@@ -56,6 +56,79 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text('Boot with Windows (engine 24/7)',
+                    style: TextStyle(
+                        color: AppColors.text, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                const Text(
+                    'Adds/removes an HKCU Run entry for mics-engine --service. Alerts keep working with the UI closed.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  FilledButton.icon(
+                    onPressed: () async {
+                      try {
+                        await ref
+                            .read(engineIpcProvider)
+                            .request('service.install');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Engine added to startup')));
+                        }
+                      } catch (_) {}
+                    },
+                    icon: const Icon(Icons.power, size: 16),
+                    label: const Text('Enable'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await ref
+                            .read(engineIpcProvider)
+                            .request('service.remove');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Engine removed from startup')));
+                        }
+                      } catch (_) {}
+                    },
+                    icon: const Icon(Icons.power_off, size: 16),
+                    label: const Text('Disable'),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('MI CS Assistant (LM Studio)',
+                    style: TextStyle(
+                        color: AppColors.text, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                const Text(
+                  'Point the engine at your local LM Studio (OpenAI-compatible). Falls back to built-in explanation templates when offline. Env: MICS_LM_URL, MICS_LM_MODEL, MICS_VT_API_KEY, MICS_IOC_FEED_URL, MICS_UPDATE_MANIFEST_URL.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(context.tr('settings.enginePath'),
                     style: const TextStyle(
                         color: AppColors.text,

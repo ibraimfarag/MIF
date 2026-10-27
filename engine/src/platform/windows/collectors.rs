@@ -824,6 +824,48 @@ impl PlatformCollectors for WindowsCollectors {
     }
 }
 
+// ---- state helpers used by the Hardening Center (mirror the audit checks) ----
+
+impl WindowsCollectors {
+    pub fn pua_enabled(&self) -> bool {
+        read_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine",
+            "PUAProtection",
+        ) == Some(1)
+    }
+
+    pub fn smbv1_enabled(&self) -> bool {
+        let smb1 = read_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters",
+            "SMB1",
+        );
+        let mrxsmb10 = read_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Services\mrxsmb10",
+            "Start",
+        );
+        smb1 != Some(0) && mrxsmb10 != Some(4)
+    }
+
+    pub fn rdp_disabled(&self) -> bool {
+        read_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Terminal Server",
+            "fDenyTSConnections",
+        ) != Some(0)
+    }
+
+    pub fn uac_enabled(&self) -> bool {
+        read_dword(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System",
+            "EnableLUA",
+        ) != Some(0)
+    }
+}
+
 /// Reads every *value name* under a key (for Run-key enumeration).
 fn enum_subkeys_values(root: HKEY, subkey: &str) -> Vec<String> {
     use windows::Win32::System::Registry::{RegOpenKeyExW, RegEnumValueW};

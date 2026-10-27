@@ -66,6 +66,15 @@ impl Storage {
                 seq INTEGER,
                 payload TEXT
              );
+             CREATE TABLE IF NOT EXISTS hardening_snapshots (
+                action_id TEXT,
+                snapshot TEXT,
+                taken_at INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS hardening_state (
+                action_id TEXT PRIMARY KEY,
+                applied INTEGER
+             );
              CREATE TABLE IF NOT EXISTS noise (
                 category TEXT PRIMARY KEY,
                 dismissals INTEGER DEFAULT 0,
@@ -385,6 +394,55 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE incidents SET closed=1 WHERE incident_id=?1", [id])?;
         Ok(())
+    }
+
+    // ---- hardening ----
+
+    pub fn save_hardening_snapshot(&self, action_id: &str, snapshot: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO hardening_snapshots VALUES (?1,?2,strftime('%s','now'))",
+            rusqlite::params![action_id, snapshot],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_hardening_applied(&self, action_id: &str, applied: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO hardening_state VALUES (?1,?2)
+             ON CONFLICT(action_id) DO UPDATE SET applied = ?2",
+            rusqlite::params![action_id, applied as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn latest_hardening_snapshot(&self, action_id: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT snapshot FROM hardening_snapshots WHERE action_id=?1
+                 ORDER BY taken_at DESC LIMIT 1",
+                [action_id],
+                |r| r.get(0),
+            )
+            .ok();
+        Ok(v)
+    }
+
+    pub fn list_hardening_snapshots(&self) -> Result<Vec<(String, String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT action_id, snapshot, taken_at FROM hardening_snapshots
+             ORDER BY taken_at DESC LIMIT 50",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+            })?
+            .flatten()
+            .collect();
+        Ok(rows)
     }
 
     // ---- noise learner ----

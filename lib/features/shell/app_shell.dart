@@ -145,6 +145,7 @@ class _TopBar extends ConsumerWidget {
             ]),
           ),
           const Spacer(),
+          const SizedBox(width: 12, child: _Omnibox()),
           TextButton.icon(
             onPressed: () => ref.read(localeProvider.notifier).toggle(),
             icon: const Icon(Icons.language, size: 18),
@@ -152,6 +153,90 @@ class _TopBar extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// Natural-language command bar (nl.command): Arabic/English intents mapped
+/// to whitelisted engine commands only. Offline regex fallback built in.
+class _Omnibox extends ConsumerStatefulWidget {
+  const _Omnibox();
+
+  @override
+  ConsumerState<_Omnibox> createState() => _OmniboxState();
+}
+
+class _OmniboxState extends ConsumerState<_Omnibox> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  String? _reply;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final res =
+          await ref.read(engineIpcProvider).request('nl.command', {'text': text});
+      final nl = (res as Map)['nl'] as Map;
+      setState(() {
+        _reply = (nl['reply'] as String?) ?? 'done';
+        _controller.clear();
+      });
+    } catch (e) {
+      setState(() => _reply = 'error: $e');
+    } finally {
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 340,
+          child: TextField(
+            controller: _controller,
+            style: const TextStyle(fontSize: 12, color: AppColors.text),
+            textAlign: TextAlign.right,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'اكتب أمراً… «افحص النظام» · «شغل الحارس» · «تقرير»',
+              hintStyle: const TextStyle(fontSize: 10.5, color: AppColors.muted),
+              prefixIcon: _busy
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2)))
+                  : const Icon(Icons.auto_awesome,
+                      size: 15, color: AppColors.cyan),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            onSubmitted: (_) => _run(),
+          ),
+        ),
+        if (_reply != null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(_reply!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 9.5, color: AppColors.green)),
+          ),
+      ],
     );
   }
 }

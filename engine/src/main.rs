@@ -7,6 +7,10 @@ mod vulns;
 mod scanner;
 mod sync;
 mod guard;
+mod hardening;
+mod llm;
+mod notify;
+mod reports;
 mod smart;
 mod storage;
 
@@ -81,6 +85,10 @@ async fn main() -> Result<()> {
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
                 while let Some(ev) = events.recv().await {
+                    // CRITICAL/HIGH events toast even with the UI closed.
+                    if ev.severity == "critical" || ev.severity == "high" {
+                        notify::toast::route_event(&ev);
+                    }
                     let note = serde_json::json!({
                         "jsonrpc": "2.0",
                         "method": "event",

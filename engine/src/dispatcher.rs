@@ -384,6 +384,125 @@ impl Dispatcher {
                     Err(e) => { error!("noise dismissal: {e:#}"); None }
                 }
             }
+            "hardening.list" => Some(json!(crate::hardening::list_actions())),
+            "hardening.apply" => {
+                let Some(id) = req.params.as_ref().and_then(|p| p.get("action")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing action");
+                };
+                match crate::hardening::apply(&id).await {
+                    Ok(_) => Some(json!({"status": "applied", "action": id})),
+                    Err(e) => { error!("hardening.apply: {e:#}"); None }
+                }
+            }
+            "hardening.rollback" => {
+                let Some(id) = req.params.as_ref().and_then(|p| p.get("action")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing action");
+                };
+                match crate::hardening::rollback(&id).await {
+                    Ok(()) => Some(json!({"status": "rolled_back", "action": id})),
+                    Err(e) => { error!("hardening.rollback: {e:#}"); None }
+                }
+            }
+            "report.export" => match crate::reports::export_markdown().await {
+                Ok(path) => Some(json!({"status": "exported", "path": path})),
+                Err(e) => { error!("report.export: {e:#}"); None }
+            },
+            "llm.explain" => {
+                let finding = req.params.as_ref().and_then(|p| p.get("finding")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let lang = req.params.as_ref().and_then(|p| p.get("lang")).and_then(|v| v.as_str()).unwrap_or("ar").to_string();
+                match crate::llm::LmClient::new().explain(&finding, &lang).await {
+                    Ok(text) => Some(json!({"explanation": text})),
+                    Err(e) => { error!("llm.explain: {e:#}"); None }
+                }
+            }
+            "nl.command" => {
+                let Some(text) = req.params.as_ref().and_then(|p| p.get("text")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing text");
+                };
+                let mut result = crate::llm::parse_nl(&text);
+                // Execute matched whitelisted command immediately.
+                if result.matched {
+                    let sub = JsonRpcRequest {
+                        jsonrpc: "2.0".into(),
+                        method: result.command.clone(),
+                        params: Some(result.params.clone()),
+                        id: Some(json!(900000)),
+                    };
+                    let inner = Box::pin(Dispatcher::handle_request(sub)).await;
+                    result.reply = if inner.result.is_some() {
+                        format!("{} ✓", result.reply)
+                    } else {
+                        format!("{} — engine returned an error", result.reply)
+                    };
+                    return JsonRpcResponse {
+                        jsonrpc: "2.0".into(),
+                        result: Some(json!({
+                            "nl": result,
+                            "engine_result": inner.result,
+                        })),
+                        error: None,
+                        id: req.id,
+                    };
+                }
+                Some(json!({"nl": result}))
+            }
+            "service.install" => {
+                // Boot-with-windows: scheduled task running the engine --service at logon.
+                let exe = match std::env::current_exe() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("service.install: {e:#}");
+                        return error_response(req, "cannot resolve engine exe");
+                    }
+                };
+                // Boot-with-windows: HKCU Run entry (no admin needed; the
+                // scheduled-task variant requires elevation and is documented).
+                let out = std::process::Command::new("reg")
+                    .args([
+                        "add",
+                        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                        "/v", "MICS-Engine",
+                        "/t", "REG_SZ",
+                        "/d", &format!("\"{}\" --service", exe.display()),
+                        "/f",
+                    ])
+                    .output();
+                match out {
+                    Ok(o) if o.status.success() => Some(json!({"status": "installed"})),
+                    Ok(o) => { error!("service.install: {}", String::from_utf8_lossy(&o.stderr)); None }
+                    Err(e) => { error!("service.install: {e:#}"); None }
+                }
+            }
+            "service.remove" => {
+                let out = std::process::Command::new("reg")
+                    .args([
+                        "delete",
+                        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                        "/v", "MICS-Engine",
+                        "/f",
+                    ])
+                    .output();
+                match out {
+                    Ok(o) if o.status.success() => Some(json!({"status": "removed"})),
+                    Ok(o) => { error!("service.remove: {}", String::from_utf8_lossy(&o.stderr)); None }
+                    Err(e) => { error!("service.remove: {e:#}"); None }
+                }
+            }
+            "update.check" => {
+                // Manifest-based self-update check (GitHub Releases JSON).
+                let url = std::env::var("MICS_UPDATE_MANIFEST_URL").unwrap_or_default();
+                if url.is_empty() {
+                    Some(json!({"status": "disabled", "detail": "MICS_UPDATE_MANIFEST_URL not configured"}))
+                } else {
+                    match crate::sync::SyncManager::new() {
+                        Ok(sm) => match sm.check_update(&url).await {
+                            Ok(info) => Some(json!(info)),
+                            Err(e) => { error!("update.check: {e:#}"); None }
+                        },
+                        Err(e) => { error!("update.check: {e:#}"); None }
+                    }
+                }
+            }
             _ => {
                 unknown = true;
                 warn!("Unknown method: {}", req.method);
