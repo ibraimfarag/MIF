@@ -339,11 +339,11 @@ class _LayerHealth extends StatelessWidget {
     final vulnerable = report.countByStatus('Vulnerable');
     final warning = report.countByStatus('Warning');
     final layers = [
-      ('L1', 'Network Gate', vulnerable + warning > 0 ? 0.6 : 1.0),
-      ('L2', 'Attack Radar', null), // Phase 4+
-      ('L3', 'Response', null), // Phase 6
-      ('L4', 'File Engines', null), // Phase 5
-      ('L5', 'Mind', null), // Phase 6
+      ('L1', 'Network Gate', vulnerable + warning > 0 ? 0.6 : 1.0, ''),
+      ('L2', 'Attack Radar', null, 'Phase 4'), // network IDS
+      ('L3', 'Response', null, 'Phase 6'), // ETW guard live
+      ('L4', 'File Engines', null, 'Phase 5'), // scanner/YARA
+      ('L5', 'Mind', null, 'Phase 6'), // correlator/assistant
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,9 +356,9 @@ class _LayerHealth extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            for (final (id, name, health) in layers) ...[
+            for (final (id, name, health, phase) in layers) ...[
               Expanded(
-                child: _LayerTile(id: id, name: name, health: health),
+                child: _LayerTile(id: id, name: name, health: health, phase: phase),
               ),
               const SizedBox(width: 10),
             ],
@@ -371,10 +371,14 @@ class _LayerHealth extends StatelessWidget {
 
 class _LayerTile extends StatelessWidget {
   const _LayerTile(
-      {required this.id, required this.name, required this.health});
+      {required this.id,
+      required this.name,
+      required this.health,
+      required this.phase});
   final String id;
   final String name;
   final double? health;
+  final String phase;
 
   @override
   Widget build(BuildContext context) {
@@ -410,7 +414,16 @@ class _LayerTile extends StatelessWidget {
           ),
           if (health == null) ...[
             const SizedBox(height: 6),
-            Text('…', style: AppTheme.mono(size: 10, color: AppColors.muted)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text('$phase later',
+                  style: TextStyle(
+                      fontSize: 8.5, color: AppColors.muted)),
+            ),
           ],
         ],
       ),

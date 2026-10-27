@@ -45,17 +45,32 @@ class AppColors {
 }
 
 class AppTheme {
+  /// Applies the palette for a mode. Call BEFORE building MaterialApp —
+  /// the theme getters below must NOT mutate statics (MaterialApp evaluates
+  /// both darkTheme and theme getters, so last-write-wins would flip the
+  /// palette back and produce half-dark half-light UI).
+  static void applyPalette(ThemeMode mode) {
+    final platformDark =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark;
+    final dark = mode == ThemeMode.dark ||
+        (mode == ThemeMode.system && platformDark);
+    if (dark) {
+      AppColors.applyDark();
+    } else {
+      AppColors.applyLight();
+    }
+  }
+
+  /// Whether the last-applied palette is dark (for widgets that need it).
+  static bool get isDark => AppColors.background == const Color(0xFF0A0E14);
+
   static ThemeData get darkTheme => _theme(Brightness.dark);
 
   static ThemeData get lightTheme => _theme(Brightness.light);
 
   static ThemeData _theme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
-    if (dark) {
-      AppColors.applyDark();
-    } else {
-      AppColors.applyLight();
-    }
     final base = ThemeData(
       brightness: brightness,
       scaffoldBackgroundColor: AppColors.background,

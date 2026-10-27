@@ -302,7 +302,7 @@ class _BrandRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 84,
+      width: 96,
       color: AppColors.surface,
       child: SingleChildScrollView(
         child: Column(
@@ -378,7 +378,7 @@ class _RailItemState extends State<_RailItem> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       color: color,
-                      fontSize: 9,
+                      fontSize: 9.5,
                       fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
             ],
           ),

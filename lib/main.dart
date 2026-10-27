@@ -134,6 +134,9 @@ class MicsApp extends ConsumerWidget {
       );
     }
 
+    // Palette must be applied BEFORE MaterialApp builds its themes.
+    AppTheme.applyPalette(settings.value?.themeMode ?? ThemeMode.dark);
+
     return MaterialApp.router(
       title: 'MI CS Command Center',
       debugShowCheckedModeBanner: false,

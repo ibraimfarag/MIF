@@ -40,10 +40,18 @@ if ($SelfSigned) {
             -NotAfter (Get-Date).AddYears(3) `
             -CertStoreLocation "Cert:\CurrentUser\My"
         # Trust it locally so signatures verify without warnings.
-        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root","CurrentUser")
-        $store.Open("ReadWrite")
-        $store.Add($cert)
-        $store.Close()
+        foreach ($storeName in @("Root", "TrustedPublisher")) {
+            foreach ($location in @("CurrentUser", "LocalMachine")) {
+                try {
+                    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeName, $location)
+                    $store.Open("ReadWrite")
+                    $store.Add($cert)
+                    $store.Close()
+                } catch {
+                    Write-Host "($storeName/$location skipped: $_)"
+                }
+            }
+        }
         Write-Host "Certificate thumbprint: $($cert.Thumbprint)"
     }
     $certArg = @("/sha1", $cert.Thumbprint)
