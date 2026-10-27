@@ -24,10 +24,15 @@ class I18nLoader extends AsyncNotifier<Map<String, Map<String, String>>> {
   Future<Map<String, Map<String, String>>> build() async {
     final tables = <String, Map<String, String>>{};
     for (final code in bundledLangs.keys) {
-      final raw = await rootBundle.loadString('assets/i18n/$code.json');
-      tables[code] = (jsonDecode(raw) as Map)
-          .cast<String, dynamic>()
-          .map((k, v) => MapEntry(k, v.toString()));
+      try {
+        final raw = await rootBundle.loadString('assets/i18n/$code.json');
+        tables[code] = (jsonDecode(raw) as Map)
+            .cast<String, dynamic>()
+            .map((k, v) => MapEntry(k, v.toString()));
+      } catch (e) {
+        // A broken pack must never hang the app — degrade to keys/English.
+        tables[code] = const {};
+      }
     }
     return tables;
   }

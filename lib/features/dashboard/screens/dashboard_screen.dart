@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 import 'package:mics_app/models/audit_models.dart';
+import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/providers/providers.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -30,10 +31,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ref.read(auditProvider.notifier).runAudit();
       });
     }
+    // Retry once the engine reconnects (covers cold start races).
+    _engineSub = ref.listenManual(engineStateProvider, (prev, next) {
+      if (next.value == EngineState.running &&
+          ref.read(auditProvider).report == null) {
+        ref.read(auditProvider.notifier).runAudit();
+      }
+    });
   }
+
+  ProviderSubscription? _engineSub;
 
   @override
   void dispose() {
+    _engineSub?.close();
     _gauge.dispose();
     super.dispose();
   }
@@ -410,16 +421,84 @@ class _LayerTile extends StatelessWidget {
 class _LoadingCard extends StatelessWidget {
   const _LoadingCard({required this.label});
   final String label;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      alignment: Alignment.center,
-      child: Column(children: [
-        const CircularProgressIndicator(),
+    // Skeleton cards: the dashboard shows structure immediately instead of a
+    // bare spinner while the engine collects live data.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          _SkeletonBox(width: 220, height: 214, radius: 16),
+          const SizedBox(width: 16),
+          Expanded(child: _SkeletonBox(width: double.infinity, height: 214, radius: 16)),
+        ]),
         const SizedBox(height: 16),
-        Text(label, style: TextStyle(color: AppColors.muted)),
-      ]),
+        Row(children: [
+          for (var i = 0; i < 4; i++) ...[
+            Expanded(child: _SkeletonBox(width: double.infinity, height: 76, radius: 12)),
+            if (i < 3) const SizedBox(width: 10),
+          ],
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          for (var i = 0; i < 5; i++) ...[
+            Expanded(child: _SkeletonBox(width: double.infinity, height: 96, radius: 12)),
+            if (i < 4) const SizedBox(width: 10),
+          ],
+        ]),
+        const SizedBox(height: 16),
+        Center(
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          ]),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatefulWidget {
+  const _SkeletonBox(
+      {required this.width, required this.height, required this.radius});
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  State<_SkeletonBox> createState() => _SkeletonBoxState();
+}
+
+class _SkeletonBoxState extends State<_SkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1100))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, _) => Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius),
+          border: Border.all(color: AppColors.border),
+          color: Color.lerp(AppColors.surface, AppColors.border,
+              0.25 + 0.25 * _c.value),
+        ),
+      ),
     );
   }
 }
