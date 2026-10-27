@@ -53,6 +53,24 @@ impl Storage {
                 restored INTEGER DEFAULT 0,
                 deleted INTEGER DEFAULT 0
              );
+             CREATE TABLE IF NOT EXISTS incidents (
+                incident_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                severity TEXT,
+                opened_at INTEGER,
+                updated_at INTEGER,
+                closed INTEGER DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS incident_events (
+                incident_id INTEGER,
+                seq INTEGER,
+                payload TEXT
+             );
+             CREATE TABLE IF NOT EXISTS noise (
+                category TEXT PRIMARY KEY,
+                dismissals INTEGER DEFAULT 0,
+                muted INTEGER DEFAULT 0
+             );
              CREATE TABLE IF NOT EXISTS sync_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kind TEXT,
@@ -267,6 +285,160 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM sync_queue WHERE id = ?1", [id])?;
         Ok(())
+    }
+
+    // ---- incidents ----
+
+    pub fn create_incident(&self, title: &str, severity: &str, at: i64) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO incidents (title, severity, opened_at, updated_at) VALUES (?1,?2,?3,?3)",
+            rusqlite::params![title, severity, at],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn append_incident_event(&self, id: i64, ev: &crate::guard::GuardEvent) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let seq: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq),0)+1 FROM incident_events WHERE incident_id = ?1",
+            [id],
+            |r| r.get(0),
+        )?;
+        conn.execute(
+            "INSERT INTO incident_events VALUES (?1,?2,?3)",
+            rusqlite::params![id, seq, serde_json::to_string(ev)?],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_incident(&self, id: i64) -> Result<Option<crate::smart::correlator::Incident>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT incident_id, title, severity, opened_at, updated_at, closed
+             FROM incidents WHERE incident_id = ?1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        let Some(row) = rows.next()? else { return Ok(None) };
+        let mut inc = crate::smart::correlator::Incident {
+            incident_id: row.get(0)?,
+            title: row.get(1)?,
+            severity: row.get(2)?,
+            opened_at: row.get(3)?,
+            updated_at: row.get(4)?,
+            closed: row.get::<_, i64>(5)? != 0,
+            timeline: vec![],
+        };
+        drop(rows);
+        drop(stmt);
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM incident_events WHERE incident_id = ?1 ORDER BY seq",
+        )?;
+        let payload_rows = stmt.query_map([id], |r| r.get::<_, String>(0))?;
+        for p in payload_rows.flatten() {
+            if let Ok(ev) = serde_json::from_str(&p) {
+                inc.timeline.push(ev);
+            }
+        }
+        Ok(Some(inc))
+    }
+
+    pub fn update_incident(&self, inc: &crate::smart::correlator::Incident) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let seq: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(seq),0) FROM incident_events WHERE incident_id = ?1",
+            [inc.incident_id],
+            |r| r.get(0),
+        )?;
+        if let Some(ev) = inc.timeline.last() {
+            conn.execute(
+                "INSERT OR REPLACE INTO incident_events VALUES (?1,?2,?3)",
+                rusqlite::params![inc.incident_id, seq, serde_json::to_string(ev)?],
+            )?;
+        }
+        conn.execute(
+            "UPDATE incidents SET severity=?2, updated_at=?3 WHERE incident_id=?1",
+            rusqlite::params![inc.incident_id, inc.severity, inc.updated_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_incidents(&self, limit: u32) -> Result<Vec<crate::smart::correlator::Incident>> {
+        // Open one storage per id — get_incident takes its own lock.
+        let ids: Vec<i64> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT incident_id FROM incidents ORDER BY updated_at DESC LIMIT ?1",
+            )?;
+            stmt.query_map([limit], |r| r.get(0))?
+                .flatten()
+                .collect()
+        };
+        let storage = Storage::open()?;
+        Ok(ids
+            .iter()
+            .filter_map(|id| storage.get_incident(*id).ok().flatten())
+            .collect())
+    }
+
+    pub fn close_incident(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE incidents SET closed=1 WHERE incident_id=?1", [id])?;
+        Ok(())
+    }
+
+    // ---- noise learner ----
+
+    pub fn bump_dismissal(&self, category: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO noise (category, dismissals, muted) VALUES (?1,1,0)
+             ON CONFLICT(category) DO UPDATE SET dismissals = dismissals + 1",
+            [category],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_dismissal(&self, category: &str) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let n: Option<i64> = conn
+            .query_row(
+                "SELECT dismissals FROM noise WHERE category=?1",
+                [category],
+                |r| r.get(0),
+            )
+            .ok();
+        Ok(n.unwrap_or(0))
+    }
+
+    pub fn set_muted(&self, category: &str, muted: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO noise (category, dismissals, muted) VALUES (?1,0,?2)
+             ON CONFLICT(category) DO UPDATE SET muted = ?2",
+            rusqlite::params![category, muted as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn is_muted(&self, category: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let m: Option<i64> = conn
+            .query_row("SELECT muted FROM noise WHERE category=?1", [category], |r| r.get(0))
+            .ok();
+        Ok(m.unwrap_or(0) != 0)
+    }
+
+    pub fn all_dismissals(&self) -> Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT category, dismissals FROM noise WHERE dismissals > 0 ORDER BY dismissals DESC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+            .flatten()
+            .collect();
+        Ok(rows)
     }
 
     pub fn queue_len(&self, kind: &str) -> Result<u64> {

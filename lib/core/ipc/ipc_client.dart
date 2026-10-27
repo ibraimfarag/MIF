@@ -15,6 +15,10 @@ class EngineIpc {
   int _nextId = 1;
   final Map<int, Completer<dynamic>> _pending = {};
   final _statusController = StreamController<EngineState>.broadcast();
+  final _eventController = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Pushed engine events (guard/canary notifications).
+  Stream<Map<String, dynamic>> get eventStream => _eventController.stream;
   Timer? _restartTimer;
   int _restartBackoffSeconds = 1;
   bool _disposed = false;
@@ -90,6 +94,14 @@ class EngineIpc {
     try {
       final msg = jsonDecode(trimmed) as Map<String, dynamic>;
       final id = msg['id'];
+      if (id == null && msg['method'] == 'event') {
+        // JSON-RPC notification: engine-pushed event (guard/canary).
+        if (!_eventController.isClosed) {
+          _eventController.add(
+              (msg['params'] as Map?)?.cast<String, dynamic>() ?? {});
+        }
+        return;
+      }
       if (id is int && _pending.containsKey(id)) {
         final completer = _pending.remove(id)!;
         final error = msg['error'];
@@ -158,6 +170,7 @@ class EngineIpc {
     _restartTimer?.cancel();
     _process?.kill();
     _statusController.close();
+    _eventController.close();
   }
 }
 

@@ -45,7 +45,8 @@ impl VtClient {
             // Compute the wait under the lock, release it, then sleep —
             // the guard must never be held across an await.
             let wait = {
-                let mut last = gate.lock().unwrap();
+                #[allow(unused_mut)]
+            let mut last = gate.lock().unwrap();
                 let elapsed = last.elapsed();
                 if REQ_COUNT.load(Ordering::SeqCst) >= 4 {
                     if elapsed >= Duration::from_secs(60) {
@@ -63,6 +64,7 @@ impl VtClient {
                 REQ_COUNT.store(0, Ordering::SeqCst);
                 continue;
             }
+            #[allow(unused_mut)]
             let mut last = gate.lock().unwrap();
             *last = Instant::now();
             REQ_COUNT.fetch_add(1, Ordering::SeqCst);

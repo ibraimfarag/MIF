@@ -1,46 +1,205 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/features/guard/screens/guard_screen.dart' show GuardEvent;
 
-/// Phase-3 skeleton: designed empty state wired into the shell. The module
-/// comes alive when its engine phase lands (see MI-CS-Agent-Prompt.md section 12).
-class IncidentsScreen extends ConsumerWidget {
+class Incident {
+  final int incidentId;
+  final String title;
+  final String severity;
+  final int openedAt;
+  final List<GuardEvent> timeline;
+  final bool closed;
+  Incident({
+    required this.incidentId,
+    required this.title,
+    required this.severity,
+    required this.openedAt,
+    required this.timeline,
+    required this.closed,
+  });
+
+  factory Incident.fromJson(Map<String, dynamic> j) => Incident(
+        incidentId: (j['incident_id'] as num?)?.toInt() ?? 0,
+        title: j['title'] as String? ?? '',
+        severity: j['severity'] as String? ?? 'high',
+        openedAt: (j['opened_at'] as num?)?.toInt() ?? 0,
+        closed: j['closed'] as bool? ?? false,
+        timeline: (j['timeline'] as List? ?? [])
+            .map((e) => GuardEvent.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  DateTime get time => DateTime.fromMillisecondsSinceEpoch(openedAt * 1000,
+          isUtc: true)
+      .toLocal();
+}
+
+final incidentsProvider =
+    NotifierProvider<IncidentsNotifier, List<Incident>>(IncidentsNotifier.new);
+
+class IncidentsNotifier extends Notifier<List<Incident>> {
+  @override
+  List<Incident> build() => const [];
+
+  Future<void> refresh() async {
+    try {
+      final res =
+          await ref.read(engineIpcProvider).request('incident.list', {'limit': 50});
+      state = (res as List)
+          .map((i) => Incident.fromJson(i as Map<String, dynamic>))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> close(int id) async {
+    await ref.read(engineIpcProvider).request('incident.close', {'incident_id': id});
+    await refresh();
+  }
+}
+
+class IncidentsScreen extends ConsumerStatefulWidget {
   const IncidentsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.border),
-                color: AppColors.surface,
-              ),
-              child: Icon(Icons.timeline_outlined, color: AppColors.cyan, size: 32),
+  ConsumerState<IncidentsScreen> createState() => _IncidentsScreenState();
+}
+
+class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(incidentsProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final incidents = ref.watch(incidentsProvider);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(children: [
+          const Icon(Icons.timeline, color: AppColors.cyan),
+          const SizedBox(width: 8),
+          Text(context.tr('nav.incidents'),
+              style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800)),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: () => ref.read(incidentsProvider.notifier).refresh(),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: Text(context.tr('common.refresh')),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        const Text(
+          'Related guard events collapse into ONE incident with a kill-chain timeline — instead of isolated alert spam.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        if (incidents.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.green.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
             ),
-            const SizedBox(height: 16),
-            Text(context.tr('nav.incidents'),
-                style: const TextStyle(
-                    color: AppColors.text,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+            child: const Row(children: [
+              Icon(Icons.verified_user, color: AppColors.green),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                    'No incidents. When the guard detects related suspicious activity, the kill chain appears here.',
+                    style: TextStyle(color: AppColors.text, fontSize: 13)),
+              ),
+            ]),
+          ),
+        for (final inc in incidents) _IncidentCard(inc: inc),
+      ],
+    );
+  }
+}
+
+class _IncidentCard extends ConsumerWidget {
+  const _IncidentCard({required this.inc});
+  final Incident inc;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final critical = inc.severity == 'critical';
+    final color = inc.closed
+        ? AppColors.muted
+        : critical
+            ? AppColors.red
+            : AppColors.orange;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 4,
+              height: 30,
+              decoration: BoxDecoration(
+                  color: color, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(inc.title,
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13)),
+            ),
+            Text('#${inc.incidentId}',
+                style: AppTheme.mono(size: 10, color: AppColors.muted)),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+              '${inc.time} · ${inc.timeline.length} event(s) · ${inc.severity}${inc.closed ? " · closed" : ""}',
+              style: AppTheme.mono(size: 10, color: AppColors.muted)),
+          const SizedBox(height: 8),
+          for (final (i, ev) in inc.timeline.indexed)
+            Padding(
+              padding: EdgeInsetsDirectional.only(start: i * 12.0),
+              child: Row(children: [
+                const Icon(Icons.chevron_right, size: 12, color: AppColors.muted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                      '${ev.ruleId} · ${ev.process.isEmpty ? ev.ruleName : ev.process} · ${ev.detail}',
+                      style: AppTheme.mono(size: 10, color: AppColors.muted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ]),
+            ),
+          if (!inc.closed) ...[
             const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Text(context.tr('soon.body'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: () =>
+                    ref.read(incidentsProvider.notifier).close(inc.incidentId),
+                child: const Text('Mark handled'),
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

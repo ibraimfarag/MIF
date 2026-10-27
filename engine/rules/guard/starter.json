@@ -1,0 +1,49 @@
+[
+  {
+    "id": "GR-001",
+    "name": "Office app spawned a script/shell (classic dropper behavior)",
+    "severity": "critical",
+    "parent_image": "winword.exe|excel.exe|powerpnt.exe|outlook.exe",
+    "child_image": "cmd.exe|powershell.exe|wscript.exe|cscript.exe|mshta.exe",
+    "action": "alert"
+  },
+  {
+    "id": "GR-002",
+    "name": "Script interpreter launched from %TEMP% (malware staging)",
+    "severity": "critical",
+    "child_image": "cmd.exe|powershell.exe|wscript.exe|cscript.exe",
+    "child_cmd_contains": "\temp\\",
+    "action": "kill"
+  },
+  {
+    "id": "GR-003",
+    "name": "Scheduled task created (persistence attempt)",
+    "severity": "high",
+    "child_image": "schtasks.exe",
+    "child_cmd_contains": "/create",
+    "action": "alert"
+  },
+  {
+    "id": "GR-004",
+    "name": "Registry persistence via reg add ... Run",
+    "severity": "high",
+    "child_image": "reg.exe",
+    "child_cmd_contains": "\run",
+    "action": "alert"
+  },
+  {
+    "id": "GR-005",
+    "name": "Encoder/tar staging in temp (ransomware preparation shape)",
+    "severity": "critical",
+    "child_image": "certutil.exe",
+    "child_cmd_contains": "-decode",
+    "action": "alert"
+  },
+  {
+    "id": "GR-006",
+    "name": "Executable launched from %TEMP% (malware staging location)",
+    "severity": "high",
+    "child_path_contains": "\\temp\\",
+    "action": "alert"
+  }
+]

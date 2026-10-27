@@ -6,6 +6,8 @@ mod firewall;
 mod vulns;
 mod scanner;
 mod sync;
+mod guard;
+mod smart;
 mod storage;
 
 use clap::{Parser, Subcommand};
@@ -75,6 +77,18 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Serve) => {
             tracing::info!("Starting engine in --serve mode (stdio)...");
+            // Forward guard events as JSON-RPC notifications on stdout.
+            let mut events = guard::subscribe_events();
+            tokio::spawn(async move {
+                while let Some(ev) = events.recv().await {
+                    let note = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "method": "event",
+                        "params": serde_json::to_value(&ev).unwrap_or_default()
+                    });
+                    println!("{}", serde_json::to_string(&note).unwrap_or_default());
+                }
+            });
             let mut reader = tokio::io::BufReader::new(tokio::io::stdin());
             let mut line = String::new();
             loop {

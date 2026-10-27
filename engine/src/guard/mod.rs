@@ -1,0 +1,306 @@
+//! Real-time Process Guard (L3).
+//!
+//! v1 transport: a high-frequency process-diff loop over sysinfo (works
+//! unelevated, zero kernel footprint) feeding a Sigma-like JSON rules engine.
+//! ETW kernel sessions (ferrisetw) plug into the same rules engine when the
+//! engine runs elevated — documented upgrade path in docs/DECISIONS.md.
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
+use sysinfo::{Pid, ProcessesToUpdate, System};
+use tokio::sync::mpsc;
+use tracing::{error, info, warn};
+
+pub mod canary;
+
+
+// ---------- rules (Sigma-like JSON) ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardRule {
+    pub id: String,
+    pub name: String,
+    pub severity: String, // high | critical
+    #[serde(default)]
+    pub parent_image: Option<String>,
+    #[serde(default)]
+    pub child_image: Option<String>,
+    #[serde(default)]
+    pub child_cmd_contains: Option<String>,
+    #[serde(default)]
+    pub child_path_contains: Option<String>,
+    #[serde(default = "default_action")]
+    pub action: String, // alert | kill
+}
+
+fn default_action() -> String {
+    "alert".into()
+}
+
+pub fn rules_dir() -> PathBuf {
+    for base in [
+        std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())),
+        std::env::var("MICS_RULES_DIR").ok().map(PathBuf::from),
+        std::env::current_dir().ok(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let p = base.join("rules").join("guard");
+        if p.exists() {
+            return p;
+        }
+    }
+    PathBuf::from("rules/guard")
+}
+
+pub fn load_rules() -> Result<Vec<GuardRule>> {
+    let mut rules = Vec::new();
+    let dir = rules_dir();
+    let entries = std::fs::read_dir(&dir)
+        .with_context(|| format!("read rules dir {}", dir.display()))?;
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.extension().map(|x| x == "json").unwrap_or(false) {
+            let text = std::fs::read_to_string(&path)
+                .with_context(|| format!("read {}", path.display()))?;
+            let parsed: Vec<GuardRule> = serde_json::from_str(&text)
+                .with_context(|| format!("parse {}", path.display()))?;
+            rules.extend(parsed);
+        }
+    }
+    Ok(rules)
+}
+
+#[allow(dead_code)]
+pub fn starter_rules_source() -> &'static str {
+    include_str!("../../rules/guard/starter.json")
+}
+
+// ---------- event bus ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardEvent {
+    pub r#type: String, // process_suspicious | canary_triggered
+    pub severity: String,
+    pub rule_id: String,
+    pub rule_name: String,
+    pub pid: u32,
+    pub process: String,
+    pub parent: String,
+    pub detail: String,
+    pub at: i64,
+}
+
+static EVENT_TX: OnceLock<mpsc::UnboundedSender<GuardEvent>> = OnceLock::new();
+
+pub fn subscribe_events() -> mpsc::UnboundedReceiver<GuardEvent> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let _ = EVENT_TX.set(tx);
+    rx
+}
+
+/// Public emit for sibling modules (canary).
+pub fn emit_public(ev: GuardEvent) {
+    emit(ev);
+}
+
+fn emit(ev: GuardEvent) {
+    if let Some(tx) = EVENT_TX.get() {
+        let _ = tx.send(ev.clone());
+    }
+    // Every guard event also lands in the correlator.
+    if let Err(e) = crate::smart::correlator::record_event(&ev) {
+        error!("correlator: {e:#}");
+    }
+}
+
+// ---------- guard engine ----------
+
+pub struct GuardState {
+    running: AtomicBool,
+    known: Mutex<HashSet<u32>>,
+}
+
+static GUARD: OnceLock<GuardState> = OnceLock::new();
+
+fn guard() -> &'static GuardState {
+    GUARD.get_or_init(|| GuardState {
+        running: AtomicBool::new(false),
+        known: Mutex::new(HashSet::new()),
+    })
+}
+
+pub fn is_running() -> bool {
+    guard().running.load(Ordering::SeqCst)
+}
+
+pub fn start_guard() {
+    let g = guard();
+    if g.running.swap(true, Ordering::SeqCst) {
+        return; // already running
+    }
+    g.known.lock().unwrap().clear();
+
+    std::thread::spawn(move || {
+        info!("Guard loop started");
+        let mut sys = System::new();
+        let rules = Arc::new(Mutex::new(load_rules().unwrap_or_default()));
+        // Rule hot-reload: rescan the rules dir every 30 s.
+        let rules_for_reload = rules.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(30));
+            match load_rules() {
+                Ok(r) => *rules_for_reload.lock().unwrap() = r,
+                Err(e) => warn!("rule reload: {e:#}"),
+            }
+        });
+
+        // Canary watchers armed alongside the process loop.
+        if let Err(e) = crate::guard::canary::arm_watchers() {
+            error!("canary arm: {e:#}");
+        }
+
+        let mut first = true;
+        loop {
+            if !guard().running.load(Ordering::SeqCst) {
+                info!("Guard loop stopped");
+                break;
+            }
+            sys.refresh_processes(ProcessesToUpdate::All, true);
+            let mut current = HashSet::new();
+            let mut new_procs: Vec<(u32, String, String, String, String)> = Vec::new();
+            for (pid, proc) in sys.processes() {
+                let pid_u32 = pid.as_u32();
+                current.insert(pid_u32);
+                let proc_name = proc.name().to_string_lossy().to_lowercase();
+                let cmd = proc
+                    .cmd()
+                    .iter()
+                    .map(|c| c.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let parent_name = proc
+                    .parent()
+                    .and_then(|p: Pid| sys.process(p))
+                    .map(|p| p.name().to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                let exe_path = proc
+                    .exe()
+                    .map(|p| p.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                new_procs.push((pid_u32, proc_name, parent_name, cmd, exe_path));
+            }
+            {
+                let mut known = guard().known.lock().unwrap();
+                let fresh: Vec<_> = new_procs
+                    .into_iter()
+                    .filter(|(pid, ..)| first || !known.contains(pid))
+                    .collect();
+                *known = current;
+                                first = false;
+                drop(known);
+
+
+                let snapshot = rules.lock().unwrap().clone();
+                for (pid, name, parent, cmd, exe_path) in fresh {
+                    for rule in &snapshot {
+                        if rule_matches(rule, &name, &parent, &cmd, &exe_path) {
+                            let ev = GuardEvent {
+                                r#type: "process_suspicious".into(),
+                                severity: rule.severity.clone(),
+                                rule_id: rule.id.clone(),
+                                rule_name: rule.name.clone(),
+                                pid,
+                                process: name.clone(),
+                                parent: parent.clone(),
+                                detail: format!("cmd: {cmd}"),
+                                at: chrono::Utc::now().timestamp(),
+                            };
+                            emit(ev);
+                            if rule.action == "kill" {
+                                if let Err(e) = kill_tree(pid) {
+                                    warn!("responder kill_tree({pid}): {e:#}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            crate::guard::canary::check_touches();
+            std::thread::sleep(Duration::from_millis(2000));
+        }
+    });
+}
+
+pub fn stop_guard() {
+    guard().running.store(false, Ordering::SeqCst);
+}
+
+/// Field values may be pipe-separated alternates: "a.exe|b.exe".
+fn field_matches(want: &str, got: &str) -> bool {
+    want.to_lowercase()
+        .split('|')
+        .map(|w| w.trim())
+        .filter(|w| !w.is_empty())
+        .any(|w| got.contains(w))
+}
+
+fn rule_matches(
+    rule: &GuardRule,
+    child: &str,
+    parent: &str,
+    cmd: &str,
+    exe_path: &str,
+) -> bool {
+    if let Some(want) = &rule.child_image {
+        if !field_matches(want, child) {
+            return false;
+        }
+    }
+    if let Some(want) = &rule.parent_image {
+        if !field_matches(want, parent) {
+            return false;
+        }
+    }
+    if let Some(want) = &rule.child_cmd_contains {
+        if !cmd.to_lowercase().contains(&want.to_lowercase()) {
+            return false;
+        }
+    }
+    if let Some(want) = &rule.child_path_contains {
+        if !exe_path.contains(&want.to_lowercase()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Optional tree-kill responder (usermode): taskkill /T /F.
+pub fn kill_tree(pid: u32) -> Result<()> {
+    let out = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output()
+        .context("launch taskkill")?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "taskkill failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+/// JSON status for the UI.
+pub fn status_json() -> serde_json::Value {
+    json!({
+        "running": is_running(),
+        "rules": load_rules().unwrap_or_default(),
+    })
+}

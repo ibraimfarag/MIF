@@ -283,6 +283,107 @@ impl Dispatcher {
                     Err(e) => { error!("sync.status: {e:#}"); None }
                 }
             }
+            "guard.start" => {
+                crate::guard::start_guard();
+                Some(json!({"status": "running"}))
+            }
+            "guard.stop" => {
+                crate::guard::stop_guard();
+                Some(json!({"status": "stopped"}))
+            }
+            "guard.status" => Some(crate::guard::status_json()),
+            "guard.rules.list" => match crate::guard::load_rules() {
+                Ok(r) => Some(json!(r)),
+                Err(e) => { error!("guard.rules.list: {e:#}"); None }
+            },
+            "guard.rules.add" => {
+                // Rules live in JSON files (hot-reloaded every 30 s); add appends
+                // to the user rules file so the starter pack stays pristine.
+                let Some(rule) = req.params.as_ref().and_then(|p| {
+                    serde_json::from_value::<crate::guard::GuardRule>(p.clone()).ok()
+                }) else {
+                    return error_response(req, "invalid rule params");
+                };
+                let dir = crate::guard::rules_dir();
+                let _ = std::fs::create_dir_all(&dir);
+                let path = dir.join("user.json");
+                let mut list: Vec<crate::guard::GuardRule> = std::fs::read_to_string(&path)
+                    .ok()
+                    .and_then(|t| serde_json::from_str(&t).ok())
+                    .unwrap_or_default();
+                list.push(rule);
+                let payload = serde_json::to_string_pretty(&list)
+                    .map_err(|e| anyhow::anyhow!("serialize rules: {e}"));
+                match payload.and_then(|p| std::fs::write(&path, p).map_err(|e| anyhow::anyhow!("write rules: {e}"))) {
+                    Ok(()) => Some(json!({"status": "added", "file": path})),
+                    Err(e) => { error!("guard.rules.add: {e:#}"); None }
+                }
+            }
+            "canary.list" => Some(json!(crate::guard::canary::list_decoys())),
+            "canary.configure" => {
+                let Some(paths) = req.params.as_ref().and_then(|p| p.get("paths")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()) else {
+                    return error_response(req, "missing paths array");
+                };
+                let cfg = crate::guard::canary::CanaryConfig { paths };
+                match crate::guard::canary::save_config(&cfg) {
+                    Ok(()) => {
+                        let _ = crate::guard::canary::deploy_decoys();
+                        Some(json!({"status": "saved"}))
+                    }
+                    Err(e) => { error!("canary.configure: {e:#}"); None }
+                }
+            }
+            "canary.deploy" => match crate::guard::canary::deploy_decoys() {
+                Ok(n) => Some(json!({"created": n})),
+                Err(e) => { error!("canary.deploy: {e:#}"); None }
+            },
+            "incident.list" => {
+                let limit = req.params.as_ref().and_then(|p| p.get("limit")).and_then(|v| v.as_u64()).unwrap_or(50) as u32;
+                match crate::smart::correlator::list_incidents(limit) {
+                    Ok(list) => Some(json!(list)),
+                    Err(e) => { error!("incident.list: {e:#}"); None }
+                }
+            }
+            "incident.close" => {
+                let Some(id) = req.params.as_ref().and_then(|p| p.get("incident_id")).and_then(|v| v.as_i64()) else {
+                    return error_response(req, "missing incident_id");
+                };
+                match crate::smart::correlator::close_incident(id) {
+                    Ok(()) => Some(json!({"status": "closed"})),
+                    Err(e) => { error!("incident.close: {e:#}"); None }
+                }
+            }
+            "noise.stats" => match crate::smart::noise_learner::stats() {
+                Ok(s) => Some(json!(s)),
+                Err(e) => { error!("noise.stats: {e:#}"); None }
+            },
+            "noise.mute" => {
+                let Some(cat) = req.params.as_ref().and_then(|p| p.get("category")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing category");
+                };
+                match crate::smart::noise_learner::mute_category(&cat) {
+                    Ok(()) => Some(json!({"status": "muted"})),
+                    Err(e) => { error!("noise.mute: {e:#}"); None }
+                }
+            }
+            "noise.unmute" => {
+                let Some(cat) = req.params.as_ref().and_then(|p| p.get("category")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing category");
+                };
+                match crate::smart::noise_learner::unmute_category(&cat) {
+                    Ok(()) => Some(json!({"status": "unmuted"})),
+                    Err(e) => { error!("noise.unmute: {e:#}"); None }
+                }
+            }
+            "guard.event.dismiss" => {
+                let Some(cat) = req.params.as_ref().and_then(|p| p.get("category")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing category");
+                };
+                match crate::smart::noise_learner::record_dismissal(&cat) {
+                    Ok(stat) => Some(json!(stat)),
+                    Err(e) => { error!("noise dismissal: {e:#}"); None }
+                }
+            }
             _ => {
                 unknown = true;
                 warn!("Unknown method: {}", req.method);
