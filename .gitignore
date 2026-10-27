@@ -12,6 +12,17 @@
 .swiftpm/
 migrate_working_dir/
 
+# Rust
+/engine/target/
+/engine/debug/
+/engine/release/
+
+
+# Optional common files
+/node_modules/
+.env
+
+
 # IntelliJ related
 *.iml
 *.ipr

@@ -1,8 +1,14 @@
 mod rpc;
 mod platform;
 mod dispatcher;
+mod firewall;
+mod vulns;
+mod scanner;
 
 use clap::{Parser, Subcommand};
+// ...existing code...
+// ...existing code...
+// ...existing code...
 use anyhow::Result;
 use tokio::io::AsyncBufReadExt;
 use tracing::{info, error, Level};
