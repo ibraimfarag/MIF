@@ -13,7 +13,7 @@ param(
     [switch]$SelfSigned,
     [string]$PfxPath,
     [string]$PfxPassword,
-    [string]$BuildDir = "build\windows\x64\runner\Release",
+    [string]$BuildDir = "dist\MICS-portable",
     [string]$Publisher = "Mourad Ibrahim (MI CS)"
 )
 
