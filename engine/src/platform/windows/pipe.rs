@@ -1,6 +1,6 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
-use crate::rpc::{JsonRpcRequest, JsonRpcResponse};
+use crate::rpc::JsonRpcRequest;
 use anyhow::{Result, Context};
 use tracing::{info, error};
 

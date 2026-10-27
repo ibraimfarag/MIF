@@ -12,10 +12,12 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 async-trait = "0.1.92"
-windows = { version = "0.62.2", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_NetworkManagement_IpHelper"] }
+windows = { version = "0.62.2", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_WindowsFirewall", "Win32_System_Com"] }
 sysinfo = "0.39.6"
 yara-x = "1.22.1"
-aes-gcm = "0.11.1"
+aes-gcm = { version = "0.11.1", features = ["aes", "alloc", "getrandom"] }
 sha2 = "0.11.1"
 hex = "0.4.3"
-windows-dpapi = "0.2.0"
+windows-dpapi = "0.2"
+reqwest = { version = "0.12", features = ["rustls-tls", "json"] }
+chrono = { version = "0.4", features = ["serde"] }

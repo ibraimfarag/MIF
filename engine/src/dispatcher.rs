@@ -1,7 +1,8 @@
 use crate::rpc::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 use serde_json::json;
 use anyhow::Result;
-use tracing::{info, warn};use crate::platform::traits::PlatformCollectors;
+use tracing::{info, warn, error};
+use crate::platform::traits::PlatformCollectors;
 pub struct Dispatcher;
 
 impl Dispatcher {
@@ -89,27 +90,27 @@ impl Dispatcher {
                 info!("Starting smart file scan...");
                 let triage = crate::scanner::TriageEngine::new();
                 if let Ok(queue) = triage.triage_directory(&std::path::PathBuf::from("C:\\")) {
-                    let yara = match crate::scanner::yara_engine::YaraEngine::new(r"rule TestRule { strings: $a = \"malware\" condition: $a }" ) {
-                        Ok(e) => e,
-                        Err(_) => {
-                            warn!("YARA engine failed to initialize, skipping scan");
-                            return None;
-                        }
-                    };
-
-                    let mut results = Vec::new();
-                    for item in queue {
-                        if let Ok(matches) = yara.scan_file(&item.path) {
-                            if !matches.is_empty() {
-                                results.push(json!({
-                                    "path": item.path,
-                                    "priority": item.priority,
-                                    "matches": matches
-                                }));
+                    let yara_rules = "rule TestRule { strings: $a = \"malware\" condition: $a }";
+                    let yara_res = crate::scanner::yara_engine::YaraEngine::new(yara_rules);
+                    
+                    if let Ok(yara) = yara_res {
+                        let mut results = Vec::new();
+                        for item in queue {
+                            if let Ok(matches) = yara.scan_file(&item.path) {
+                                if !matches.is_empty() {
+                                    results.push(json!({
+                                        "path": item.path,
+                                        "priority": item.priority,
+                                        "matches": matches
+                                    }));
+                                }
                             }
                         }
+                        Some(json!(results))
+                    } else {
+                        warn!("YARA engine failed to initialize, skipping scan");
+                        None
                     }
-                    Some(json!(results))
                 } else {
                     None
                 }
@@ -131,6 +132,24 @@ impl Dispatcher {
                         }
                     } else { None }
                 } else { None }
+            }
+            "sync.now" => {
+                info!("Syncing intelligence...");
+                let sm = crate::sync::SyncManager::new();
+                if let Ok(res) = sm.sync_now().await {
+                    Some(json!({"status": "success", "message": res}))
+                } else {
+                    None
+                }
+            }
+            "sync.status" => {
+                info!("Checking sync status...");
+                let sm = crate::sync::SyncManager::new();
+                if let Ok(state) = sm.get_status().await {
+                    Some(json!(state))
+                } else {
+                    None
+                }
             }
         };
         if let Some(res) = result {

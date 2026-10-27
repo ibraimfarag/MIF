@@ -1,11 +1,6 @@
 use crate::platform::traits::{PlatformCollectors, AuditFinding, FindingStatus, Severity, NetworkConnection};
 use async_trait::async_trait;
 use anyhow::Result;
-use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RegOpenKeyExW, RegQueryValueExW, KEY_READ};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::NetworkManagement::IpHelper::*;
-use windows::Win32::Foundation::PSTR;
-use std::ptr;
 
 pub struct WindowsCollectors;
 
@@ -77,6 +72,9 @@ impl PlatformCollectors for WindowsCollectors {
     }
 
     async fn get_network_connections(&self) -> Result<Vec<NetworkConnection>> {
+        use windows::Win32::NetworkManagement::IpHelper::*;
+        use std::ptr;
+
         let mut connections = Vec::new();
         
         // Implementation for GetExtendedTcpTable will be added here
