@@ -1,8 +1,10 @@
 use anyhow::Result;
-use tracing::{info, error};
+use tracing::info;
 
+#[allow(dead_code)]
 pub struct FirewallManager;
 
+#[allow(dead_code)]
 impl FirewallManager {
     pub async fn set_default_deny_outbound(enabled: bool) -> Result<()> {
         info!("Setting default outbound firewall policy to: {}", if enabled { "Deny" } else { "Allow" });
@@ -22,6 +24,7 @@ impl FirewallManager {
     }
 }
 
+#[allow(dead_code)]
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct FirewallRule {
     pub name: String,

@@ -26,7 +26,7 @@ pub async fn run_pipe_server() -> Result<()> {
     }
 }
 
-async fn handle_client(mut stream: NamedPipeServer) -> Result<()> {
+async fn handle_client(stream: NamedPipeServer) -> Result<()> {
     let (reader, mut writer) = tokio::io::split(stream);
     let mut reader = BufReader::new(reader);
     let mut line = String::new();

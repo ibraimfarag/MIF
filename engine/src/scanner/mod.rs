@@ -52,7 +52,7 @@ impl TriageEngine {
         }
     }
 
-    pub fn triage_directory(&self, dir: &PathBuf) -> Result<Vec<FileTriage>> {
+    pub fn triage_directory(&self, _dir: &PathBuf) -> Result<Vec<FileTriage>> {
         let mut queue = Vec::new();
         // We would use walkdir here to scan the directory
         // Simulating file discovery

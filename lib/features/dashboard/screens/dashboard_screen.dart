@@ -91,12 +91,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHealthCard(
-    BuildContext context,
-    String title,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildHealthCard(String title, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

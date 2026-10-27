@@ -1,3 +1,4 @@
+use crate::platform::traits::PlatformCollectors;
 mod rpc;
 mod platform;
 mod dispatcher;
@@ -7,13 +8,9 @@ mod scanner;
 mod sync;
 
 use clap::{Parser, Subcommand};
-// ...existing code...
-// ...existing code...
-// ...existing code...
-// ...existing code...
 use anyhow::Result;
 use tokio::io::AsyncBufReadExt;
-use tracing::{info, error, Level};
+use tracing::{error, Level};
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(Parser)]
@@ -26,12 +23,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the engine in serve mode (stdio)
+    /// Start the engine in serve mode (stdio JSON-RPC)
     Serve,
-    /// Start the engine as a background service (Named Pipe)
+    /// Start the engine as a background service (Named Pipe JSON-RPC)
     Service,
-    /// Run a specific audit action
+    /// Run the full system audit and print results
     Audit {
+        #[arg(short, long)]
+        json: bool,
+    },
+    /// List live TCP/UDP connections with owning processes
+    Connections {
+        #[arg(short, long)]
+        json: bool,
+    },
+    /// List installed software inventory
+    Inventory {
         #[arg(short, long)]
         json: bool,
     },
@@ -39,35 +46,55 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Logs go to stderr so stdout stays clean for JSON consumers (CLI pipe usage).
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
+        .with_writer(std::io::stderr)
         .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Setting default subscriber failed");
 
     let cli = Cli::parse();
 
     match cli.command {
         Some(Commands::Serve) => {
-            info!("Starting engine in --serve mode (stdio)...");
+            tracing::info!("Starting engine in --serve mode (stdio)...");
             let mut reader = tokio::io::BufReader::new(tokio::io::stdin());
             let mut line = String::new();
             loop {
                 line.clear();
-                if reader.read_line(&mut line).await.is_err() || line.is_empty() { break; }
+                if reader.read_line(&mut line).await.is_err() || line.is_empty() {
+                    break;
+                }
                 if let Ok(req) = serde_json::from_str::<rpc::JsonRpcRequest>(&line) {
                     let resp = dispatcher::Dispatcher::handle_request(req).await;
-                    println!("{}", serde_json::to_string(&resp).unwrap());
+                    println!("{}", serde_json::to_string(&resp)?);
                 }
             }
         }
         Some(Commands::Service) => {
-            info!("Starting engine in --service mode (Named Pipe)...");
+            tracing::info!("Starting engine in --service mode (Named Pipe)...");
             if let Err(e) = platform::windows::pipe::run_pipe_server().await {
-                error!("Pipe server error: {:?}", e);
+                error!("Pipe server error: {e:#}");
             }
         }
         Some(Commands::Audit { json }) => {
-            info!("Running system audit (json: {})...", json);
+            let collectors = platform::windows::collectors::WindowsCollectors;
+            let report = platform::traits::run_full_audit(&collectors).await?;
+            emit(&report, json)?;
+        }
+        Some(Commands::Connections { json }) => {
+            let collectors = platform::windows::collectors::WindowsCollectors;
+            let conns = collectors.get_network_connections().await?;
+            emit(
+                &serde_json::to_value(&conns)?,
+                json,
+            )?;
+        }
+        Some(Commands::Inventory { json }) => {
+            let collectors = platform::windows::collectors::WindowsCollectors;
+            let sw = collectors.get_software_inventory().await?;
+            emit(&serde_json::to_value(&sw)?, json)?;
         }
         None => {
             println!("MI CS Engine v0.1.0");
@@ -75,5 +102,63 @@ async fn main() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// JSON mode prints machine-readable output; human mode prints a compact table.
+fn emit(value: &serde_json::Value, json: bool) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(value)?);
+        return Ok(());
+    }
+
+    if let Some(score) = value.get("score") {
+        println!("MI CS Security Score: {score}/100");
+        println!();
+        if let Some(findings) = value.get("findings").and_then(|f| f.as_array()) {
+            for f in findings {
+                let section = f.get("section").and_then(|v| v.as_str()).unwrap_or("?");
+                let item = f.get("item").and_then(|v| v.as_str()).unwrap_or("?");
+                let status = f.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+                println!("[{status:^9}] {section} :: {item}");
+                if let Some(d) = f.get("description").and_then(|v| v.as_str()) {
+                    println!("           {d}");
+                }
+            }
+        }
+        if let Some(startup) = value.get("startup_entries").and_then(|f| f.as_array()) {
+            println!();
+            println!("Startup entries ({}):", startup.len());
+            for s in startup {
+                println!(
+                    "  {} [{}] -> {}",
+                    s.get("name").and_then(|v| v.as_str()).unwrap_or("?"),
+                    s.get("location").and_then(|v| v.as_str()).unwrap_or("?"),
+                    s.get("command").and_then(|v| v.as_str()).unwrap_or("?")
+                );
+            }
+        }
+        if let Some(tasks) = value.get("scheduled_tasks").and_then(|f| f.as_array()) {
+            println!();
+            println!("Non-Microsoft scheduled tasks ({}):", tasks.len());
+            for t in tasks {
+                println!(
+                    "  {} ({})",
+                    t.get("name").and_then(|v| v.as_str()).unwrap_or("?"),
+                    t.get("path").and_then(|v| v.as_str()).unwrap_or("?")
+                );
+            }
+        }
+        return Ok(());
+    }
+
+    // Arrays (connections / inventory).
+    if let Some(items) = value.as_array() {
+        for item in items {
+            println!("{item}");
+        }
+    } else {
+        println!("{value}");
+    }
     Ok(())
 }

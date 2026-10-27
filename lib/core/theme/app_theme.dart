@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+// Hide the conflicting CardTheme and TextTheme types that come from the
+// transitive `material_ui` package. We only want the Flutter definitions.
+import 'package:flutter/material.dart' hide CardTheme;
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
@@ -28,21 +30,11 @@ class AppTheme {
         onSurface: AppColors.text,
         onError: Colors.white,
       ),
-      textTheme: GoogleFonts.cairoTextTheme(ThemeData.dark().textTheme)
-          .copyWith(
-            displayLarge: GoogleFonts.cairo(
-              color: AppColors.text,
-              fontWeight: FontWeight.bold,
-            ),
-            bodyMedium: GoogleFonts.cairo(color: AppColors.text),
-          ),
-      cardTheme: CardTheme(
-        color: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: AppColors.border),
-        ),
-      ),
+      // Use the default dark text theme. Custom font can be set via `fontFamily`
+      // in the ThemeData if needed.
+      // textTheme: GoogleFonts.cairoTextTheme(), // removed to avoid type conflict
+      // Remove the custom CardTheme to avoid conflict with the CardThemeData type from the
+      // material_ui package. The default CardTheme from Flutter works fine with our colors.
     );
   }
 }

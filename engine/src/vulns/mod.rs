@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use reqwest::Client;
-use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Vulnerability {
@@ -18,6 +17,7 @@ pub struct SoftwareItem {
     pub cpe: String,
 }
 
+#[allow(dead_code)]
 pub struct VulnScanner {
     client: Client,
 }
@@ -59,7 +59,7 @@ impl VulnScanner {
         ])
     }
 
-    async fn fetch_vulnerabilities(&self, cpe: &str) -> Result<Vec<Vulnerability>> {
+    async fn fetch_vulnerabilities(&self, _cpe: &str) -> Result<Vec<Vulnerability>> {
         // Real NVD API call would go here: https://services.nvd.nist.gov/rest/json/cves/2.0
         // For the skeleton, we return a simulated vulnerability
         Ok(vec![Vulnerability {

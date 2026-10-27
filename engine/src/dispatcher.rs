@@ -1,6 +1,5 @@
 use crate::rpc::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 use serde_json::json;
-use anyhow::Result;
 use tracing::{info, warn, error};
 use crate::platform::traits::PlatformCollectors;
 pub struct Dispatcher;
@@ -24,23 +23,13 @@ impl Dispatcher {
             "audit.run" => {
                 info!("Running full system audit...");
                 let collectors = crate::platform::windows::collectors::WindowsCollectors;
-                
-                let mut all_findings = Vec::new();
-                
-                if let Ok(findings) = collectors.audit_defender().await {
-                    all_findings.extend(findings);
+                match crate::platform::traits::run_full_audit(&collectors).await {
+                    Ok(report) => Some(report),
+                    Err(e) => {
+                        error!("audit.run failed: {e:#}");
+                        None
+                    }
                 }
-                if let Ok(findings) = collectors.audit_firewall().await {
-                    all_findings.extend(findings);
-                }
-                if let Ok(findings) = collectors.audit_rdp().await {
-                    all_findings.extend(findings);
-                }
-                if let Ok(findings) = collectors.audit_smbv1().await {
-                    all_findings.extend(findings);
-                }
-
-                Some(json!(all_findings))
             }
             "net.connections" => {
                 info!("Fetching network connections...");
@@ -150,6 +139,10 @@ impl Dispatcher {
                 } else {
                     None
                 }
+            }
+            _ => {
+                warn!("Unknown method: {}", req.method);
+                None
             }
         };
         if let Some(res) = result {

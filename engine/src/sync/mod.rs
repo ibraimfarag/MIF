@@ -3,7 +3,7 @@ use anyhow::Result;
 use reqwest::Client;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{info, error};
+use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncState {
@@ -13,6 +13,7 @@ pub struct SyncState {
 }
 
 pub struct SyncManager {
+    #[allow(dead_code)]
     client: Client,
     storage_path: PathBuf,
 }

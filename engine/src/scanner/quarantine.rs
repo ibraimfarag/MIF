@@ -1,10 +1,14 @@
+//! Quarantine storage (Phase 5): currently unused helpers kept for the next phase.
+#![allow(dead_code)]
+#![allow(deprecated)]
+
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, KeyInit};
-use sha2::{Sha256, Digest};
+use sha2::Digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
-use tracing::{info, error};
+use tracing::info;
 
 pub struct QuarantineManager {
     quarantine_dir: PathBuf,
@@ -34,7 +38,8 @@ impl QuarantineManager {
         let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
         let cipher = Aes256Gcm::new(key);
         
-        let nonce_bytes = sha2::Sha256::digest(&file_data).as_slice()[..12].to_vec();
+        let digest = sha2::Sha256::digest(&file_data);
+        let nonce_bytes: Vec<u8> = digest.as_slice()[..12].to_vec();
         let nonce = Nonce::from_slice(&nonce_bytes);
         
         let encrypted_data = cipher.encrypt(nonce, file_data.as_ref())

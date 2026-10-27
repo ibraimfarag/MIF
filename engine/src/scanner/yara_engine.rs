@@ -1,23 +1,31 @@
-use yara_x::Rules;
+use yara_x::{Compiler, Scanner};
 use anyhow::{Result, Context};
 use std::path::Path;
 use std::fs;
 
 pub struct YaraEngine {
-    rules: Rules,
+    rules: yara_x::Rules,
 }
 
 impl YaraEngine {
     pub fn new(rules_source: &str) -> Result<Self> {
-        // Use a simplified approach to avoid API version mismatches
-        let rules = Rules::compile(rules_source).context("Failed to compile YARA rules")?;
+        let mut compiler = Compiler::new();
+        compiler
+            .add_source(rules_source)
+            .context("Failed to add YARA source")?;
+        let rules = compiler.build();
         Ok(Self { rules })
     }
 
     pub fn scan_file(&self, path: &Path) -> Result<Vec<String>> {
         let data = fs::read(path).context("Failed to read file for YARA scan")?;
-        let matches = self.rules.scan(&data).context("YARA scan failed")?;
-        
-        Ok(matches.into_iter().map(|m| m.identifier().to_string()).collect())
+        let mut scanner = Scanner::new(&self.rules);
+        let results = scanner.scan(&data).context("YARA scan failed")?;
+
+        let mut matched = Vec::new();
+        for rule in results.matching_rules() {
+            matched.push(rule.identifier().to_string());
+        }
+        Ok(matched)
     }
 }
