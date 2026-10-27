@@ -4,6 +4,19 @@ use tracing::{info, warn, error};
 use crate::platform::traits::PlatformCollectors;
 pub struct Dispatcher;
 
+fn error_response(req: JsonRpcRequest, message: &str) -> JsonRpcResponse {
+    JsonRpcResponse {
+        jsonrpc: "2.0".to_string(),
+        result: None,
+        error: Some(json!(JsonRpcError {
+            code: -32602,
+            message: message.to_string(),
+            data: None,
+        })),
+        id: req.id,
+    }
+}
+
 impl Dispatcher {
     pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
@@ -60,19 +73,99 @@ impl Dispatcher {
             }
             "vuln.scan" => {
                 info!("Running vulnerability scan...");
-                let scanner = crate::vulns::VulnScanner::new();
-                if let Ok(results) = scanner.scan_software().await {
-                    // Format results for JSON-RPC
-                    let formatted: Vec<_> = results.into_iter().map(|(sw, v)| {
-                        json!({
-                            "software": sw.name,
-                            "version": sw.version,
-                            "vulnerabilities": v
-                        })
-                    }).collect();
-                    Some(json!(formatted))
-                } else {
-                    None
+                let max_apps = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("max_apps"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10) as usize;
+                match crate::vulns::VulnScanner::new().and_then(|s| Ok(s)) {
+                    Ok(scanner) => match scanner.scan(max_apps).await {
+                        Ok(results) => Some(json!(results)),
+                        Err(e) => {
+                            error!("vuln.scan failed: {e:#}");
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        error!("vuln.scan init failed: {e:#}");
+                        None
+                    }
+                }
+            }
+            "fw.rules.list" => {
+                match crate::firewall::FirewallManager::list_rules().await {
+                    Ok(rules) => Some(json!(rules)),
+                    Err(e) => {
+                        error!("fw.rules.list failed: {e:#}");
+                        None
+                    }
+                }
+            }
+            "fw.rules.add" => {
+                let Some(params) = req.params.clone() else {
+                    return error_response(req, "missing params");
+                };
+                let parsed: anyhow::Result<crate::firewall::AddRuleRequest> =
+                    serde_json::from_value(params)
+                        .map_err(|e| anyhow::anyhow!("invalid rule params: {e}"));
+                match parsed {
+                    Ok(r) => match crate::firewall::FirewallManager::add_rule(&r).await {
+                        Ok(name) => Some(json!({"status": "created", "name": name})),
+                        Err(e) => {
+                            error!("fw.rules.add failed: {e:#}");
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        error!("fw.rules.add invalid: {e:#}");
+                        None
+                    }
+                }
+            }
+            "fw.rules.remove" => {
+                let Some(name) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                else {
+                    return error_response(req, "missing rule name");
+                };
+                match crate::firewall::FirewallManager::remove_rule(&name).await {
+                    Ok(()) => Some(json!({"status": "removed", "name": name})),
+                    Err(e) => {
+                        error!("fw.rules.remove failed: {e:#}");
+                        None
+                    }
+                }
+            }
+            "fw.default_deny.status" => {
+                match crate::firewall::FirewallManager::is_default_deny_enabled().await {
+                    Ok(on) => Some(json!({"default_deny_outbound": on})),
+                    Err(e) => {
+                        error!("fw.default_deny.status failed: {e:#}");
+                        None
+                    }
+                }
+            }
+            "fw.country.block" => {
+                let Some(cc) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("country"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                else {
+                    return error_response(req, "missing country code");
+                };
+                match crate::firewall::FirewallManager::block_country(&cc).await {
+                    Ok(name) => Some(json!({"status": "blocked", "rule": name})),
+                    Err(e) => {
+                        error!("fw.country.block failed: {e:#}");
+                        None
+                    }
                 }
             }
             "scan.start" => {

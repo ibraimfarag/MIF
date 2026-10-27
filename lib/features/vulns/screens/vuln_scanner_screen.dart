@@ -1,46 +1,195 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/models/network_models.dart';
 
-/// Phase-3 skeleton: designed empty state wired into the shell. The module
-/// comes alive when its engine phase lands (see MI-CS-Agent-Prompt.md section 12).
+final vulnProvider =
+    NotifierProvider<VulnNotifier, AsyncValue<List<SoftwareVulns>>>(
+        VulnNotifier.new);
+
+class VulnNotifier extends Notifier<AsyncValue<List<SoftwareVulns>>> {
+  @override
+  AsyncValue<List<SoftwareVulns>> build() =>
+      const AsyncValue.data(<SoftwareVulns>[]);
+
+  Future<void> scan({int maxApps = 10}) async {
+    state = const AsyncValue.loading();
+    try {
+      final res = await ref
+          .read(engineIpcProvider)
+          .request('vuln.scan', {'max_apps': maxApps});
+      state = AsyncValue.data((res as List)
+          .map((v) => SoftwareVulns.fromJson(v as Map<String, dynamic>))
+          .toList());
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+}
+
+Color cvssColor(double score) {
+  if (score >= 9) return AppColors.red;
+  if (score >= 7) return AppColors.orange;
+  if (score >= 4) return const Color(0xFFEAB308);
+  return AppColors.muted;
+}
+
 class VulnScannerScreen extends ConsumerWidget {
   const VulnScannerScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.border),
-                color: AppColors.surface,
-              ),
-              child: Icon(Icons.gpp_maybe_outlined, color: AppColors.cyan, size: 32),
-            ),
-            const SizedBox(height: 16),
+    final async = ref.watch(vulnProvider);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(children: [
             Text(context.tr('nav.vulns'),
                 style: const TextStyle(
                     color: AppColors.text,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Text(context.tr('soon.body'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800)),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: () => ref.read(vulnProvider.notifier).scan(),
+              icon: const Icon(Icons.radar, size: 18),
+              label: Text('NVD Scan'),
             ),
-          ],
+          ]),
         ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'Matches installed software against NVD (cached offline). First scan is rate-limited (~6.5 s per app).',
+              style: TextStyle(color: AppColors.muted, fontSize: 11),
+            ),
+          ),
+        ),
+        Expanded(
+          child: async.when(
+            data: (items) => ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                for (final item in items) _SoftwareCard(item: item),
+              ],
+            ),
+            loading: () => const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('Querying NVD / reading cache…',
+                      style: TextStyle(color: AppColors.muted)),
+                ],
+              ),
+            ),
+            error: (e, _) => Center(
+              child: Text('$e', style: const TextStyle(color: AppColors.red)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SoftwareCard extends StatelessWidget {
+  const _SoftwareCard({required this.item});
+  final SoftwareVulns item;
+
+  @override
+  Widget build(BuildContext context) {
+    final vulns = item.vulnerabilities;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              Text(item.software,
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14)),
+              if (item.version.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(item.version,
+                    style: AppTheme.mono(size: 11, color: AppColors.cyan)),
+              ],
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text(item.fromCache ? 'CACHE' : 'LIVE',
+                    style: AppTheme.mono(
+                        size: 9,
+                        color: item.fromCache
+                            ? AppColors.muted
+                            : AppColors.green)),
+              ),
+              const SizedBox(width: 8),
+              Text('${vulns.length} CVEs',
+                  style: AppTheme.mono(size: 11, color: AppColors.muted)),
+            ]),
+          ),
+          for (final v in vulns.take(5))
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.border))),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 30,
+                    decoration: BoxDecoration(
+                        color: cvssColor(v.cvss),
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 110,
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(v.cveId,
+                              style: AppTheme.mono(
+                                  size: 11, color: AppColors.text)),
+                          Text('CVSS ${v.cvss.toStringAsFixed(1)}',
+                              style: AppTheme.mono(
+                                  size: 10, color: cvssColor(v.cvss))),
+                        ]),
+                  ),
+                  Expanded(
+                    child: Text(v.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: AppColors.muted, fontSize: 11.5)),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

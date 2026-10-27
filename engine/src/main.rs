@@ -6,6 +6,7 @@ mod firewall;
 mod vulns;
 mod scanner;
 mod sync;
+mod storage;
 
 use clap::{Parser, Subcommand};
 use anyhow::Result;
