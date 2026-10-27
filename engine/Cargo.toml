@@ -1,5 +1,6 @@
 [package]
 name = "mics-engine"
+description = "MI CS Engine — Mourad Ibrahim Cyber Security"
 version = "0.1.0"
 edition = "2024"
 

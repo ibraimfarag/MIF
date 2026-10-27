@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "mics_app" "\0"
+            VALUE "CompanyName", "Mourad Ibrahim" "\0"
+            VALUE "FileDescription", "MI CS Command Center" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "mics_app" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Mourad Ibrahim. GPL-3.0-or-later." "\0"
             VALUE "OriginalFilename", "mics_app.exe" "\0"
-            VALUE "ProductName", "mics_app" "\0"
+            VALUE "ProductName", "MI CS Command Center" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
