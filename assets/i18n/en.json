@@ -19,6 +19,8 @@
   "engine.missing": "Engine not found",
   "engine.stopped": "Stopped",
   "score.title": "Security Score",
+  "score.whatNow": "What should I do now?",
+  "score.doFirst": "Fix the highest-impact finding first:",
   "common.refresh": "Refresh",
   "common.fix": "Fix",
   "common.critical": "Critical",
@@ -39,11 +41,13 @@
   "audit.empty.action": "Run first audit",
   "audit.loading": "Collecting live data from the engine…",
   "audit.error": "Audit failed",
+  "dashboard.liveFeed": "Layer Health (L1–L5)",
   "dashboard.summary": "Findings Summary",
   "soon.title": "Module coming in a later phase",
   "soon.body": "This module ships in an upcoming phase of the build plan. The engine-side work for it is scheduled — the screen will light up with live data once wired.",
   "settings.title": "Settings",
   "settings.language": "Language",
+  "settings.enginePath": "Engine executable",
   "lang.ar": "العربية",
   "lang.en": "English"
 }

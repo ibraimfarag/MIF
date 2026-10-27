@@ -19,6 +19,8 @@
   "engine.missing": "المحرك غير موجود",
   "engine.stopped": "متوقف",
   "score.title": "درجة الحماية",
+  "score.whatNow": "ماذا أفعل الآن؟",
+  "score.doFirst": "ابدأ بأخطر ملاحظة:",
   "common.refresh": "تحديث",
   "common.fix": "إصلاح",
   "common.critical": "حرج",
@@ -39,11 +41,13 @@
   "audit.empty.action": "ابدأ الفحص الأول",
   "audit.loading": "جارٍ جمع البيانات الحية من المحرك…",
   "audit.error": "فشل الفحص",
+  "dashboard.liveFeed": "صحة الطبقات (L1–L5)",
   "dashboard.summary": "ملخص الملاحظات",
   "soon.title": "الوحدة تظهر في مرحلة لاحقة",
   "soon.body": "هذه الوحدة ضمن المراحل القادمة من خطة البناء. سيتم ربطها بالمحرك وتظهر بالبيانات الحية فور اكتمال مرحلتها.",
   "settings.title": "الإعدادات",
   "settings.language": "اللغة",
+  "settings.enginePath": "مسار المحرك",
   "lang.ar": "العربية",
   "lang.en": "English"
 }
