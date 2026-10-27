@@ -60,6 +60,10 @@ class EngineIpc {
     return beside;
   }
 
+  /// Extra environment (VT key, LM Studio URL, ...) applied at spawn — set
+  /// from the advanced settings screen before first launch.
+  Map<String, String> spawnEnv = {};
+
   Future<bool> ensureRunning() async {
     if (_process != null) return true;
     final path = resolveEnginePath();
@@ -69,7 +73,7 @@ class EngineIpc {
     }
     try {
       final proc = await Process.start(path, ['serve'],
-          mode: ProcessStartMode.normal);
+          environment: spawnEnv, mode: ProcessStartMode.normal);
       _process = proc;
       _setState(EngineState.running);
       _restartBackoffSeconds = 1;

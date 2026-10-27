@@ -142,6 +142,40 @@ impl SyncManager {
         }))
     }
 
+    /// Background loop: waits for connectivity, then refreshes intel every
+    /// `interval_hours`. Runs for the engine's lifetime (spawned by --serve).
+    /// Background loop: waits for connectivity, then refreshes intel every
+    /// `interval_hours`. Runs for the engine's lifetime; needs the tokio
+    /// handle because sync IO is async.
+    pub fn start_auto_sync(rt: tokio::runtime::Handle, interval_hours: u64) {
+        std::thread::spawn(move || {
+            // First tick after 2 min, then every interval.
+            std::thread::sleep(std::time::Duration::from_secs(120));
+            loop {
+                let sm = match SyncManager::new() {
+                    Ok(sm) => sm,
+                    Err(_) => continue,
+                };
+                let online = rt.block_on(sm.online());
+                if online {
+                    match rt.block_on(sm.sync_now()) {
+                        Ok(report) => {
+                            tracing::info!(
+                                "auto-sync: +{} hashes, total {}",
+                                report.ioc_hashes_added,
+                                report.ioc_hash_total
+                            );
+                        }
+                        Err(e) => tracing::warn!("auto-sync failed: {e:#}"),
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(
+                    (interval_hours.clamp(1, 168) * 3600) as u64,
+                ));
+            }
+        });
+    }
+
     pub async fn get_status(&self) -> Result<serde_json::Value> {
         let online = self.online().await;
         Ok(serde_json::json!({

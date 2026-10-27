@@ -81,6 +81,12 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Serve) => {
             tracing::info!("Starting engine in --serve mode (stdio)...");
+            // Auto intel-sync cadence (hours) comes from UI settings.
+            let sync_hours: u64 = std::env::var("MICS_SYNC_HOURS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6);
+            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current(), sync_hours);
             // Forward guard events as JSON-RPC notifications on stdout.
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
