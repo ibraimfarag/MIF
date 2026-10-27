@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 
 import 'package:mics_app/models/audit_models.dart';
@@ -143,12 +145,65 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _FindingCard extends StatelessWidget {
+String? _hardeningActionFor(AuditFinding f) {
+  final item = '${f.section} ${f.item}'.toLowerCase();
+  if (item.contains('pua')) return 'pua_protection';
+  if (item.contains('smbv1')) return 'smbv1_off';
+  if (item.contains('rdp')) return 'rdp_off';
+  if (item.contains('uac')) return 'uac_on';
+  return null;
+}
+
+Future<void> _explainFinding(
+    BuildContext context, WidgetRef ref, AuditFinding f) async {
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Asking the analyst…'), duration: Duration(seconds: 2)));
+  try {
+    final res = await ref.read(engineIpcProvider).request('llm.explain', {
+      'finding': '${f.section} :: ${f.item} — ${f.description}',
+      'lang': 'ar',
+    });
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
+              const SizedBox(width: 8),
+              Text('MI CS Assistant',
+                  style: TextStyle(
+                      color: AppColors.cyan, fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 12),
+            SelectableText((res as Map)['explanation']?.toString() ?? '—',
+                style: TextStyle(
+                    color: AppColors.text, fontSize: 13.5, height: 1.6)),
+          ],
+        ),
+      ),
+    );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Explain failed: $e')));
+    }
+  }
+}
+
+class _FindingCard extends ConsumerWidget {
   const _FindingCard({required this.finding});
   final AuditFinding finding;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = finding.statusColor;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -208,16 +263,47 @@ class _FindingCard extends StatelessWidget {
               ],
             ),
           ),
-          if (finding.fixAvailable)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(start: 8),
-              child: OutlinedButton(
-                onPressed: () {},
-                style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact),
-                child: Text(context.tr('common.fix')),
-              ),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'Explain',
+                  icon: Icon(Icons.auto_awesome,
+                      size: 16, color: AppColors.cyan),
+                  onPressed: () => _explainFinding(context, ref, finding),
+                ),
+                if (finding.fixAvailable)
+                  OutlinedButton(
+                    onPressed: () async {
+                      final action = _hardeningActionFor(finding);
+                      if (action == null) {
+                        context.go('/hardening');
+                        return;
+                      }
+                      final messenger = ScaffoldMessenger.of(context);
+                      messenger.showSnackBar(const SnackBar(
+                          content: Text('Applying fix… (UAC may appear)')));
+                      try {
+                        await ref
+                            .read(engineIpcProvider)
+                            .request('hardening.apply', {'action': action});
+                        messenger.showSnackBar(SnackBar(
+                            content: Text(
+                                'Fixed: ${finding.item} — rescan for the new score')));
+                      } catch (e) {
+                        messenger.showSnackBar(
+                            SnackBar(content: Text('Fix failed: $e')));
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
+                    child: Text(context.tr('common.fix')),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );

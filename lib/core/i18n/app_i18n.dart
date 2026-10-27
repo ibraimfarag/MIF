@@ -72,6 +72,7 @@ class AppSettings {
   /// Engine environment variables derived from these settings.
   Map<String, String> engineEnv() => {
         'MICS_SYNC_HOURS': syncIntervalHours.toString(),
+        'MICS_DND': dndMode ? '1' : '0',
         if (vtApiKey.isNotEmpty) 'MICS_VT_API_KEY': vtApiKey,
         if (lmUrl.isNotEmpty) 'MICS_LM_URL': lmUrl,
         if (lmModel.isNotEmpty) 'MICS_LM_MODEL': lmModel,
