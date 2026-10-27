@@ -43,6 +43,21 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+    /// Scan a folder (triage-ordered: IOC hashes then YARA)
+    Scan {
+        #[arg(short, long)]
+        path: String,
+        /// Quarantine detected files
+        #[arg(long, default_value_t = false)]
+        quarantine: bool,
+        #[arg(short, long)]
+        json: bool,
+    },
+    /// List quarantine entries
+    Quarantine {
+        #[arg(short, long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
@@ -96,6 +111,15 @@ async fn main() -> Result<()> {
             let collectors = platform::windows::collectors::WindowsCollectors;
             let sw = collectors.get_software_inventory().await?;
             emit(&serde_json::to_value(&sw)?, json)?;
+        }
+        Some(Commands::Scan { path, quarantine, json }) => {
+            let report = scanner::run_scan(&std::path::PathBuf::from(path), quarantine).await?;
+            emit(&serde_json::to_value(&report)?, json)?;
+        }
+        Some(Commands::Quarantine { json }) => {
+            let m = scanner::quarantine::QuarantineManager::new()?;
+            let items = m.list()?;
+            emit(&serde_json::to_value(&items)?, json)?;
         }
         None => {
             println!("MI CS Engine v0.1.0");

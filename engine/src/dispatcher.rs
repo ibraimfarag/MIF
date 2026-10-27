@@ -21,6 +21,7 @@ impl Dispatcher {
     pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
 
+        let mut unknown = false;
         let result = match req.method.as_str() {
             "ping" => {
                 info!("Ping received");
@@ -168,33 +169,80 @@ impl Dispatcher {
                     }
                 }
             }
-            "scan.start" => {
-                info!("Starting smart file scan...");
-                let triage = crate::scanner::TriageEngine::new();
-                if let Ok(queue) = triage.triage_directory(&std::path::PathBuf::from("C:\\")) {
-                    let yara_rules = "rule TestRule { strings: $a = \"malware\" condition: $a }";
-                    let yara_res = crate::scanner::yara_engine::YaraEngine::new(yara_rules);
-                    
-                    if let Ok(yara) = yara_res {
-                        let mut results = Vec::new();
-                        for item in queue {
-                            if let Ok(matches) = yara.scan_file(&item.path) {
-                                if !matches.is_empty() {
-                                    results.push(json!({
-                                        "path": item.path,
-                                        "priority": item.priority,
-                                        "matches": matches
-                                    }));
-                                }
-                            }
-                        }
-                        Some(json!(results))
-                    } else {
-                        warn!("YARA engine failed to initialize, skipping scan");
+"scan.start" => {
+                info!("Starting scan of {:?}", req.params);
+                let root = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::PathBuf::from(r"C:\\"));
+                let quarantine = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("quarantine"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                match crate::scanner::run_scan(&root, quarantine).await {
+                    Ok(report) => Some(json!(report)),
+                    Err(e) => {
+                        error!("scan.start failed: {e:#}");
                         None
                     }
-                } else {
-                    None
+                }
+            }
+            "scan.stop" => {
+                let stopped = crate::scanner::stop_active_scan();
+                Some(json!({"stopped": stopped}))
+            }
+            "quarantine.list" => {
+                match crate::scanner::quarantine::QuarantineManager::new() {
+                    Ok(m) => match m.list() {
+                        Ok(items) => Some(json!(items)),
+                        Err(e) => { error!("quarantine.list: {e:#}"); None }
+                    },
+                    Err(e) => { error!("quarantine.list: {e:#}"); None }
+                }
+            }
+            "quarantine.restore" => {
+                let Some(id) = req.params.as_ref().and_then(|p| p.get("blob_id")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing blob_id");
+                };
+                match crate::scanner::quarantine::QuarantineManager::new() {
+                    Ok(m) => match m.restore_file(&id).await {
+                        Ok(orig) => Some(json!({"status": "restored", "path": orig})),
+                        Err(e) => { error!("quarantine.restore: {e:#}"); None }
+                    },
+                    Err(e) => { error!("quarantine.restore: {e:#}"); None }
+                }
+            }
+            "quarantine.delete" => {
+                let Some(id) = req.params.as_ref().and_then(|p| p.get("blob_id")).and_then(|v| v.as_str()).map(String::from) else {
+                    return error_response(req, "missing blob_id");
+                };
+                match crate::scanner::quarantine::QuarantineManager::new() {
+                    Ok(m) => match m.delete_blob(&id).await {
+                        Ok(()) => Some(json!({"status": "deleted"})),
+                        Err(e) => { error!("quarantine.delete: {e:#}"); None }
+                    },
+                    Err(e) => { error!("quarantine.delete: {e:#}"); None }
+                }
+            }
+            "defender.scan.quick" => {
+                // Defender orchestration: MpCmdRun quick scan.
+                let out = tokio::process::Command::new("powershell")
+                    .args(["-NoProfile", "-Command",
+                        r#"Start-Process -FilePath 'C:\Program Files\Windows Defender\MpCmdRun.exe' -ArgumentList '-Scan','-ScanType','1' -Wait"#])
+                    .output()
+                    .await;
+                match out {
+                    Ok(o) if o.status.success() => Some(json!({"status": "done"})),
+                    Ok(o) => {
+                        error!("defender scan failed: {}", String::from_utf8_lossy(&o.stderr));
+                        None
+                    }
+                    Err(e) => { error!("defender scan: {e:#}"); None }
                 }
             }
             "quarantine.add" => {
@@ -207,7 +255,7 @@ impl Dispatcher {
                 if let Some(p) = path {
                     let qm = crate::scanner::quarantine::QuarantineManager::new().ok();
                     if let Some(mgr) = qm {
-                        if let Ok(dest) = mgr.quarantine_file(&p).await {
+                        if let Ok(dest) = mgr.quarantine_file(&p, "manual request").await {
                             Some(json!({"status": "quarantined", "path": dest}))
                         } else {
                             None
@@ -217,45 +265,59 @@ impl Dispatcher {
             }
             "sync.now" => {
                 info!("Syncing intelligence...");
-                let sm = crate::sync::SyncManager::new();
-                if let Ok(res) = sm.sync_now().await {
-                    Some(json!({"status": "success", "message": res}))
-                } else {
-                    None
+                match crate::sync::SyncManager::new() {
+                    Ok(sm) => match sm.sync_now().await {
+                        Ok(res) => Some(json!({"status": "success", "report": res})),
+                        Err(e) => { error!("sync.now: {e:#}"); None }
+                    },
+                    Err(e) => { error!("sync.now: {e:#}"); None }
                 }
             }
             "sync.status" => {
                 info!("Checking sync status...");
-                let sm = crate::sync::SyncManager::new();
-                if let Ok(state) = sm.get_status().await {
-                    Some(json!(state))
-                } else {
-                    None
+                match crate::sync::SyncManager::new() {
+                    Ok(sm) => match sm.get_status().await {
+                        Ok(state) => Some(state),
+                        Err(e) => { error!("sync.status: {e:#}"); None }
+                    },
+                    Err(e) => { error!("sync.status: {e:#}"); None }
                 }
             }
             _ => {
+                unknown = true;
                 warn!("Unknown method: {}", req.method);
                 None
             }
         };
-        if let Some(res) = result {
-            JsonRpcResponse {
+        // Distinguish "unknown method" (-32601) from "known method that
+        // failed internally" (-32000) so the UI shows honest errors.
+        match result {
+            Some(res) => JsonRpcResponse {
                 jsonrpc: "2.0".to_string(),
                 result: Some(res),
                 error: None,
                 id: req.id,
-            }
-        } else {
-            JsonRpcResponse {
+            },
+            None if unknown => JsonRpcResponse {
                 jsonrpc: "2.0".to_string(),
                 result: None,
                 error: Some(json!(JsonRpcError {
                     code: -32601,
-                    message: "Method not found".to_string(),
+                    message: format!("Method not found: {}", req.method),
                     data: None,
                 })),
                 id: req.id,
-            }
+            },
+            None => JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                result: None,
+                error: Some(json!(JsonRpcError {
+                    code: -32000,
+                    message: format!("Method failed internally: {}", req.method),
+                    data: None,
+                })),
+                id: req.id,
+            },
         }
     }
 }
