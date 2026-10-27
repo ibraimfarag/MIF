@@ -57,3 +57,4 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+dist/MICS-v1.0.0-windows-portable/
