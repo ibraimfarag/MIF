@@ -1,149 +1,113 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 
-/// AR/EN dictionary — every user-facing string goes through [tr].
-/// Arabic is the default language (RTL).
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Language packs: JSON files under assets/i18n/<code>.json. Adding a language
+/// = dropping a new file + one entry in [bundledLangs]. Missing keys fall
+/// back to English; unknown keys surface the key itself (debug-friendly).
 enum AppLang { ar, en }
 
-final localeProvider =
-    NotifierProvider<LocaleNotifier, AppLang>(LocaleNotifier.new);
+const bundledLangs = {
+  'ar': 'العربية',
+  'en': 'English',
+};
 
-class LocaleNotifier extends Notifier<AppLang> {
+final i18nProvider =
+    AsyncNotifierProvider<I18nLoader, Map<String, Map<String, String>>>(
+        I18nLoader.new);
+
+class I18nLoader extends AsyncNotifier<Map<String, Map<String, String>>> {
   @override
-  AppLang build() => AppLang.ar;
-  void toggle() => state = state == AppLang.ar ? AppLang.en : AppLang.ar;
-  void set(AppLang l) => state = l;
+  Future<Map<String, Map<String, String>>> build() async {
+    final tables = <String, Map<String, String>>{};
+    for (final code in bundledLangs.keys) {
+      final raw = await rootBundle.loadString('assets/i18n/$code.json');
+      tables[code] = (jsonDecode(raw) as Map)
+          .cast<String, dynamic>()
+          .map((k, v) => MapEntry(k, v.toString()));
+    }
+    return tables;
+  }
 }
 
-final rtlProvider = Provider<bool>((ref) {
-  return ref.watch(localeProvider) == AppLang.ar;
-});
-
-String tr(BuildContext context, String key) {
-  final lang = AppLang.ar; // fallback; widgets use the extension below
-  return lookup(lang, key);
+String lookup(
+    Map<String, Map<String, String>> tables, AppLang lang, String key) {
+  final code = lang == AppLang.ar ? 'ar' : 'en';
+  return tables[code]?[key] ?? tables['en']?[key] ?? key;
 }
+
+// ---------- persisted preferences (theme + language) ----------
+
+class AppSettings {
+  final AppLang lang;
+  final ThemeMode themeMode;
+  const AppSettings(
+      {this.lang = AppLang.ar, this.themeMode = ThemeMode.dark});
+}
+
+final settingsProvider =
+    AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+
+class SettingsNotifier extends AsyncNotifier<AppSettings> {
+  @override
+  Future<AppSettings> build() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lang = prefs.getString('lang') ?? 'ar';
+    final theme = prefs.getString('themeMode') ?? 'dark';
+    return AppSettings(
+      lang: lang == 'en' ? AppLang.en : AppLang.ar,
+      themeMode: switch (theme) {
+        'light' => ThemeMode.light,
+        'system' => ThemeMode.system,
+        _ => ThemeMode.dark,
+      },
+    );
+  }
+
+  Future<void> setLang(AppLang lang) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lang', lang == AppLang.ar ? 'ar' : 'en');
+    state = AsyncValue.data(AppSettings(
+        lang: lang, themeMode: state.value?.themeMode ?? ThemeMode.dark));
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('themeMode', switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.system => 'system',
+      _ => 'dark',
+    });
+    state = AsyncValue.data(AppSettings(
+        lang: state.value?.lang ?? AppLang.ar, themeMode: mode));
+  }
+}
+
+// ---------- convenience lookups ----------
 
 extension TrX on BuildContext {
   String tr(String key) {
     final container = ProviderScope.containerOf(this);
-    final lang = container.read(localeProvider);
-    return lookup(lang, key);
+    final lang =
+        container.read(settingsProvider).value?.lang ?? AppLang.ar;
+    final tables = container.read(i18nProvider).value ?? const {};
+    return lookup(tables, lang, key);
   }
+
+  AppLang get currentLang =>
+      ProviderScope.containerOf(this).read(settingsProvider).value?.lang ??
+      AppLang.ar;
 }
 
-String lookup(AppLang lang, String key) {
-  final table = lang == AppLang.ar ? _ar : _en;
-  return table[key] ?? _en[key] ?? key;
-}
+final rtlProvider = Provider<bool>((ref) {
+  return (ref.watch(settingsProvider).value?.lang ?? AppLang.ar) ==
+      AppLang.ar;
+});
 
-const Map<String, String> _en = {
-  'app.name': 'MI CS Command Center',
-  'app.tagline': 'Smart. Transparent. Open-source defense.',
-  'nav.dashboard': 'Dashboard',
-  'nav.audit': 'System Audit',
-  'nav.scanner': 'Malware Scanner',
-  'nav.network': 'Network & Firewall',
-  'nav.ids': 'IDS (L2)',
-  'nav.vulns': 'Vulnerabilities',
-  'nav.guard': 'Process Guard',
-  'nav.canaries': 'Canaries',
-  'nav.hardening': 'Hardening Center',
-  'nav.incidents': 'Incidents',
-  'nav.reports': 'Reports',
-  'nav.settings': 'Settings',
-  'state.engine': 'Engine',
-  'engine.running': 'Protected',
-  'engine.reconnecting': 'Reconnecting…',
-  'engine.missing': 'Engine not found',
-  'engine.stopped': 'Stopped',
-  'score.title': 'Security Score',
-  'score.whatNow': 'What should I do now?',
-  'score.doFirst': 'Fix the highest-impact finding first:',
-  'common.refresh': 'Refresh',
-  'common.fix': 'Fix',
-  'common.critical': 'Critical',
-  'common.high': 'High',
-  'common.medium': 'Medium',
-  'common.low': 'Low',
-  'common.secure': 'Secure',
-  'common.warning': 'Warning',
-  'common.vulnerable': 'Vulnerable',
-  'common.unknown': 'Unknown',
-  'status.secure': 'Secure',
-  'audit.title': 'System Audit',
-  'audit.subtitle': 'Real checks from your machine — Defender, firewall, RDP, SMBv1, UAC, admins, startup and more',
-  'audit.findings': 'findings',
-  'audit.startup': 'Startup entries',
-  'audit.tasks': 'Non-Microsoft scheduled tasks',
-  'audit.empty.title': 'No audit has run yet',
-  'audit.empty.action': 'Run first audit',
-  'audit.loading': 'Collecting live data from the engine…',
-  'audit.error': 'Audit failed',
-  'dashboard.liveFeed': 'Layer Health (L1–L5)',
-  'dashboard.summary': 'Findings Summary',
-  'soon.title': 'Module coming in a later phase',
-  'soon.body':
-      'This module ships in an upcoming phase of the build plan. The engine-side work for it is scheduled — the screen will light up with live data once wired.',
-  'settings.title': 'Settings',
-  'settings.language': 'Language',
-  'settings.enginePath': 'Engine executable',
-  'lang.ar': 'العربية',
-  'lang.en': 'English',
-};
-
-const Map<String, String> _ar = {
-  'app.name': 'مركز MI CS للدفاع السيبراني',
-  'app.tagline': 'حماية ذكية، شفافة، ومفتوحة المصدر',
-  'nav.dashboard': 'الرئيسية',
-  'nav.audit': 'فحص النظام',
-  'nav.scanner': 'فاحص الملفات',
-  'nav.network': 'الشبكة والجدار',
-  'nav.ids': 'كاشف التسلل L2',
-  'nav.vulns': 'الثغرات',
-  'nav.guard': 'حارس العمليات',
-  'nav.canaries': 'الفخاخ',
-  'nav.hardening': 'مركز التقوية',
-  'nav.incidents': 'الحوادث',
-  'nav.reports': 'التقارير',
-  'nav.settings': 'الإعدادات',
-  'state.engine': 'المحرك',
-  'engine.running': 'محمي',
-  'engine.reconnecting': 'إعادة الاتصال…',
-  'engine.missing': 'المحرك غير موجود',
-  'engine.stopped': 'متوقف',
-  'score.title': 'درجة الحماية',
-  'score.whatNow': 'ماذا أفعل الآن؟',
-  'score.doFirst': 'ابدأ بأخطر ملاحظة:',
-  'common.refresh': 'تحديث',
-  'common.fix': 'إصلاح',
-  'common.critical': 'حرج',
-  'common.high': 'مرتفع',
-  'common.medium': 'متوسط',
-  'common.low': 'منخفض',
-  'common.secure': 'آمن',
-  'common.warning': 'تحذير',
-  'common.vulnerable': 'معرض للخطر',
-  'common.unknown': 'غير معروف',
-  'status.secure': 'آمن',
-  'audit.title': 'فحص النظام',
-  'audit.subtitle':
-      'نتائج حقيقية من جهازك — ديفندر، الجدار الناري، RDP، SMBv1، UAC، المدراء، بدء التشغيل والمزيد',
-  'audit.findings': 'ملاحظة',
-  'audit.startup': 'عناصر بدء التشغيل',
-  'audit.tasks': 'مهام مجدولة (غير Microsoft)',
-  'audit.empty.title': 'لم يتم تشغيل فحص بعد',
-  'audit.empty.action': 'ابدأ الفحص الأول',
-  'audit.loading': 'جارٍ جمع البيانات الحية من المحرك…',
-  'audit.error': 'فشل الفحص',
-  'dashboard.liveFeed': 'صحة الطبقات (L1–L5)',
-  'dashboard.summary': 'ملخص الملاحظات',
-  'soon.title': 'الوحدة تظهر في مرحلة لاحقة',
-  'soon.body':
-      'هذه الوحدة ضمن المراحل القادمة من خطة البناء. سيتم ربطها بالمحرك وتظهر بالبيانات الحية فور اكتمال مرحلتها.',
-  'settings.title': 'الإعدادات',
-  'settings.language': 'اللغة',
-  'settings.enginePath': 'مسار المحرك',
-  'lang.ar': 'العربية',
-  'lang.en': 'English',
-};
+/// Backwards-compat shim: old code watched this for the active language.
+final localeProvider = Provider<AppLang>((ref) {
+  return ref.watch(settingsProvider).value?.lang ?? AppLang.ar;
+});

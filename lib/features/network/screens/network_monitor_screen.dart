@@ -192,7 +192,7 @@ class _ConnectionsView extends ConsumerWidget {
               if (suspicious.isNotEmpty)
                 Chip(
                   label: Text('${suspicious.length} suspicious',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppColors.orange, fontSize: 11)),
                   side: BorderSide(
                       color: AppColors.orange.withValues(alpha: 0.5)),
@@ -217,7 +217,7 @@ class _ConnectionsView extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) =>
-          Center(child: Text('$e', style: const TextStyle(color: AppColors.red))),
+          Center(child: Text('$e', style: TextStyle(color: AppColors.red))),
     );
   }
 }
@@ -262,12 +262,12 @@ class _ConnTile extends StatelessWidget {
         SizedBox(
           width: 96,
           child: Text(conn.state,
-              style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+              style: TextStyle(color: AppColors.muted, fontSize: 11)),
         ),
         Expanded(
           flex: 2,
           child: Text('${conn.processName} (${conn.processId})',
-              style: const TextStyle(color: AppColors.text, fontSize: 11),
+              style: TextStyle(color: AppColors.text, fontSize: 11),
               overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -294,18 +294,18 @@ class _FirewallView extends ConsumerWidget {
               border: Border.all(color: AppColors.red.withValues(alpha: 0.4)),
             ),
             child: Text(fw.error!,
-                style: const TextStyle(color: AppColors.orange, fontSize: 12)),
+                style: TextStyle(color: AppColors.orange, fontSize: 12)),
           ),
         Card(
           child: SwitchListTile(
-            title: const Text('Default-Deny Outbound',
+            title: Text('Default-Deny Outbound',
                 style: TextStyle(
                     color: AppColors.text, fontWeight: FontWeight.w700)),
             subtitle: Text(
               fw.defaultDeny
                   ? 'ON — all outbound traffic blocked unless a rule allows it (L1)'
                   : 'OFF — outbound traffic allowed (Windows default)',
-              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
             value: fw.defaultDeny,
             onChanged: fw.loading
@@ -317,10 +317,10 @@ class _FirewallView extends ConsumerWidget {
         const SizedBox(height: 8),
         Card(
           child: ListTile(
-            leading: const Icon(Icons.public_off, color: AppColors.cyan),
+            leading: Icon(Icons.public_off, color: AppColors.cyan),
             title: Text('Block a country (needs synced blocklist)',
-                style: const TextStyle(color: AppColors.text, fontSize: 13)),
-            subtitle: const Text(
+                style: TextStyle(color: AppColors.text, fontSize: 13)),
+            subtitle: Text(
                 'Creates a MICS-BLOCK-<CC> rule from rules/blocklists/<CC>.cidr',
                 style: TextStyle(color: AppColors.muted, fontSize: 11)),
             trailing: SizedBox(
@@ -338,7 +338,7 @@ class _FirewallView extends ConsumerWidget {
         const SizedBox(height: 12),
         Row(children: [
           Text('MI CS rules (${fw.rules.length})',
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text, fontWeight: FontWeight.w700)),
           const Spacer(),
           OutlinedButton.icon(
@@ -349,7 +349,7 @@ class _FirewallView extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
         if (fw.rules.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
             child: Text(
               'No MICS-* rules yet. Rules created from MI CS appear in wf.msc with the MICS- prefix.',
@@ -397,7 +397,7 @@ class _FirewallView extends ConsumerWidget {
                     ]),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
+                icon: Icon(Icons.delete_outline,
                     size: 18, color: AppColors.muted),
                 onPressed: () =>
                     ref.read(firewallProvider.notifier).removeRule(r.name),

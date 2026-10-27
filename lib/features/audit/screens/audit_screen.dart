@@ -20,17 +20,17 @@ class AuditScreen extends ConsumerWidget {
         const CircularProgressIndicator(),
         const SizedBox(height: 16),
         Text(context.tr('audit.loading'),
-            style: const TextStyle(color: AppColors.muted)),
+            style: TextStyle(color: AppColors.muted)),
       ]));
     }
 
     if (state.error != null && report == null) {
       return _Centered(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline, color: AppColors.red, size: 40),
+        Icon(Icons.error_outline, color: AppColors.red, size: 40),
         const SizedBox(height: 12),
         Text(context.tr('audit.error'),
-            style: const TextStyle(color: AppColors.red)),
+            style: TextStyle(color: AppColors.red)),
         const SizedBox(height: 8),
         OutlinedButton(
             onPressed: () => ref.read(auditProvider.notifier).runAudit(),
@@ -42,11 +42,11 @@ class AuditScreen extends ConsumerWidget {
       // Designed empty state with a one-click action.
       return _Centered(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.fact_check_outlined,
+        Icon(Icons.fact_check_outlined,
             color: AppColors.muted, size: 48),
         const SizedBox(height: 12),
         Text(context.tr('audit.empty.title'),
-            style: const TextStyle(color: AppColors.text, fontSize: 16)),
+            style: TextStyle(color: AppColors.text, fontSize: 16)),
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: () => ref.read(auditProvider.notifier).runAudit(),
@@ -63,7 +63,7 @@ class AuditScreen extends ConsumerWidget {
         children: [
           Row(children: [
             Text(context.tr('audit.title'),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppColors.text,
                     fontSize: 18,
                     fontWeight: FontWeight.w800)),
@@ -85,7 +85,7 @@ class AuditScreen extends ConsumerWidget {
           ]),
           const SizedBox(height: 4),
           Text(context.tr('audit.subtitle'),
-              style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              style: TextStyle(color: AppColors.muted, fontSize: 12)),
           const SizedBox(height: 16),
           for (final f in report.findings) _FindingCard(finding: f),
           const SizedBox(height: 16),
@@ -93,10 +93,10 @@ class AuditScreen extends ConsumerWidget {
           for (final s in report.startupEntries)
             ListTile(
               dense: true,
-              leading: const Icon(Icons.rocket_launch_outlined,
+              leading: Icon(Icons.rocket_launch_outlined,
                   color: AppColors.muted, size: 18),
               title: Text(s.name,
-                  style: const TextStyle(color: AppColors.text, fontSize: 13)),
+                  style: TextStyle(color: AppColors.text, fontSize: 13)),
               subtitle: Text(s.command,
                   style: AppTheme.mono(size: 10, color: AppColors.muted),
                   maxLines: 1,
@@ -108,7 +108,7 @@ class AuditScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           _SectionHeader(title: context.tr('audit.tasks')),
           if (report.scheduledTasks.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(12),
               child: Text('—',
                   style: TextStyle(color: AppColors.muted)),
@@ -116,10 +116,10 @@ class AuditScreen extends ConsumerWidget {
           for (final t in report.scheduledTasks)
             ListTile(
               dense: true,
-              leading: const Icon(Icons.schedule,
+              leading: Icon(Icons.schedule,
                   color: AppColors.muted, size: 18),
               title: Text(t.name,
-                  style: const TextStyle(color: AppColors.text, fontSize: 13)),
+                  style: TextStyle(color: AppColors.text, fontSize: 13)),
               subtitle: Text(t.path,
                   style: AppTheme.mono(size: 10, color: AppColors.muted)),
             ),
@@ -137,7 +137,7 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 8),
       child: Text(title,
-          style: const TextStyle(
+          style: TextStyle(
               color: AppColors.cyan, fontWeight: FontWeight.w700)),
     );
   }
@@ -179,7 +179,7 @@ class _FindingCard extends StatelessWidget {
                 Row(children: [
                   Flexible(
                     child: Text('${finding.section} :: ${finding.item}',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppColors.text,
                             fontWeight: FontWeight.w700,
                             fontSize: 14)),
@@ -203,7 +203,7 @@ class _FindingCard extends StatelessWidget {
                 ]),
                 const SizedBox(height: 6),
                 Text(finding.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppColors.muted, fontSize: 12.5)),
               ],
             ),

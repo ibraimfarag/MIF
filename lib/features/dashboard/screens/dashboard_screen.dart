@@ -93,7 +93,7 @@ class _ScoreCard extends StatelessWidget {
       child: Column(
         children: [
           Text(context.tr('score.title'),
-              style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+              style: TextStyle(color: AppColors.muted, fontSize: 13)),
           const SizedBox(height: 12),
           SizedBox(
             width: 150,
@@ -182,10 +182,10 @@ class _WhatNowCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            const Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
+            Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
             const SizedBox(width: 8),
             Text(context.tr('score.whatNow'),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppColors.cyan,
                     fontWeight: FontWeight.w700,
                     fontSize: 15)),
@@ -193,10 +193,10 @@ class _WhatNowCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (top == null)
             Text('✅ ${context.tr('status.secure')} — ${context.tr('app.tagline')}',
-                style: const TextStyle(color: AppColors.green))
+                style: TextStyle(color: AppColors.green))
           else ...[
             Text(context.tr('score.doFirst'),
-                style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                style: TextStyle(color: AppColors.muted, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,12 +215,12 @@ class _WhatNowCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${top!.section} :: ${top!.item}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: AppColors.text)),
                       const SizedBox(height: 4),
                       Text(top!.description,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppColors.muted, fontSize: 13)),
                     ],
                   ),
@@ -258,7 +258,7 @@ class _FindingsSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(context.tr('dashboard.summary'),
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.text,
                 fontWeight: FontWeight.w700,
                 fontSize: 16)),
@@ -310,7 +310,7 @@ class _SummaryTile extends StatelessWidget {
           Text('$count', style: AppTheme.mono(size: 24, color: color)),
           const SizedBox(height: 4),
           Text(label,
-              style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ],
       ),
     );
@@ -338,7 +338,7 @@ class _LayerHealth extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(context.tr('dashboard.liveFeed'),
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.text,
                 fontWeight: FontWeight.w700,
                 fontSize: 16)),
@@ -384,7 +384,7 @@ class _LayerTile extends StatelessWidget {
           Text(id, style: AppTheme.mono(size: 16, color: color)),
           const SizedBox(height: 4),
           Text(name,
-              style: const TextStyle(color: AppColors.muted, fontSize: 11),
+              style: TextStyle(color: AppColors.muted, fontSize: 11),
               textAlign: TextAlign.center,
               maxLines: 2),
           const SizedBox(height: 8),
@@ -418,7 +418,7 @@ class _LoadingCard extends StatelessWidget {
       child: Column(children: [
         const CircularProgressIndicator(),
         const SizedBox(height: 16),
-        Text(label, style: const TextStyle(color: AppColors.muted)),
+        Text(label, style: TextStyle(color: AppColors.muted)),
       ]),
     );
   }
@@ -438,10 +438,10 @@ class _ErrorCard extends StatelessWidget {
         border: Border.all(color: AppColors.red.withValues(alpha: 0.4)),
       ),
       child: Column(children: [
-        const Icon(Icons.error_outline, color: AppColors.red, size: 36),
+        Icon(Icons.error_outline, color: AppColors.red, size: 36),
         const SizedBox(height: 12),
         Text(message,
-            style: const TextStyle(color: AppColors.muted),
+            style: TextStyle(color: AppColors.muted),
             textAlign: TextAlign.center),
         const SizedBox(height: 12),
         OutlinedButton.icon(

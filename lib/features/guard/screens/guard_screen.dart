@@ -135,10 +135,10 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Row(children: [
-          const Icon(Icons.monitor_heart, color: AppColors.cyan),
+          Icon(Icons.monitor_heart, color: AppColors.cyan),
           const SizedBox(width: 8),
           Text(context.tr('nav.guard'),
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text,
                   fontSize: 16,
                   fontWeight: FontWeight.w800)),
@@ -159,11 +159,11 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
           st.running
               ? 'Live — new processes are matched against the rules every 2 s. Respond, kill-tree and canary events feed the correlator.'
               : 'Stopped — start the guard to watch process creation in real time.',
-          style: const TextStyle(color: AppColors.muted, fontSize: 12),
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 16),
         Text('Rules (${st.rules.length}) — hot-reloaded every 30 s from rules/guard/*.json',
-            style: const TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         for (final r in st.rules)
           Container(
@@ -180,15 +180,15 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
               Expanded(
                 child: Text(r.name,
                     style:
-                        const TextStyle(color: AppColors.text, fontSize: 12.5)),
+                        TextStyle(color: AppColors.text, fontSize: 12.5)),
               ),
               if (r.action == 'kill')
-                const Icon(Icons.gavel, size: 14, color: AppColors.red),
+                Icon(Icons.gavel, size: 14, color: AppColors.red),
             ]),
           ),
         const SizedBox(height: 16),
         Text('Live events (${st.events.length})',
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.cyan, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         if (st.events.isEmpty)
@@ -199,7 +199,7 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.border),
             ),
-            child: const Text(
+            child: Text(
               'No events yet. Suspicious process creations and canary touches appear here the moment they happen.',
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),

@@ -38,12 +38,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(context.tr('nav.reports'),
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.text,
                 fontSize: 16,
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Export the live audit score, all findings, startup entries and incident kill-chains as a Markdown report.',
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
@@ -54,7 +54,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(children: [
+                Row(children: [
                   Icon(Icons.description, color: AppColors.cyan),
                   SizedBox(width: 8),
                   Text('Markdown security report',
@@ -103,7 +103,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Where everything lives',
+                  Text('Where everything lives',
                       style: TextStyle(
                           color: AppColors.text, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
@@ -111,7 +111,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     'Intel + quarantine + snapshots:  %PROGRAMDATA%\\MICS\\\n'
                     'Reports:  Documents\\MICS-Reports\\\n'
                     'Rules (YARA + guard):  rules\\ next to mics-engine.exe',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontFamily: 'JetBrainsMono', fontSize: 11,
                         color: AppColors.muted, height: 1.6),
                   ),

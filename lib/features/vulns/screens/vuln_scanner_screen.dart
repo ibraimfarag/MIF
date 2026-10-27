@@ -49,7 +49,7 @@ class VulnScannerScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(12),
           child: Row(children: [
             Text(context.tr('nav.vulns'),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppColors.text,
                     fontSize: 16,
                     fontWeight: FontWeight.w800)),
@@ -61,7 +61,7 @@ class VulnScannerScreen extends ConsumerWidget {
             ),
           ]),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
@@ -79,7 +79,7 @@ class VulnScannerScreen extends ConsumerWidget {
                 for (final item in items) _SoftwareCard(item: item),
               ],
             ),
-            loading: () => const Center(
+            loading: () => Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -91,7 +91,7 @@ class VulnScannerScreen extends ConsumerWidget {
               ),
             ),
             error: (e, _) => Center(
-              child: Text('$e', style: const TextStyle(color: AppColors.red)),
+              child: Text('$e', style: TextStyle(color: AppColors.red)),
             ),
           ),
         ),
@@ -121,7 +121,7 @@ class _SoftwareCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(children: [
               Text(item.software,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppColors.text,
                       fontWeight: FontWeight.w700,
                       fontSize: 14)),
@@ -153,7 +153,7 @@ class _SoftwareCard extends StatelessWidget {
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.border))),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,7 +183,7 @@ class _SoftwareCard extends StatelessWidget {
                     child: Text(v.description,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppColors.muted, fontSize: 11.5)),
                   ),
                 ],

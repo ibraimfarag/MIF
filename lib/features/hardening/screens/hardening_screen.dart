@@ -95,12 +95,12 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(context.tr('nav.hardening'),
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.text,
                 fontSize: 16,
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'One-click fixes. Every change is snapshotted first and can be rolled back. Admin fixes trigger a UAC prompt.',
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
@@ -115,7 +115,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
               border: Border.all(color: AppColors.cyan.withValues(alpha: 0.4)),
             ),
             child: Text(_message!,
-                style: const TextStyle(color: AppColors.text, fontSize: 12)),
+                style: TextStyle(color: AppColors.text, fontSize: 12)),
           ),
         for (final a in actions)
           Container(
@@ -141,13 +141,13 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(isAr ? a.nameAr : a.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppColors.text,
                             fontWeight: FontWeight.w700,
                             fontSize: 13.5)),
                     const SizedBox(height: 2),
                     Text(a.explanation,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppColors.muted, fontSize: 11.5)),
                   ],
                 ),

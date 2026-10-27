@@ -80,10 +80,10 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Row(children: [
-          const Icon(Icons.egg, color: AppColors.cyan),
+          Icon(Icons.egg, color: AppColors.cyan),
           const SizedBox(width: 8),
           Text(context.tr('nav.canaries'),
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text,
                   fontSize: 16,
                   fontWeight: FontWeight.w800)),
@@ -95,7 +95,7 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
           ),
         ]),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Decoy files nobody should ever touch. Any access is a CRITICAL canary event — the classic sign of ransomware or a snooper. Decoys arm when the Guard runs.',
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
@@ -120,7 +120,7 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
                 _pathController.clear();
               }
             },
-            icon: const Icon(Icons.add, color: AppColors.cyan),
+            icon: Icon(Icons.add, color: AppColors.cyan),
           ),
         ]),
         const SizedBox(height: 12),
@@ -149,7 +149,7 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
                     overflow: TextOverflow.ellipsis),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
+                icon: Icon(Icons.delete_outline,
                     size: 16, color: AppColors.muted),
                 onPressed: () =>
                     ref.read(canariesProvider.notifier).removePath(f.path),

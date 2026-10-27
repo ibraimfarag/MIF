@@ -28,7 +28,7 @@ class IdsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             Text(context.tr('nav.ids'),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppColors.text,
                     fontSize: 17,
                     fontWeight: FontWeight.w700)),
@@ -37,7 +37,7 @@ class IdsScreen extends ConsumerWidget {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Text(context.tr('soon.body'),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 13)),
             ),
           ],
         ),

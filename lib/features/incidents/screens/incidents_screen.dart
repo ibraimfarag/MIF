@@ -83,10 +83,10 @@ class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Row(children: [
-          const Icon(Icons.timeline, color: AppColors.cyan),
+          Icon(Icons.timeline, color: AppColors.cyan),
           const SizedBox(width: 8),
           Text(context.tr('nav.incidents'),
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text,
                   fontSize: 16,
                   fontWeight: FontWeight.w800)),
@@ -98,7 +98,7 @@ class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
           ),
         ]),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Related guard events collapse into ONE incident with a kill-chain timeline — instead of isolated alert spam.',
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
@@ -111,7 +111,7 @@ class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
             ),
-            child: const Row(children: [
+            child: Row(children: [
               Icon(Icons.verified_user, color: AppColors.green),
               SizedBox(width: 10),
               Expanded(
@@ -160,7 +160,7 @@ class _IncidentCard extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(inc.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppColors.text,
                       fontWeight: FontWeight.w700,
                       fontSize: 13)),
@@ -177,7 +177,7 @@ class _IncidentCard extends ConsumerWidget {
             Padding(
               padding: EdgeInsetsDirectional.only(start: i * 12.0),
               child: Row(children: [
-                const Icon(Icons.chevron_right, size: 12, color: AppColors.muted),
+                Icon(Icons.chevron_right, size: 12, color: AppColors.muted),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(

@@ -11,16 +11,52 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final lang = ref.watch(localeProvider);
     final ipc = ref.watch(engineIpcProvider);
+    final currentThemeMode =
+        ref.watch(settingsProvider).value?.themeMode ?? ThemeMode.dark;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(context.tr('settings.title'),
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppColors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w800)),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Appearance',
+                    style: TextStyle(
+                        color: AppColors.text, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                SegmentedButton<ThemeMode>(
+                  segments: [
+                    ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode, size: 16),
+                        label: Text('Dark')),
+                    ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode, size: 16),
+                        label: Text('Light')),
+                    ButtonSegment(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.settings_suggest, size: 16),
+                        label: Text('System')),
+                  ],
+                  selected: {currentThemeMode},
+                  onSelectionChanged: (s) =>
+                      ref.read(settingsProvider.notifier).setThemeMode(s.first),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -28,7 +64,7 @@ class SettingsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(context.tr('settings.language'),
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppColors.text,
                         fontWeight: FontWeight.w700)),
                 const SizedBox(height: 12),
@@ -43,7 +79,7 @@ class SettingsScreen extends ConsumerWidget {
                   ],
                   selected: {lang},
                   onSelectionChanged: (s) =>
-                      ref.read(localeProvider.notifier).set(s.first),
+                      ref.read(settingsProvider.notifier).setLang(s.first),
                 ),
               ],
             ),
@@ -56,11 +92,11 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Boot with Windows (engine 24/7)',
+                Text('Boot with Windows (engine 24/7)',
                     style: TextStyle(
                         color: AppColors.text, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                     'Adds/removes an HKCU Run entry for mics-engine --service. Alerts keep working with the UI closed.',
                     style: TextStyle(color: AppColors.muted, fontSize: 11)),
                 const SizedBox(height: 8),
@@ -110,11 +146,11 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('MI CS Assistant (LM Studio)',
+                Text('MI CS Assistant (LM Studio)',
                     style: TextStyle(
                         color: AppColors.text, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Point the engine at your local LM Studio (OpenAI-compatible). Falls back to built-in explanation templates when offline. Env: MICS_LM_URL, MICS_LM_MODEL, MICS_VT_API_KEY, MICS_IOC_FEED_URL, MICS_UPDATE_MANIFEST_URL.',
                   style: TextStyle(color: AppColors.muted, fontSize: 11),
                 ),
@@ -130,7 +166,7 @@ class SettingsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(context.tr('settings.enginePath'),
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppColors.text,
                         fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
@@ -161,7 +197,7 @@ class SettingsScreen extends ConsumerWidget {
                       EngineState.engineMissing => 'engine.missing',
                       EngineState.stopped => 'engine.stopped',
                     })}',
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
                   ),
                 ]),
               ],

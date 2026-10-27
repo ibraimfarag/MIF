@@ -259,7 +259,7 @@ class _ScanTab extends ConsumerWidget {
               value: quarantine,
               onChanged: onQuarantineChanged,
             ),
-            const Text('Auto-quarantine',
+            Text('Auto-quarantine',
                 style: TextStyle(fontSize: 12, color: AppColors.text)),
           ],
         ),
@@ -291,7 +291,7 @@ class _ScanTab extends ConsumerWidget {
         if (st.error != null) ...[
           const SizedBox(height: 8),
           Text(st.error!,
-              style: const TextStyle(color: AppColors.orange, fontSize: 12)),
+              style: TextStyle(color: AppColors.orange, fontSize: 12)),
         ],
         const SizedBox(height: 16),
         if (st.report != null) ...[
@@ -309,7 +309,7 @@ class _ScanTab extends ConsumerWidget {
                 border:
                     Border.all(color: AppColors.green.withValues(alpha: 0.3)),
               ),
-              child: const Row(children: [
+              child: Row(children: [
                 Icon(Icons.check_circle, color: AppColors.green),
                 SizedBox(width: 10),
                 Expanded(
@@ -321,7 +321,7 @@ class _ScanTab extends ConsumerWidget {
             ),
           for (final f in st.report!.findings) _FindingTile(finding: f),
         ] else
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(24),
             child: Text(
               'Pick a folder and run a scan. Files are triaged (location × extension × size × age) so the riskiest are checked first: IOC hash cache, then YARA rules.',
@@ -361,7 +361,7 @@ class _FindingTile extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(finding.path,
-                  style: const TextStyle(color: AppColors.text, fontSize: 12.5),
+                  style: TextStyle(color: AppColors.text, fontSize: 12.5),
                   overflow: TextOverflow.ellipsis),
             ),
           ]),
@@ -401,7 +401,7 @@ class _QuarantineTab extends ConsumerWidget {
       children: [
         Row(children: [
           Text('Quarantine (${items.where((e) => !e.restored).length} active)',
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text, fontWeight: FontWeight.w700)),
           const Spacer(),
           OutlinedButton.icon(
@@ -413,7 +413,7 @@ class _QuarantineTab extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
         if (items.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(24),
             child: Text(
               'Quarantine is empty. Files detected by IOC hashes or YARA rules are AES-256-GCM encrypted here with a DPAPI-protected key.',
@@ -438,14 +438,14 @@ class _QuarantineTab extends ConsumerWidget {
                 Row(children: [
                   Expanded(
                     child: Text(e.originalPath,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppColors.text, fontSize: 12),
                         overflow: TextOverflow.ellipsis),
                   ),
                   if (!e.restored) ...[
                     IconButton(
                       tooltip: 'Restore',
-                      icon: const Icon(Icons.undo,
+                      icon: Icon(Icons.undo,
                           size: 16, color: AppColors.green),
                       onPressed: () => ref
                           .read(scannerProvider.notifier)
@@ -453,13 +453,13 @@ class _QuarantineTab extends ConsumerWidget {
                     ),
                     IconButton(
                       tooltip: 'Delete forever',
-                      icon: const Icon(Icons.delete_forever,
+                      icon: Icon(Icons.delete_forever,
                           size: 16, color: AppColors.red),
                       onPressed: () =>
                           ref.read(scannerProvider.notifier).delete(e.blobId),
                     ),
                   ] else
-                    const Text('restored',
+                    Text('restored',
                         style:
                             TextStyle(color: AppColors.muted, fontSize: 10)),
                 ]),

@@ -70,7 +70,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.cyan, width: 2),
                   ),
-                  child: const Icon(Icons.shield, color: AppColors.cyan),
+                  child: Icon(Icons.shield, color: AppColors.cyan),
                 ),
               ),
               destinations: [
@@ -87,12 +87,12 @@ class _AppShellState extends ConsumerState<AppShell> {
                   ),
               ],
             ),
-            const VerticalDivider(width: 1, color: AppColors.border),
+            VerticalDivider(width: 1, color: AppColors.border),
             Expanded(
               child: Column(
                 children: [
                   _TopBar(engineState: engineState),
-                  const Divider(height: 1, color: AppColors.border),
+                  Divider(height: 1, color: AppColors.border),
                   Expanded(child: widget.child),
                 ],
               ),
@@ -125,7 +125,7 @@ class _TopBar extends ConsumerWidget {
       child: Row(
         children: [
           Text(context.tr('app.name'),
-              style: const TextStyle(
+              style: TextStyle(
                   color: AppColors.text,
                   fontWeight: FontWeight.w800,
                   fontSize: 15)),
@@ -145,9 +145,29 @@ class _TopBar extends ConsumerWidget {
             ]),
           ),
           const Spacer(),
+          IconButton(
+            tooltip: 'Theme',
+            onPressed: () {
+              final cur = ref.watch(settingsProvider).value?.themeMode ??
+                  ThemeMode.dark;
+              ref.read(settingsProvider.notifier).setThemeMode(
+                  cur == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);
+            },
+            icon: Icon(
+              (ref.watch(settingsProvider).value?.themeMode ??
+                          ThemeMode.dark) ==
+                      ThemeMode.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+              size: 18,
+            ),
+          ),
           const SizedBox(width: 12, child: _Omnibox()),
           TextButton.icon(
-            onPressed: () => ref.read(localeProvider.notifier).toggle(),
+            onPressed: () {
+  final cur = ref.read(localeProvider);
+  ref.read(settingsProvider.notifier).setLang(cur == AppLang.ar ? AppLang.en : AppLang.ar);
+},
             icon: const Icon(Icons.language, size: 18),
             label: Text(lang == AppLang.ar ? 'EN' : 'AR'),
           ),
@@ -206,12 +226,12 @@ class _OmniboxState extends ConsumerState<_Omnibox> {
           width: 340,
           child: TextField(
             controller: _controller,
-            style: const TextStyle(fontSize: 12, color: AppColors.text),
+            style: TextStyle(fontSize: 12, color: AppColors.text),
             textAlign: TextAlign.right,
             decoration: InputDecoration(
               isDense: true,
               hintText: 'اكتب أمراً… «افحص النظام» · «شغل الحارس» · «تقرير»',
-              hintStyle: const TextStyle(fontSize: 10.5, color: AppColors.muted),
+              hintStyle: TextStyle(fontSize: 10.5, color: AppColors.muted),
               prefixIcon: _busy
                   ? const Padding(
                       padding: EdgeInsets.all(8),
@@ -219,7 +239,7 @@ class _OmniboxState extends ConsumerState<_Omnibox> {
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2)))
-                  : const Icon(Icons.auto_awesome,
+                  : Icon(Icons.auto_awesome,
                       size: 15, color: AppColors.cyan),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -233,7 +253,7 @@ class _OmniboxState extends ConsumerState<_Omnibox> {
             child: Text(_reply!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 9.5, color: AppColors.green)),
           ),
       ],
