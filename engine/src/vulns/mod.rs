@@ -148,10 +148,10 @@ impl VulnScanner {
             .append_pair("resultsPerPage", "10");
 
         let mut req = self.client.get(url);
-        if let Ok(key) = std::env::var("NVD_API_KEY")
-            && !key.is_empty() {
-                req = req.header("apiKey", key);
-            }
+        let key = crate::settings::current().nvd_key();
+        if !key.is_empty() {
+            req = req.header("apiKey", key);
+        }
         let resp = req.send().await.context("NVD request")?;
         if !resp.status().is_success() {
             anyhow::bail!("NVD returned {}", resp.status());

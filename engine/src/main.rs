@@ -16,6 +16,7 @@ mod jobs;
 mod llm;
 mod notify;
 mod reports;
+mod settings;
 mod smart;
 mod update;
 mod storage;
@@ -103,6 +104,10 @@ async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default subscriber failed");
 
+    // Settings are the single source of truth (D-008) and must be loaded
+    // before any subsystem reads them.
+    let settings = settings::init();
+
     let cli = Cli::parse();
 
     // One line per process start: the service engine is detached, so this is
@@ -140,12 +145,7 @@ async fn main() -> Result<()> {
                 }
             };
             tracing::info!("Starting engine in --serve mode (stdio)...");
-            // Auto intel-sync cadence (hours) comes from UI settings.
-            let sync_hours: u64 = std::env::var("MICS_SYNC_HOURS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(6);
-            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current(), sync_hours);
+            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
             // Forward guard events as JSON-RPC notifications on stdout.
             let mut events = guard::subscribe_events();
@@ -192,16 +192,13 @@ async fn main() -> Result<()> {
                 }
             };
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
-            let sync_hours: u64 = std::env::var("MICS_SYNC_HOURS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(6);
-            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current(), sync_hours);
+            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
             // 24/7 protection: with the service running, the guard is armed
-            // even when the UI is closed. `guard.start` from the UI is a no-op
-            // when it is already running. `MICS_NO_GUARD=1` is a test hook.
-            if std::env::var("MICS_NO_GUARD").is_err() {
+            // even when the UI is closed (unless the user turned it off, or a
+            // test sets MICS_NO_GUARD=1). `guard.start` from the UI is a no-op
+            // when it is already running.
+            if std::env::var("MICS_NO_GUARD").is_err() && settings.guard_autostart {
                 guard::start_guard();
             }
             // Guard events go to every pipe client (and toast when critical).
@@ -354,7 +351,7 @@ fn log_file_writer() -> TeeWriter {
 /// `MICS_NO_AUTO_RESUME=1` disables this (used by tests and by users who want
 /// scans to be explicit).
 fn resume_jobs_on_startup() {
-    if std::env::var("MICS_NO_AUTO_RESUME").is_ok() {
+    if std::env::var("MICS_NO_AUTO_RESUME").is_ok() || !settings::current().auto_resume_scans {
         return;
     }
     match storage::sqlite::Storage::open() {

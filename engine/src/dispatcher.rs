@@ -575,6 +575,19 @@ impl Dispatcher {
                     Err(e) => { error!("update.apply: {e:#}"); None }
                 }
             }
+            "notify.test" => {
+                // Settings screen: proves toasts (and DND) actually work.
+                match crate::notify::toast::show_toast(
+                    "🛡️ MI CS — test notification",
+                    "Notifications are working. This is what a HIGH alert looks like.",
+                ) {
+                    Ok(()) => Some(json!({"status": "sent"})),
+                    Err(e) => {
+                        error!("notify.test: {e:#}");
+                        None
+                    }
+                }
+            }
             "hardening.list" => Some(json!(crate::hardening::list_actions())),
             "hardening.apply" => {
                 let Some(id) = req.params.as_ref().and_then(|p| p.get("action")).and_then(|v| v.as_str()).map(String::from) else {
@@ -679,11 +692,41 @@ impl Dispatcher {
                     Err(e) => { error!("service.remove: {e:#}"); None }
                 }
             }
+            "settings.get" => Some(json!(crate::settings::current())),
+            "settings.set" => {
+                let Some(patch) = req.params.clone() else {
+                    return error_response(req, "missing settings object");
+                };
+                match crate::settings::patch(&patch) {
+                    Ok(next) => {
+                        // Settings that change engine behaviour take effect on
+                        // the next decision (sync tick, new toast, next scan);
+                        // anything requiring a restart is documented in the UI.
+                        crate::jobs::notify(
+                            "event",
+                            json!({ "type": "settings.changed", "data": next }),
+                        );
+                        Some(json!(next))
+                    }
+                    Err(e) => {
+                        return JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            result: None,
+                            error: Some(json!(JsonRpcError {
+                                code: -32602,
+                                message: format!("settings.set: {e:#}"),
+                                data: None,
+                            })),
+                            id: req.id,
+                        };
+                    }
+                }
+            }
             "update.check" => {
-                // Manifest-based self-update check (GitHub Releases JSON).
-                let url = std::env::var("MICS_UPDATE_MANIFEST_URL").unwrap_or_default();
+                // Manifest-based self-update check (URL comes from settings).
+                let url = crate::settings::current().update_url();
                 if url.is_empty() {
-                    Some(json!({"status": "disabled", "detail": "MICS_UPDATE_MANIFEST_URL not configured"}))
+                    Some(json!({"status": "disabled", "detail": "no update manifest URL configured"}))
                 } else {
                     match crate::sync::SyncManager::new() {
                         Ok(sm) => match sm.check_update(&url).await {

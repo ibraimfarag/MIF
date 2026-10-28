@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-28 · HEAD `dcce43f` · Phase P1 complete.
+> Last updated: 2026-10-28 · HEAD after P2a (settings) · P1 complete, P2 in progress.
 
 ---
 
@@ -91,8 +91,9 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 |---|---|---|
 | P0 | Environment (Flutter/Rust) | done (pre-existing) |
 | **P1** | Pipe transport, single instance, resumable jobs, window corners, engine file log, decisions log | **done — `dcce43f`** |
-| **P1.5** | Single-elevation privileged helper (D-007) | **next, not started** |
-| P2 | i18n split, full Settings screen (D-008), sounds, theme polish | planned |
+| **P2a** | Settings as the single source of truth + full Settings screen | **done — see Done log** |
+| **P1.5** | Single-elevation privileged helper (D-007) | **pending — needs one interactive UAC prompt, so it is scheduled for a session where the user is present** |
+| P2b | i18n split, sounds, theme polish | **next** |
 | P3 | App self-update channels, intel/CVE update paths, offline badge/sync screen | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, honest README + protection matrix | planned |
@@ -100,6 +101,29 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ### Done log (append only)
 
+- **P2a — settings as the single source of truth (D-008)**
+  - `engine/src/settings.rs`: typed document + defaults + `apply_patch`
+    validation (unknown keys and out-of-range values are rejected with
+    `-32602`), atomic save (`.tmp` + rename), process-wide cache.
+  - JSON-RPC `settings.get` / `settings.set`; a successful set broadcasts
+    `event{type: settings.changed}`. New `notify.test` so the UI can prove
+    toasts/DND work.
+  - Engine consumers now read the document instead of env vars: guard
+    autostart, auto-resume, DND, LM Studio URL/model, VT key, NVD key, update
+    manifest URL, auto-sync cadence (re-read each cycle → applies live).
+  - UI: `AppSettings` mirrors the same snake_case keys; the Settings screen is
+    complete (appearance, protection, notifications+sounds, intel+schedule,
+    integrations, updates, engine, about); every control writes through
+    `settings.set`; `setLang`/`setThemeMode` now patch one field instead of
+    rebuilding the object (the old "changing the language wipes settings" bug);
+    legacy `shared_preferences` are migrated once; the local cache exists only
+    so the window paints before the engine answers.
+  - Evidence: `cargo test` 10/10 (4 new settings tests), `cargo clippy` clean,
+    `flutter analyze` clean, `flutter test` 9/9 (5 new model tests);
+    `settings.get` returns defaults, `settings.set` persists to
+    `%PROGRAMDATA%\MICS\settings.json` and emits the event, an invalid value
+    (`sync_interval_hours: 0`) is rejected with the reason, `notify.test`
+    returns `{"status":"sent"}`.
 - `dcce43f` **P1**
   - One engine per machine (named mutex) + pipe server that survives transient
     create failures and forwards `event`/`progress` to every client.
@@ -130,8 +154,8 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | 2 | Translation as separate files with keys | **todo P2** — 2 files, 51 keys, but 57 strings are hardcoded in the UI | see Known issues |
 | 3 | Code signing | **partial** — self-signed script works; trusted cert deferred | D-002, `scripts/sign.ps1` |
 | 4 | Permissions asked once, publisher name | **todo P1.5** — today every admin op spawns its own UAC prompt | D-007 |
-| 5 | Complete advanced Settings screen | **todo P2** — model has the fields, no UI, `patchSettings` never called | D-008 |
-| 6 | App update paths | **partial** — engine code exists, no default manifest URL, no channels, no screen | P3 |
+| 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
+| 6 | App update paths | **partial** — the manifest URL + channel are now real settings and `update.check` uses them; no extraction/apply UI, no rollback screen | P3 |
 | 7 | CVE/intel update paths | **partial** — NVD keyword search + cache; no incremental sync, no scheduler UI | P3 |
 | 8 | Dark/light mode | **mostly done** — System mode reads the OS once; live OS theme change not handled; light contrast not audited | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
@@ -168,21 +192,16 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 - Note: the prompt shows "MI CS" as publisher only with a trusted certificate
   (D-002) — until then it shows the helper's unsigned identity.
 
-### P2 — language, settings, sounds, theme
-- [ ] `settings.json` in `%PROGRAMDATA%\MICS\` read by **both** UI and engine
-      (`engine/src/settings.rs`); migrate `shared_preferences` on first run.
-- [ ] Full Settings screen, 10 sections: General · Appearance · Language ·
-      Notifications & Sounds · Scanning · Guard & Canaries · Network & Firewall ·
-      Intel & Schedule · Updates · Advanced + Diagnostics (engine state, log
-      path, data dir, benchmark button).
-- [ ] Fix: `setLang` / `setThemeMode` currently rebuild `AppSettings` with only
-      those two fields → they wipe DND, keys, sync interval, updater URL.
+### P2b — language, sounds, theme (settings are done, see Done log)
+- [x] `settings.json` in `%PROGRAMDATA%\MICS\` read by **both** UI and engine.
+- [x] Full Settings screen, 8 sections, every field persisted + validated.
+- [x] Fix: changing language/theme no longer wipes the other settings.
 - [ ] i18n: `assets/i18n/<lang>/<module>.json` (14 modules) + loader that merges
       namespaces + a test that fails on hardcoded UI strings and on
       missing/extra keys between languages + pseudo-locale RTL check.
-- [ ] Extract the 57 hardcoded strings (settings 9, audit 5, scanner 4, network
-      4, vulns 3, reports 3, guard 3, ids 2, shell 1, incidents 1, hardening 1,
-      canaries 1, model text).
+- [ ] Extract the remaining hardcoded strings (audit 5, scanner 4, network 4,
+      vulns 3, reports 3, guard 3, ids 2, shell 1, incidents 1, hardening 1,
+      canaries 1, model text). The Settings screen is fully translated.
 - [ ] Sounds (D-004): generate `assets/sounds/*.wav` (info/warning/critical/
       success), map event kind → cue, per-severity volume + mute + DND, a "test"
       button; engine plays the critical cue when the UI is closed.
@@ -245,8 +264,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | Sev | Issue | Where |
 |---|---|---|
 | HIGH | Every admin operation opens its own UAC prompt attributed to "Windows PowerShell", not MI CS | `firewall/mod.rs`, `ids/mod.rs`, `hardening/mod.rs` |
-| HIGH | Settings that reach the engine as env vars (VT key, LM Studio URL, sync hours) only apply if this app started the engine; changing language/theme wipes the rest | `lib/core/i18n/app_i18n.dart`, D-008 |
-| HIGH | No installer; `dist/` ZIP predates P1 and must be regenerated | `dist/` |
+| HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
@@ -256,12 +274,14 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | MED | No offline badge / freshness indicator anywhere in the UI | shell |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | `docs/` has no THREAT-MODEL / DECISIONS is new; README is a stub | `docs/`, `README.md` |
-| LOW | 57 hardcoded UI strings; i18n keys 51 | `lib/features/**` |
+| LOW | 57 hardcoded UI strings; i18n keys grew to ~90 with the Settings screen | `lib/features/**` |
 | LOW | System theme is read once; live OS theme change does not repaint | `app_theme.dart` |
 
-Resolved during P1 (keep for context): pipe closed after the first client;
+Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);
-`scan.start` blocked the UI for the whole scan; engine had no log file.
+`scan.start` blocked the UI for the whole scan; engine had no log file; settings
+were UI-only and language/theme changes wiped them; engine options ignored
+settings and read environment variables only.
 
 ---
 

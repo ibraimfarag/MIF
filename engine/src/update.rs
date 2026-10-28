@@ -20,10 +20,10 @@ fn staging_dir() -> PathBuf {
 
 /// Downloads the manifest and returns its parsed fields (update.check).
 pub async fn check() -> Result<serde_json::Value> {
-    let url = std::env::var("MICS_UPDATE_MANIFEST_URL").unwrap_or_default();
+    let url = crate::settings::current().update_url();
     if url.is_empty() {
         return Ok(json!({"status": "disabled",
-            "detail": "MICS_UPDATE_MANIFEST_URL not configured"}));
+            "detail": "no update manifest URL configured (Settings → Updates)"}));
     }
     let sm = SyncManager::new()?;
     let manifest = sm.fetch_manifest(&url).await?;

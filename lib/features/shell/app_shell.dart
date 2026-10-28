@@ -179,7 +179,8 @@ class _TitleBar extends ConsumerWidget {
               ]),
             ),
             const Spacer(),
-            const _Omnibox(),
+            if (ref.watch(settingsProvider).value?.nlBarEnabled ?? true)
+              const _Omnibox(),
             const SizedBox(width: 8),
             _HeaderIcon(
               icon: (ref.watch(settingsProvider).value?.themeMode ??

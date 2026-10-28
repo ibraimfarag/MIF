@@ -167,17 +167,38 @@ publisher-named UAC prompt requires the trusted certificate from D-002.
 
 ## D-008 — Settings are a single source of truth
 
-**Status:** pending implementation
+**Status:** implemented (2026-10-28)
 
 **Decision.** Application settings live in one file
 (`%PROGRAMDATA%\MICS\settings.json`) read by both the UI and the engine.
 Every setting has a UI control, a default, validation, and a documented effect.
 
-**Why.** The current `AppSettings` model defines DND, VT key, LM Studio URL,
-sync interval, and update manifest URL, but no screen exposes them and
-`patchSettings` is never called — and changing language resets the rest.
+**Why.** The old `AppSettings` model defined DND, VT key, LM Studio URL, sync
+interval, and update manifest URL, but no screen exposed them, `patchSettings`
+was never called, and changing the language rebuilt the object from two fields
+— silently wiping every other setting. Engine-side options were environment
+variables that only applied when *this app* started the engine.
 
-**Commits us to.** Wiring every field to the Settings screen, migrating the
-existing `shared_preferences` values on first run, and keeping engine/UI
-defaults in sync.
+**Implementation notes.**
+- `engine/src/settings.rs`: typed document, `serde(default)` so an older file
+  still loads, `apply_patch` rejects unknown keys and out-of-range values
+  (`-32602` with the reason), atomic write (`.tmp` + rename), process-wide cache.
+- JSON-RPC `settings.get` / `settings.set`; a successful set broadcasts
+  `event{type: settings.changed}` so any connected surface refreshes.
+- Consumers read the document instead of the environment: guard autostart,
+  auto-resume, DND (`toast.rs`), LM Studio URL/model, VT key, NVD key, update
+  manifest URL, and the auto-sync cadence (re-read every cycle, so a change
+  applies without restarting the engine).
+- Environment variables remain as a **test override** and are documented as
+  such (`MICS_SYNC_HOURS`, `MICS_DND`, `MICS_VT_API_KEY`, `MICS_LM_URL`,
+  `MICS_LM_MODEL`, `MICS_UPDATE_MANIFEST_URL`, `NVD_API_KEY`).
+- UI: `AppSettings` is a typed mirror of the same field names; every control
+  calls `settings.set`, the state updates from the engine's response, and the
+  last known document is cached in `shared_preferences` only so the window can
+  paint before the engine answers. Legacy preferences are migrated once
+  (`settingsMigratedV2`).
+- Added `notify.test` so the Settings screen can prove toasts (and DND) work.
+
+**Commits us to.** Adding a new setting means: field in `settings.rs` + default +
+validation + UI control + a test — never a UI-only preference.
 

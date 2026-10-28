@@ -184,12 +184,10 @@ impl SyncManager {
         }))
     }
 
-    /// Background loop: waits for connectivity, then refreshes intel every
-    /// `interval_hours`. Runs for the engine's lifetime (spawned by --serve).
-    /// Background loop: waits for connectivity, then refreshes intel every
-    /// `interval_hours`. Runs for the engine's lifetime; needs the tokio
-    /// handle because sync IO is async.
-    pub fn start_auto_sync(rt: tokio::runtime::Handle, interval_hours: u64) {
+    /// Background loop: waits for connectivity, then refreshes intel on the
+    /// cadence stored in settings (re-read every cycle, so changing the value
+    /// in the UI applies without restarting the engine).
+    pub fn start_auto_sync(rt: tokio::runtime::Handle) {
         std::thread::spawn(move || {
             // First tick after 2 min, then every interval.
             std::thread::sleep(std::time::Duration::from_secs(120));
@@ -211,9 +209,8 @@ impl SyncManager {
                         Err(e) => tracing::warn!("auto-sync failed: {e:#}"),
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_secs(
-                    interval_hours.clamp(1, 168) * 3600,
-                ));
+                let hours = crate::settings::current().sync_hours().clamp(1, 168);
+                std::thread::sleep(std::time::Duration::from_secs(hours as u64 * 3600));
             }
         });
     }

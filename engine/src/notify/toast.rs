@@ -15,7 +15,8 @@ use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
 pub const AUMID: &str = "MICS";
 
 pub fn dnd_enabled() -> bool {
-    std::env::var("MICS_DND").map(|v| v == "1").unwrap_or(false)
+    // Settings are authoritative (D-008); MICS_DND stays as a test override.
+    crate::settings::current().quiet()
 }
 
 /// Pending toast actions: id -> file path to quarantine when the user taps

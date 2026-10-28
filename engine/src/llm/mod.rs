@@ -185,10 +185,10 @@ pub struct LmClient {
 
 impl LmClient {
     pub fn new() -> Self {
+        let settings = crate::settings::current();
         Self {
-            base_url: std::env::var("MICS_LM_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:1234".into()),
-            model: std::env::var("MICS_LM_MODEL").unwrap_or_else(|_| "local-model".into()),
+            base_url: settings.lm_base(),
+            model: settings.lm_name(),
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(60))
                 .build()

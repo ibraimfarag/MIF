@@ -29,7 +29,7 @@ impl VtClient {
     }
 
     fn api_key() -> String {
-        std::env::var("MICS_VT_API_KEY").unwrap_or_default()
+        crate::settings::current().vt_key()
     }
 
     #[allow(dead_code)]
