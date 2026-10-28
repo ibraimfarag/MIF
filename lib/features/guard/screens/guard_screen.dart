@@ -63,8 +63,12 @@ class GuardUiState {
   final bool running;
   final List<GuardRule> rules;
   final List<GuardEvent> events;
+  final Map<String, bool> muteSuggested; // category -> suggested
   GuardUiState(
-      {this.running = false, this.rules = const [], this.events = const []});
+      {this.running = false,
+      this.rules = const [],
+      this.events = const [],
+      this.muteSuggested = const {}});
 }
 
 final guardProvider =
@@ -84,7 +88,8 @@ class GuardNotifier extends Notifier<GuardUiState> {
       state = GuardUiState(
           running: state.running,
           rules: state.rules,
-          events: [ev, ...state.events].take(100).toList());
+          events: [ev, ...state.events].take(100).toList(),
+          muteSuggested: state.muteSuggested);
     });
     ref.onDispose(() => _eventsSub?.cancel());
     return GuardUiState();
@@ -101,6 +106,44 @@ class GuardNotifier extends Notifier<GuardUiState> {
             .map((r) => GuardRule.fromJson(r as Map<String, dynamic>))
             .toList(),
         events: state.events,
+      );
+    } catch (_) {}
+  }
+
+  /// Records a dismissal; surfaces the mute offer at 5 dismissals.
+  Future<void> dismiss(GuardEvent ev) async {
+    final category = '${ev.type}:${ev.ruleId}';
+    state = GuardUiState(
+        running: state.running,
+        rules: state.rules,
+        events: state.events,
+        muteSuggested: state.muteSuggested);
+    try {
+      final res = await ref
+          .read(engineIpcProvider)
+          .request('guard.event.dismiss', {'category': category});
+      final suggested = (res as Map)['mute_suggested'] as bool? ?? false;
+      if (suggested) {
+        state = GuardUiState(
+          running: state.running,
+          rules: state.rules,
+          events: state.events,
+          muteSuggested: {...state.muteSuggested, category: true},
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> mute(String category) async {
+    try {
+      await ref
+          .read(engineIpcProvider)
+          .request('noise.mute', {'category': category});
+      state = GuardUiState(
+        running: state.running,
+        rules: state.rules,
+        events: state.events,
+        muteSuggested: {...state.muteSuggested, category: false},
       );
     } catch (_) {}
   }
@@ -204,15 +247,47 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ),
-        for (final e in st.events) _EventTile(ev: e),
+        for (final e in st.events)
+          _EventTile(
+            ev: e,
+            onDismiss: () => ref.read(guardProvider.notifier).dismiss(e),
+          ),
+        for (final entry in st.muteSuggested.entries)
+          if (entry.value)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    Border.all(color: AppColors.orange.withValues(alpha: 0.4)),
+              ),
+              child: Row(children: [
+                Icon(Icons.notifications_off_outlined,
+                    size: 15, color: AppColors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('You dismiss this alert a lot. Mute it?',
+                      style: TextStyle(
+                          color: AppColors.text, fontSize: 12)),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      ref.read(guardProvider.notifier).mute(entry.key),
+                  child: const Text('Mute'),
+                ),
+              ]),
+            ),
       ],
     );
   }
 }
 
 class _EventTile extends StatelessWidget {
-  const _EventTile({required this.ev});
+  const _EventTile({required this.ev, required this.onDismiss});
   final GuardEvent ev;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +321,12 @@ class _EventTile extends StatelessWidget {
             Text(
                 '${ev.time.hour.toString().padLeft(2, '0')}:${ev.time.minute.toString().padLeft(2, '0')}:${ev.time.second.toString().padLeft(2, '0')}',
                 style: AppTheme.mono(size: 10, color: AppColors.muted)),
+            IconButton(
+              tooltip: 'Dismiss',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close, size: 13, color: AppColors.muted),
+              onPressed: onDismiss,
+            ),
           ]),
           const SizedBox(height: 4),
           Text(ev.detail,

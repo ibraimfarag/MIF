@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/providers/providers.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 
 class HardeningAction {
@@ -162,13 +163,22 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                   FilledButton(
                     onPressed: () async {
                       setState(() => _busy = a.id);
+                      final before =
+                          ref.read(auditProvider).report?.score;
                       final err = await ref
                           .read(hardeningProvider.notifier)
                           .apply(a.id);
+                      // Rescan so the score delta flashes immediately.
+                      await ref.read(auditProvider.notifier).runAudit();
+                      final after = ref.read(auditProvider).report?.score;
+                      final delta = (after != null && before != null)
+                          ? after - before
+                          : null;
                       setState(() {
                         _busy = null;
                         _message = err ??
-                            '✓ ${isAr ? a.nameAr : a.name} — applied (snapshot saved)';
+                            '✓ ${isAr ? a.nameAr : a.name} — applied'
+                                '${delta != null && delta != 0 ? "  (score ${delta > 0 ? "+" : ""}$delta)" : ""}';
                       });
                     },
                     style: FilledButton.styleFrom(

@@ -7,6 +7,8 @@ mod vulns;
 mod scanner;
 mod sync;
 mod benchmark;
+#[cfg(test)]
+mod tests;
 mod guard;
 mod ids;
 mod hardening;
@@ -14,6 +16,7 @@ mod llm;
 mod notify;
 mod reports;
 mod smart;
+mod update;
 mod storage;
 
 use clap::{Parser, Subcommand};

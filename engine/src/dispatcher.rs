@@ -1,5 +1,6 @@
 use crate::rpc::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 use serde_json::json;
+use std::path::PathBuf;
 use tracing::{info, warn, error};
 use crate::platform::traits::PlatformCollectors;
 pub struct Dispatcher;
@@ -444,6 +445,29 @@ impl Dispatcher {
                     return error_response(req, "missing ip");
                 };
                 Some(json!({"country": crate::ids::geoip::lookup(&ip)}))
+            }
+            "update.download" => {
+                match crate::update::download_and_verify().await {
+                    Ok(path) => Some(json!({"status": "staged", "path": path})),
+                    Err(e) => { error!("update.download: {e:#}"); None }
+                }
+            }
+            "update.apply" => {
+                let p = req
+                    .params
+                    .as_ref()
+                    .and_then(|pp| pp.get("staged"))
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| {
+                        std::env::var("PROGRAMDATA")
+                            .map(|p| PathBuf::from(p).join("MICS").join("update").join("update.zip"))
+                            .unwrap()
+                    });
+                match crate::update::apply(&p) {
+                    Ok(msg) => Some(json!({"status": "applied", "detail": msg})),
+                    Err(e) => { error!("update.apply: {e:#}"); None }
+                }
             }
             "hardening.list" => Some(json!(crate::hardening::list_actions())),
             "hardening.apply" => {

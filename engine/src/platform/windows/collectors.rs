@@ -905,7 +905,7 @@ fn format_ipv4_ip(addr: u32) -> String {
     .to_string()
 }
 
-fn format_ipv4_port(addr: u32, port_net_order: u32) -> String {
+pub fn format_ipv4_port(addr: u32, port_net_order: u32) -> String {
     let ip = Ipv4Addr::new(
         (addr & 0xFF) as u8,
         ((addr >> 8) & 0xFF) as u8,

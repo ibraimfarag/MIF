@@ -9,6 +9,49 @@ use std::time::Duration;
 
 use crate::storage::sqlite::Storage;
 
+/// Parses a hash feed: plain lines of sha256 OR the URLhaus CSV format
+/// (`"id","date_time",...,"sha256_hash",...,"file_type",...`). Column names
+/// are matched so upstream format tweaks don't break the parser.
+fn parse_hash_feed(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut sha_col: Option<usize> = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('#') && !line.contains("sha256") {
+            continue;
+        }
+        if line.contains('"') && line.starts_with('"') {
+            // CSV row.
+            let cols: Vec<&str> = line.split("\",\"").collect();
+            if sha_col.is_none() {
+                let header = line.to_lowercase();
+                if let Some((i, _)) = header
+                    .split("\",\"")
+                    .enumerate()
+                    .find(|(_, c)| c.contains("sha256"))
+                {
+                    sha_col = Some(i);
+                }
+                continue; // header row
+            }
+            if let Some(i) = sha_col {
+                if let Some(h) = cols.get(i) {
+                    let h = h.trim_matches('"').trim().to_lowercase();
+                    if h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()) {
+                        out.push(h);
+                    }
+                }
+            }
+        } else if line.len() == 64 && line.chars().all(|c| c.is_ascii_hexdigit()) {
+            out.push(line.to_lowercase());
+        }
+    }
+    out
+}
+
 #[derive(Debug, Serialize)]
 pub struct SyncReport {
     pub online: bool,
@@ -60,25 +103,26 @@ impl SyncManager {
             return Ok(report);
         }
 
-        // IOC hash feed: MICS_IOC_FEED_URL (CSV: sha256 per line, `#source`
-        // comment header optional) — community-pack friendly.
-        let urls: Vec<(String, String)> = [
-            ("mics_starter".to_string(), std::env::var("MICS_IOC_FEED_URL").unwrap_or_default()),
+        // IOC hash feeds: the real abuse.ch URLhaus feed by default (full CSV
+        // — sha256 column parsed), plus an optional extra source via env.
+        let urls: Vec<(String, String)> = vec![
+            (
+                "urlhaus".to_string(),
+                "https://urlhaus.abuse.ch/downloads/csv_recent/".to_string(),
+            ),
+            ("mics_extra".to_string(), std::env::var("MICS_IOC_FEED_URL").unwrap_or_default()),
         ]
-        .iter()
+        .into_iter()
         .filter(|(_, u)| !u.is_empty())
-        .map(|(s, u)| (s.clone(), u.clone()))
         .collect();
 
         for (source, url) in urls {
             match self.client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     let text = resp.text().await.unwrap_or_default();
-                    let hashes: Vec<(String, String)> = text
-                        .lines()
-                        .map(|l| l.trim())
-                        .filter(|l| !l.is_empty() && !l.starts_with('#') && l.len() == 64)
-                        .map(|l| (l.to_lowercase(), source.clone()))
+                    let hashes: Vec<(String, String)> = parse_hash_feed(&text)
+                        .into_iter()
+                        .map(|h| (h, source.clone()))
                         .collect();
                     match self.storage.add_ioc_hashes(&hashes) {
                         Ok(n) => {
@@ -174,6 +218,19 @@ impl SyncManager {
                 ));
             }
         });
+    }
+
+    pub async fn fetch_manifest(&self, url: &str) -> Result<serde_json::Value> {
+        let resp = self.client.get(url).send().await.context("fetch manifest")?;
+        Ok(resp.json().await.context("manifest json")?)
+    }
+
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
+        let resp = self.client.get(url).send().await.context("download")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("download returned {}", resp.status());
+        }
+        Ok(resp.bytes().await?.to_vec())
     }
 
     pub async fn get_status(&self) -> Result<serde_json::Value> {
