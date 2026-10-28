@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
@@ -140,20 +141,30 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: (v) => notifier.setSoundVolume(v.round()),
               ),
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final sent = context.tr('settings.toastSent');
-                  try {
-                    await ipc.request('notify.test');
-                    _snack(messenger, sent);
-                  } catch (e) {
-                    _snack(messenger, '$e', error: true);
-                  }
-                },
-                icon: const Icon(Icons.notifications_active_outlined, size: 16),
-                label: Text(context.tr('settings.testToast')),
-              ),
+              Wrap(spacing: 8, children: [
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final sent = context.tr('settings.toastSent');
+                    try {
+                      await ipc.request('notify.test');
+                      _snack(messenger, sent);
+                    } catch (e) {
+                      _snack(messenger, '$e', error: true);
+                    }
+                  },
+                  icon: const Icon(Icons.notifications_active_outlined,
+                      size: 16),
+                  label: Text(context.tr('settings.testToast')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => ref
+                      .read(soundServiceProvider)
+                      .play(SoundCue.critical, volume: s.soundVolume),
+                  icon: const Icon(Icons.music_note_outlined, size: 16),
+                  label: Text(context.tr('settings.testSound')),
+                ),
+              ]),
             ],
           ),
 

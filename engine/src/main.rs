@@ -151,9 +151,11 @@ async fn main() -> Result<()> {
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
                 while let Ok(ev) = events.recv().await {
-                    // CRITICAL/HIGH events toast even with the UI closed.
+                    // CRITICAL/HIGH events toast (and sound) even with the UI
+                    // closed; the sound respects settings.sound_enabled + DND.
                     if ev.severity == "critical" || ev.severity == "high" {
                         notify::toast::route_event(&ev);
+                        notify::sound::play_for_severity(&ev.severity);
                     }
                     let note = serde_json::json!({
                         "jsonrpc": "2.0",
@@ -207,6 +209,7 @@ async fn main() -> Result<()> {
                 while let Ok(ev) = events.recv().await {
                     if ev.severity == "critical" || ev.severity == "high" {
                         notify::toast::route_event(&ev);
+                        notify::sound::play_for_severity(&ev.severity);
                     }
                     platform::windows::pipe::notify(
                         "event",

@@ -71,18 +71,34 @@ runners are available for verification.
 
 ## D-004 — Notification sounds: in-house pack + Windows system sounds
 
-**Status:** accepted (2026-10-28)
+**Status:** implemented (2026-10-29)
 
 **Decision.** Ship a small in-house generated sound pack (a handful of short
-WAV cues: info / warning / critical / success) plus Windows system sounds for
+WAV cues: info / success / warning / critical) plus Windows system sounds for
 generic events. No third-party audio assets.
 
 **Why.** Zero licensing risk, zero cost, small installer, full control over
 tone and duration on a low-end machine.
 
-**Commits us to.** Storing the pack under `assets/sounds/`, listing it in
-`THIRD-PARTY-NOTICES` only if any asset is derived from a third party, and
-wiring per-severity volume/mute/DND in Settings (see D-008 scope).
+**Implementation notes.**
+- `assets/sounds/{info,success,warning,critical}.wav` are generated tones
+  (16-bit mono), produced in-house; `test/sound_assets_test.dart` asserts every
+  cue exists and is a valid RIFF/WAVE file, and that no stray files are shipped.
+- Two playback paths by design:
+  - **engine** (`engine/src/notify/sound.rs`): critical/high cues play even when
+    the UI is closed, via `PlaySound` straight from bytes embedded in the binary
+    (no asset path to lose, no extra file to install). Respects
+    `sound_enabled` and DND. Windows' `PlaySound` has no per-app volume, so the
+    engine cue follows the system volume — documented in the module.
+  - **UI** (`lib/core/audio/sound_service.dart`): every cue, honouring the
+    Settings volume slider, the on/off toggle and DND. `SoundRouter` maps engine
+    events (`canary_triggered`, `process_suspicious`, `threat_detected`,
+    `job_finished` with findings) to cues, and works with either transport
+    payload shape.
+- Settings gained a "play a test sound" button next to the toast test.
+
+**Commits us to.** Keeping the pack in-house; any third-party asset must be
+recorded in `THIRD-PARTY-NOTICES` before it ships (P4).
 
 ---
 

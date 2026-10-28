@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
@@ -113,6 +114,8 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     );
     // Engines start with the app — no manual engine launch required.
     final ipc = ref.read(engineIpcProvider);
+    // Start the sound router once: it maps engine events to cues (D-004).
+    ref.read(soundRouterProvider);
     ref.listenManual(settingsProvider, (prev, next) {
       final s = next.value;
       if (s != null) ipc.spawnEnv = s.engineEnv();

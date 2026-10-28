@@ -101,6 +101,19 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ### Done log (append only)
 
+- **P2c — notification sounds (D-004)**
+  - In-house WAV pack `assets/sounds/{info,success,warning,critical}.wav`
+    (generated tones, no third-party licence).
+  - Engine: `engine/src/notify/sound.rs` plays critical/high cues with the UI
+    closed (`PlaySound` from bytes embedded in the binary), gated by
+    `sound_enabled` + DND.
+  - UI: `audioplayers` (MIT) + `SoundRouter` maps `canary_triggered`,
+    `process_suspicious`, `threat_detected` and `job_finished` to cues, honouring
+    the Settings volume slider, the toggle and DND; "play a test sound" button.
+  - Evidence: `cargo clippy` clean, `cargo test` 12/12 (2 new: cue selection +
+    embedded WAV validity), `flutter analyze` clean, `flutter test` 17/17
+    (2 new asset checks), packaged build ships the 4 WAVs and
+    `audioplayers_windows_plugin.dll`.
 - **P2b — translations as module files + live theme (D-009)**
   - `assets/i18n/<lang>/<module>.json`: 16 modules, 169 keys, Arabic and
     English at full parity; loader merges modules with graceful degradation.
@@ -174,7 +187,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are now real settings and `update.check` uses them; no extraction/apply UI, no rollback screen | P3 |
 | 7 | CVE/intel update paths | **partial** — NVD keyword search + cache; no incremental sync, no scheduler UI | P3 |
-| 8 | Dark/light mode | **mostly done** — System mode reads the OS once; live OS theme change not handled; light contrast not audited | P2 |
+| 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; light contrast audit still pending | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **todo P5** | `README.md` is still a stub |
 | 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter) | D-003; build legs in P4 |
@@ -182,7 +195,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | 13 | Full test walk-through with a report | **todo P6** — two smoke tools exist; no feature-wide harness/report | P6 |
 | 14 | Malware corpus for testing | **deferred** — EICAR only, and only inside a VM lab | P6 (later) |
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
-| 16 | Interactive sounds + control | **todo P2** — zero audio code today | D-004 |
+| 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
 | 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; no SBOM/NOTICES/cost sheet | P4 |
 | 19 | Professional README | **todo P5** | — |
@@ -219,11 +232,8 @@ Both tools need an engine to talk to; start one with an isolated pipe first
       strings stay by design, listed in the lint test).
 - [x] Theme: `didChangePlatformBrightness` observer, so System mode follows a
       live Windows theme switch.
-- [ ] Sounds (D-004): generate `assets/sounds/*.wav` (info/warning/critical/
-      success), map event kind → cue, per-severity volume + mute + DND, a "test"
-      button; engine plays the critical cue when the UI is closed.
-      Needs a decision: Rust `PlaySound` (no per-app volume) vs adding an audio
-      plugin (new dependency, MIT, needs `pub add`).
+- [x] Sounds (D-004): in-house `assets/sounds/*.wav`, engine cue with the UI
+      closed, UI cues via `audioplayers` with volume/mute/DND, test button.
 - [ ] Light-mode contrast audit (text/borders/severity colours) with screenshots.
 - [ ] Acceptance: `flutter analyze` clean, `flutter test` green, zero hardcoded
       UI strings.
