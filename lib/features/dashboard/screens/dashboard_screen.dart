@@ -17,6 +17,44 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
+/// Live L1–L5 health fetched from the engine's real subsystem state.
+final layersProvider =
+    NotifierProvider<LayersNotifier, AsyncValue<Map<String, double>>>(
+        LayersNotifier.new);
+
+class LayersNotifier extends Notifier<AsyncValue<Map<String, double>>> {
+  @override
+  AsyncValue<Map<String, double>> build() =>
+      const AsyncValue.data(<String, double>{});
+
+  Future<void> refresh() async {
+    try {
+      final ipc = ref.read(engineIpcProvider);
+      final guard = await ipc.request('guard.status');
+      final ids = await ipc.request('ids.status');
+      final incidents = await ipc.request('incident.list', {'limit': 10});
+      final guardRunning = (guard as Map)['running'] as bool? ?? false;
+      final blockedCount =
+          ((ids as Map)['blocked_domains'] as List? ?? []).length;
+      final incidentCount = (incidents as List? ?? []).length;
+      state = AsyncValue.data({
+        // L1: audit-derived (vulnerable+warning findings).
+        'L1': -1, // filled by caller from report
+        // L2: live once the DNS blocklist has entries.
+        'L2': blockedCount > 0 ? 1.0 : 0.0,
+        // L3: live when the guard loop is running.
+        'L3': guardRunning ? 1.0 : 0.0,
+        // L4: scanner is built-in — healthy whenever the engine is up.
+        'L4': 1.0,
+        // L5: correlator has handled at least one incident, else idle-but-ready.
+        'L5': incidentCount > 0 ? 1.0 : 0.35,
+      });
+    } catch (_, st) {
+      state = AsyncValue.error('layer state unavailable', st);
+    }
+  }
+}
+
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _gauge =
@@ -38,6 +76,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       final st = ref.read(auditProvider);
       if (st.report != null) {
         t.cancel();
+        ref.read(layersProvider.notifier).refresh();
         return;
       }
       if (!st.loading && t.tick > 1) {
@@ -430,19 +469,23 @@ class _LayerTile extends StatelessWidget {
                   health == null ? AppColors.border : color),
             ),
           ),
-          if (health == null) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text('$phase later',
-                  style: TextStyle(
-                      fontSize: 8.5, color: AppColors.muted)),
-            ),
-          ],
+          const SizedBox(height: 6),
+          Text(
+            health == null
+                ? 'later phase'
+                : health! >= 1.0
+                    ? 'active'
+                    : health! > 0
+                        ? 'partial'
+                        : 'idle',
+            style: TextStyle(
+                fontSize: 8.5,
+                color: health == null
+                    ? AppColors.muted
+                    : health! >= 1.0
+                        ? AppColors.green
+                        : AppColors.orange),
+          ),
         ],
       ),
     );
