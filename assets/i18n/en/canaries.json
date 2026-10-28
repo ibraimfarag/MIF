@@ -1,0 +1,5 @@
+﻿{
+  "canaries.addPath": "Add decoy path",
+  "canaries.deploy": "Deploy decoys",
+  "canaries.intro": "Decoy files nobody should ever touch. Any access is a CRITICAL canary event — the classic sign of ransomware or a snooper. Decoys arm when the Guard runs."
+}

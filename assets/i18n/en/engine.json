@@ -1,0 +1,7 @@
+{
+  "engine.missing": "Engine not found",
+  "engine.reconnecting": "Reconnecting…",
+  "engine.running": "Protected",
+  "engine.stopped": "Stopped",
+  "state.engine": "Engine"
+}

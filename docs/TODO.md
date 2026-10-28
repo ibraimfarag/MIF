@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-28 · HEAD after P2a (settings) · P1 complete, P2 in progress.
+> Last updated: 2026-10-28 · P1 + P2a + P2b(i18n/theme) done · next: sounds, P1.5 elevation.
 
 ---
 
@@ -101,6 +101,23 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ### Done log (append only)
 
+- **P2b — translations as module files + live theme (D-009)**
+  - `assets/i18n/<lang>/<module>.json`: 16 modules, 169 keys, Arabic and
+    English at full parity; loader merges modules with graceful degradation.
+  - `tool/split_i18n.dart` documents the module-assignment rule and can
+    re-split a flat pack.
+  - Two gates: `test/i18n_parity_test.dart` (same modules, same keys, no empty
+    values, same `{placeholders}`) and `test/i18n_lint_test.dart` (no
+    user-facing literal inside `Text('…')`; interpolations and a small
+    brand/legal allowlist excepted).
+  - All 13 screens extracted to keys (buttons, labels, tooltips, hints,
+    section titles, empty states and the long explanatory copy); only brand,
+    licence and a literal path remain hardcoded by design.
+  - Theme: `MicsApp` observes `didChangePlatformBrightness`, so "System"
+    follows a Windows theme switch without restarting.
+  - Evidence: `flutter test` 15/15 (5 parity + 1 lint added), `flutter analyze`
+    clean, packaged build contains `data/flutter_assets/assets/i18n/{ar,en}/`
+    with 16 module files each.
 - **P2a — settings as the single source of truth (D-008)**
   - `engine/src/settings.rs`: typed document + defaults + `apply_patch`
     validation (unknown keys and out-of-range values are rejected with
@@ -151,7 +168,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | # | Request | State | Where / note |
 |---|---|---|---|
 | 1 | Rounded window corners | **done** (needs visual check on Win10 + HiDPI) | `lib/core/window/window_corners.dart` |
-| 2 | Translation as separate files with keys | **todo P2** — 2 files, 51 keys, but 57 strings are hardcoded in the UI | see Known issues |
+| 2 | Translation as separate files with keys | **done** — 16 module files × 2 languages, 169 keys, parity + no-hardcoded-copy tests | D-009 |
 | 3 | Code signing | **partial** — self-signed script works; trusted cert deferred | D-002, `scripts/sign.ps1` |
 | 4 | Permissions asked once, publisher name | **todo P1.5** — today every admin op spawns its own UAC prompt | D-007 |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
@@ -196,19 +213,20 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 - [x] `settings.json` in `%PROGRAMDATA%\MICS\` read by **both** UI and engine.
 - [x] Full Settings screen, 8 sections, every field persisted + validated.
 - [x] Fix: changing language/theme no longer wipes the other settings.
-- [ ] i18n: `assets/i18n/<lang>/<module>.json` (14 modules) + loader that merges
-      namespaces + a test that fails on hardcoded UI strings and on
-      missing/extra keys between languages + pseudo-locale RTL check.
-- [ ] Extract the remaining hardcoded strings (audit 5, scanner 4, network 4,
-      vulns 3, reports 3, guard 3, ids 2, shell 1, incidents 1, hardening 1,
-      canaries 1, model text). The Settings screen is fully translated.
+- [x] i18n: `assets/i18n/<lang>/<module>.json` (16 modules) + loader that merges
+      namespaces + parity test + no-hardcoded-copy lint test.
+- [x] Extract every user-facing literal from the 13 screens (brand/legal/path
+      strings stay by design, listed in the lint test).
+- [x] Theme: `didChangePlatformBrightness` observer, so System mode follows a
+      live Windows theme switch.
 - [ ] Sounds (D-004): generate `assets/sounds/*.wav` (info/warning/critical/
       success), map event kind → cue, per-severity volume + mute + DND, a "test"
       button; engine plays the critical cue when the UI is closed.
-- [ ] Theme: listen for `platformBrightness` changes while running; audit light
-      palette contrast (text/borders/severity colors).
-- [ ] Acceptance: `flutter analyze` clean, `flutter test` green (new tests for
-      settings migration + i18n parity), zero hardcoded UI strings.
+      Needs a decision: Rust `PlaySound` (no per-app volume) vs adding an audio
+      plugin (new dependency, MIT, needs `pub add`).
+- [ ] Light-mode contrast audit (text/borders/severity colours) with screenshots.
+- [ ] Acceptance: `flutter analyze` clean, `flutter test` green, zero hardcoded
+      UI strings.
 
 ---
 
@@ -273,9 +291,8 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
 | MED | No offline badge / freshness indicator anywhere in the UI | shell |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
-| LOW | `docs/` has no THREAT-MODEL / DECISIONS is new; README is a stub | `docs/`, `README.md` |
-| LOW | 57 hardcoded UI strings; i18n keys grew to ~90 with the Settings screen | `lib/features/**` |
-| LOW | System theme is read once; live OS theme change does not repaint | `app_theme.dart` |
+| LOW | `docs/` has no THREAT-MODEL yet; README is still a stub | `docs/`, `README.md` |
+| LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
 
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);

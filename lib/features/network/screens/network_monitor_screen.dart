@@ -160,7 +160,7 @@ class _NetworkMonitorScreenState extends ConsumerState<NetworkMonitorScreen> {
                   icon: const Icon(Icons.lan)),
               ButtonSegment(
                   value: 1,
-                  label: const Text('Firewall'),
+                  label: Text(context.tr('network.firewall')),
                   icon: const Icon(Icons.security)),
             ],
             selected: {_tab},
@@ -186,12 +186,18 @@ class _ConnectionsView extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           children: [
             Row(children: [
-              Text('${conns.length} connections',
+              Text(
+                  context
+                      .tr('network.connections')
+                      .replaceAll('{count}', '${conns.length}'),
                   style: AppTheme.mono(size: 12, color: AppColors.muted)),
               const SizedBox(width: 12),
               if (suspicious.isNotEmpty)
                 Chip(
-                  label: Text('${suspicious.length} suspicious',
+                  label: Text(
+                      context
+                          .tr('network.suspicious')
+                          .replaceAll('{count}', '${suspicious.length}'),
                       style: TextStyle(
                           color: AppColors.orange, fontSize: 11)),
                   side: BorderSide(
@@ -298,13 +304,13 @@ class _FirewallView extends ConsumerWidget {
           ),
         Card(
           child: SwitchListTile(
-            title: Text('Default-Deny Outbound',
+            title: Text(context.tr('network.defaultDeny'),
                 style: TextStyle(
                     color: AppColors.text, fontWeight: FontWeight.w700)),
             subtitle: Text(
               fw.defaultDeny
-                  ? 'ON — all outbound traffic blocked unless a rule allows it (L1)'
-                  : 'OFF — outbound traffic allowed (Windows default)',
+                  ? context.tr('network.defaultDenyOn')
+                  : context.tr('network.defaultDenyOff'),
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
             value: fw.defaultDeny,
@@ -318,15 +324,16 @@ class _FirewallView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: Icon(Icons.public_off, color: AppColors.cyan),
-            title: Text('Block a country (needs synced blocklist)',
+            title: Text(context.tr('network.blockCountry'),
                 style: TextStyle(color: AppColors.text, fontSize: 13)),
             subtitle: Text(
-                'Creates a MICS-BLOCK-<CC> rule from rules/blocklists/<CC>.cidr',
+                context.tr('network.blockCountryHint'),
                 style: TextStyle(color: AppColors.muted, fontSize: 11)),
             trailing: SizedBox(
               width: 90,
               child: TextField(
-                decoration: const InputDecoration(hintText: 'e.g. RU'),
+                decoration: InputDecoration(
+                    hintText: context.tr('network.countryHint')),
                 style: AppTheme.mono(size: 12),
                 onSubmitted: (cc) => ref
                     .read(firewallProvider.notifier)
@@ -337,7 +344,10 @@ class _FirewallView extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Row(children: [
-          Text('MI CS rules (${fw.rules.length})',
+          Text(
+              context
+                  .tr('network.rules')
+                  .replaceAll('{count}', '${fw.rules.length}'),
               style: TextStyle(
                   color: AppColors.text, fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -352,7 +362,7 @@ class _FirewallView extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'No MICS-* rules yet. Rules created from MI CS appear in wf.msc with the MICS- prefix.',
+              context.tr('network.noRules'),
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ),

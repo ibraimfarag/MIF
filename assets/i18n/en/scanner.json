@@ -1,0 +1,20 @@
+﻿{
+    "scanner.autoQuarantine":  "Auto-quarantine",
+    "scanner.bytes":  "{size} bytes",
+    "scanner.clean":  "No threats found â€” the triaged queue came back clean.",
+    "scanner.deleteForever":  "Delete forever",
+    "scanner.findingsSoFar":  "{count} finding(s) so far",
+    "scanner.folder":  "Folder or drive to scan",
+    "scanner.hint":  "Pick a folder and run a scan. Files are triaged (location Ã— extension Ã— size Ã— age) so the riskiest are checked first: IOC hash cache, then YARA rules.",
+    "scanner.queue":  "Triaged queue: {scanned} / {total} files",
+    "scanner.queuePreparing":  "Preparing the triage queueâ€¦",
+    "scanner.quarantineCount":  "Quarantine ({count} active)",
+    "scanner.quarantineEmpty":  "Quarantine is empty. Files detected by IOC hashes or YARA rules are AES-256-GCM encrypted here with a DPAPI-protected key.",
+    "scanner.restore":  "Restore",
+    "scanner.restored":  "restored",
+    "scanner.scan":  "Scan",
+    "scanner.stop":  "Stop",
+    "scanner.tabQuarantine":  "Quarantine",
+    "scanner.stats":  "{scanned} files scanned · {skipped} skipped · {ms} ms{stopped}",
+    "scanner.stoppedSuffix":  "STOPPED"
+}

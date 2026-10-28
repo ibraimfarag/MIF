@@ -200,12 +200,15 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
         const SizedBox(height: 6),
         Text(
           st.running
-              ? 'Live — new processes are matched against the rules every 2 s. Respond, kill-tree and canary events feed the correlator.'
-              : 'Stopped — start the guard to watch process creation in real time.',
+              ? context.tr('guard.live')
+              : context.tr('guard.stopped'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 16),
-        Text('Rules (${st.rules.length}) — hot-reloaded every 30 s from rules/guard/*.json',
+        Text(
+            context
+                .tr('guard.rules')
+                .replaceAll('{count}', '${st.rules.length}'),
             style: TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         for (final r in st.rules)
@@ -230,7 +233,10 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
             ]),
           ),
         const SizedBox(height: 16),
-        Text('Live events (${st.events.length})',
+        Text(
+            context
+                .tr('guard.events')
+                .replaceAll('{count}', '${st.events.length}'),
             style: TextStyle(
                 color: AppColors.cyan, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
@@ -243,7 +249,7 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
               border: Border.all(color: AppColors.border),
             ),
             child: Text(
-              'No events yet. Suspicious process creations and canary touches appear here the moment they happen.',
+              context.tr('guard.empty'),
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ),
@@ -268,14 +274,14 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
                     size: 15, color: AppColors.orange),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('You dismiss this alert a lot. Mute it?',
+                  child: Text(context.tr('guard.muteOffer'),
                       style: TextStyle(
                           color: AppColors.text, fontSize: 12)),
                 ),
                 TextButton(
                   onPressed: () =>
                       ref.read(guardProvider.notifier).mute(entry.key),
-                  child: const Text('Mute'),
+                  child: Text(context.tr('guard.mute')),
                 ),
               ]),
             ),
@@ -322,7 +328,7 @@ class _EventTile extends StatelessWidget {
                 '${ev.time.hour.toString().padLeft(2, '0')}:${ev.time.minute.toString().padLeft(2, '0')}:${ev.time.second.toString().padLeft(2, '0')}',
                 style: AppTheme.mono(size: 10, color: AppColors.muted)),
             IconButton(
-              tooltip: 'Dismiss',
+              tooltip: context.tr('guard.dismiss'),
               visualDensity: VisualDensity.compact,
               icon: Icon(Icons.close, size: 13, color: AppColors.muted),
               onPressed: onDismiss,

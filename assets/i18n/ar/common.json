@@ -1,0 +1,15 @@
+{
+  "common.critical": "حرج",
+  "common.fix": "إصلاح",
+  "common.high": "مرتفع",
+  "common.low": "منخفض",
+  "common.medium": "متوسط",
+  "common.refresh": "تحديث",
+  "common.secure": "آمن",
+  "common.unknown": "غير معروف",
+  "common.vulnerable": "معرض للخطر",
+  "common.warning": "تحذير",
+  "soon.body": "هذه الوحدة ضمن المراحل القادمة من خطة البناء. سيتم ربطها بالمحرك وتظهر بالبيانات الحية فور اكتمال مرحلتها.",
+  "soon.title": "الوحدة تظهر في مرحلة لاحقة",
+  "status.secure": "آمن"
+}

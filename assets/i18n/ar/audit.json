@@ -1,0 +1,18 @@
+{
+  "audit.applyingFix": "بيطبّق الإصلاح… (ممكن تظهر نافذة UAC)",
+  "audit.askingAnalyst": "بيسأل المحلّل…",
+  "audit.assistant": "مساعد MI CS",
+  "audit.empty.action": "ابدأ الفحص الأول",
+  "audit.empty.title": "لم يتم تشغيل فحص بعد",
+  "audit.error": "فشل الفحص",
+  "audit.explain": "اشرحلي الملاحظة دي",
+  "audit.explainFailed": "الشرح فشل",
+  "audit.findings": "ملاحظة",
+  "audit.fixFailed": "الإصلاح فشل",
+  "audit.fixed": "تم الإصلاح: {item} — أعد الفحص لمعرفة الدرجة الجديدة",
+  "audit.loading": "جارٍ جمع البيانات الحية من المحرك…",
+  "audit.startup": "عناصر بدء التشغيل",
+  "audit.subtitle": "نتائج حقيقية من جهازك — ديفندر، الجدار الناري، RDP، SMBv1، UAC، المدراء، بدء التشغيل والمزيد",
+  "audit.tasks": "مهام مجدولة (غير Microsoft)",
+  "audit.title": "فحص النظام"
+}

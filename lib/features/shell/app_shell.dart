@@ -188,7 +188,7 @@ class _TitleBar extends ConsumerWidget {
                       ThemeMode.dark
                   ? Icons.light_mode_outlined
                   : Icons.dark_mode_outlined,
-              tooltip: 'Theme',
+              tooltip: context.tr('shell.theme'),
               onTap: () {
                 final cur = ref.read(settingsProvider).value?.themeMode ??
                     ThemeMode.dark;

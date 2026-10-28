@@ -1,0 +1,7 @@
+{
+  "engine.missing": "المحرك غير موجود",
+  "engine.reconnecting": "إعادة الاتصال…",
+  "engine.running": "محمي",
+  "engine.stopped": "متوقف",
+  "state.engine": "المحرك"
+}

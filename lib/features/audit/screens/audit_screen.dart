@@ -156,8 +156,12 @@ String? _hardeningActionFor(AuditFinding f) {
 
 Future<void> _explainFinding(
     BuildContext context, WidgetRef ref, AuditFinding f) async {
-  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Asking the analyst…'), duration: Duration(seconds: 2)));
+  final messenger = ScaffoldMessenger.of(context);
+  final asking = context.tr('audit.askingAnalyst');
+  final assistant = context.tr('audit.assistant');
+  final failedLabel = context.tr('audit.explainFailed');
+  messenger.showSnackBar(SnackBar(
+      content: Text(asking), duration: const Duration(seconds: 2)));
   try {
     final res = await ref.read(engineIpcProvider).request('llm.explain', {
       'finding': '${f.section} :: ${f.item} — ${f.description}',
@@ -178,7 +182,7 @@ Future<void> _explainFinding(
             Row(children: [
               Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
               const SizedBox(width: 8),
-              Text('MI CS Assistant',
+              Text(assistant,
                   style: TextStyle(
                       color: AppColors.cyan, fontWeight: FontWeight.w700)),
             ]),
@@ -192,8 +196,8 @@ Future<void> _explainFinding(
     );
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Explain failed: $e')));
+      messenger.showSnackBar(
+          SnackBar(content: Text('$failedLabel: $e')));
     }
   }
 }
@@ -269,7 +273,7 @@ class _FindingCard extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
-                  tooltip: 'Explain',
+                  tooltip: context.tr('audit.explain'),
                   icon: Icon(Icons.auto_awesome,
                       size: 16, color: AppColors.cyan),
                   onPressed: () => _explainFinding(context, ref, finding),
@@ -283,18 +287,22 @@ class _FindingCard extends ConsumerWidget {
                         return;
                       }
                       final messenger = ScaffoldMessenger.of(context);
-                      messenger.showSnackBar(const SnackBar(
-                          content: Text('Applying fix… (UAC may appear)')));
+                      final applying = context.tr('audit.applyingFix');
+                      final fixedLabel =
+                          context.tr('audit.fixed');
+                      final failedLabel = context.tr('audit.fixFailed');
+                      messenger.showSnackBar(
+                          SnackBar(content: Text(applying)));
                       try {
                         await ref
                             .read(engineIpcProvider)
                             .request('hardening.apply', {'action': action});
                         messenger.showSnackBar(SnackBar(
-                            content: Text(
-                                'Fixed: ${finding.item} — rescan for the new score')));
+                            content: Text(fixedLabel
+                                .replaceAll('{item}', finding.item))));
                       } catch (e) {
-                        messenger.showSnackBar(
-                            SnackBar(content: Text('Fix failed: $e')));
+                        messenger.showSnackBar(SnackBar(
+                            content: Text('$failedLabel: $e')));
                       }
                     },
                     style: OutlinedButton.styleFrom(

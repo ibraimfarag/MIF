@@ -1,0 +1,4 @@
+﻿{
+  "hardening.intro": "One-click fixes. Every change is snapshotted first and can be rolled back. Admin fixes trigger a UAC prompt.",
+  "hardening.rollback": "Rollback"
+}

@@ -1,0 +1,7 @@
+﻿{
+    "reports.exportNow":  "Export now",
+    "reports.intro":  "Export the live audit score, all findings, startup entries and incident kill-chains as a Markdown report.",
+    "reports.markdownTitle":  "Markdown security report",
+    "reports.where":  "Where everything lives",
+    "reports.paths":  "Intel + quarantine + snapshots:  %PROGRAMDATA%\\MICS\\`nReports:  Documents\\MICS-Reports\\`nRules (YARA + guard):  rules\\ next to mics-engine.exe"
+}

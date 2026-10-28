@@ -44,7 +44,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
         Text(
-          'Export the live audit score, all findings, startup entries and incident kill-chains as a Markdown report.',
+          context.tr('reports.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 16),
@@ -57,7 +57,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 Row(children: [
                   Icon(Icons.description, color: AppColors.cyan),
                   SizedBox(width: 8),
-                  Text('Markdown security report',
+                  Text(context.tr('reports.markdownTitle'),
                       style: TextStyle(
                           color: AppColors.text,
                           fontWeight: FontWeight.w700)),
@@ -77,7 +77,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                           });
                         },
                   icon: const Icon(Icons.file_download),
-                  label: const Text('Export now'),
+                  label: Text(context.tr('reports.exportNow')),
                 ),
                 if (_exporting)
                   const Padding(
@@ -103,14 +103,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Where everything lives',
+                  Text(context.tr('reports.where'),
                       style: TextStyle(
                           color: AppColors.text, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(
-                    'Intel + quarantine + snapshots:  %PROGRAMDATA%\\MICS\\\n'
-                    'Reports:  Documents\\MICS-Reports\\\n'
-                    'Rules (YARA + guard):  rules\\ next to mics-engine.exe',
+                    context.tr('reports.paths'),
                     style: TextStyle(
                         fontFamily: 'JetBrainsMono', fontSize: 11,
                         color: AppColors.muted, height: 1.6),

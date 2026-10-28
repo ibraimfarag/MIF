@@ -1,0 +1,9 @@
+﻿{
+  "vulns.cache": "كاش",
+  "vulns.count": "{count} ثغرة",
+  "vulns.cvss": "CVSS {score}",
+  "vulns.hint": "بيقارن البرامج المثبتة بقاعدة NVD (مع كاش أوفلاين). أول فحص محدود السرعة (~6.5 ثانية للبرنامج).",
+  "vulns.live": "مباشر",
+  "vulns.loading": "بيسأل NVD / بيقرأ الكاش…",
+  "vulns.scan": "فحص NVD"
+}

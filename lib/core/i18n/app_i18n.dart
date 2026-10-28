@@ -7,15 +7,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Language packs: JSON files under assets/i18n/<code>.json. Adding a language
-/// = dropping a new file + one entry in [bundledLangs]. Missing keys fall
-/// back to English; unknown keys surface the key itself (debug-friendly).
+/// Language packs: one folder per language, one JSON file per module
+/// (`assets/i18n/<lang>/<module>.json`). Adding a language = add a folder with
+/// the same module files + one entry in [bundledLangs]. Adding a module = add
+/// it to [i18nModules] and drop the file in every language folder (the parity
+/// test in `test/i18n_parity_test.dart` enforces both).
 enum AppLang { ar, en }
 
 const bundledLangs = {
   'ar': 'العربية',
   'en': 'English',
 };
+
+/// Every translation module, in load order. Order does not matter for lookup
+/// (keys are flat and unique) but keeps the asset list predictable.
+const i18nModules = <String>[
+  'app',
+  'nav',
+  'engine',
+  'dashboard',
+  'common',
+  'audit',
+  'scanner',
+  'network',
+  'ids',
+  'vulns',
+  'guard',
+  'canaries',
+  'hardening',
+  'incidents',
+  'reports',
+  'settings',
+  'about',
+];
 
 final i18nProvider =
     AsyncNotifierProvider<I18nLoader, Map<String, Map<String, String>>>(
@@ -26,15 +50,19 @@ class I18nLoader extends AsyncNotifier<Map<String, Map<String, String>>> {
   Future<Map<String, Map<String, String>>> build() async {
     final tables = <String, Map<String, String>>{};
     for (final code in bundledLangs.keys) {
-      try {
-        final raw = await rootBundle.loadString('assets/i18n/$code.json');
-        tables[code] = (jsonDecode(raw) as Map)
-            .cast<String, dynamic>()
-            .map((k, v) => MapEntry(k, v.toString()));
-      } catch (e) {
-        // A broken pack must never hang the app — degrade to keys/English.
-        tables[code] = const {};
+      final table = <String, String>{};
+      for (final module in i18nModules) {
+        try {
+          final raw = await rootBundle
+              .loadString('assets/i18n/$code/$module.json');
+          final decoded = (jsonDecode(raw) as Map).cast<String, dynamic>();
+          decoded.forEach((k, v) => table[k] = v.toString());
+        } catch (_) {
+          // A module that has not been translated yet must not break the app;
+          // missing keys fall back to English or surface the key itself.
+        }
       }
+      tables[code] = table;
     }
     return tables;
   }

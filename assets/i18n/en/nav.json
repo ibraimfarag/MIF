@@ -1,0 +1,14 @@
+{
+  "nav.audit": "System Audit",
+  "nav.canaries": "Canaries",
+  "nav.dashboard": "Dashboard",
+  "nav.guard": "Process Guard",
+  "nav.hardening": "Hardening Center",
+  "nav.ids": "IDS (L2)",
+  "nav.incidents": "Incidents",
+  "nav.network": "Network & Firewall",
+  "nav.reports": "Reports",
+  "nav.scanner": "Malware Scanner",
+  "nav.settings": "Settings",
+  "nav.vulns": "Vulnerabilities"
+}

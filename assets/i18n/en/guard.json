@@ -1,0 +1,10 @@
+﻿{
+    "guard.dismiss":  "Dismiss",
+    "guard.events":  "Live events ({count})",
+    "guard.live":  "Live â€” new processes are matched against the rules every 2 s. Respond, kill-tree and canary events feed the correlator.",
+    "guard.mute":  "Mute",
+    "guard.muteOffer":  "You dismiss this alert a lot. Mute it?",
+    "guard.rules":  "Rules ({count}) â€” hot-reloaded every 30 s from rules/guard/*.json",
+    "guard.stopped":  "Stopped â€” start the guard to watch process creation in real time.",
+    "guard.empty":  "No events yet. Suspicious process creations and canary touches appear here the moment they happen."
+}

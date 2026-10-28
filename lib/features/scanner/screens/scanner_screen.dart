@@ -55,6 +55,20 @@ class ScanReport {
       );
 }
 
+class _QuarantineMeta extends StatelessWidget {
+  const _QuarantineMeta({required this.entry});
+  final QuarantineEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = context
+        .tr('scanner.bytes')
+        .replaceAll('{size}', '${entry.size}');
+    return Text('${entry.reason} · $size · ${entry.blobId.substring(0, 12)}…',
+        style: AppTheme.mono(size: 10, color: AppColors.muted));
+  }
+}
+
 class QuarantineEntry {
   final String blobId;
   final String originalPath;
@@ -359,7 +373,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   icon: const Icon(Icons.bug_report)),
               ButtonSegment(
                   value: 1,
-                  label: const Text('Quarantine'),
+                  label: Text(context.tr('scanner.tabQuarantine')),
                   icon: const Icon(Icons.lock_outline)),
             ],
             selected: {_tab},
@@ -406,8 +420,8 @@ class _ScanTab extends ConsumerWidget {
               child: TextField(
                 controller: pathController,
                 style: AppTheme.mono(size: 12),
-                decoration: const InputDecoration(
-                    labelText: 'Folder or drive to scan',
+                decoration: InputDecoration(
+                    labelText: context.tr('scanner.folder'),
                     hintText: r'C:\Users\...\Downloads'),
               ),
             ),
@@ -416,7 +430,7 @@ class _ScanTab extends ConsumerWidget {
               value: quarantine,
               onChanged: onQuarantineChanged,
             ),
-            Text('Auto-quarantine',
+            Text(context.tr('scanner.autoQuarantine'),
                 style: TextStyle(fontSize: 12, color: AppColors.text)),
           ],
         ),
@@ -429,14 +443,14 @@ class _ScanTab extends ConsumerWidget {
                     .read(scannerProvider.notifier)
                     .scan(pathController.text.trim(), quarantine),
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Scan'),
+            label: Text(context.tr('scanner.scan')),
           ),
           const SizedBox(width: 8),
           if (st.scanning)
             OutlinedButton.icon(
               onPressed: () => ref.read(scannerProvider.notifier).stop(),
               icon: const Icon(Icons.stop),
-              label: const Text('Stop'),
+              label: Text(context.tr('scanner.stop')),
             ),
           const SizedBox(width: 12),
           if (st.scanning)
@@ -457,7 +471,16 @@ class _ScanTab extends ConsumerWidget {
         const SizedBox(height: 16),
         if (st.report != null) ...[
           Text(
-            '${st.report!.filesScanned} files scanned · ${st.report!.filesSkipped} skipped · ${st.report!.durationMs} ms${st.report!.stopped ? " · STOPPED" : ""}',
+            context
+                .tr('scanner.stats')
+                .replaceAll('{scanned}', '${st.report!.filesScanned}')
+                .replaceAll('{skipped}', '${st.report!.filesSkipped}')
+                .replaceAll('{ms}', '${st.report!.durationMs}')
+                .replaceAll(
+                    '{stopped}',
+                    st.report!.stopped
+                        ? ' · ${context.tr('scanner.stoppedSuffix')}'
+                        : ''),
             style: AppTheme.mono(size: 12, color: AppColors.muted),
           ),
           const SizedBox(height: 8),
@@ -475,7 +498,7 @@ class _ScanTab extends ConsumerWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                      'No threats found — the triaged queue came back clean.',
+                      context.tr('scanner.clean'),
                       style: TextStyle(color: AppColors.text, fontSize: 13)),
                 ),
               ]),
@@ -485,7 +508,7 @@ class _ScanTab extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Pick a folder and run a scan. Files are triaged (location × extension × size × age) so the riskiest are checked first: IOC hash cache, then YARA rules.',
+              context.tr('scanner.hint'),
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ),
@@ -517,8 +540,11 @@ class _ScanProgress extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               st.total > 0
-                  ? 'Triaged queue: ${st.scanned} / ${st.total} files'
-                  : 'Preparing the triage queue…',
+                  ? context
+                      .tr('scanner.queue')
+                      .replaceAll('{scanned}', '${st.scanned}')
+                      .replaceAll('{total}', '${st.total}')
+                  : context.tr('scanner.queuePreparing'),
               style: TextStyle(color: AppColors.text, fontSize: 12.5),
             ),
             const Spacer(),
@@ -537,8 +563,10 @@ class _ScanProgress extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${st.findingsCount} finding(s) so far'
-            '${st.jobId != null ? ' · job ${st.jobId}' : ''}',
+            context
+                    .tr('scanner.findingsSoFar')
+                    .replaceAll('{count}', '${st.findingsCount}') +
+                (st.jobId != null ? ' · ${st.jobId}' : ''),
             style: AppTheme.mono(size: 10, color: AppColors.muted),
           ),
         ],
@@ -614,7 +642,11 @@ class _QuarantineTab extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
         Row(children: [
-          Text('Quarantine (${items.where((e) => !e.restored).length} active)',
+          Text(
+              context
+                  .tr('scanner.quarantineCount')
+                  .replaceAll('{count}',
+                      '${items.where((e) => !e.restored).length}'),
               style: TextStyle(
                   color: AppColors.text, fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -630,7 +662,7 @@ class _QuarantineTab extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Quarantine is empty. Files detected by IOC hashes or YARA rules are AES-256-GCM encrypted here with a DPAPI-protected key.',
+              context.tr('scanner.quarantineEmpty'),
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ),
@@ -658,7 +690,7 @@ class _QuarantineTab extends ConsumerWidget {
                   ),
                   if (!e.restored) ...[
                     IconButton(
-                      tooltip: 'Restore',
+                      tooltip: context.tr('scanner.restore'),
                       icon: Icon(Icons.undo,
                           size: 16, color: AppColors.green),
                       onPressed: () => ref
@@ -666,19 +698,18 @@ class _QuarantineTab extends ConsumerWidget {
                           .restore(e.blobId),
                     ),
                     IconButton(
-                      tooltip: 'Delete forever',
+                      tooltip: context.tr('scanner.deleteForever'),
                       icon: Icon(Icons.delete_forever,
                           size: 16, color: AppColors.red),
                       onPressed: () =>
                           ref.read(scannerProvider.notifier).delete(e.blobId),
                     ),
                   ] else
-                    Text('restored',
+                    Text(context.tr('scanner.restored'),
                         style:
                             TextStyle(color: AppColors.muted, fontSize: 10)),
                 ]),
-                Text('${e.reason} · ${e.size} bytes · ${e.blobId.substring(0, 12)}…',
-                    style: AppTheme.mono(size: 10, color: AppColors.muted)),
+                _QuarantineMeta(entry: e),
               ],
             ),
           ),

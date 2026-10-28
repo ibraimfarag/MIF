@@ -1,0 +1,15 @@
+{
+  "common.critical": "Critical",
+  "common.fix": "Fix",
+  "common.high": "High",
+  "common.low": "Low",
+  "common.medium": "Medium",
+  "common.refresh": "Refresh",
+  "common.secure": "Secure",
+  "common.unknown": "Unknown",
+  "common.vulnerable": "Vulnerable",
+  "common.warning": "Warning",
+  "soon.body": "This module ships in an upcoming phase of the build plan. The engine-side work for it is scheduled — the screen will light up with live data once wired.",
+  "soon.title": "Module coming in a later phase",
+  "status.secure": "Secure"
+}

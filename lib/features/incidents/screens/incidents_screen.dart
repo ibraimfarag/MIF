@@ -99,7 +99,7 @@ class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
         ]),
         const SizedBox(height: 6),
         Text(
-          'Related guard events collapse into ONE incident with a kill-chain timeline — instead of isolated alert spam.',
+          context.tr('incidents.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 16),
@@ -116,7 +116,7 @@ class _IncidentsScreenState extends ConsumerState<IncidentsScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                    'No incidents. When the guard detects related suspicious activity, the kill chain appears here.',
+                    context.tr('incidents.empty'),
                     style: TextStyle(color: AppColors.text, fontSize: 13)),
               ),
             ]),
@@ -170,7 +170,9 @@ class _IncidentCard extends ConsumerWidget {
           ]),
           const SizedBox(height: 4),
           Text(
-              '${inc.time} · ${inc.timeline.length} event(s) · ${inc.severity}${inc.closed ? " · closed" : ""}',
+              '${inc.time} · '
+              '${context.tr('incidents.summary').replaceAll('{count}', '${inc.timeline.length}').replaceAll('{severity}', inc.severity)}'
+              '${inc.closed ? ' · ${context.tr('incidents.closed')}' : ''}',
               style: AppTheme.mono(size: 10, color: AppColors.muted)),
           const SizedBox(height: 8),
           for (final (i, ev) in inc.timeline.indexed)
@@ -195,7 +197,7 @@ class _IncidentCard extends ConsumerWidget {
               child: TextButton(
                 onPressed: () =>
                     ref.read(incidentsProvider.notifier).close(inc.incidentId),
-                child: const Text('Mark handled'),
+                child: Text(context.tr('incidents.markHandled')),
               ),
             ),
           ],

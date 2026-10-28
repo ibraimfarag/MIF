@@ -117,7 +117,7 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
         ]),
         const SizedBox(height: 6),
         Text(
-          'Minimal IDS (L2): domains on the blocklist resolve to 0.0.0.0 via a managed hosts-file section — every app on this machine is blocked from them. Imports a synced blocklist file (one domain per line).',
+          context.tr('ids.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 12),
@@ -141,9 +141,9 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
                 child: TextField(
                   controller: _domainController,
                   style: AppTheme.mono(size: 12),
-                  decoration: const InputDecoration(
-                    labelText: 'Domain to block',
-                    hintText: 'tracker.example.com',
+                  decoration: InputDecoration(
+                    labelText: context.tr('ids.domainLabel'),
+                    hintText: context.tr('ids.domainHint'),
                   ),
                   onSubmitted: (d) {
                     if (d.trim().isNotEmpty) {
@@ -163,7 +163,7 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
                   }
                 },
                 icon: const Icon(Icons.block, size: 16),
-                label: const Text('Block'),
+                label: Text(context.tr('ids.block')),
               ),
             ]),
           ),
@@ -171,14 +171,15 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
         const SizedBox(height: 12),
         Row(children: [
           Text(
-              'Blocked domains (${st.blockedDomains.length})'
-                  .replaceAll('Blocked', context.tr('common.warning')),
+              context
+                  .tr('ids.blockedDomains')
+                  .replaceAll('{count}', '${st.blockedDomains.length}'),
               style: TextStyle(
                   color: AppColors.text, fontWeight: FontWeight.w700)),
           const Spacer(),
           if (st.hostsManaged)
             Chip(
-              label: const Text('hosts managed',
+              label: Text(context.tr('ids.hostsManaged'),
                   style: TextStyle(fontSize: 10)),
               side: BorderSide(color: AppColors.green.withValues(alpha: 0.5)),
               labelStyle: TextStyle(color: AppColors.green),
@@ -189,7 +190,7 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
           Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'Blocklist is empty. Add tracker/malware domains above or import a synced blocklist via ids.blocklist.import.',
+              context.tr('ids.empty'),
               style: TextStyle(color: AppColors.muted, fontSize: 12.5),
             ),
           ),

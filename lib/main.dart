@@ -140,11 +140,35 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   }
 }
 
-class MicsApp extends ConsumerWidget {
+class MicsApp extends ConsumerStatefulWidget {
   const MicsApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MicsApp> createState() => _MicsAppState();
+}
+
+class _MicsAppState extends ConsumerState<MicsApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // "Follow the system" must react while the app is open, not only at boot.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final i18n = ref.watch(i18nProvider);
     final lang = settings.value?.lang ?? AppLang.ar;
@@ -158,7 +182,9 @@ class MicsApp extends ConsumerWidget {
       );
     }
 
-    // Palette must be applied BEFORE MaterialApp builds its themes.
+    // Palette must be applied BEFORE MaterialApp builds its themes. In system
+    // mode this reads the *current* platform brightness, which is why the
+    // observer above forces a rebuild when Windows switches theme.
     AppTheme.applyPalette(settings.value?.themeMode ?? ThemeMode.dark);
 
     // Keying on mode+lang forces the whole tree (incl. the cached Router

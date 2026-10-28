@@ -1,0 +1,9 @@
+﻿{
+  "ids.block": "Block",
+  "ids.blockedDomains": "Blocked domains ({count})",
+  "ids.domainHint": "tracker.example.com",
+  "ids.domainLabel": "Domain to block",
+  "ids.empty": "Blocklist is empty. Add tracker/malware domains above or import a synced blocklist via ids.blocklist.import.",
+  "ids.hostsManaged": "hosts managed",
+  "ids.intro": "Minimal IDS (L2): domains on the blocklist resolve to 0.0.0.0 via a managed hosts-file section — every app on this machine is blocked from them. Imports a synced blocklist file (one domain per line)."
+}

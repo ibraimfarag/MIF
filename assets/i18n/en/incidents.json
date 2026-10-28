@@ -1,0 +1,7 @@
+﻿{
+    "incidents.empty":  "No incidents. When the guard detects related suspicious activity, the kill chain appears here.",
+    "incidents.intro":  "Related guard events collapse into ONE incident with a kill-chain timeline — instead of isolated alert spam.",
+    "incidents.markHandled":  "Mark handled",
+    "incidents.summary":  "{count} event(s) · {severity}",
+    "incidents.closed":  "closed"
+}

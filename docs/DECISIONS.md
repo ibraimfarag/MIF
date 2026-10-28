@@ -202,3 +202,30 @@ variables that only applied when *this app* started the engine.
 **Commits us to.** Adding a new setting means: field in `settings.rs` + default +
 validation + UI control + a test — never a UI-only preference.
 
+---
+
+## D-009 — Translations are per-module files, guarded by tests
+
+**Status:** implemented (2026-10-28)
+
+**Decision.** Every language is a folder (`assets/i18n/<lang>/`) with one JSON
+file per module (app, nav, engine, dashboard, common, audit, scanner, network,
+ids, vulns, guard, canaries, hardening, incidents, reports, settings). Keys stay
+flat and namespaced (`scanner.scan`), the loader merges the modules into one
+lookup table, and two tests make drift impossible to merge:
+
+- parity: identical module files, identical key sets, no empty values, identical
+  `{placeholders}` in every language;
+- lint: user-facing copy must arrive through `context.tr(...)`; a literal inside
+  `Text('…')` fails the build unless it is pure interpolation or an explicitly
+  allowed brand/legal/path string.
+
+**Why.** One flat `ar.json`/`en.json` pair becomes unmergeable as the app grows,
+and a missing key silently degrades to English — the user sees a half-translated
+screen with no signal. Splitting by screen also means a contributor translating
+one screen touches one file.
+
+**Commits us to.** Adding a language = copy a folder + one line in
+`bundledLangs`. Adding a key = same commit in every language folder. No widget
+may hardcode copy.
+

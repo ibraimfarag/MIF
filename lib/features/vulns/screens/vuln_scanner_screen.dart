@@ -57,7 +57,7 @@ class VulnScannerScreen extends ConsumerWidget {
             FilledButton.icon(
               onPressed: () => ref.read(vulnProvider.notifier).scan(),
               icon: const Icon(Icons.radar, size: 18),
-              label: Text('NVD Scan'),
+              label: Text(context.tr('vulns.scan')),
             ),
           ]),
         ),
@@ -66,7 +66,7 @@ class VulnScannerScreen extends ConsumerWidget {
           child: Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
-              'Matches installed software against NVD (cached offline). First scan is rate-limited (~6.5 s per app).',
+              context.tr('vulns.hint'),
               style: TextStyle(color: AppColors.muted, fontSize: 11),
             ),
           ),
@@ -85,7 +85,7 @@ class VulnScannerScreen extends ConsumerWidget {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 12),
-                  Text('Querying NVD / reading cache…',
+                  Text(context.tr('vulns.loading'),
                       style: TextStyle(color: AppColors.muted)),
                 ],
               ),
@@ -137,7 +137,10 @@ class _SoftwareCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Text(item.fromCache ? 'CACHE' : 'LIVE',
+                child: Text(
+                    item.fromCache
+                        ? context.tr('vulns.cache')
+                        : context.tr('vulns.live'),
                     style: AppTheme.mono(
                         size: 9,
                         color: item.fromCache
@@ -145,7 +148,10 @@ class _SoftwareCard extends StatelessWidget {
                             : AppColors.green)),
               ),
               const SizedBox(width: 8),
-              Text('${vulns.length} CVEs',
+              Text(
+                  context
+                      .tr('vulns.count')
+                      .replaceAll('{count}', '${vulns.length}'),
                   style: AppTheme.mono(size: 11, color: AppColors.muted)),
             ]),
           ),
@@ -174,7 +180,9 @@ class _SoftwareCard extends StatelessWidget {
                           Text(v.cveId,
                               style: AppTheme.mono(
                                   size: 11, color: AppColors.text)),
-                          Text('CVSS ${v.cvss.toStringAsFixed(1)}',
+                          Text(
+                              context.tr('vulns.cvss').replaceAll(
+                                  '{score}', v.cvss.toStringAsFixed(1)),
                               style: AppTheme.mono(
                                   size: 10, color: cvssColor(v.cvss))),
                         ]),

@@ -66,7 +66,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/i18n/
+    - assets/i18n/ar/
+    - assets/i18n/en/
     - assets/icons/mics.ico
 
   fonts:

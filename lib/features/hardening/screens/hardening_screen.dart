@@ -102,7 +102,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
         Text(
-          'One-click fixes. Every change is snapshotted first and can be rolled back. Admin fixes trigger a UAC prompt.',
+          context.tr('hardening.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 12),
@@ -199,7 +199,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                             '↩ ${isAr ? a.nameAr : a.name} — rolled back';
                       });
                     },
-                    child: const Text('Rollback'),
+                    child: Text(context.tr('hardening.rollback')),
                   ),
               ],
             ]),

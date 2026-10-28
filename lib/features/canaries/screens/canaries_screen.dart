@@ -91,12 +91,12 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
           FilledButton.icon(
             onPressed: () => ref.read(canariesProvider.notifier).deploy(),
             icon: const Icon(Icons.download),
-            label: const Text('Deploy decoys'),
+            label: Text(context.tr('canaries.deploy')),
           ),
         ]),
         const SizedBox(height: 6),
         Text(
-          'Decoy files nobody should ever touch. Any access is a CRITICAL canary event — the classic sign of ransomware or a snooper. Decoys arm when the Guard runs.',
+          context.tr('canaries.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
         const SizedBox(height: 16),
@@ -105,8 +105,8 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
             child: TextField(
               controller: _pathController,
               style: AppTheme.mono(size: 11),
-              decoration: const InputDecoration(
-                labelText: 'Add decoy path',
+              decoration: InputDecoration(
+                labelText: context.tr('canaries.addPath'),
                 hintText: r'C:\Users\...\Documents\secret.txt.canary',
               ),
             ),

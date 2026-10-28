@@ -1,0 +1,7 @@
+{
+  "dashboard.liveFeed": "Layer Health (L1–L5)",
+  "dashboard.summary": "Findings Summary",
+  "score.doFirst": "Fix the highest-impact finding first:",
+  "score.title": "Security Score",
+  "score.whatNow": "What should I do now?"
+}

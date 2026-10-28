@@ -1,0 +1,14 @@
+{
+  "nav.audit": "فحص النظام",
+  "nav.canaries": "الفخاخ",
+  "nav.dashboard": "الرئيسية",
+  "nav.guard": "حارس العمليات",
+  "nav.hardening": "مركز التقوية",
+  "nav.ids": "كاشف التسلل L2",
+  "nav.incidents": "الحوادث",
+  "nav.network": "الشبكة والجدار",
+  "nav.reports": "التقارير",
+  "nav.scanner": "فاحص الملفات",
+  "nav.settings": "الإعدادات",
+  "nav.vulns": "الثغرات"
+}
