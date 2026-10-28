@@ -26,3 +26,4 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 walkdir = "2"
 regex = "1"
 getrandom = "0.3"
+ferrisetw = "1.2.0"

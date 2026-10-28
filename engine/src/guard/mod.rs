@@ -18,6 +18,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 pub mod canary;
+pub mod etw;
 
 
 // ---------- rules (Sigma-like JSON) ----------
@@ -167,6 +168,10 @@ pub fn start_guard() {
             error!("canary arm: {e:#}");
         }
 
+        // Prefer instant ETW kernel events when elevated; the poll loop below
+        // stays as the unelevated fallback (and still feeds canary checks).
+        let etw_live = crate::guard::etw::start();
+
         let mut first = true;
         loop {
             if !guard().running.load(Ordering::SeqCst) {
@@ -234,6 +239,12 @@ pub fn start_guard() {
                 }
             }
             crate::guard::canary::check_touches();
+            if etw_live {
+                // ETW pushes instant events; the poll loop only services the
+                // canary checker.
+                std::thread::sleep(Duration::from_millis(1000));
+                continue;
+            }
             std::thread::sleep(Duration::from_millis(2000));
         }
     });

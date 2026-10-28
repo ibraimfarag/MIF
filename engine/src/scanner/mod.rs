@@ -231,6 +231,16 @@ pub async fn run_scan(root: &Path, quarantine: bool) -> Result<ScanReport> {
                 let _ = qm.quarantine_file(Path::new(&f.path), &f.reason).await;
             }
         }
+    } else {
+        // Offer a one-tap quarantine from the toast for critical findings.
+        for f in findings.iter().filter(|f| f.severity == "critical").take(3) {
+            let _ = crate::notify::toast::show_toast_for_file(
+                "🛡️ MI CS — Threat found",
+                &format!("{} — {}", f.path, f.reason),
+                &["Quarantine", "Open MI CS"],
+                Some(f.path.clone()),
+            );
+        }
     }
 
     Ok(ScanReport {

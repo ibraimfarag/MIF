@@ -60,3 +60,4 @@ app.*.map.json
 dist/MICS-v1.0.0-windows-portable/
 
 engine/nul
+dist/
