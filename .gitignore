@@ -60,4 +60,9 @@ app.*.map.json
 dist/MICS-v1.0.0-windows-portable/
 
 engine/nul
+
+# Local test fixtures, dart tool state and ACL repair records — never shipped
+/_testdata/
+/.dart_home/
+/_acl_recovery/
 dist/

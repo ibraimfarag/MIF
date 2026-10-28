@@ -9,14 +9,14 @@ use ferrisetw::schema_locator::SchemaLocator;
 use ferrisetw::trace::KernelTrace;
 use ferrisetw::EventRecord;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 
 use super::{emit_public, load_rules, rule_matches, GuardEvent};
 use crate::storage::sqlite::Storage;
 
 static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
-static KNOWN_PIDS: Mutex<Option<Vec<u32>>> = Mutex::new(None);
 
+/// True when the kernel ETW session is live (i.e. the guard is running with
+/// instant process events instead of the 2 s poll fallback).
 pub fn is_active() -> bool {
     ETW_ACTIVE.load(Ordering::SeqCst)
 }
@@ -25,7 +25,6 @@ pub fn is_active() -> bool {
 /// to the poll loop.
 pub fn start() -> bool {
     ETW_ACTIVE.store(false, Ordering::SeqCst);
-    *KNOWN_PIDS.lock().unwrap() = None;
 
     let storage = Storage::open().ok();
     let ioc_hashes = storage.map(|s| s.dump_ioc_hashes().unwrap_or_default()).unwrap_or_default();
@@ -124,9 +123,4 @@ fn enrich(pid: u32) -> (String, String) {
         .map(|pp| pp.name().to_string_lossy().to_lowercase())
         .unwrap_or_default();
     (parent, cmd)
-}
-
-/// Snapshot of current PIDs — used by the poll fallback only.
-pub fn snapshot_pids() -> Arc<Vec<u32>> {
-    Arc::new(KNOWN_PIDS.lock().unwrap().clone().unwrap_or_default())
 }

@@ -80,7 +80,7 @@ fn read_string(root: HKEY, subkey: &str, value: &str) -> Option<String> {
     }
     // Returned buffer is UTF-16LE, possibly without the trailing nul.
     let words: Vec<u16> = buf
-        .chunks_exact(2)
+        .as_chunks::<2>().0.iter()
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
     let s = String::from_utf16_lossy(&words);
@@ -209,17 +209,14 @@ impl PlatformCollectors for WindowsCollectors {
 
         // AntiSpyware enabled (the master on/off of the Defender engine).
         const AS: &str = r"SOFTWARE\Policies\Microsoft\Windows Defender";
-        match read_dword(HKEY_LOCAL_MACHINE, AS, "DisableAntiSpyware") {
-            Some(1) => findings.push(finding(
-                "Defender",
-                "AntiSpyware Engine",
-                FindingStatus::Vulnerable,
-                Severity::Critical,
-                "Windows Defender AntiSpyware is disabled by policy".to_string(),
-                true,
-            )),
-            _ => {}
-        }
+        if let Some(1) = read_dword(HKEY_LOCAL_MACHINE, AS, "DisableAntiSpyware") { findings.push(finding(
+            "Defender",
+            "AntiSpyware Engine",
+            FindingStatus::Vulnerable,
+            Severity::Critical,
+            "Windows Defender AntiSpyware is disabled by policy".to_string(),
+            true,
+        )) }
 
         // PUA protection: 1 = block, 0/absent = audit or off.
         const PUA: &str = r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine";
@@ -548,8 +545,8 @@ impl PlatformCollectors for WindowsCollectors {
                 "Startup Folder (all users)",
             ),
         ] {
-            if let Ok(dir) = dir {
-                if let Ok(rd) = std::fs::read_dir(&dir) {
+            if let Ok(dir) = dir
+                && let Ok(rd) = std::fs::read_dir(&dir) {
                     for e in rd.flatten() {
                         entries.push(StartupEntry {
                             name: e.file_name().to_string_lossy().to_string(),
@@ -558,7 +555,6 @@ impl PlatformCollectors for WindowsCollectors {
                         });
                     }
                 }
-            }
         }
 
         Ok(entries)
@@ -730,7 +726,7 @@ impl PlatformCollectors for WindowsCollectors {
                         local_address: format_ipv4_port(r.dwLocalAddr, r.dwLocalPort),
                         remote_address: format_ipv4_port(r.dwRemoteAddr, r.dwRemotePort),
                         protocol: "TCP".to_string(),
-                        state: state.into(),
+                        state,
                         process_id: pid,
                         process_name: process_name(&sys, pid),
                         country: crate::ids::geoip::lookup(&format_ipv4_ip(r.dwRemoteAddr)),
@@ -821,7 +817,7 @@ impl PlatformCollectors for WindowsCollectors {
             }
         }
 
-        entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        entries.sort_by_key(|a| a.name.to_lowercase());
         Ok(entries)
     }
 }

@@ -126,17 +126,15 @@ pub fn parse_nl(input: &str) -> NlResult {
         if let Some(caps) = re.captures(&lowered) {
             let mut params = params.clone();
             // Fill dynamic captures.
-            if *name == "scan_path" {
-                if let Some(p) = caps.get(1) {
+            if *name == "scan_path"
+                && let Some(p) = caps.get(1) {
                     params["path"] = serde_json::Value::String(p.as_str().to_string());
                 }
-            }
-            if *name == "block_country" {
-                if let Some(cc) = caps.get(5) {
+            if *name == "block_country"
+                && let Some(cc) = caps.get(5) {
                     params["country"] =
                         serde_json::Value::String(cc.as_str().to_uppercase());
                 }
-            }
             return NlResult {
                 matched: true,
                 command: (*command).to_string(),

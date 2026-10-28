@@ -81,7 +81,7 @@ impl Dispatcher {
                     .and_then(|p| p.get("max_apps"))
                     .and_then(|v| v.as_u64())
                     .unwrap_or(10) as usize;
-                match crate::vulns::VulnScanner::new().and_then(|s| Ok(s)) {
+                match crate::vulns::VulnScanner::new() {
                     Ok(scanner) => match scanner.scan(max_apps).await {
                         Ok(results) => Some(json!(results)),
                         Err(e) => {
@@ -170,8 +170,8 @@ impl Dispatcher {
                     }
                 }
             }
-"scan.start" => {
-                info!("Starting scan of {:?}", req.params);
+            "scan.start" => {
+                info!("Starting scan job of {:?}", req.params);
                 let root = req
                     .params
                     .as_ref()
@@ -185,17 +185,123 @@ impl Dispatcher {
                     .and_then(|p| p.get("quarantine"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                match crate::scanner::run_scan(&root, quarantine).await {
-                    Ok(report) => Some(json!(report)),
+                // Returns immediately: the scan itself runs as a durable job and
+                // reports through `progress` / `job_finished` notifications.
+                match crate::scanner::start_scan(
+                    root.clone(),
+                    quarantine,
+                    tokio::runtime::Handle::current(),
+                ) {
+                    Ok(job_id) => Some(json!({
+                        "job_id": job_id,
+                        "state": "running",
+                        "path": root.to_string_lossy(),
+                        "quarantine": quarantine,
+                    })),
                     Err(e) => {
                         error!("scan.start failed: {e:#}");
-                        None
+                        return JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            result: None,
+                            error: Some(json!(JsonRpcError {
+                                code: -32000,
+                                message: format!("scan.start: {e:#}"),
+                                data: None,
+                            })),
+                            id: req.id,
+                        };
                     }
                 }
             }
             "scan.stop" => {
                 let stopped = crate::scanner::stop_active_scan();
                 Some(json!({"stopped": stopped}))
+            }
+            "job.list" => {
+                let limit = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("limit"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(20) as u32;
+                match crate::storage::sqlite::Storage::open().and_then(|s| s.list_jobs(limit)) {
+                    Ok(list) => Some(json!(list)),
+                    Err(e) => {
+                        error!("job.list: {e:#}");
+                        None
+                    }
+                }
+            }
+            "job.get" => {
+                let Some(job_id) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("job_id"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing job_id");
+                };
+                match crate::storage::sqlite::Storage::open() {
+                    Ok(s) => match s.get_job(&job_id) {
+                        Ok(Some(job)) => {
+                            let findings = s.job_findings(&job_id).unwrap_or_default();
+                            Some(json!({
+                                "job": job,
+                                "findings": findings
+                                    .iter()
+                                    .filter_map(|t| serde_json::from_str::<serde_json::Value>(t).ok())
+                                    .collect::<Vec<_>>(),
+                                "running": crate::jobs::is_running(&job_id),
+                            }))
+                        }
+                        Ok(None) => {
+                            return error_response(req, &format!("job not found: {job_id}"));
+                        }
+                        Err(e) => {
+                            error!("job.get: {e:#}");
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        error!("job.get: {e:#}");
+                        None
+                    }
+                }
+            }
+            "job.cancel" => {
+                let Some(job_id) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("job_id"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing job_id");
+                };
+                let cancelled = crate::jobs::cancel(&job_id);
+                Some(json!({"cancelled": cancelled, "job_id": job_id}))
+            }
+            "job.resume" => {
+                // Resume a job that is not currently running (e.g. interrupted
+                // by an engine restart that auto-resume skipped).
+                let Some(job_id) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("job_id"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing job_id");
+                };
+                match crate::scanner::resume_job(&job_id, tokio::runtime::Handle::current()) {
+                    Ok(true) => Some(json!({"status": "resumed", "job_id": job_id})),
+                    Ok(false) => Some(json!({"status": "not_resumable", "job_id": job_id})),
+                    Err(e) => {
+                        error!("job.resume: {e:#}");
+                        None
+                    }
+                }
             }
             "quarantine.list" => {
                 match crate::scanner::quarantine::QuarantineManager::new() {

@@ -85,6 +85,36 @@ impl Storage {
                 kind TEXT,
                 payload TEXT,
                 created_at INTEGER
+             );
+             -- Durable scan jobs: the queue is persisted so a scan survives an
+             -- engine restart and resumes at the exact file it stopped on.
+             CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                kind TEXT,
+                root TEXT,
+                state TEXT,              -- queued | running | done | cancelled | failed | interrupted
+                total INTEGER DEFAULT 0,
+                processed INTEGER DEFAULT 0,
+                scanned INTEGER DEFAULT 0,
+                skipped INTEGER DEFAULT 0,
+                findings_count INTEGER DEFAULT 0,
+                error TEXT,
+                quarantine INTEGER DEFAULT 0,
+                created_at INTEGER,
+                updated_at INTEGER
+             );
+             CREATE TABLE IF NOT EXISTS job_files (
+                job_id TEXT,
+                seq INTEGER,
+                path TEXT,
+                score INTEGER,
+                PRIMARY KEY (job_id, seq)
+             );
+             CREATE TABLE IF NOT EXISTS job_findings (
+                job_id TEXT,
+                seq INTEGER,
+                payload TEXT,
+                PRIMARY KEY (job_id, seq)
              );",
         )
         .context("init schema")?;
@@ -516,6 +546,202 @@ impl Storage {
             |r| r.get(0),
         )?)
     }
+
+    // ---- scan jobs (resumable) ----
+
+    pub fn create_job(&self, job_id: &str, kind: &str, root: &str, quarantine: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO jobs
+             (job_id, kind, root, state, total, processed, scanned, skipped,
+              findings_count, error, quarantine, created_at, updated_at)
+             VALUES (?1,?2,?3,'queued',0,0,0,0,0,NULL,?4,
+                     strftime('%s','now'),strftime('%s','now'))",
+            rusqlite::params![job_id, kind, root, quarantine as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_job_state(&self, job_id: &str, state: &str, error: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE jobs SET state=?2, error=?3, updated_at=strftime('%s','now')
+             WHERE job_id=?1",
+            rusqlite::params![job_id, state, error],
+        )?;
+        Ok(())
+    }
+
+    /// Stores one chunk of the enumerated, triage-ordered queue.
+    pub fn set_job_files(&self, job_id: &str, files: &[(i64, String, i64)]) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO job_files (job_id, seq, path, score)
+                 VALUES (?1,?2,?3,?4)",
+            )?;
+            for (seq, path, score) in files {
+                stmt.execute(rusqlite::params![job_id, seq, path, score])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn set_job_total(&self, job_id: &str, total: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE jobs SET total=?2, updated_at=strftime('%s','now') WHERE job_id=?1",
+            rusqlite::params![job_id, total],
+        )?;
+        Ok(())
+    }
+
+    pub fn job_files_after(
+        &self,
+        job_id: &str,
+        after_seq: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT seq, path, score FROM job_files
+             WHERE job_id=?1 AND seq>?2 ORDER BY seq ASC LIMIT ?3",
+        )?;
+        let rows = stmt
+            .query_map(rusqlite::params![job_id, after_seq, limit as i64], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+            })?
+            .flatten()
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn set_job_progress(
+        &self,
+        job_id: &str,
+        processed: i64,
+        scanned: i64,
+        skipped: i64,
+        findings_count: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE jobs
+             SET processed=?2, scanned=?3, skipped=?4, findings_count=?5,
+                 updated_at=strftime('%s','now')
+             WHERE job_id=?1",
+            rusqlite::params![job_id, processed, scanned, skipped, findings_count],
+        )?;
+        Ok(())
+    }
+
+    pub fn add_job_finding(&self, job_id: &str, seq: i64, payload: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO job_findings (job_id, seq, payload)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![job_id, seq, payload],
+        )?;
+        Ok(())
+    }
+
+    pub fn job_findings(&self, job_id: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM job_findings WHERE job_id=?1 ORDER BY seq ASC",
+        )?;
+        let rows = stmt
+            .query_map([job_id], |r| r.get::<_, String>(0))?
+            .flatten()
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn get_job(&self, job_id: &str) -> Result<Option<JobRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT job_id, kind, root, state, total, processed, scanned, skipped,
+                    findings_count, error, quarantine, created_at, updated_at
+             FROM jobs WHERE job_id=?1",
+        )?;
+        let row = stmt
+            .query_row([job_id], map_job)
+            .ok();
+        Ok(row)
+    }
+
+    pub fn list_jobs(&self, limit: u32) -> Result<Vec<JobRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT job_id, kind, root, state, total, processed, scanned, skipped,
+                    findings_count, error, quarantine, created_at, updated_at
+             FROM jobs ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit as i64], map_job)?.flatten().collect();
+        Ok(rows)
+    }
+
+    /// Jobs that were in flight when the engine stopped (or that never started).
+    pub fn resumable_jobs(&self) -> Result<Vec<JobRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT job_id, kind, root, state, total, processed, scanned, skipped,
+                    findings_count, error, quarantine, created_at, updated_at
+             FROM jobs WHERE state IN ('queued','running','interrupted')
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt.query_map([], map_job)?.flatten().collect();
+        Ok(rows)
+    }
+
+    /// Marks every unfinished job as interrupted (called at engine startup).
+    pub fn mark_jobs_interrupted(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE jobs SET state='interrupted', updated_at=strftime('%s','now')
+             WHERE state IN ('queued','running')",
+            [],
+        )?;
+        Ok(n)
+    }
+}
+
+fn map_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<JobRow> {
+    Ok(JobRow {
+        job_id: r.get(0)?,
+        kind: r.get(1)?,
+        root: r.get(2)?,
+        state: r.get(3)?,
+        total: r.get(4)?,
+        processed: r.get(5)?,
+        scanned: r.get(6)?,
+        skipped: r.get(7)?,
+        findings_count: r.get(8)?,
+        error: r.get(9)?,
+        quarantine: r.get::<_, i64>(10)? != 0,
+        created_at: r.get(11)?,
+        updated_at: r.get(12)?,
+    })
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct JobRow {
+    pub job_id: String,
+    pub kind: String,
+    pub root: String,
+    pub state: String,
+    pub total: i64,
+    pub processed: i64,
+    pub scanned: i64,
+    pub skipped: i64,
+    pub findings_count: i64,
+    pub error: Option<String>,
+    #[serde(skip)]
+    pub quarantine: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, serde::Serialize)]

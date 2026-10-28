@@ -1,31 +1,52 @@
+// JSON-RPC 2.0 client for the MI CS engine.
+//
+// Transport (v1, see docs/DECISIONS.md D-006): Windows named pipe
+// `\\.\pipe\mics_engine`, served by `mics-engine --service`.
+//
+// Behaviour that matters to the product:
+//  * the engine is a **single** long-lived process per machine. The UI attaches
+//    to it if it is already running, otherwise it starts it detached and
+//    attaches. Quitting the UI never kills the engine;
+//  * a dropped connection is retried with 1→2→5→10 s backoff and a `ping`
+//    heartbeat every 15 s;
+//  * the engine's push traffic (`progress`, `event`) is exposed as streams, so
+//    screens never have to poll for scan progress.
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// JSON-RPC 2.0 client for the MI CS engine.
-///
-/// Transport (v1): spawns `mics_engine.exe --serve` and speaks JSON-Lines over
-/// stdio. This keeps the architecture rule "the UI never touches OS APIs" —
-/// every OS query still happens inside the engine process. The named-pipe
-/// transport plugs into the same interface when service mode lands (Phase 7).
+import 'pipe_client.dart';
+
 class EngineIpc {
-  Process? _process;
+  PipeConnection? _pipe;
   int _nextId = 1;
   final Map<int, Completer<dynamic>> _pending = {};
   final _statusController = StreamController<EngineState>.broadcast();
   final _eventController = StreamController<Map<String, dynamic>>.broadcast();
+  final _progressController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
-  /// Pushed engine events (guard/canary notifications).
+  /// Engine-pushed events (guard/canary/job_finished).
   Stream<Map<String, dynamic>> get eventStream => _eventController.stream;
+
+  /// Engine-pushed scan progress notifications.
+  Stream<Map<String, dynamic>> get progressStream => _progressController.stream;
+
   Timer? _restartTimer;
+  Timer? _heartbeat;
   int _restartBackoffSeconds = 1;
   bool _disposed = false;
+  Future<bool>? _connecting;
 
   Stream<EngineState> get statusStream => _statusController.stream;
   EngineState _state = EngineState.stopped;
   EngineState get state => _state;
+
+  /// Extra environment applied when *this* app has to start the engine.
+  Map<String, String> spawnEnv = {};
 
   void _setState(EngineState s) {
     _state = s;
@@ -53,44 +74,65 @@ class EngineIpc {
       if (parent.path == dir.path) break;
       dir = parent;
     }
-    for (final root in [Directory.current.path]) {
-      final dev = '$root\\engine\\target\\release\\mics-engine.exe';
-      if (File(dev).existsSync()) return dev;
-    }
     return beside;
   }
 
-  /// Extra environment (VT key, LM Studio URL, ...) applied at spawn — set
-  /// from the advanced settings screen before first launch.
-  Map<String, String> spawnEnv = {};
+  /// Connects to the engine, starting it if needed. Safe to call repeatedly:
+  /// concurrent callers share the same in-flight attempt.
+  Future<bool> ensureRunning() {
+    if (_pipe != null) return Future.value(true);
+    return _connecting ??= _connect().whenComplete(() => _connecting = null);
+  }
 
-  Future<bool> ensureRunning() async {
-    if (_process != null) return true;
+  Future<bool> _connect() async {
+    // 1) An engine may already be running (autostart, previous app session).
+    final existing = await PipeConnection.tryConnect(
+      timeout: const Duration(milliseconds: 900),
+    );    if (existing != null) {
+      _attach(existing);
+      return true;
+    }
+
+    // 2) Start it detached. The single-instance mutex inside the engine makes
+    //    a duplicate start harmless: the loser exits immediately.
     final path = resolveEnginePath();
     if (!File(path).existsSync()) {
       _setState(EngineState.engineMissing);
       return false;
     }
     try {
-      final proc = await Process.start(path, ['serve'],
-          environment: spawnEnv, mode: ProcessStartMode.normal);
-      _process = proc;
-      _setState(EngineState.running);
-      _restartBackoffSeconds = 1;
-
-      proc.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(_handleLine, onDone: _handleExit);
-      proc.stderr.drain<void>();
-      proc.exitCode.then((_) => _handleExit());
-      _startHeartbeat();
-      return true;
+      await Process.start(
+        path,
+        const ['service'],
+        environment: spawnEnv.isEmpty ? null : spawnEnv,
+        mode: ProcessStartMode.detached,
+      );
     } catch (_) {
       _setState(EngineState.engineMissing);
       _scheduleRestart();
       return false;
     }
+
+    // 3) Wait for the pipe to come up.
+    final started = await PipeConnection.tryConnect(
+      timeout: const Duration(seconds: 8),
+    );
+    if (started != null) {
+      _attach(started);
+      return true;
+    }
+    _setState(EngineState.engineMissing);
+    _scheduleRestart();
+    return false;
+  }
+
+  void _attach(PipeConnection conn) {
+    _pipe = conn;
+    conn.lines.listen(_handleLine);
+    conn.onClosed.listen((reason) => _handleDisconnect(reason));
+    _restartBackoffSeconds = 1;
+    _setState(EngineState.running);
+    _startHeartbeat();
   }
 
   void _handleLine(String line) {
@@ -100,11 +142,13 @@ class EngineIpc {
       final msg = jsonDecode(trimmed) as Map<String, dynamic>;
       final id = msg['id'];
       if (id == null && msg['method'] == 'event') {
-        // JSON-RPC notification: engine-pushed event (guard/canary).
-        if (!_eventController.isClosed) {
-          _eventController.add(
-              (msg['params'] as Map?)?.cast<String, dynamic>() ?? {});
-        }
+        final params = (msg['params'] as Map?)?.cast<String, dynamic>() ?? {};
+        if (!_eventController.isClosed) _eventController.add(params);
+        return;
+      }
+      if (id == null && msg['method'] == 'progress') {
+        final params = (msg['params'] as Map?)?.cast<String, dynamic>() ?? {};
+        if (!_progressController.isClosed) _progressController.add(params);
         return;
       }
       if (id is int && _pending.containsKey(id)) {
@@ -123,12 +167,16 @@ class EngineIpc {
     }
   }
 
-  void _handleExit() {
-    _process = null;
+  void _handleDisconnect(String reason) {
+    _pipe?.close();
+    _pipe = null;
     for (final c in _pending.values) {
-      if (!c.isCompleted) c.completeError(EngineException('engine exited'));
+      if (!c.isCompleted) {
+        c.completeError(EngineException('engine connection lost: $reason'));
+      }
     }
     _pending.clear();
+    _heartbeat?.cancel();
     if (!_disposed) {
       _setState(EngineState.reconnecting);
       _scheduleRestart();
@@ -144,18 +192,16 @@ class EngineIpc {
     });
   }
 
-  Timer? _heartbeat;
-
   /// Spec: heartbeat `ping` every 15 s — a missed reply triggers reconnect.
   void _startHeartbeat() {
     _heartbeat?.cancel();
     _heartbeat = Timer.periodic(const Duration(seconds: 15), (_) async {
-      if (_process == null || _disposed) return;
+      if (_pipe == null || _disposed) return;
       try {
         final res = await request('ping').timeout(const Duration(seconds: 5));
-        if (res != 'pong') _handleExit();
+        if (res != 'pong') _handleDisconnect('heartbeat lost');
       } catch (_) {
-        _handleExit();
+        _handleDisconnect('heartbeat failed');
       }
     });
   }
@@ -164,6 +210,8 @@ class EngineIpc {
   Future<dynamic> request(String method, [Map<String, dynamic>? params]) async {
     final ok = await ensureRunning();
     if (!ok) throw EngineException('engine not running');
+    final pipe = _pipe;
+    if (pipe == null) throw EngineException('engine connection lost');
     final id = _nextId++;
     final completer = Completer<dynamic>();
     _pending[id] = completer;
@@ -173,9 +221,8 @@ class EngineIpc {
       'method': method,
     };
     if (params != null) body['params'] = params;
-    final req = jsonEncode(body);
+    pipe.send(jsonEncode(body));
     try {
-      _process!.stdin.writeln(req);
       return await completer.future.timeout(const Duration(seconds: 120));
     } on TimeoutException {
       _pending.remove(id);
@@ -190,9 +237,11 @@ class EngineIpc {
     _disposed = true;
     _heartbeat?.cancel();
     _restartTimer?.cancel();
-    _process?.kill();
+    _pipe?.close();
+    _pipe = null;
     _statusController.close();
     _eventController.close();
+    _progressController.close();
   }
 }
 

@@ -7,7 +7,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
-use windows::core::HSTRING;
+use windows::core::{HSTRING, Interface};
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::Foundation::TypedEventHandler;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
@@ -26,10 +26,12 @@ fn pending() -> &'static Mutex<HashMap<String, String>> {
     PENDING_QUARANTINE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+#[allow(dead_code)] // part of the notification API; kept small on purpose
 pub fn show_toast(title: &str, body: &str) -> Result<()> {
     show_toast_for_file(title, body, &[], None)
 }
 
+#[allow(dead_code)]
 pub fn show_toast_with_actions(title: &str, body: &str, actions: &[&str]) -> Result<()> {
     show_toast_for_file(title, body, actions, None)
 }
@@ -80,19 +82,25 @@ pub fn show_toast_for_file(
     notification.Activated(&TypedEventHandler::<
         ToastNotification,
         windows::core::IInspectable,
-    >::new(move |notification, _| {
-        // Parse the launch payload: an action id quarantines the file; any
-        // other activation opens the command center.
+    >::new(move |_, args| {
+        // args is ToastActivatedEventArgs whose Arguments() carries the toast
+        // launch payload: an action id quarantines the file; any other
+        // activation opens the command center.
         let mut open_ui = true;
-        // Ref<'_, T> derefs to &T.
-        let launch = notification
-            .as_ref()
-            .and_then(|n| n.LaunchArgs().ok());
+        let mut launch: Option<String> = None;
+        // Ref<IInspectable> derefs to &IInspectable; Ref<Option<IInspectable>>
+        // in this windows version — get the inner reference either way.
+        if let Some(insp) = args.as_ref()
+            && let Ok(evt) = insp
+                .cast::<windows::UI::Notifications::ToastActivatedEventArgs>()
+                && let Ok(l) = evt.Arguments() {
+                    launch = Some(l.to_string());
+                }
         if let Some(launch) = launch {
             let launch = launch.to_string();
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&launch) {
-                if let Some(id) = v["mics-action"].as_str() {
-                    if let Some(path) = pending().lock().unwrap().remove(id) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&launch)
+                && let Some(id) = v["mics-action"].as_str()
+                    && let Some(path) = pending().lock().unwrap().remove(id) {
                         open_ui = false;
                         std::thread::spawn(move || {
                             let rt = tokio::runtime::Builder::new_current_thread()
@@ -121,14 +129,11 @@ pub fn show_toast_for_file(
                             });
                         });
                     }
-                }
-            }
         }
-        if open_ui {
-            if let Some(path) = ui_path.clone() {
+        if open_ui
+            && let Some(path) = ui_path.clone() {
                 let _ = std::process::Command::new(&path).spawn();
             }
-        }
         Ok(())
     }))?;
 

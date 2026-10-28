@@ -37,14 +37,13 @@ fn parse_hash_feed(text: &str) -> Vec<String> {
                 }
                 continue; // header row
             }
-            if let Some(i) = sha_col {
-                if let Some(h) = cols.get(i) {
+            if let Some(i) = sha_col
+                && let Some(h) = cols.get(i) {
                     let h = h.trim_matches('"').trim().to_lowercase();
                     if h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()) {
                         out.push(h);
                     }
                 }
-            }
         } else if line.len() == 64 && line.chars().all(|c| c.is_ascii_hexdigit()) {
             out.push(line.to_lowercase());
         }
@@ -157,11 +156,10 @@ impl SyncManager {
         let vt = crate::scanner::vt::VtClient::new();
         let ops = self.storage.pop_queue_ops("vt_lookup", 100)?;
         for (id, payload) in ops {
-            if let Ok(hash) = serde_json::from_str::<String>(&payload) {
-                if vt.lookup_hash(&hash).await.is_ok() {
+            if let Ok(hash) = serde_json::from_str::<String>(&payload)
+                && vt.lookup_hash(&hash).await.is_ok() {
                     let _ = self.storage.remove_queue_op(id);
                 }
-            }
         }
 
         self.storage.set_sync_state("ioc_hashes", "v1")?;
@@ -214,7 +212,7 @@ impl SyncManager {
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_secs(
-                    (interval_hours.clamp(1, 168) * 3600) as u64,
+                    interval_hours.clamp(1, 168) * 3600,
                 ));
             }
         });
@@ -222,7 +220,7 @@ impl SyncManager {
 
     pub async fn fetch_manifest(&self, url: &str) -> Result<serde_json::Value> {
         let resp = self.client.get(url).send().await.context("fetch manifest")?;
-        Ok(resp.json().await.context("manifest json")?)
+        resp.json().await.context("manifest json")
     }
 
     pub async fn download(&self, url: &str) -> Result<Vec<u8>> {

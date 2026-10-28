@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use sysinfo::{Pid, ProcessesToUpdate, System};
-use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 pub mod canary;
@@ -99,12 +99,15 @@ pub struct GuardEvent {
     pub at: i64,
 }
 
-static EVENT_TX: OnceLock<mpsc::UnboundedSender<GuardEvent>> = OnceLock::new();
+static EVENT_TX: OnceLock<broadcast::Sender<GuardEvent>> = OnceLock::new();
 
-pub fn subscribe_events() -> mpsc::UnboundedReceiver<GuardEvent> {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let _ = EVENT_TX.set(tx);
-    rx
+fn event_tx() -> &'static broadcast::Sender<GuardEvent> {
+    EVENT_TX.get_or_init(|| broadcast::channel(512).0)
+}
+
+/// Multiple consumers are supported (CLI prints, pipe forwards, tests).
+pub fn subscribe_events() -> broadcast::Receiver<GuardEvent> {
+    event_tx().subscribe()
 }
 
 /// Public emit for sibling modules (canary).
@@ -113,9 +116,8 @@ pub fn emit_public(ev: GuardEvent) {
 }
 
 fn emit(ev: GuardEvent) {
-    if let Some(tx) = EVENT_TX.get() {
-        let _ = tx.send(ev.clone());
-    }
+    // A send error only means nobody is listening (CLI mode / UI closed).
+    let _ = event_tx().send(ev.clone());
     // Every guard event also lands in the correlator.
     if let Err(e) = crate::smart::correlator::record_event(&ev) {
         error!("correlator: {e:#}");
@@ -229,11 +231,10 @@ pub fn start_guard() {
                                 at: chrono::Utc::now().timestamp(),
                             };
                             emit(ev);
-                            if rule.action == "kill" {
-                                if let Err(e) = kill_tree(pid) {
+                            if rule.action == "kill"
+                                && let Err(e) = kill_tree(pid) {
                                     warn!("responder kill_tree({pid}): {e:#}");
                                 }
-                            }
                         }
                     }
                 }
@@ -270,26 +271,22 @@ fn rule_matches(
     cmd: &str,
     exe_path: &str,
 ) -> bool {
-    if let Some(want) = &rule.child_image {
-        if !field_matches(want, child) {
+    if let Some(want) = &rule.child_image
+        && !field_matches(want, child) {
             return false;
         }
-    }
-    if let Some(want) = &rule.parent_image {
-        if !field_matches(want, parent) {
+    if let Some(want) = &rule.parent_image
+        && !field_matches(want, parent) {
             return false;
         }
-    }
-    if let Some(want) = &rule.child_cmd_contains {
-        if !cmd.to_lowercase().contains(&want.to_lowercase()) {
+    if let Some(want) = &rule.child_cmd_contains
+        && !cmd.to_lowercase().contains(&want.to_lowercase()) {
             return false;
         }
-    }
-    if let Some(want) = &rule.child_path_contains {
-        if !exe_path.contains(&want.to_lowercase()) {
+    if let Some(want) = &rule.child_path_contains
+        && !exe_path.contains(&want.to_lowercase()) {
             return false;
         }
-    }
     true
 }
 
@@ -312,6 +309,8 @@ pub fn kill_tree(pid: u32) -> Result<()> {
 pub fn status_json() -> serde_json::Value {
     json!({
         "running": is_running(),
+        // True = instant kernel events; false = 2 s poll fallback (unelevated).
+        "etw_active": etw::is_active(),
         "rules": load_rules().unwrap_or_default(),
     })
 }

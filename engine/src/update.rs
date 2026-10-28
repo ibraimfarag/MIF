@@ -55,7 +55,7 @@ pub async fn download_and_verify() -> Result<PathBuf> {
         .to_lowercase();
 
     let sm = SyncManager::new()?;
-    let bytes = sm.download(&url).await?;
+    let bytes = sm.download(url).await?;
     let actual = hex::encode(Sha256::digest(&bytes));
     if actual != expected {
         bail!("SHA256 mismatch: expected {expected}, got {actual}");
@@ -71,7 +71,7 @@ pub async fn download_and_verify() -> Result<PathBuf> {
 /// Applies a staged update: extracts over the app dir with the rename trick
 /// for the two running binaries, then relaunches the UI. Best-effort on files
 /// the extractor can't replace (they keep the .old rename).
-pub fn apply(staged_zip: &PathBuf) -> Result<String> {
+pub fn apply(staged_zip: &std::path::Path) -> Result<String> {
     let app_exe = std::env::current_exe().context("resolve engine exe")?;
     let engine_dir = app_exe.parent().context("engine dir")?;
     let app_dir = engine_dir.join("mics_app.exe");
@@ -123,11 +123,10 @@ fn find_root(dir: &PathBuf) -> Option<PathBuf> {
         return Some(dir.clone());
     }
     for sub in std::fs::read_dir(dir).ok()?.flatten() {
-        if sub.path().is_dir() {
-            if let Some(found) = find_root(&sub.path()) {
+        if sub.path().is_dir()
+            && let Some(found) = find_root(&sub.path()) {
                 return Some(found);
             }
-        }
     }
     None
 }

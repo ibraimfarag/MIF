@@ -23,11 +23,10 @@ fn config_path() -> PathBuf {
 
 pub fn load_config() -> CanaryConfig {
     let p = config_path();
-    if let Ok(text) = std::fs::read_to_string(&p) {
-        if let Ok(c) = serde_json::from_str(&text) {
+    if let Ok(text) = std::fs::read_to_string(&p)
+        && let Ok(c) = serde_json::from_str(&text) {
             return c;
         }
-    }
     // Default decoys: user documents/desktop.
     let mut paths = Vec::new();
     if let Ok(user) = std::env::var("USERPROFILE") {

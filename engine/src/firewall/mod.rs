@@ -106,11 +106,10 @@ impl FirewallManager {
         for raw in text.lines() {
             let line = raw.trim();
             if let Some(rest) = line.strip_prefix("Rule Name:") {
-                if let Some(r) = current.take() {
-                    if r.name.starts_with(RULE_PREFIX) {
+                if let Some(r) = current.take()
+                    && r.name.starts_with(RULE_PREFIX) {
                         rules.push(r);
                     }
-                }
                 current = Some(FirewallRule {
                     name: rest.trim().to_string(),
                     enabled: false,
@@ -137,11 +136,10 @@ impl FirewallManager {
                 r.remote_ip = v.trim().to_string();
             }
         }
-        if let Some(r) = current.take() {
-            if r.name.starts_with(RULE_PREFIX) {
+        if let Some(r) = current.take()
+            && r.name.starts_with(RULE_PREFIX) {
                 rules.push(r);
             }
-        }
         Ok(rules)
     }
 

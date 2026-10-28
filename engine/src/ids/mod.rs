@@ -46,7 +46,7 @@ fn managed_section(content: &str) -> String {
     body[..end].to_string()
 }
 
-fn rewrite_hosts(content: &str, new_section: &str) -> Result<()> {
+fn rewrite_hosts(_content: &str, new_section: &str) -> Result<()> {
     let path = hosts_path();
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
 

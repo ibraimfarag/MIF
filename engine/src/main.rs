@@ -12,6 +12,7 @@ mod tests;
 mod guard;
 mod ids;
 mod hardening;
+mod jobs;
 mod llm;
 mod notify;
 mod reports;
@@ -71,22 +72,73 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+    /// List recent scan jobs and their persisted state
+    Jobs {
+        #[arg(long, default_value_t = 20)]
+        limit: u32,
+        #[arg(short, long)]
+        json: bool,
+    },
+    /// Resume an interrupted scan job by id
+    ResumeJob { job_id: String },
+    /// Print one job with its findings
+    Job {
+        job_id: String,
+        #[arg(short, long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Logs go to stderr so stdout stays clean for JSON consumers (CLI pipe usage).
+    // Logs go to stderr (so stdout stays clean for JSON consumers) and to a
+    // rotating file: a detached service engine has no console, and support
+    // needs to know what happened overnight.
+    let file_writer = log_file_writer();
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
-        .with_writer(std::io::stderr)
+        .with_writer(file_writer)
+        .with_ansi(false)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default subscriber failed");
 
     let cli = Cli::parse();
 
+    // One line per process start: the service engine is detached, so this is
+    // how support tells "did it even start?" apart from "did it crash later?".
+    let mode = match &cli.command {
+        Some(Commands::Serve) => "serve",
+        Some(Commands::Service) => "service",
+        Some(Commands::Audit { .. }) => "audit",
+        Some(Commands::Connections { .. }) => "connections",
+        Some(Commands::Inventory { .. }) => "inventory",
+        Some(Commands::Scan { .. }) => "scan",
+        Some(Commands::Benchmark) => "benchmark",
+        Some(Commands::Quarantine { .. }) => "quarantine",
+        Some(Commands::Jobs { .. }) => "jobs",
+        Some(Commands::ResumeJob { .. }) => "resume-job",
+        Some(Commands::Job { .. }) => "job",
+        None => "idle",
+    };
+    tracing::info!(
+        "MI CS engine {} starting (mode={mode}, pid={})",
+        env!("CARGO_PKG_VERSION"),
+        std::process::id()
+    );
+
     match cli.command {
         Some(Commands::Serve) => {
+            // Single engine per machine (D-006): if a service instance (or a
+            // previous UI-spawned one) already owns the slot, exit quietly so
+            // the caller can connect to the pipe instead of starting a rival.
+            let _instance = match platform::windows::single_instance::acquire() {
+                Some(g) => g,
+                None => {
+                    eprintln!("MI CS engine already running — connect to the pipe");
+                    return Ok(());
+                }
+            };
             tracing::info!("Starting engine in --serve mode (stdio)...");
             // Auto intel-sync cadence (hours) comes from UI settings.
             let sync_hours: u64 = std::env::var("MICS_SYNC_HOURS")
@@ -94,10 +146,11 @@ async fn main() -> Result<()> {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(6);
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current(), sync_hours);
+            resume_jobs_on_startup();
             // Forward guard events as JSON-RPC notifications on stdout.
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
-                while let Some(ev) = events.recv().await {
+                while let Ok(ev) = events.recv().await {
                     // CRITICAL/HIGH events toast even with the UI closed.
                     if ev.severity == "critical" || ev.severity == "high" {
                         notify::toast::route_event(&ev);
@@ -108,6 +161,13 @@ async fn main() -> Result<()> {
                         "params": serde_json::to_value(&ev).unwrap_or_default()
                     });
                     println!("{}", serde_json::to_string(&note).unwrap_or_default());
+                }
+            });
+            // Job progress / completion notifications share the same stdout.
+            let mut notifs = jobs::subscribe();
+            tokio::spawn(async move {
+                while let Ok(msg) = notifs.recv().await {
+                    println!("{msg}");
                 }
             });
             let mut reader = tokio::io::BufReader::new(tokio::io::stdin());
@@ -124,7 +184,42 @@ async fn main() -> Result<()> {
             }
         }
         Some(Commands::Service) => {
+            let _instance = match platform::windows::single_instance::acquire() {
+                Some(g) => g,
+                None => {
+                    tracing::info!("MI CS engine already running — exiting");
+                    return Ok(());
+                }
+            };
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
+            let sync_hours: u64 = std::env::var("MICS_SYNC_HOURS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6);
+            sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current(), sync_hours);
+            resume_jobs_on_startup();
+            // 24/7 protection: with the service running, the guard is armed
+            // even when the UI is closed. `guard.start` from the UI is a no-op
+            // when it is already running. `MICS_NO_GUARD=1` is a test hook.
+            if std::env::var("MICS_NO_GUARD").is_err() {
+                guard::start_guard();
+            }
+            // Guard events go to every pipe client (and toast when critical).
+            let mut events = guard::subscribe_events();
+            tokio::spawn(async move {
+                while let Ok(ev) = events.recv().await {
+                    if ev.severity == "critical" || ev.severity == "high" {
+                        notify::toast::route_event(&ev);
+                    }
+                    platform::windows::pipe::notify(
+                        "event",
+                        serde_json::json!({
+                            "type": ev.r#type,
+                            "data": serde_json::to_value(&ev).unwrap_or_default()
+                        }),
+                    );
+                }
+            });
             if let Err(e) = platform::windows::pipe::run_pipe_server().await {
                 error!("Pipe server error: {e:#}");
             }
@@ -148,7 +243,7 @@ async fn main() -> Result<()> {
             emit(&serde_json::to_value(&sw)?, json)?;
         }
         Some(Commands::Scan { path, quarantine, json }) => {
-            let report = scanner::run_scan(&std::path::PathBuf::from(path), quarantine).await?;
+            let report = scanner::run_scan(&std::path::PathBuf::from(path), quarantine)?;
             emit(&serde_json::to_value(&report)?, json)?;
         }
         Some(Commands::Benchmark) => {
@@ -160,6 +255,31 @@ async fn main() -> Result<()> {
             let items = m.list()?;
             emit(&serde_json::to_value(&items)?, json)?;
         }
+        Some(Commands::Jobs { limit, json }) => {
+            let storage = storage::sqlite::Storage::open()?;
+            let jobs = storage.list_jobs(limit)?;
+            emit(&serde_json::to_value(&jobs)?, json)?;
+        }
+        Some(Commands::ResumeJob { job_id }) => {
+            let resumed =
+                scanner::resume_job(&job_id, tokio::runtime::Handle::current())?;
+            println!("{}", if resumed { "resumed" } else { "not_resumable" });
+        }
+        Some(Commands::Job { job_id, json }) => {
+            let storage = storage::sqlite::Storage::open()?;
+            let job = storage
+                .get_job(&job_id)?
+                .ok_or_else(|| anyhow::anyhow!("job not found: {job_id}"))?;
+            let findings = storage.job_findings(&job_id)?;
+            let payload = serde_json::json!({
+                "job": job,
+                "findings": findings
+                    .iter()
+                    .filter_map(|t| serde_json::from_str::<serde_json::Value>(t).ok())
+                    .collect::<Vec<_>>(),
+            });
+            emit(&payload, json)?;
+        }
         None => {
             println!("MI CS Engine v0.1.0");
             println!("Use --help for more information");
@@ -167,6 +287,89 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Log sink: stderr **and** `%PROGRAMDATA%\MICS\logs\engine.log`.
+///
+/// The service engine is started detached (no console), so without a file log
+/// a support case ("it stopped at 3am") would be undebuggable. The file is
+/// rotated once at 5 MB so it can never grow without bound.
+struct TeeWriter {
+    file: std::sync::Mutex<std::fs::File>,
+}
+
+struct TeeGuard<'a> {
+    file: std::sync::MutexGuard<'a, std::fs::File>,
+}
+
+impl std::io::Write for TeeGuard<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        self.file.write_all(buf)?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        let _ = std::io::stderr().flush();
+        self.file.flush()
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for TeeWriter {
+    type Writer = TeeGuard<'a>;
+    fn make_writer(&'a self) -> Self::Writer {
+        TeeGuard {
+            file: self.file.lock().unwrap_or_else(|e| e.into_inner()),
+        }
+    }
+}
+
+fn log_file_writer() -> TeeWriter {
+    use std::io::Write;
+    let dir = std::env::var("PROGRAMDATA")
+        .map(|p| std::path::PathBuf::from(p).join("MICS").join("logs"))
+        .unwrap_or_else(|_| std::path::PathBuf::from(r"C:\ProgramData\MICS\logs"));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("engine.log");
+    if let Ok(meta) = std::fs::metadata(&path)
+        && meta.len() > 5 * 1024 * 1024 {
+            let _ = std::fs::rename(&path, dir.join("engine.old.log"));
+        }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .or_else(|_| std::fs::OpenOptions::new().append(true).open("NUL"))
+        .unwrap_or_else(|_| std::fs::File::create("NUL").expect("NUL sink"));
+    let mut f = file;
+    let _ = writeln!(f);
+    TeeWriter {
+        file: std::sync::Mutex::new(f),
+    }
+}
+
+/// Marks stale jobs as interrupted, then resumes them.
+///
+/// A scan that was running when the engine stopped is not lost: its queue and
+/// cursor are in SQLite, so it continues from the next unexamined file.
+/// `MICS_NO_AUTO_RESUME=1` disables this (used by tests and by users who want
+/// scans to be explicit).
+fn resume_jobs_on_startup() {
+    if std::env::var("MICS_NO_AUTO_RESUME").is_ok() {
+        return;
+    }
+    match storage::sqlite::Storage::open() {
+        Ok(s) => {
+            let marked = s.mark_jobs_interrupted().unwrap_or(0);
+            if marked > 0 {
+                tracing::info!("marked {marked} unfinished job(s) as interrupted");
+            }
+        }
+        Err(e) => tracing::warn!("jobs storage unavailable: {e:#}"),
+    }
+    let resumed = scanner::resume_interrupted(tokio::runtime::Handle::current());
+    if resumed > 0 {
+        tracing::info!("resumed {resumed} interrupted scan job(s)");
+    }
 }
 
 /// JSON mode prints machine-readable output; human mode prints a compact table.

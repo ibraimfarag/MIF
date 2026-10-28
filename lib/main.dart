@@ -1,7 +1,3 @@
-import 'dart:ffi' hide Size;
-import 'dart:io';
-
-import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +5,7 @@ import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/core/window/window_corners.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -80,6 +77,22 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     await windowManager.hide();
   }
 
+  @override
+  void onWindowMaximize() {
+    // A rounding region would cut the corners of a maximized window.
+    WindowCorners.apply(rounded: false);
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    WindowCorners.apply(rounded: true);
+  }
+
+  @override
+  void onWindowRestore() {
+    WindowCorners.apply(rounded: true);
+  }
+
   Future<void> _init() async {
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(
@@ -95,7 +108,7 @@ class _BootstrapState extends ConsumerState<Bootstrap>
         await _setupTray();
         await windowManager.show();
         await windowManager.focus();
-        applyWindowCornerRadius();
+        WindowCorners.apply(rounded: true);
       },
     );
     // Engines start with the app — no manual engine launch required.
@@ -124,39 +137,6 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       );
     }
     return const MicsApp();
-  }
-}
-
-/// Windows 11 rounded window corners via DWM (DWMWA_WINDOW_CORNER_PREFERENCE).
-/// Gracefully no-ops on Windows 10 / when the window is not found.
-void applyWindowCornerRadius() {
-  if (!Platform.isWindows) return;
-  Pointer<Utf16>? titlePtr;
-  try {
-    final user32 = DynamicLibrary.open('user32.dll');
-    final dwmapi = DynamicLibrary.open('dwmapi.dll');
-    // FindWindowW(lpClassName, lpWindowName) — the title goes in the WINDOW
-    // NAME slot, not the class slot.
-    final findWindow = user32.lookupFunction<
-        IntPtr Function(Pointer<Utf16>, Pointer<Utf16>),
-        int Function(Pointer<Utf16>, Pointer<Utf16>)>('FindWindowW');
-    final setAttr = dwmapi.lookupFunction<
-        IntPtr Function(IntPtr, IntPtr, Pointer<Void>, IntPtr),
-        int Function(int, int, Pointer<Void>, int)>('DwmSetWindowAttribute');
-
-    titlePtr = 'MI CS Command Center'.toNativeUtf16();
-    final hwnd = findWindow(Pointer.fromAddress(0), titlePtr);
-    if (hwnd == 0) return;
-    const dwmwaWindowCornerPreference = 33;
-    const dwmcpRound = 2;
-    final pref = malloc<Uint32>();
-    pref.value = dwmcpRound;
-    setAttr(hwnd, dwmwaWindowCornerPreference, pref.cast(), 4);
-    malloc.free(pref);
-  } catch (_) {
-    // Older Windows: square corners, no failure.
-  } finally {
-    if (titlePtr != null) malloc.free(titlePtr);
   }
 }
 

@@ -109,7 +109,9 @@ pub fn lookup(ip: &str) -> String {
     String::new()
 }
 
-/// Loads the table eagerly (called by net.connections path once).
+/// Loads the table eagerly (kept for callers that want to pay the parse cost
+/// up front instead of on the first lookup).
+#[allow(dead_code)]
 pub fn warm() -> Result<()> {
     let _ = table();
     Ok(())

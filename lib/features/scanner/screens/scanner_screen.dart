@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -83,54 +84,207 @@ final scannerProvider =
 
 class ScannerState {
   final ScanReport? report;
-  final bool scanning;
+  final String? jobId;
+  final String? jobState;
+  final int pct;
+  final int scanned;
+  final int total;
+  final int findingsCount;
   final List<QuarantineEntry> quarantine;
   final String? error;
-  const ScannerState(
-      {this.report,
-      this.scanning = false,
-      this.quarantine = const [],
-      this.error});
+
+  const ScannerState({
+    this.report,
+    this.jobId,
+    this.jobState,
+    this.pct = 0,
+    this.scanned = 0,
+    this.total = 0,
+    this.findingsCount = 0,
+    this.quarantine = const [],
+    this.error,
+  });
+
+  /// A job is in flight when its state is not terminal.
+  bool get scanning =>
+      jobState == 'running' || jobState == 'queued' || jobState == 'interrupted';
 }
 
 class ScannerNotifier extends Notifier<ScannerState> {
+  StreamSubscription<Map<String, dynamic>>? _progressSub;
+  StreamSubscription<Map<String, dynamic>>? _eventSub;
+
   @override
-  ScannerState build() => const ScannerState();
+  ScannerState build() {
+    final ipc = ref.read(engineIpcProvider);
+    // Progress arrives as an engine push; the screen never polls.
+    _progressSub = ipc.progressStream.listen(_onProgress);
+    _eventSub = ipc.eventStream.listen(_onEvent);
+    ref.onDispose(() {
+      _progressSub?.cancel();
+      _eventSub?.cancel();
+    });
+    return const ScannerState();
+  }
+
+  /// Re-attaches to a scan that was already running (engine restart, or a job
+  /// that the service resumed while this screen was closed).
+  Future<void> attachRunningJob() async {
+    try {
+      final jobs = await ref.read(engineIpcProvider).request('job.list', {'limit': 10});
+      final running = (jobs as List).cast<Map<String, dynamic>>().firstWhere(
+            (j) => const {'running', 'queued', 'interrupted'}
+                .contains(j['state'] as String?),
+            orElse: () => const {},
+          );
+      if (running.isEmpty) return;
+      _adoptJob(running);
+    } catch (_) {
+      // No engine yet — the screen still works, it just has nothing to attach.
+    }
+  }
+
+  void _adoptJob(Map<String, dynamic> job) {
+    final total = (job['total'] as num?)?.toInt() ?? 0;
+    final processed = (job['processed'] as num?)?.toInt() ?? 0;
+    state = ScannerState(
+      report: state.report,
+      jobId: job['job_id'] as String?,
+      jobState: job['state'] as String?,
+      total: total,
+      scanned: (job['scanned'] as num?)?.toInt() ?? 0,
+      findingsCount: (job['findings_count'] as num?)?.toInt() ?? 0,
+      pct: total == 0 ? 0 : ((processed / total) * 100).round(),
+      quarantine: state.quarantine,
+    );
+  }
 
   Future<void> scan(String path, bool quarantine) async {
     state = ScannerState(
-        report: state.report, quarantine: state.quarantine, scanning: true);
+      report: state.report,
+      jobState: 'running',
+      quarantine: state.quarantine,
+    );
     try {
       final res = await ref
           .read(engineIpcProvider)
           .request('scan.start', {'path': path, 'quarantine': quarantine});
-      final report = ScanReport.fromJson(res as Map<String, dynamic>);
-      state = ScannerState(report: report, quarantine: state.quarantine);
+      final jobId = (res as Map)['job_id'] as String?;
+      state = ScannerState(
+        report: state.report,
+        jobId: jobId,
+        jobState: (res)['state'] as String? ?? 'running',
+        quarantine: state.quarantine,
+      );
       await refreshQuarantine();
     } catch (e) {
       state = ScannerState(
-          report: state.report,
-          quarantine: state.quarantine,
-          error: e.toString());
+        report: state.report,
+        quarantine: state.quarantine,
+        error: e.toString(),
+      );
+    }
+  }
+
+  void _onProgress(Map<String, dynamic> p) {
+    if (p['job_id'] != state.jobId) return;
+    state = ScannerState(
+      report: state.report,
+      jobId: state.jobId,
+      jobState: p['state'] as String? ?? state.jobState,
+      pct: (p['pct'] as num?)?.toInt() ?? state.pct,
+      scanned: (p['scanned'] as num?)?.toInt() ?? state.scanned,
+      total: (p['total'] as num?)?.toInt() ?? state.total,
+      findingsCount: (p['findings'] as num?)?.toInt() ?? state.findingsCount,
+      quarantine: state.quarantine,
+    );
+  }
+
+  void _onEvent(Map<String, dynamic> e) {
+    if (e['type'] != 'job_finished') return;
+    final data = (e['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    if (data['job_id'] != state.jobId) return;
+    _loadCompletedJob(data['job_id'] as String);
+  }
+
+  /// Pulls the persisted job (works even if the engine restarted mid-scan).
+  Future<void> _loadCompletedJob(String jobId) async {
+    try {
+      final res = await ref
+          .read(engineIpcProvider)
+          .request('job.get', {'job_id': jobId});
+      final map = (res as Map).cast<String, dynamic>();
+      final job = (map['job'] as Map).cast<String, dynamic>();
+      final findings = (map['findings'] as List? ?? [])
+          .map((f) => ScanFinding.fromJson((f as Map).cast<String, dynamic>()))
+          .toList();
+      final durationMs =
+          (((job['updated_at'] as num?)?.toInt() ?? 0) * 1000) -
+              (((job['created_at'] as num?)?.toInt() ?? 0) * 1000);
+      state = ScannerState(
+        jobId: jobId,
+        jobState: job['state'] as String?,
+        pct: 100,
+        total: (job['total'] as num?)?.toInt() ?? 0,
+        scanned: (job['scanned'] as num?)?.toInt() ?? 0,
+        findingsCount: findings.length,
+        quarantine: state.quarantine,
+        report: ScanReport(
+          path: job['root'] as String? ?? '',
+          filesScanned: (job['scanned'] as num?)?.toInt() ?? 0,
+          filesSkipped: (job['skipped'] as num?)?.toInt() ?? 0,
+          durationMs: durationMs < 0 ? 0 : durationMs,
+          stopped: job['state'] == 'cancelled',
+          findings: findings,
+        ),
+      );
+      await refreshQuarantine();
+    } catch (e) {
+      state = ScannerState(
+        report: state.report,
+        jobId: state.jobId,
+        quarantine: state.quarantine,
+        error: 'cannot load job $jobId: $e',
+      );
     }
   }
 
   Future<void> stop() async {
-    await ref.read(engineIpcProvider).request('scan.stop');
+    try {
+      final id = state.jobId;
+      if (id != null) {
+        await ref.read(engineIpcProvider).request('job.cancel', {'job_id': id});
+      } else {
+        await ref.read(engineIpcProvider).request('scan.stop');
+      }
+    } catch (_) {}
+  }
+
+  /// Rebuilds the state while keeping the current job/progress fields.
+  void _patch({List<QuarantineEntry>? quarantine, String? error}) {
+    state = ScannerState(
+      report: state.report,
+      jobId: state.jobId,
+      jobState: state.jobState,
+      pct: state.pct,
+      scanned: state.scanned,
+      total: state.total,
+      findingsCount: state.findingsCount,
+      quarantine: quarantine ?? state.quarantine,
+      error: error,
+    );
   }
 
   Future<void> refreshQuarantine() async {
     try {
       final res = await ref.read(engineIpcProvider).request('quarantine.list');
-      state = ScannerState(
-        report: state.report,
-        scanning: state.scanning,
+      _patch(
         quarantine: (res as List)
             .map((e) => QuarantineEntry.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
     } catch (e) {
-      state = ScannerState(report: state.report, error: e.toString());
+      _patch(error: e.toString());
     }
   }
 
@@ -141,7 +295,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
           .request('quarantine.restore', {'blob_id': blobId});
       await refreshQuarantine();
     } catch (e) {
-      state = ScannerState(report: state.report, error: e.toString());
+      _patch(error: e.toString());
     }
   }
 
@@ -152,7 +306,7 @@ class ScannerNotifier extends Notifier<ScannerState> {
           .request('quarantine.delete', {'blob_id': blobId});
       await refreshQuarantine();
     } catch (e) {
-      state = ScannerState(report: state.report, error: e.toString());
+      _patch(error: e.toString());
     }
   }
 }
@@ -178,6 +332,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         '${Platform.environment['USERPROFILE'] ?? ''}\\Downloads';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(scannerProvider.notifier).refreshQuarantine();
+      // A scan may already be running (engine restart or the service resuming
+      // a job) — show its live progress instead of an empty screen.
+      ref.read(scannerProvider.notifier).attachRunningJob();
     });
   }
 
@@ -293,6 +450,10 @@ class _ScanTab extends ConsumerWidget {
           Text(st.error!,
               style: TextStyle(color: AppColors.orange, fontSize: 12)),
         ],
+        if (st.scanning) ...[
+          const SizedBox(height: 16),
+          _ScanProgress(st: st),
+        ],
         const SizedBox(height: 16),
         if (st.report != null) ...[
           Text(
@@ -329,6 +490,59 @@ class _ScanTab extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Live job progress, driven by engine `progress` notifications (no polling).
+class _ScanProgress extends StatelessWidget {
+  const _ScanProgress({required this.st});
+  final ScannerState st;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = st.pct.clamp(0, 100);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.radar, size: 16, color: AppColors.cyan),
+            const SizedBox(width: 8),
+            Text(
+              st.total > 0
+                  ? 'Triaged queue: ${st.scanned} / ${st.total} files'
+                  : 'Preparing the triage queue…',
+              style: TextStyle(color: AppColors.text, fontSize: 12.5),
+            ),
+            const Spacer(),
+            Text('$pct%',
+                style: AppTheme.mono(size: 12, color: AppColors.cyan)),
+          ]),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: st.total > 0 ? pct / 100 : null,
+              minHeight: 6,
+              backgroundColor: AppColors.background,
+              valueColor: AlwaysStoppedAnimation(AppColors.cyan),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${st.findingsCount} finding(s) so far'
+            '${st.jobId != null ? ' · job ${st.jobId}' : ''}',
+            style: AppTheme.mono(size: 10, color: AppColors.muted),
+          ),
+        ],
+      ),
     );
   }
 }
