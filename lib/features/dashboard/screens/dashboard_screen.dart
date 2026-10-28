@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -31,6 +32,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ref.read(auditProvider.notifier).runAudit();
       });
     }
+    // Safety net: if the first audit never lands (slow engine spawn, raced
+    // request), retry after 6 s instead of spinning forever.
+    _retryTimer = Timer.periodic(const Duration(seconds: 6), (t) {
+      final st = ref.read(auditProvider);
+      if (st.report != null) {
+        t.cancel();
+        return;
+      }
+      if (!st.loading && t.tick > 1) {
+        ref.read(auditProvider.notifier).runAudit();
+      }
+    });
     // Retry once the engine reconnects (covers cold start races).
     _engineSub = ref.listenManual(engineStateProvider, (prev, next) {
       if (next.value == EngineState.running &&
@@ -41,9 +54,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   ProviderSubscription? _engineSub;
+  Timer? _retryTimer;
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _engineSub?.close();
     _gauge.dispose();
     super.dispose();
@@ -405,11 +420,14 @@ class _LayerTile extends StatelessWidget {
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
+            // Deterministic track: pending phases show a static empty track —
+            // an indeterminate indicator here reads as "loading forever".
             child: LinearProgressIndicator(
-              value: health,
+              value: health ?? 0.0,
               minHeight: 4,
               backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(color),
+              valueColor: AlwaysStoppedAnimation(
+                  health == null ? AppColors.border : color),
             ),
           ),
           if (health == null) ...[

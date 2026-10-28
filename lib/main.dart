@@ -181,7 +181,10 @@ class MicsApp extends ConsumerWidget {
     // Palette must be applied BEFORE MaterialApp builds its themes.
     AppTheme.applyPalette(settings.value?.themeMode ?? ThemeMode.dark);
 
+    // Keying on mode+lang forces the whole tree (incl. the cached Router
+    // pages) to rebuild — statics-based colors switch instantly.
     return MaterialApp.router(
+      key: ValueKey('theme-${settings.value?.themeMode}-lang-$lang'),
       title: 'MI CS Command Center',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
