@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// Local intelligence cache (section 6 of the brief). One small wrapper used
@@ -12,9 +11,7 @@ pub struct Storage {
 #[allow(dead_code)]
 impl Storage {
     pub fn open() -> Result<Self> {
-        let base = std::env::var("PROGRAMDATA")
-            .map(|p| PathBuf::from(p).join("MICS"))
-            .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS"));
+        let base = crate::settings::Settings::base_dir();
         std::fs::create_dir_all(&base).context("create MICS data dir")?;
         let conn = Connection::open(base.join("mics.db"))
             .context("open mics.db")?;

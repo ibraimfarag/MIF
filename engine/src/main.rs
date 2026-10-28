@@ -127,9 +127,10 @@ async fn main() -> Result<()> {
         None => "idle",
     };
     tracing::info!(
-        "MI CS engine {} starting (mode={mode}, pid={})",
+        "MI CS engine {} starting (mode={mode}, pid={}, data={})",
         env!("CARGO_PKG_VERSION"),
-        std::process::id()
+        std::process::id(),
+        settings::Settings::base_dir().display()
     );
 
     match cli.command {
@@ -325,9 +326,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for TeeWriter {
 
 fn log_file_writer() -> TeeWriter {
     use std::io::Write;
-    let dir = std::env::var("PROGRAMDATA")
-        .map(|p| std::path::PathBuf::from(p).join("MICS").join("logs"))
-        .unwrap_or_else(|_| std::path::PathBuf::from(r"C:\ProgramData\MICS\logs"));
+    let dir = settings::Settings::base_dir().join("logs");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("engine.log");
     if let Ok(meta) = std::fs::metadata(&path)

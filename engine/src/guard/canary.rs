@@ -16,9 +16,7 @@ pub struct CanaryConfig {
 }
 
 fn config_path() -> PathBuf {
-    std::env::var("PROGRAMDATA")
-        .map(|p| PathBuf::from(p).join("MICS").join("canaries.json"))
-        .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS\canaries.json"))
+    crate::settings::Settings::base_dir().join("canaries.json")
 }
 
 pub fn load_config() -> CanaryConfig {

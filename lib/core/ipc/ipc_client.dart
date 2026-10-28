@@ -104,7 +104,12 @@ class EngineIpc {
       await Process.start(
         path,
         const ['service'],
-        environment: spawnEnv.isEmpty ? null : spawnEnv,
+        // Dart replaces the whole environment when `environment` is given, so
+        // it must be merged with the current one: dropping it would lose
+        // PROGRAMDATA (state/data path) and PATH (netsh, taskkill, reg).
+        environment: spawnEnv.isEmpty
+            ? null
+            : {...Platform.environment, ...spawnEnv},
         mode: ProcessStartMode.detached,
       );
     } catch (_) {

@@ -446,7 +446,7 @@ class _OmniboxState extends ConsumerState<_Omnibox> {
             textAlign: TextAlign.right,
             decoration: InputDecoration(
               isDense: true,
-              hintText: 'اكتب أمراً… «افحص النظام» · «شغل الحارس» · «تقرير»',
+              hintText: context.tr('omnibox.hint'),
               hintStyle:
                   TextStyle(fontSize: 10, color: AppColors.muted),
               prefixIcon: _busy

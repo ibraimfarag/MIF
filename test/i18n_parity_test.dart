@@ -71,6 +71,18 @@ void main() {
     }
   });
 
+  test('no mojibake (UTF-8 read as Latin-1) in any pack', () {
+    // Guards against editors/scripts that rewrite the JSON with the wrong
+    // encoding: "—" becomes "â€“" and Arabic becomes "Ø­...".
+    final marker = RegExp(r'[ÃÂØÙ]|â€');
+    for (final lang in langs) {
+      keysOf(lang).forEach((key, value) {
+        expect(marker.hasMatch(value), isFalse,
+            reason: '$lang/$key looks mojibaked: "$value"');
+      });
+    }
+  });
+
   test('placeholders match between languages', () {
     final reference = keysOf(langs.first);
     for (final lang in langs.skip(1)) {

@@ -63,6 +63,8 @@ engine/nul
 
 # Local test fixtures, dart tool state and ACL repair records — never shipped
 /_testdata/
+/_test_app/
+/_screens/
 /.dart_home/
 /_acl_recovery/
 dist/

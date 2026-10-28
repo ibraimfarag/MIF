@@ -566,9 +566,9 @@ impl Dispatcher {
                     .and_then(|v| v.as_str())
                     .map(PathBuf::from)
                     .unwrap_or_else(|| {
-                        std::env::var("PROGRAMDATA")
-                            .map(|p| PathBuf::from(p).join("MICS").join("update").join("update.zip"))
-                            .unwrap()
+                        crate::settings::Settings::base_dir()
+                            .join("update")
+                            .join("update.zip")
                     });
                 match crate::update::apply(&p) {
                     Ok(msg) => Some(json!({"status": "applied", "detail": msg})),

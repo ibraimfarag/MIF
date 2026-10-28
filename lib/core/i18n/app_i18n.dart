@@ -239,8 +239,13 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       lmModel: prefs.getString('lmModel') ?? '',
       updateManifestUrl: prefs.getString('updateManifestUrl') ?? '',
     );
+    // Only carry over values the user actually set: sending empty strings
+    // would overwrite the engine's real defaults (e.g. the LM Studio URL).
+    final patch = legacy.toEngineJson()
+      ..removeWhere((key, value) =>
+          value == '' || (value is List && value.isEmpty));
     try {
-      final res = await ipc.request('settings.set', legacy.toEngineJson());
+      final res = await ipc.request('settings.set', patch);
       await prefs.setBool(_migratedKey, true);
       return AppSettings.fromEngineJson((res as Map).cast<String, dynamic>());
     } catch (_) {

@@ -1,4 +1,4 @@
-﻿{
+{
     "settings.about":  "About",
     "settings.appearance":  "Appearance",
     "settings.autoQuarantine":  "Auto-quarantine detections by default",
@@ -33,7 +33,7 @@
     "settings.startupEnable":  "Start with Windows",
     "settings.startupOff":  "Engine removed from startup",
     "settings.startupOn":  "Engine added to startup",
-    "settings.subtitle":  "Everything here is stored by the engine in settings.json â€” the UI and the protection engine always agree.",
+    "settings.subtitle":  "Everything here is stored by the engine in settings.json — the UI and the protection engine always agree.",
     "settings.syncDone":  "Sync finished",
     "settings.syncHours":  "Refresh interval",
     "settings.syncNow":  "Sync now",

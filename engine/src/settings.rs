@@ -214,6 +214,14 @@ impl Settings {
     }
 
     pub fn base_dir() -> PathBuf {
+        // `MICS_DATA_DIR` is the explicit override (portable mode, tests, and
+        // the app passing its own data dir to the engine it spawns). Falling
+        // back to PROGRAMDATA keeps the documented Windows layout.
+        if let Ok(dir) = std::env::var("MICS_DATA_DIR")
+            && !dir.trim().is_empty()
+        {
+            return PathBuf::from(dir);
+        }
         std::env::var("PROGRAMDATA")
             .map(|p| PathBuf::from(p).join("MICS"))
             .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS"))

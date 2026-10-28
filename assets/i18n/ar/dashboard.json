@@ -1,7 +1,16 @@
 {
-  "dashboard.liveFeed": "صحة الطبقات (L1–L5)",
-  "dashboard.summary": "ملخص الملاحظات",
-  "score.doFirst": "ابدأ بأخطر ملاحظة:",
-  "score.title": "درجة الحماية",
-  "score.whatNow": "ماذا أفعل الآن؟"
+    "dashboard.liveFeed":  "صحة الطبقات (L1–L5)",
+    "dashboard.summary":  "ملخص الملاحظات",
+    "score.doFirst":  "ابدأ بأخطر ملاحظة:",
+    "score.title":  "درجة الحماية",
+    "score.whatNow":  "ماذا أفعل الآن؟",
+    "layer.idle":  "متوقف",
+    "layer.l3":  "الاستجابة",
+    "layer.partial":  "جزئي",
+    "layer.active":  "نشط",
+    "layer.l1":  "بوابة الشبكة",
+    "layer.l4":  "محركات الملفات",
+    "layer.l2":  "رادار الهجوم",
+    "layer.l5":  "العقل",
+    "omnibox.hint":  "اكتب أمراً… «افحص النظام» · «شغل الحارس» · «تقرير»"
 }

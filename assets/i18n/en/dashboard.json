@@ -1,7 +1,16 @@
 {
-  "dashboard.liveFeed": "Layer Health (L1–L5)",
-  "dashboard.summary": "Findings Summary",
-  "score.doFirst": "Fix the highest-impact finding first:",
-  "score.title": "Security Score",
-  "score.whatNow": "What should I do now?"
+    "dashboard.liveFeed":  "Layer Health (L1–L5)",
+    "dashboard.summary":  "Findings Summary",
+    "score.doFirst":  "Fix the highest-impact finding first:",
+    "score.title":  "Security Score",
+    "score.whatNow":  "What should I do now?",
+    "layer.idle":  "idle",
+    "layer.l3":  "Response",
+    "layer.partial":  "partial",
+    "layer.active":  "active",
+    "layer.l1":  "Network Gate",
+    "layer.l4":  "File Engines",
+    "layer.l2":  "Attack Radar",
+    "layer.l5":  "Mind",
+    "omnibox.hint":  "Ask anything… \"scan the system\" · \"start the guard\" · \"report\""
 }

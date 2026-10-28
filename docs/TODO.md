@@ -101,6 +101,30 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ### Done log (append only)
 
+- **P2d — first real run on the user's machine (bug sweep)**
+  - Ran the built app for real and inspected screenshots. Found and fixed:
+    - **L1–L5 cards were static** (`layersProvider` was never consumed); they now
+      show live engine state (L3/L4/L5 active, L2 idle, L1 partial).
+    - **SMBv1 critical false positive**: absent registry values (`SMB1` under
+      LanmanServer, `mrxsmb10` key) were treated as "enabled". Audit score on the
+      reference machine went 37 → 62 after the fix; the hardening card no longer
+      offers a bogus fix.
+    - **`hardening.apply` could hang forever** when a UAC prompt went unanswered
+      (`Start-Process -Verb RunAs -Wait`); all hardening PowerShell calls now have
+      a deadline and fail with an actionable error.
+    - **i18n files were re-encoded as mojibake** by a PowerShell edit
+      (`Get-Content -Raw` defaults to ANSI on Windows PowerShell 5.1). Repaired
+      and now guarded by a test (`no mojibake in any pack`).
+    - **Omnibox hint was Arabic-only**; translated and covered by the lint test.
+    - **`/100` rendered reversed in RTL**; numeric suffixes are now LTR.
+    - **ETW session name was fixed**, so a crashed predecessor left a stale
+      kernel session that forced the 2 s poll fallback forever; the name now
+      includes the pid.
+    - **Engine data dir is a single function** (`Settings::base_dir`) with a
+      `MICS_DATA_DIR` override, and the engine logs the resolved path at startup.
+  - Evidence: `cargo test` 12/12, `cargo clippy` clean, `flutter analyze` clean,
+    `flutter test` 18/18; screenshots in `_screens/` (dark English, light English,
+    dark Arabic with RTL rail).
 - **P2c — notification sounds (D-004)**
   - In-house WAV pack `assets/sounds/{info,success,warning,critical}.wav`
     (generated tones, no third-party licence).
@@ -299,6 +323,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
+| MED | `firewall` and `ids` still call `netsh` / elevated PowerShell **without a timeout** (hardening was fixed) — an unanswered UAC prompt can block those requests | `firewall/mod.rs`, `ids/mod.rs` |
 | MED | No offline badge / freshness indicator anywhere in the UI | shell |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | `docs/` has no THREAT-MODEL yet; README is still a stub | `docs/`, `README.md` |
@@ -336,6 +361,19 @@ settings and read environment variables only.
 8. The app resolves the engine as: `MICS_ENGINE_PATH` → beside `mics_app.exe` →
    `engine/target/release` (dev). In a packaged layout the exe must sit beside
    the app.
+9. **Never rewrite `assets/i18n/*.json` with PowerShell.** Windows PowerShell
+   5.1's `Get-Content -Raw` decodes as ANSI, so a read-modify-write turns Arabic
+   into `Ø­...` and `—` into `â€“`. Use the `write` tool, or
+   `[System.IO.File]::ReadAllText/WriteAllText` with an explicit UTF-8 encoding.
+   The parity test now fails on mojibake; `tool/fix_i18n_encoding.dart` repairs
+   simple cases (CP1252-only characters like `€` cannot be auto-repaired).
+10. **Isolated runs:** set `MICS_DATA_DIR` (state) or `PROGRAMDATA` (parent of
+    `MICS`) for the engine. The resolved path is printed in the startup log line
+    (`data=...`), which is the fastest way to tell which store a process uses.
+11. **Screenshots for UI verification:** `GetWindowRect` + `CopyFromScreen` on
+    `mics_app`'s `MainWindowHandle` works; prefer that over clicking. Blind
+    mouse clicks can hit destructive buttons (a stray click started a hardening
+    action during this session).
 
 ---
 

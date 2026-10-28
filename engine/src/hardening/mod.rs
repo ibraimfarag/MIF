@@ -66,18 +66,54 @@ pub fn list_actions() -> Vec<HardeningAction> {
     ]
 }
 
-fn ps_run(command: &str) -> Result<String> {
-    // Elevation-aware PowerShell runner (same path as firewall ops).
-    let out = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", command])
-        .output()
+/// Runs PowerShell with a hard deadline.
+///
+/// A UAC prompt that nobody answers used to block this thread (and the UI's
+/// busy spinner) forever, because `Start-Process -Verb RunAs -Wait` simply
+/// waits. A timeout turns that into a clear, actionable error instead.
+fn ps_run_with_timeout(args: &[&str], timeout: std::time::Duration) -> Result<(bool, String)> {
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = std::process::Command::new("powershell")
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn()
         .context("launch powershell")?;
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    if !out.status.success() && !text.contains("elevation") {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait()? {
+            Some(status) => {
+                let mut text = String::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_string(&mut text);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut text);
+                }
+                return Ok((status.success(), text));
+            }
+            None => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    anyhow::bail!(
+                        "the operation did not finish within {}s — a UAC prompt may have been \
+                         cancelled or left unanswered",
+                        timeout.as_secs()
+                    );
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+}
+
+fn ps_run(command: &str) -> Result<String> {
+    let (ok, text) =
+        ps_run_with_timeout(&["-NoProfile", "-Command", command], std::time::Duration::from_secs(60))?;
+    if !ok && !text.contains("elevation") {
         anyhow::bail!("powershell failed: {}", text.trim());
     }
     Ok(text)
@@ -89,15 +125,13 @@ fn ps_run_elevated(command: &str) -> Result<()> {
         "Start-Process -FilePath powershell -ArgumentList @('-NoProfile','-Command','{}') -Verb RunAs -Wait -WindowStyle Hidden",
         escaped
     );
-    let out = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_arg])
-        .output()
-        .context("launch elevated powershell")?;
-    if !out.status.success() {
-        anyhow::bail!(
-            "elevated powershell failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
+    // Elevation needs room for the user to read and answer the prompt.
+    let (ok, text) = ps_run_with_timeout(
+        &["-NoProfile", "-Command", &ps_arg],
+        std::time::Duration::from_secs(120),
+    )?;
+    if !ok {
+        anyhow::bail!("elevated powershell failed: {}", text.trim());
     }
     Ok(())
 }

@@ -37,9 +37,7 @@ pub struct QuarantineManager {
 
 impl QuarantineManager {
     pub fn new() -> Result<Self> {
-        let path = std::env::var("PROGRAMDATA")
-            .map(|p| PathBuf::from(p).join("MICS").join("Quarantine"))
-            .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS\Quarantine"));
+        let path = crate::settings::Settings::base_dir().join("Quarantine");
         fs::create_dir_all(&path).context("create quarantine dir")?;
         Ok(Self { quarantine_dir: path })
     }

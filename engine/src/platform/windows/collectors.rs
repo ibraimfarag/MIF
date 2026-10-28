@@ -382,7 +382,10 @@ impl PlatformCollectors for WindowsCollectors {
 
     async fn audit_smbv1(&self) -> Result<Vec<AuditFinding>> {
         let mut findings = Vec::new();
-        // SMB1 server component: Start=4 means disabled.
+        // SMB1 server flag: 0 = disabled. The value is frequently *absent* on a
+        // hardened Windows 10/11 (it is only written when someone changes it),
+        // and `mrxsmb10` is absent when the SMBv1 feature was removed entirely.
+        // Treating "absent" as "enabled" produced a critical false positive.
         let smb1 = read_dword(
             HKEY_LOCAL_MACHINE,
             r"SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters",
@@ -393,8 +396,11 @@ impl PlatformCollectors for WindowsCollectors {
             r"SYSTEM\CurrentControlSet\Services\mrxsmb10",
             "Start",
         );
-        let server_enabled = smb1 != Some(0) && mrxsmb10 != Some(4);
-        if server_enabled {
+        let server_on = smb1.map(|v| v != 0).unwrap_or(false);
+        // Missing driver key = the legacy stack is not installed at all.
+        let client_on = mrxsmb10.map(|v| v != 4).unwrap_or(false);
+        let enabled = server_on || client_on;
+        if enabled {
             findings.push(finding(
                 "Legacy Protocols",
                 "SMBv1",
@@ -409,7 +415,7 @@ impl PlatformCollectors for WindowsCollectors {
                 "SMBv1",
                 FindingStatus::Secure,
                 Severity::Critical,
-                "SMBv1 is disabled".to_string(),
+                "SMBv1 is disabled (legacy stack not enabled)".to_string(),
                 false,
             ));
         }

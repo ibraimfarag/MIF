@@ -13,9 +13,7 @@ use std::path::PathBuf;
 use crate::sync::SyncManager;
 
 fn staging_dir() -> PathBuf {
-    std::env::var("PROGRAMDATA")
-        .map(|p| PathBuf::from(p).join("MICS").join("update"))
-        .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS\update"))
+    crate::settings::Settings::base_dir().join("update")
 }
 
 /// Downloads the manifest and returns its parsed fields (update.check).

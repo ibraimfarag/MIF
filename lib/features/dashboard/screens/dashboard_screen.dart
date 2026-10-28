@@ -90,15 +90,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ref.read(auditProvider.notifier).runAudit();
       }
     });
+    // Refresh the L2–L5 live state the moment a report lands, so the layer
+    // cards never sit on "idle" until the safety-net timer fires.
+    _auditSub = ref.listenManual(auditProvider, (prev, next) {
+      if (next.report != null) {
+        ref.read(layersProvider.notifier).refresh();
+      }
+    });
   }
 
   ProviderSubscription? _engineSub;
+  ProviderSubscription? _auditSub;
   Timer? _retryTimer;
 
   @override
   void dispose() {
     _retryTimer?.cancel();
     _engineSub?.close();
+    _auditSub?.close();
     _gauge.dispose();
     super.dispose();
   }
@@ -179,9 +188,13 @@ class _ScoreCard extends StatelessWidget {
                     children: [
                       Text('${(score * gauge.value).round()}',
                           style: AppTheme.mono(size: 40, color: color)),
-                      Text('/100',
-                          style:
-                              AppTheme.mono(size: 12, color: AppColors.muted)),
+                      // Numeric scores stay LTR even in an RTL layout.
+                      Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text('/100',
+                            style:
+                                AppTheme.mono(size: 12, color: AppColors.muted)),
+                      ),
                     ],
                   ),
                 ),
@@ -382,22 +395,25 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
-class _LayerHealth extends StatelessWidget {
+class _LayerHealth extends ConsumerWidget {
   const _LayerHealth({required this.report});
   final AuditReport report;
 
   @override
-  Widget build(BuildContext context) {
-    // L1–L5 health derived from live data. Later phases fill L2–L5 with
-    // their own engines; today the audit feeds the general posture.
+  Widget build(BuildContext context, WidgetRef ref) {
+    // L1 comes from the audit posture; L2–L5 come from the engine's live
+    // subsystem state (`layersProvider` -> guard.status / ids.status /
+    // incident.list). A missing value means "not reporting yet", never
+    // "planned for a later phase".
+    final live = ref.watch(layersProvider).value ?? const <String, double>{};
     final vulnerable = report.countByStatus('Vulnerable');
     final warning = report.countByStatus('Warning');
     final layers = [
-      ('L1', 'Network Gate', vulnerable + warning > 0 ? 0.6 : 1.0, ''),
-      ('L2', 'Attack Radar', null, 'Phase 4'), // network IDS
-      ('L3', 'Response', null, 'Phase 6'), // ETW guard live
-      ('L4', 'File Engines', null, 'Phase 5'), // scanner/YARA
-      ('L5', 'Mind', null, 'Phase 6'), // correlator/assistant
+      ('L1', context.tr('layer.l1'), vulnerable + warning > 0 ? 0.6 : 1.0),
+      ('L2', context.tr('layer.l2'), live['L2'] ?? 0.0),
+      ('L3', context.tr('layer.l3'), live['L3'] ?? 0.0),
+      ('L4', context.tr('layer.l4'), live['L4'] ?? 0.0),
+      ('L5', context.tr('layer.l5'), live['L5'] ?? 0.0),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,9 +426,9 @@ class _LayerHealth extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            for (final (id, name, health, phase) in layers) ...[
+            for (final (id, name, health) in layers) ...[
               Expanded(
-                child: _LayerTile(id: id, name: name, health: health, phase: phase),
+                child: _LayerTile(id: id, name: name, health: health),
               ),
               const SizedBox(width: 10),
             ],
@@ -424,23 +440,23 @@ class _LayerHealth extends StatelessWidget {
 }
 
 class _LayerTile extends StatelessWidget {
-  const _LayerTile(
-      {required this.id,
-      required this.name,
-      required this.health,
-      required this.phase});
+  const _LayerTile({required this.id, required this.name, required this.health});
   final String id;
   final String name;
-  final double? health;
-  final String phase;
+  final double health;
 
   @override
   Widget build(BuildContext context) {
-    final color = health == null
-        ? AppColors.muted
-        : health! >= 0.9
-            ? AppColors.green
-            : AppColors.orange;
+    final color = health >= 0.9
+        ? AppColors.green
+        : health > 0
+            ? AppColors.orange
+            : AppColors.muted;
+    final status = health >= 1.0
+        ? context.tr('layer.active')
+        : health > 0
+            ? context.tr('layer.partial')
+            : context.tr('layer.idle');
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -459,33 +475,16 @@ class _LayerTile extends StatelessWidget {
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            // Deterministic track: pending phases show a static empty track —
-            // an indeterminate indicator here reads as "loading forever".
             child: LinearProgressIndicator(
-              value: health ?? 0.0,
+              value: health.clamp(0.0, 1.0),
               minHeight: 4,
               backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(
-                  health == null ? AppColors.border : color),
+              valueColor: AlwaysStoppedAnimation(color),
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            health == null
-                ? 'later phase'
-                : health! >= 1.0
-                    ? 'active'
-                    : health! > 0
-                        ? 'partial'
-                        : 'idle',
-            style: TextStyle(
-                fontSize: 8.5,
-                color: health == null
-                    ? AppColors.muted
-                    : health! >= 1.0
-                        ? AppColors.green
-                        : AppColors.orange),
-          ),
+          Text(status,
+              style: TextStyle(fontSize: 8.5, color: color)),
         ],
       ),
     );

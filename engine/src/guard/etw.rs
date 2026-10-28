@@ -84,8 +84,12 @@ pub fn start() -> bool {
     let provider = Provider::kernel(&kernel_providers::PROCESS_PROVIDER)
         .add_callback(callback)
         .build();
+    // Session name includes the pid: a crashed predecessor leaves its kernel
+    // session behind, and a fixed name would then fail with "AlreadyExist" and
+    // silently degrade to the 2 s poll loop forever.
+    let session = format!("MICS-Guard-ETW-{}", std::process::id());
     match KernelTrace::new()
-        .named("MICS-Guard-ETW".to_string())
+        .named(session)
         .enable(provider)
         .start_and_process()
     {
