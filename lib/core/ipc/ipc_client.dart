@@ -84,6 +84,7 @@ class EngineIpc {
           .listen(_handleLine, onDone: _handleExit);
       proc.stderr.drain<void>();
       proc.exitCode.then((_) => _handleExit());
+      _startHeartbeat();
       return true;
     } catch (_) {
       _setState(EngineState.engineMissing);
@@ -143,6 +144,22 @@ class EngineIpc {
     });
   }
 
+  Timer? _heartbeat;
+
+  /// Spec: heartbeat `ping` every 15 s — a missed reply triggers reconnect.
+  void _startHeartbeat() {
+    _heartbeat?.cancel();
+    _heartbeat = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (_process == null || _disposed) return;
+      try {
+        final res = await request('ping').timeout(const Duration(seconds: 5));
+        if (res != 'pong') _handleExit();
+      } catch (_) {
+        _handleExit();
+      }
+    });
+  }
+
   /// Sends a whitelisted JSON-RPC command and awaits the matching response.
   Future<dynamic> request(String method, [Map<String, dynamic>? params]) async {
     final ok = await ensureRunning();
@@ -171,6 +188,7 @@ class EngineIpc {
 
   void dispose() {
     _disposed = true;
+    _heartbeat?.cancel();
     _restartTimer?.cancel();
     _process?.kill();
     _statusController.close();

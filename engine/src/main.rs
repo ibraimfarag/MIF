@@ -6,6 +6,7 @@ mod firewall;
 mod vulns;
 mod scanner;
 mod sync;
+mod benchmark;
 mod guard;
 mod ids;
 mod hardening;
@@ -60,6 +61,8 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+    /// Measure idle RAM/CPU against the spec budgets
+    Benchmark,
     /// List quarantine entries
     Quarantine {
         #[arg(short, long)]
@@ -144,6 +147,10 @@ async fn main() -> Result<()> {
         Some(Commands::Scan { path, quarantine, json }) => {
             let report = scanner::run_scan(&std::path::PathBuf::from(path), quarantine).await?;
             emit(&serde_json::to_value(&report)?, json)?;
+        }
+        Some(Commands::Benchmark) => {
+            let b = benchmark::run();
+            println!("{}", serde_json::to_string_pretty(&b)?);
         }
         Some(Commands::Quarantine { json }) => {
             let m = scanner::quarantine::QuarantineManager::new()?;

@@ -9,6 +9,7 @@ import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() {
@@ -29,13 +30,54 @@ class Bootstrap extends ConsumerStatefulWidget {
   ConsumerState<Bootstrap> createState() => _BootstrapState();
 }
 
-class _BootstrapState extends ConsumerState<Bootstrap> {
+class _BootstrapState extends ConsumerState<Bootstrap>
+    with WindowListener, TrayListener {
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
+    windowManager.addListener(this);
+    trayManager.addListener(this);
     _init();
+  }
+
+  /// Closing the window hides to tray — the engine (and alerts) keep running.
+  Future<void> _setupTray() async {
+    await trayManager.setIcon('assets/icons/mics.ico');
+    await trayManager.setToolTip('MI CS Command Center');
+    await trayManager.setContextMenu(Menu(items: [
+      MenuItem(key: 'show', label: 'Open MI CS'),
+      MenuItem.separator(),
+      MenuItem(key: 'quit', label: 'Quit'),
+    ]));
+  }
+
+  @override
+  void onTrayIconMouseDown() {
+    windowManager.show();
+    windowManager.focus();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    trayManager.popUpContextMenu();
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem item) {
+    if (item.key == 'show') {
+      windowManager.show();
+      windowManager.focus();
+    } else if (item.key == 'quit') {
+      windowManager.destroy();
+    }
+  }
+
+  @override
+  void onWindowClose() async {
+    // Minimize to tray instead of quitting; engine keeps protecting.
+    await windowManager.hide();
   }
 
   Future<void> _init() async {
@@ -49,6 +91,8 @@ class _BootstrapState extends ConsumerState<Bootstrap> {
         titleBarStyle: TitleBarStyle.hidden,
       ),
       () async {
+        await windowManager.setPreventClose(true);
+        await _setupTray();
         await windowManager.show();
         await windowManager.focus();
         applyWindowCornerRadius();

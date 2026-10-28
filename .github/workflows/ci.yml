@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  analyze-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Flutter analyze
+        run: flutter analyze --fatal-infos
+
+      - name: Flutter test
+        run: flutter test
+
+      - name: Build engine
+        working-directory: engine
+        run: cargo build --release
+
+      - name: Engine tests
+        working-directory: engine
+        run: cargo test
+
+      - name: Clippy (zero warnings)
+        working-directory: engine
+        run: cargo clippy --release -- -D warnings
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      - name: Smoke test engine
+        run: |
+          ./engine/target/release/mics-engine.exe benchmark
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mics-windows
+          path: |
+            build/windows/x64/runner/Release/
+            engine/target/release/mics-engine.exe
