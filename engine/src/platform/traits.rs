@@ -54,6 +54,8 @@ pub struct NetworkConnection {
     pub state: String,
     pub process_id: u32,
     pub process_name: String,
+    #[serde(default)]
+    pub country: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -6,6 +6,7 @@ class NetworkConnection {
   final String state;
   final int processId;
   final String processName;
+  final String country;
 
   NetworkConnection({
     required this.localAddress,
@@ -14,6 +15,7 @@ class NetworkConnection {
     required this.state,
     required this.processId,
     required this.processName,
+    this.country = '',
   });
 
   factory NetworkConnection.fromJson(Map<String, dynamic> j) =>
@@ -24,6 +26,7 @@ class NetworkConnection {
         state: j['state'] as String? ?? '',
         processId: (j['process_id'] as num?)?.toInt() ?? 0,
         processName: j['process_name'] as String? ?? '',
+        country: j['country'] as String? ?? '',
       );
 
   bool get isLoopback =>

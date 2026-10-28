@@ -384,6 +384,67 @@ impl Dispatcher {
                     Err(e) => { error!("noise dismissal: {e:#}"); None }
                 }
             }
+            "ids.status" => match crate::ids::status() {
+                Ok(s) => Some(json!(s)),
+                Err(e) => { error!("ids.status: {e:#}"); None }
+            },
+            "ids.block.add" => {
+                let Some(domains) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("domains"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>())
+                else {
+                    return error_response(req, "missing domains");
+                };
+                match crate::ids::add_domains(&domains) {
+                    Ok(n) => Some(json!({"added": n})),
+                    Err(e) => { error!("ids.block.add: {e:#}"); None }
+                }
+            }
+            "ids.block.remove" => {
+                let Some(d) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("domain"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing domain");
+                };
+                match crate::ids::remove_domain(&d) {
+                    Ok(()) => Some(json!({"status": "removed"})),
+                    Err(e) => { error!("ids.block.remove: {e:#}"); None }
+                }
+            }
+            "ids.blocklist.import" => {
+                let Some(p) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing path");
+                };
+                match crate::ids::import_blocklist(&p) {
+                    Ok(n) => Some(json!({"imported": n})),
+                    Err(e) => { error!("ids.blocklist.import: {e:#}"); None }
+                }
+            }
+            "geoip.lookup" => {
+                let Some(ip) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("ip"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing ip");
+                };
+                Some(json!({"country": crate::ids::geoip::lookup(&ip)}))
+            }
             "hardening.list" => Some(json!(crate::hardening::list_actions())),
             "hardening.apply" => {
                 let Some(id) = req.params.as_ref().and_then(|p| p.get("action")).and_then(|v| v.as_str()).map(String::from) else {

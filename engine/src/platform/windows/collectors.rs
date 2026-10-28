@@ -733,6 +733,7 @@ impl PlatformCollectors for WindowsCollectors {
                         state: state.into(),
                         process_id: pid,
                         process_name: process_name(&sys, pid),
+                        country: crate::ids::geoip::lookup(&format_ipv4_ip(r.dwRemoteAddr)),
                     });
                 }
             } else {
@@ -772,6 +773,7 @@ impl PlatformCollectors for WindowsCollectors {
                         state: "-".to_string(),
                         process_id: pid,
                         process_name: process_name(&sys, pid),
+                        country: String::new(),
                     });
                 }
             } else {
@@ -891,6 +893,16 @@ fn enum_subkeys_values(root: HKEY, subkey: &str) -> Vec<String> {
         let _ = RegCloseKey(hkey);
     }
     names
+}
+
+fn format_ipv4_ip(addr: u32) -> String {
+    Ipv4Addr::new(
+        (addr & 0xFF) as u8,
+        ((addr >> 8) & 0xFF) as u8,
+        ((addr >> 16) & 0xFF) as u8,
+        ((addr >> 24) & 0xFF) as u8,
+    )
+    .to_string()
 }
 
 fn format_ipv4_port(addr: u32, port_net_order: u32) -> String {

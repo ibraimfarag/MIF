@@ -7,6 +7,7 @@ mod vulns;
 mod scanner;
 mod sync;
 mod guard;
+mod ids;
 mod hardening;
 mod llm;
 mod notify;

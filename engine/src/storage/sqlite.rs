@@ -191,6 +191,15 @@ impl Storage {
         Ok(rows)
     }
 
+    pub fn add_ioc_domain(&self, domain: &str, source: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO ioc_domains VALUES (?1, ?2, 'block', strftime('%s','now'))",
+            rusqlite::params![domain, source],
+        )?;
+        Ok(())
+    }
+
     pub fn ioc_hash_count(&self) -> Result<u64> {
         let conn = self.conn.lock().unwrap();
         Ok(conn.query_row("SELECT COUNT(*) FROM ioc_hashes", [], |r| r.get(0))?)
