@@ -1,9 +1,20 @@
 use serde::{Deserialize, Serialize};
 use anyhow::{Context, Result};
 use reqwest::Client;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use crate::platform::traits::PlatformCollectors;
 use crate::storage::sqlite::Storage;
+
+/// NVD's public limit is 5 requests / 30 s, so the loop waits between
+/// applications. That is also why the scan is a job: minutes of work behind a
+/// blocking RPC is a spinner the user cannot cancel.
+const RATE_LIMIT: Duration = Duration::from_millis(6500);
+
+/// Progress is only useful if a cancel is felt within a fraction of the step,
+/// so the rate-limit pause is sliced rather than slept in one go.
+const PAUSE_SLICE: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Vulnerability {
@@ -109,16 +120,17 @@ impl VulnScanner {
         Ok(Self { client, storage, kev })
     }
 
-    pub async fn scan(&self, max_apps: usize) -> Result<Vec<SoftwareVulns>> {
+    /// Applications worth looking up, in inventory order, with the NVD keyword
+    /// and the installed version. Shared by the blocking RPC and the job.
+    async fn targets(&self, max_apps: usize) -> Result<Vec<(String, String, String)>> {
         let collectors = crate::platform::windows::collectors::WindowsCollectors;
         let inventory = collectors.get_software_inventory().await?;
-
-        let mut targets: Vec<(String, String)> = Vec::new();
+        let mut targets: Vec<(String, String, String)> = Vec::new();
         for sw in &inventory {
             let lowered = sw.name.to_lowercase();
             for (needle, keyword) in KEYWORD_MAP {
                 if lowered.contains(needle) {
-                    targets.push((sw.name.clone(), keyword.to_string()));
+                    targets.push((sw.name.clone(), keyword.to_string(), sw.version.clone()));
                     break;
                 }
             }
@@ -126,91 +138,113 @@ impl VulnScanner {
                 break;
             }
         }
+        Ok(targets)
+    }
 
-        let mut results = Vec::new();
-        let mut live = 0usize;
-        let mut served_cache = 0usize;
-        let mut last_error: Option<String> = None;
-        for (name, keyword) in &targets {
-            let version = inventory
-                .iter()
-                .find(|s| &s.name == name)
-                .map(|s| s.version.clone())
-                .unwrap_or_default();
-
-            let cached = self.storage.cached_cves_for(name)?;
-            if !cached.is_empty() {
-                let mut vulnerabilities: Vec<Vulnerability> = cached
-                    .into_iter()
-                    .map(|c| Vulnerability {
-                        cve_id: c.cve_id,
-                        cvss: c.cvss,
-                        description: c.description,
-                        published: c.published,
-                        known_exploited: false,
-                        kev_due: None,
-                    })
-                    .collect();
-                annotate_kev(&mut vulnerabilities, &self.kev);
-                served_cache += 1;
-                results.push(SoftwareVulns {
-                    software: name.clone(),
-                    version: version.clone(),
-                    from_cache: true,
-                    vulnerabilities,
-                });
-                continue;
+    /// One application: cache first, NVD when the cache is cold. The cache is
+    /// what makes a re-scan of an unchanged machine instant and offline-safe.
+    async fn scan_one(
+        &self,
+        name: &str,
+        keyword: &str,
+        version: &str,
+        tally: &mut ScanTally,
+    ) -> SoftwareVulns {
+        let cached = match self.storage.cached_cves_for(name) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("CVE cache read failed for {name}: {e:#}");
+                Vec::new()
             }
-
-            match self.fetch_nvd(keyword, name).await {
-                Ok(mut vulns) => {
-                    annotate_kev(&mut vulns, &self.kev);
-                    live += 1;
-                    results.push(SoftwareVulns {
-                        software: name.clone(),
-                        version,
-                        from_cache: false,
-                        vulnerabilities: vulns,
-                    });
-                }
-                Err(e) => {
-                    tracing::warn!("NVD fetch failed for {name}: {e:#}");
-                    last_error = Some(format!("{e:#}"));
-                    results.push(SoftwareVulns {
-                        software: name.clone(),
-                        version,
-                        from_cache: true,
-                        vulnerabilities: vec![],
-                    });
-                }
-            }
-            // NVD public rate limit: 5 requests / 30 s without a key.
-            tokio::time::sleep(Duration::from_millis(6500)).await;
+        };
+        if !cached.is_empty() {
+            let mut vulnerabilities: Vec<Vulnerability> = cached
+                .into_iter()
+                .map(|c| Vulnerability {
+                    cve_id: c.cve_id,
+                    cvss: c.cvss,
+                    description: c.description,
+                    published: c.published,
+                    known_exploited: false,
+                    kev_due: None,
+                })
+                .collect();
+            annotate_kev(&mut vulnerabilities, &self.kev);
+            tally.cached += 1;
+            tally.cves += vulnerabilities.len();
+            return SoftwareVulns {
+                software: name.to_string(),
+                version: version.to_string(),
+                from_cache: true,
+                vulnerabilities,
+            };
         }
-        self.record_nvd_state(live, served_cache, last_error.as_deref());
+
+        match self.fetch_nvd(keyword, name).await {
+            Ok(mut vulns) => {
+                annotate_kev(&mut vulns, &self.kev);
+                tally.live += 1;
+                tally.cves += vulns.len();
+                SoftwareVulns {
+                    software: name.to_string(),
+                    version: version.to_string(),
+                    from_cache: false,
+                    vulnerabilities: vulns,
+                }
+            }
+            Err(e) => {
+                tracing::warn!("NVD fetch failed for {name}: {e:#}");
+                tally.failed += 1;
+                tally.last_error = Some(format!("{e:#}"));
+                SoftwareVulns {
+                    software: name.to_string(),
+                    version: version.to_string(),
+                    from_cache: true,
+                    vulnerabilities: vec![],
+                }
+            }
+        }
+    }
+
+    /// Blocking variant (CLI probes, `vuln.scan`). The UI uses `start_scan`,
+    /// which reports progress and can be cancelled.
+    pub async fn scan(&self, max_apps: usize) -> Result<Vec<SoftwareVulns>> {
+        let targets = self.targets(max_apps).await?;
+        let mut tally = ScanTally::default();
+        let mut results = Vec::new();
+        for (i, (name, keyword, version)) in targets.iter().enumerate() {
+            results.push(self.scan_one(name, keyword, version, &mut tally).await);
+            if i + 1 < targets.len() {
+                pause(RATE_LIMIT, None).await;
+            }
+        }
+        self.record_nvd_state(&tally);
         Ok(results)
     }
 
     /// Records the scan as the `nvd` intel source, so CVE freshness sits next
     /// to the feed freshness on the Intel screen. Called only after real work:
     /// a scan that found nothing to look up must not claim a successful sync.
-    fn record_nvd_state(&self, live: usize, served_cache: usize, last_error: Option<&str>) {
-        if live == 0 && served_cache == 0 && last_error.is_none() {
+    fn record_nvd_state(&self, tally: &ScanTally) {
+        if tally.live == 0 && tally.cached == 0 && tally.last_error.is_none() {
             return;
         }
         let cadence = crate::settings::current().sync_hours().clamp(1, 168) as i64 * 3600;
         let now = chrono::Utc::now().timestamp();
         let cached = self.storage.cached_cve_count().unwrap_or(0) as i64;
-        if live > 0 || last_error.is_none() {
-            let detail = if live > 0 {
-                format!("{live} live NVD lookups ({served_cache} from cache)")
+        if tally.live > 0 || tally.last_error.is_none() {
+            let detail = if tally.live > 0 {
+                format!(
+                    "{} live NVD lookups ({} from cache, {} CVEs)",
+                    tally.live, tally.cached, tally.cves
+                )
             } else {
-                format!("{served_cache} applications served from cache")
+                format!("{} applications served from cache", tally.cached)
             };
             let _ = self
                 .storage
                 .record_sync_success("nvd", "NVD 2.0", &detail, cached, Some(now + cadence));
-        } else if let Some(err) = last_error {
+        } else if let Some(err) = tally.last_error.as_deref() {
             let _ = self.storage.record_sync_failure(
                 "nvd",
                 err,
@@ -276,4 +310,151 @@ impl VulnScanner {
         }
         Ok(out)
     }
+}
+
+/// What one pass over the applications produced, for the `nvd` source state.
+#[derive(Default)]
+struct ScanTally {
+    live: usize,
+    cached: usize,
+    cves: usize,
+    failed: usize,
+    last_error: Option<String>,
+}
+
+/// Rate-limit pause that a cancel can cut short, so stopping a scan does not
+/// wait for the slowest step of the loop.
+pub(crate) async fn pause(duration: Duration, cancel: Option<&AtomicBool>) {
+    let mut left = duration;
+    while left > Duration::ZERO {
+        if cancel.is_some_and(|c| c.load(Ordering::SeqCst)) {
+            return;
+        }
+        let slice = left.min(PAUSE_SLICE);
+        tokio::time::sleep(slice).await;
+        left = left.saturating_sub(slice);
+    }
+}
+
+pub(crate) fn pct(done: usize, total: usize) -> u32 {
+    if total == 0 {
+        return 0;
+    }
+    ((done as f64 / total as f64) * 100.0).clamp(0.0, 100.0) as u32
+}
+
+/// Starts a vulnerability scan as a durable, cancellable job and returns its
+/// id. Progress, findings and the terminal state are all persisted, so closing
+/// the window (or restarting the engine) never loses what was already checked.
+pub fn start_scan(max_apps: usize, rt: tokio::runtime::Handle) -> Result<String> {
+    if crate::jobs::active_count() > 0 {
+        anyhow::bail!("another job is running");
+    }
+    let job_id = crate::jobs::new_job_id("vuln_scan");
+    let storage = Storage::open()?;
+    // A vulnerability scan has no root path and no quarantine stage: the job row
+    // exists so the UI can poll it and so a restart leaves a visible record.
+    storage.create_job(&job_id, "vuln_scan", "", false)?;
+    let cancel = crate::jobs::register(&job_id);
+    let id = job_id.clone();
+    rt.spawn(async move {
+        run_scan_job(id.clone(), max_apps, cancel).await;
+        crate::jobs::unregister(&id);
+    });
+    Ok(job_id)
+}
+
+async fn run_scan_job(job_id: String, max_apps: usize, cancel: Arc<AtomicBool>) {
+    let storage = match Storage::open() {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("vuln_scan {job_id}: storage unavailable: {e:#}");
+            crate::jobs::finished(&job_id, "failed", 0);
+            return;
+        }
+    };
+    let scanner = match VulnScanner::new() {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("vuln_scan {job_id} init failed: {e:#}");
+            let _ = storage.set_job_state(&job_id, "failed", Some(&format!("{e:#}")));
+            crate::jobs::progress(&job_id, "failed", 0, "init failed", 0, 0, 0, 0);
+            crate::jobs::finished(&job_id, "failed", 0);
+            return;
+        }
+    };
+    let _ = storage.set_job_state(&job_id, "running", None);
+    crate::jobs::progress(&job_id, "running", 0, "collecting software inventory", 0, 0, 0, 0);
+
+    let targets = match scanner.targets(max_apps).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("vuln_scan {job_id}: inventory failed: {e:#}");
+            let _ = storage.set_job_state(&job_id, "failed", Some(&format!("{e:#}")));
+            crate::jobs::progress(&job_id, "failed", 0, "inventory failed", 0, 0, 0, 0);
+            crate::jobs::finished(&job_id, "failed", 0);
+            return;
+        }
+    };
+    let total = targets.len();
+    let _ = storage.set_job_total(&job_id, total as i64);
+
+    let mut tally = ScanTally::default();
+    let mut findings = 0i64;
+    let mut state = "done";
+    for (i, (name, keyword, version)) in targets.iter().enumerate() {
+        if cancel.load(Ordering::SeqCst) {
+            state = "cancelled";
+            break;
+        }
+        let item = scanner.scan_one(name, keyword, version, &mut tally).await;
+        let cves = item.vulnerabilities.len() as i64;
+        findings += cves;
+        // Persisted per application: a cancelled or interrupted scan still
+        // shows everything it did check.
+        if let Ok(payload) = serde_json::to_string(&item) {
+            let _ = storage.add_job_finding(&job_id, i as i64, &payload);
+        }
+        let _ = storage.set_job_progress(
+            &job_id,
+            (i + 1) as i64,
+            (i + 1) as i64,
+            tally.failed as i64,
+            findings,
+        );
+        crate::jobs::progress(
+            &job_id,
+            "running",
+            pct(i + 1, total),
+            name,
+            (i + 1) as i64,
+            tally.failed as i64,
+            total as i64,
+            findings,
+        );
+        if i + 1 < total {
+            pause(RATE_LIMIT, Some(&cancel)).await;
+        }
+    }
+
+    let _ = storage.set_job_progress(
+        &job_id,
+        tally.live as i64 + tally.cached as i64,
+        tally.live as i64 + tally.cached as i64,
+        tally.failed as i64,
+        findings,
+    );
+    let _ = storage.set_job_state(&job_id, state, None);
+    scanner.record_nvd_state(&tally);
+    crate::jobs::progress(
+        &job_id,
+        state,
+        if state == "done" { 100 } else { pct(tally.live + tally.cached, total) },
+        state,
+        (tally.live + tally.cached) as i64,
+        tally.failed as i64,
+        total as i64,
+        findings,
+    );
+    crate::jobs::finished(&job_id, state, findings);
 }

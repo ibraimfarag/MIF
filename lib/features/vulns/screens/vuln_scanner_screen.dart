@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
@@ -6,28 +8,167 @@ import 'package:mics_app/core/theme/app_theme.dart';
 import 'package:mics_app/models/network_models.dart';
 
 final vulnProvider =
-    NotifierProvider<VulnNotifier, AsyncValue<List<SoftwareVulns>>>(
-        VulnNotifier.new);
+    NotifierProvider<VulnNotifier, VulnState>(VulnNotifier.new);
 
-class VulnNotifier extends Notifier<AsyncValue<List<SoftwareVulns>>> {
+/// Live state of the vulnerability scan: it is a job (NVD rate-limits it to
+/// minutes), so the screen shows progress and can cancel instead of sitting on
+/// a spinner it cannot stop.
+class VulnState {
+  final List<SoftwareVulns> results;
+  final String? jobId;
+  final String? jobState;
+  final int pct;
+  final int checked;
+  final int total;
+  final int cveCount;
+  final String? current;
+  final String? error;
+
+  const VulnState({
+    this.results = const <SoftwareVulns>[],
+    this.jobId,
+    this.jobState,
+    this.pct = 0,
+    this.checked = 0,
+    this.total = 0,
+    this.cveCount = 0,
+    this.current,
+    this.error,
+  });
+
+  /// A job is in flight while its state is not terminal.
+  bool get scanning =>
+      jobState == 'running' || jobState == 'queued' || jobState == 'interrupted';
+
+  bool get cancelled => jobState == 'cancelled';
+  bool get failed => jobState == 'failed';
+}
+
+class VulnNotifier extends Notifier<VulnState> {
+  StreamSubscription<Map<String, dynamic>>? _progressSub;
+  StreamSubscription<Map<String, dynamic>>? _eventSub;
+
   @override
-  AsyncValue<List<SoftwareVulns>> build() =>
-      const AsyncValue.data(<SoftwareVulns>[]);
+  VulnState build() {
+    final ipc = ref.read(engineIpcProvider);
+    // Progress arrives as an engine push; the screen never polls.
+    _progressSub = ipc.progressStream.listen(_onProgress);
+    _eventSub = ipc.eventStream.listen(_onEvent);
+    ref.onDispose(() {
+      _progressSub?.cancel();
+      _eventSub?.cancel();
+    });
+    return const VulnState();
+  }
+
+  /// Re-attaches to a scan that is already running (engine restart, or a job
+  /// the service kept alive while this screen was closed).
+  Future<void> attachRunningJob() async {
+    try {
+      final jobs =
+          await ref.read(engineIpcProvider).request('job.list', {'limit': 10});
+      final running = (jobs as List).cast<Map<String, dynamic>>().firstWhere(
+            (j) =>
+                j['kind'] == 'vuln_scan' &&
+                const {'running', 'queued', 'interrupted'}
+                    .contains(j['state'] as String?),
+            orElse: () => const {},
+          );
+      if (running.isEmpty) return;
+      state = VulnState(
+        results: state.results,
+        jobId: running['job_id'] as String?,
+        jobState: running['state'] as String?,
+        total: (running['total'] as num?)?.toInt() ?? 0,
+        checked: (running['processed'] as num?)?.toInt() ?? 0,
+        cveCount: (running['findings_count'] as num?)?.toInt() ?? 0,
+      );
+    } catch (_) {
+      // No engine yet — the screen still works, it just has nothing to attach.
+    }
+  }
 
   Future<void> scan({int maxApps = 10}) async {
-    state = const AsyncValue.loading();
+    state = VulnState(results: state.results, jobState: 'running');
     try {
-      final res = await ref.read(engineIpcProvider).request(
-          'vuln.scan', {'max_apps': maxApps},
-          // NVD's public limit is 5 requests / 30 s and the engine waits 6.5 s
-          // between applications, so a cold scan is minutes, not seconds. The
-          // request timeout has to outlive the work it is waiting for.
-          const Duration(minutes: 10));
-      state = AsyncValue.data((res as List)
-          .map((v) => SoftwareVulns.fromJson(v as Map<String, dynamic>))
-          .toList());
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      final res = await ref
+          .read(engineIpcProvider)
+          .request('vuln.scan.start', {'max_apps': maxApps});
+      state = VulnState(
+        results: state.results,
+        jobId: (res as Map)['job_id'] as String?,
+        jobState: 'running',
+      );
+    } catch (e) {
+      state = VulnState(results: state.results, error: e.toString());
+    }
+  }
+
+  void _onProgress(Map<String, dynamic> p) {
+    if (p['job_id'] != state.jobId) return;
+    final detail = p['detail'] as String?;
+    final total = (p['total'] as num?)?.toInt() ?? state.total;
+    state = VulnState(
+      results: state.results,
+      jobId: state.jobId,
+      jobState: p['state'] as String? ?? state.jobState,
+      pct: (p['pct'] as num?)?.toInt() ?? state.pct,
+      checked: (p['scanned'] as num?)?.toInt() ?? state.checked,
+      total: total,
+      cveCount: (p['findings'] as num?)?.toInt() ?? state.cveCount,
+      // The phase labels the engine sends at the start and the end are not
+      // application names, so only keep one once the target list exists.
+      current: total > 0 ? detail : null,
+    );
+  }
+
+  void _onEvent(Map<String, dynamic> e) {
+    if (e['type'] != 'job_finished') return;
+    final data = (e['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    if (data['job_id'] != state.jobId) return;
+    _loadCompletedJob(data['job_id'] as String);
+  }
+
+  /// Pulls the persisted job: the per-application findings were written as the
+  /// scan went, so a cancelled job still shows everything it checked.
+  Future<void> _loadCompletedJob(String jobId) async {
+    try {
+      final res = await ref
+          .read(engineIpcProvider)
+          .request('job.get', {'job_id': jobId});
+      final map = (res as Map).cast<String, dynamic>();
+      final job = (map['job'] as Map).cast<String, dynamic>();
+      final findings = (map['findings'] as List? ?? [])
+          .map((f) => SoftwareVulns.fromJson((f as Map).cast<String, dynamic>()))
+          .toList();
+      state = VulnState(
+        results: findings,
+        jobId: jobId,
+        jobState: job['state'] as String?,
+        pct: 100,
+        total: (job['total'] as num?)?.toInt() ?? 0,
+        checked: (job['processed'] as num?)?.toInt() ?? 0,
+        cveCount: findings.fold<int>(
+            0, (sum, item) => sum + item.vulnerabilities.length),
+        current: null,
+      );
+    } catch (e) {
+      state = VulnState(
+        results: state.results,
+        jobId: state.jobId,
+        jobState: state.jobState,
+        error: 'cannot load job $jobId: $e',
+      );
+    }
+  }
+
+  Future<void> stop() async {
+    final id = state.jobId;
+    if (id == null) return;
+    try {
+      await ref.read(engineIpcProvider).request('job.cancel', {'job_id': id});
+    } catch (_) {
+      // The job may have finished between the tap and the request.
     }
   }
 }
@@ -39,12 +180,27 @@ Color cvssColor(double score) {
   return AppColors.muted;
 }
 
-class VulnScannerScreen extends ConsumerWidget {
+class VulnScannerScreen extends ConsumerStatefulWidget {
   const VulnScannerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(vulnProvider);
+  ConsumerState<VulnScannerScreen> createState() => _VulnScannerScreenState();
+}
+
+class _VulnScannerScreenState extends ConsumerState<VulnScannerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // A scan may already be running (engine restart, or the service resuming
+      // a job) — show its live progress instead of an idle screen.
+      ref.read(vulnProvider.notifier).attachRunningJob();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final st = ref.watch(vulnProvider);
 
     return Column(
       children: [
@@ -58,10 +214,20 @@ class VulnScannerScreen extends ConsumerWidget {
                     fontWeight: FontWeight.w800)),
             const Spacer(),
             FilledButton.icon(
-              onPressed: () => ref.read(vulnProvider.notifier).scan(),
+              onPressed: st.scanning
+                  ? null
+                  : () => ref.read(vulnProvider.notifier).scan(),
               icon: const Icon(Icons.radar, size: 18),
               label: Text(context.tr('vulns.scan')),
             ),
+            if (st.scanning) ...[
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => ref.read(vulnProvider.notifier).stop(),
+                icon: const Icon(Icons.stop, size: 18),
+                label: Text(context.tr('vulns.cancel')),
+              ),
+            ],
           ]),
         ),
         Padding(
@@ -74,31 +240,115 @@ class VulnScannerScreen extends ConsumerWidget {
             ),
           ),
         ),
-        Expanded(
-          child: async.when(
-            data: (items) => ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                for (final item in items) _SoftwareCard(item: item),
-              ],
-            ),
-            loading: () => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
-                  Text(context.tr('vulns.loading'),
-                      style: TextStyle(color: AppColors.muted)),
-                ],
-              ),
-            ),
-            error: (e, _) => Center(
-              child: Text('$e', style: TextStyle(color: AppColors.red)),
+        if (st.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(st.error!,
+                  style: TextStyle(color: AppColors.orange, fontSize: 12)),
             ),
           ),
+        if (st.scanning) _VulnProgress(st: st),
+        if (st.cancelled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(context.tr('vulns.cancelled'),
+                  style: TextStyle(color: AppColors.orange, fontSize: 12)),
+            ),
+          ),
+        Expanded(
+          child: st.scanning && st.results.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(context.tr('vulns.loading'),
+                          style: TextStyle(color: AppColors.muted)),
+                    ],
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    for (final item in st.results) _SoftwareCard(item: item),
+                  ],
+                ),
         ),
       ],
+    );
+  }
+}
+
+/// Live job progress, driven by engine `progress` notifications (no polling).
+class _VulnProgress extends StatelessWidget {
+  const _VulnProgress({required this.st});
+  final VulnState st;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = st.pct.clamp(0, 100);
+    // Built here, not inline: the copy goes through context.tr (and the i18n
+    // lint requires any literal inside Text(...) to be interpolation only).
+    final queue = st.total > 0
+        ? context
+            .tr('vulns.progress')
+            .replaceAll('{done}', '${st.checked}')
+            .replaceAll('{total}', '${st.total}')
+        : context.tr('vulns.loading');
+    final cves = context
+        .tr('vulns.cvesSoFar')
+        .replaceAll('{count}', '${st.cveCount}');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.radar, size: 16, color: AppColors.cyan),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                st.current != null
+                    ? context
+                        .tr('vulns.current')
+                        .replaceAll('{app}', st.current!)
+                    : context.tr('vulns.loading'),
+                style: TextStyle(color: AppColors.text, fontSize: 12.5),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('$pct%',
+                style: AppTheme.mono(size: 12, color: AppColors.cyan)),
+          ]),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: st.total > 0 ? pct / 100 : null,
+              minHeight: 6,
+              backgroundColor: AppColors.background,
+              valueColor: AlwaysStoppedAnimation(AppColors.cyan),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$queue · $cves',
+            style: AppTheme.mono(size: 10, color: AppColors.muted),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,9 +1,14 @@
-﻿{
+{
   "vulns.cache": "CACHE",
+  "vulns.cancel": "Cancel",
+  "vulns.cancelled": "Scan cancelled — showing what was checked.",
   "vulns.count": "{count} CVEs",
+  "vulns.current": "Checking {app}",
+  "vulns.cvesSoFar": "{count} CVEs found so far",
   "vulns.cvss": "CVSS {score}",
-  "vulns.hint": "Matches installed software against NVD (cached offline). First scan is rate-limited (~6.5 s per app).",
+  "vulns.hint": "Matches installed software against NVD (cached offline). The first scan is rate-limited (~6.5 s per app) and runs as a cancellable job.",
   "vulns.live": "LIVE",
-  "vulns.loading": "Querying NVD / reading cache…",
+  "vulns.loading": "Querying NVD / reading cache...",
+  "vulns.progress": "{done} of {total} applications",
   "vulns.scan": "NVD Scan"
 }

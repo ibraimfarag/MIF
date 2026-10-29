@@ -326,6 +326,47 @@ mod tests {
     }
 
     #[test]
+    /// A cancelled vuln scan must not sit through the 6.5 s NVD pause: that is
+    /// the difference between "cancel" and "cancel after the next step".
+    #[test]
+    fn vuln_scan_pause_is_interrupted_by_cancel() {
+        use std::sync::atomic::AtomicBool;
+        use std::time::{Duration, Instant};
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let cancelled = AtomicBool::new(true);
+        let start = Instant::now();
+        rt.block_on(crate::vulns::pause(
+            Duration::from_secs(6),
+            Some(&cancelled),
+        ));
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "pause ignored the cancel flag: {:?}",
+            start.elapsed()
+        );
+
+        let running = AtomicBool::new(false);
+        let start = Instant::now();
+        rt.block_on(crate::vulns::pause(
+            Duration::from_millis(300),
+            Some(&running),
+        ));
+        assert!(start.elapsed() >= Duration::from_millis(250));
+    }
+
+    #[test]
+    fn vuln_scan_progress_is_bounded() {
+        use crate::vulns::pct;
+        assert_eq!(pct(0, 0), 0, "an empty target list must not divide by zero");
+        assert_eq!(pct(1, 4), 25);
+        assert_eq!(pct(4, 4), 100);
+        assert_eq!(pct(9, 4), 100, "progress never exceeds 100 %");
+    }
+
+    #[test]
     fn vulnerability_annotation_marks_only_exploited_cves() {
         use crate::storage::sqlite::KevRow;
         use crate::vulns::{Vulnerability, annotate_kev};

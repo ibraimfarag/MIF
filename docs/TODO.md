@@ -11,8 +11,8 @@
 >
 > Last updated: 2026-10-30 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
-> pipe concurrency) and P3c1 (intel source registry, D-012) done · **next:
-> P3c2 (vulnerability scan as a job) then P3c3 (Intel screen)**, P1.5
+> pipe concurrency), P3c1 (intel source registry, D-012) and P3c2 (vulnerability
+> scan as a cancellable job) done · **next: P3c3 (Intel screen)**, then P1.5
 > (single-elevation helper), P4 packaging, P5 documentation/hardening, P6 QA
 > harness. README is written; the app runs unelevated and was verified
 > end-to-end on a real machine.
@@ -114,7 +114,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3e** | Third real-run bug sweep: concurrent pipe dispatch, heartbeat only when idle, vuln-scan deadline | **done** |
 | **P3c1** | Intel source registry: per-source state, backoff/next-due, DNS-blocklist domains, CISA KEV catalog | **done** |
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
-| P3c2 | Vulnerability scan as a cancellable job with progress (UI + engine) | planned |
+| **P3c2** | Vulnerability scan as a cancellable job with live progress | **done** |
 | P3c3 | Dedicated Intel/Sync screen with per-source results, last errors and on-demand NVD row | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
@@ -122,6 +122,29 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **P3c2 — the Vulnerabilities screen was a spinner you could not cancel**
+  - Symptom: `vuln.scan` was one blocking RPC covering NVD lookups plus a 6.5 s
+    rate-limit pause per application, so a cold scan left the screen spinning
+    for minutes with no progress, no cancel and no way to see what had already
+    been checked.
+  - Fix: `vuln.scan.start` returns a `job_id` immediately and the scan runs as a
+    durable job (`kind: vuln_scan`): per-application results are written to
+    `job_findings` as it goes, `progress` notifications carry
+    `pct`/`current app`/`checked of total`/CVEs so far, and `job.cancel` stops it
+    within 200 ms because the rate-limit pause is sliced and re-checks the flag.
+    The screen shows a progress card with a Stop button, re-attaches to a job
+    that outlived the window, and renders whatever was persisted even for a
+    cancelled run. The blocking `vuln.scan` stays for probes. New i18n keys in
+    both languages; the project's first widget test covers this flow (start calls
+    `vuln.scan.start` and never the blocking RPC, progress is matched by job id,
+    Stop calls `job.cancel`, the terminal event renders the persisted findings).
+  - Evidence (throwaway engine): `vuln.scan.start` answered in **0.06 s** with a
+    job id; live notifications were `pct=0 'collecting software inventory'` then
+    `pct=25 '7-Zip 23.01' checked=1/4 findings=1`; cancelling at 1.6 s produced
+    `state=cancelled` + `job_finished` within 0.1 s, and `job.get` afterwards
+    returned `state=cancelled, total=4, processed=1` with the one application it
+    managed to check (including `CVE-2025-0411 known_exploited=true`). `cargo
+    test` 29/29, `flutter test` 26/26, both analyzers/clippy clean.
 - **P3c1 — the intel pipeline could not tell one dead feed from another (it was all dead)**
   - Symptom: the sync chip always showed "never synced" and `sync.now` returned
     `HTTP 410 Gone`. The default URLhaus export is gone: abuse.ch now requires an
@@ -506,7 +529,7 @@ money (P4 signing certificate).
 | HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
-| MED | `vuln.scan` is a blocking RPC, not a job: no progress, no cancel, and a cold scan keeps the screen on a spinner for minutes (P3c2 job-ifies it) | `vulns/mod.rs`, `vuln_scanner_screen.dart` |
+| LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |

@@ -1,9 +1,14 @@
-﻿{
+{
   "vulns.cache": "كاش",
+  "vulns.cancel": "إلغاء",
+  "vulns.cancelled": "الفحص اتلغى — بنعرض اللي اتفحص.",
   "vulns.count": "{count} ثغرة",
+  "vulns.current": "بيفحص {app}",
+  "vulns.cvesSoFar": "{count} ثغرة لحد دلوقتي",
   "vulns.cvss": "CVSS {score}",
-  "vulns.hint": "بيقارن البرامج المثبتة بقاعدة NVD (مع كاش أوفلاين). أول فحص محدود السرعة (~6.5 ثانية للبرنامج).",
+  "vulns.hint": "بيقارن البرامج المثبتة بقاعدة NVD (مع كاش أوفلاين). أول فحص محدود السرعة (~6.5 ثانية للبرنامج) وبيشتغل كمهمة تقدر تلغيها.",
   "vulns.live": "مباشر",
-  "vulns.loading": "بيسأل NVD / بيقرأ الكاش…",
+  "vulns.loading": "بيسأل NVD / بيقرأ الكاش...",
+  "vulns.progress": "{done} من {total} برنامج",
   "vulns.scan": "فحص NVD"
 }

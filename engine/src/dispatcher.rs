@@ -89,7 +89,41 @@ impl Dispatcher {
                     Some(json!({"status": "success", "message": "Outbound traffic allowed"}))
                 }
             }
+            "vuln.scan.start" => {
+                info!("Starting vulnerability scan job of {:?}", req.params);
+                let max_apps = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("max_apps"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10) as usize;
+                // Returns immediately: the scan runs as a durable job (NVD's
+                // rate limit makes it minutes long) and reports through
+                // `progress` / `job_finished`.
+                match crate::vulns::start_scan(max_apps, tokio::runtime::Handle::current()) {
+                    Ok(job_id) => Some(json!({
+                        "job_id": job_id,
+                        "state": "running",
+                        "max_apps": max_apps,
+                    })),
+                    Err(e) => {
+                        error!("vuln.scan.start failed: {e:#}");
+                        return JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            result: None,
+                            error: Some(json!(JsonRpcError {
+                                code: -32000,
+                                message: format!("vuln.scan.start: {e:#}"),
+                                data: None,
+                            })),
+                            id: req.id,
+                        };
+                    }
+                }
+            }
             "vuln.scan" => {
+                // Blocking variant, kept for probes and scripts; the UI uses
+                // `vuln.scan.start` so it can show progress and cancel.
                 info!("Running vulnerability scan...");
                 let max_apps = req
                     .params
