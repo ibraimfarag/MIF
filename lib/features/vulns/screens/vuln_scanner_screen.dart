@@ -17,9 +17,12 @@ class VulnNotifier extends Notifier<AsyncValue<List<SoftwareVulns>>> {
   Future<void> scan({int maxApps = 10}) async {
     state = const AsyncValue.loading();
     try {
-      final res = await ref
-          .read(engineIpcProvider)
-          .request('vuln.scan', {'max_apps': maxApps});
+      final res = await ref.read(engineIpcProvider).request(
+          'vuln.scan', {'max_apps': maxApps},
+          // NVD's public limit is 5 requests / 30 s and the engine waits 6.5 s
+          // between applications, so a cold scan is minutes, not seconds. The
+          // request timeout has to outlive the work it is waiting for.
+          const Duration(minutes: 10));
       state = AsyncValue.data((res as List)
           .map((v) => SoftwareVulns.fromJson(v as Map<String, dynamic>))
           .toList());

@@ -198,10 +198,17 @@ class EngineIpc {
   }
 
   /// Spec: heartbeat `ping` every 15 s — a missed reply triggers reconnect.
+  ///
+  /// Only probed when nothing else is in flight: a vulnerability scan or an
+  /// update download legitimately keeps the engine busy for minutes, and a
+  /// ping stuck behind it is not proof the engine died. Killing the connection
+  /// there is what surfaced as `engine connection lost: heartbeat failed` on
+  /// the Vulnerabilities screen.
   void _startHeartbeat() {
     _heartbeat?.cancel();
     _heartbeat = Timer.periodic(const Duration(seconds: 15), (_) async {
       if (_pipe == null || _disposed) return;
+      if (_pending.isNotEmpty) return;
       try {
         final res = await request('ping').timeout(const Duration(seconds: 5));
         if (res != 'pong') _handleDisconnect('heartbeat lost');
@@ -212,7 +219,13 @@ class EngineIpc {
   }
 
   /// Sends a whitelisted JSON-RPC command and awaits the matching response.
-  Future<dynamic> request(String method, [Map<String, dynamic>? params]) async {
+  ///
+  /// [timeout] is per call because a few commands are slow by design (a cold
+  /// NVD vulnerability scan spends ~6.5 s per application on the public rate
+  /// limit); everything else keeps the 120 s default.
+  Future<dynamic> request(String method,
+      [Map<String, dynamic>? params,
+      Duration timeout = const Duration(seconds: 120)]) async {
     final ok = await ensureRunning();
     if (!ok) throw EngineException('engine not running');
     final pipe = _pipe;
@@ -228,7 +241,7 @@ class EngineIpc {
     if (params != null) body['params'] = params;
     pipe.send(jsonEncode(body));
     try {
-      return await completer.future.timeout(const Duration(seconds: 120));
+      return await completer.future.timeout(timeout);
     } on TimeoutException {
       _pending.remove(id);
       throw EngineException('engine request timed out: $method');

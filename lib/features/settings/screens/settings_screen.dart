@@ -492,7 +492,11 @@ class _UpdatePanelState extends ConsumerState<_UpdatePanel> {
       _error = null;
     });
     try {
-      await ref.read(engineIpcProvider).request('update.download');
+      // A release ZIP can take minutes on a slow line; the default 120 s
+      // deadline would abandon the wait while the engine keeps downloading.
+      await ref
+          .read(engineIpcProvider)
+          .request('update.download', null, const Duration(minutes: 10));
       await ref.read(engineIpcProvider).request('update.apply');
       if (!mounted) return;
       messenger.showSnackBar(

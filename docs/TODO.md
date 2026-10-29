@@ -10,10 +10,11 @@
 > rewrite history — append.
 >
 > Last updated: 2026-10-29 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
-> update flow, sticky data dir) and the P3d real-run sweep (Defender PUA) done ·
-> **next: P1.5 (single-elevation helper)**, then P4 packaging, P5
-> documentation/hardening, P6 QA harness. README is written; the app runs
-> unelevated and was verified end-to-end on a real machine.
+> update flow, sticky data dir) and the P3d/P3e real-run sweeps (Defender
+> checks, pipe concurrency) done · **next: P1.5 (single-elevation helper)**,
+> then P4 packaging, P5 documentation/hardening, P6 QA harness. README is
+> written; the app runs unelevated and was verified end-to-end on a real
+> machine.
 
 ---
 
@@ -109,6 +110,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3b** | Sticky data directory with a real write test (D-011) | **done — `9ad3ad9`** |
 | **README** | Bilingual, honest README (what it does / does not, requirements, data, privacy, build, testing) | **done** |
 | **P3d** | Second real-run bug sweep: Defender PUA false positive, read-only snapshot, verified apply | **done** |
+| **P3e** | Third real-run bug sweep: concurrent pipe dispatch, heartbeat only when idle, vuln-scan deadline | **done** |
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
 | P3c | Incremental intel pipeline + dedicated sync screen; default update manifest URL | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
@@ -117,6 +119,26 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **P3e — the Vulnerabilities screen could not survive its own scan**
+  - Symptom: pressing Scan showed `EngineException(-1): engine connection
+    lost: heartbeat failed` while the engine was alive and answering a second
+    pipe client immediately.
+  - Cause: `handle_client` awaited every request inside the connection's read
+    loop, so `vuln.scan` (NVD lookups plus a 6.5 s rate-limit sleep per
+    application — minutes for ten apps) also blocked that connection's `ping`.
+    The UI's 15 s heartbeat gives up after 5 s, tears the connection down and
+    fails every in-flight request with "connection lost", so the scan died as
+    collateral damage rather than the engine falling over.
+  - Fix: the pipe dispatches each request in its own task (responses carry
+    their `id`, so ordering does not matter); `Storage::open` now sets
+    `busy_timeout=5000` because two handlers can write at once; the heartbeat
+    only probes when nothing is in flight; and `vuln.scan` gets a 10-minute
+    client deadline instead of the 120 s default, since the work really is
+    minutes on NVD's public rate limit.
+  - Evidence: live test against a throwaway engine on `\\.\pipe\mics_test` —
+    with `vuln.scan` in flight the `ping` was answered in **81 ms** (it used to
+    be queued behind the scan); `cargo test` 16/16, `cargo clippy` clean,
+    `flutter analyze` clean, `flutter test` 24/24.
 - **P3d — second real-run bug sweep: the Defender checks that guessed instead of reading**
   - **False positive.** "Defender PUA Protection — *PUA protection is not
     explicitly enabled*" was reported on a machine where PUA blocking was
@@ -458,6 +480,7 @@ money (P4 signing certificate).
 | HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
+| MED | `vuln.scan` is a blocking RPC, not a job: no progress, no cancel, and a cold scan keeps the screen on a spinner for minutes (job-ifying it belongs with P3c's sync screen) | `vulns/mod.rs`, `vuln_scanner_screen.dart` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |

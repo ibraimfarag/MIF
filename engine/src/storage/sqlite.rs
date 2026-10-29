@@ -17,6 +17,10 @@ impl Storage {
             .context("open mics.db")?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
+             -- Requests are handled concurrently, so two writers can meet here;
+             -- without this the loser fails with 'database is locked' instead
+             -- of waiting a few milliseconds.
+             PRAGMA busy_timeout=5000;
              CREATE TABLE IF NOT EXISTS cve_cache (
                 cve_id TEXT PRIMARY KEY,
                 cvss REAL,

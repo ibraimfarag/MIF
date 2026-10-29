@@ -120,11 +120,18 @@ async fn handle_client(stream: NamedPipeServer) -> Result<()> {
         }
         match serde_json::from_str::<JsonRpcRequest>(trimmed) {
             Ok(req) => {
-                let resp = crate::dispatcher::Dispatcher::handle_request(req).await;
-                if let Ok(text) = serde_json::to_string(&resp)
-                    && out_tx.send(text).is_err() {
-                        break;
+                // Never let one request block the connection: a vulnerability
+                // scan talks to NVD for minutes and the UI's 15 s heartbeat
+                // runs on this same pipe, so a ping queued behind it was read
+                // as "engine connection lost". Responses carry their `id`, so
+                // the client does not care about ordering.
+                let tx = out_tx.clone();
+                tokio::spawn(async move {
+                    let resp = crate::dispatcher::Dispatcher::handle_request(req).await;
+                    if let Ok(text) = serde_json::to_string(&resp) {
+                        let _ = tx.send(text);
                     }
+                });
             }
             Err(e) => {
                 // JSON-RPC 2.0 parse error: keep the connection alive.
