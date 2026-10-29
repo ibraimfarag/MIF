@@ -54,4 +54,67 @@ mod tests {
         assert!(!r.matched);
         assert_eq!(r.command, "");
     }
+
+    #[test]
+    fn pua_live_preference_counts_when_no_policy_is_set() {
+        use crate::platform::windows::collectors::pua_effective;
+        // The regression: the audit read the Group Policy key alone, so a
+        // machine with PUA blocking enabled through Windows Security was
+        // reported as "not explicitly enabled" and offered a repair.
+        assert_eq!(pua_effective(None, Some(1)), Some(1));
+        assert_eq!(pua_effective(None, Some(0)), Some(0));
+        // A policy outranks the local preference store.
+        assert_eq!(pua_effective(Some(0), Some(1)), Some(0));
+        assert_eq!(pua_effective(Some(2), Some(1)), Some(2));
+        // Nothing anywhere: Defender's built-in default, reported as unset.
+        assert_eq!(pua_effective(None, None), None);
+    }
+
+    #[test]
+    fn pua_verdict_only_passes_blocking() {
+        use crate::platform::windows::collectors::pua_verdict;
+        use crate::platform::traits::FindingStatus;
+        assert!(matches!(
+            pua_verdict(Some(1)),
+            (FindingStatus::Secure, _, false)
+        ));
+        // Audit mode reports unwanted apps but never blocks them.
+        assert!(matches!(
+            pua_verdict(Some(2)),
+            (FindingStatus::Warning, _, true)
+        ));
+        assert!(matches!(
+            pua_verdict(Some(0)),
+            (FindingStatus::Warning, _, true)
+        ));
+        assert!(matches!(
+            pua_verdict(None),
+            (FindingStatus::Warning, _, true)
+        ));
+    }
+
+    #[test]
+    fn unreadable_defender_status_is_not_a_false_alarm() {
+        use crate::platform::windows::collectors::parse_mp_bool;
+        // A refused WMI query exits 0 with empty stdout: that used to be read as
+        // "real-time protection is DISABLED" (Critical) on a healthy machine.
+        assert_eq!(parse_mp_bool(""), None);
+        assert_eq!(parse_mp_bool("Access is denied\n"), None);
+        assert_eq!(parse_mp_bool("True"), Some(true));
+        assert_eq!(parse_mp_bool(" False "), Some(false));
+    }
+
+    #[test]
+    fn pua_snapshot_restores_the_exact_state() {
+        use crate::hardening::{parse_pua_state, pua_rollback};
+        // The snapshot must never write: it only reports what is there.
+        assert_eq!(parse_pua_state("pua=1\n").unwrap(), Some(1));
+        assert_eq!(parse_pua_state("pua=absent").unwrap(), None);
+        assert!(parse_pua_state("noise only").is_err());
+        assert!(pua_rollback(Some(0)).contains("/d 0 /f"));
+        assert!(pua_rollback(Some(2)).contains("/d 2 /f"));
+        // Nothing was set before, so the rollback removes the value instead of
+        // guessing a default.
+        assert!(pua_rollback(None).contains("reg delete"));
+    }
 }

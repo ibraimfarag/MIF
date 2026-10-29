@@ -148,7 +148,17 @@ fn snapshot_dir() -> PathBuf {
 /// Applies one hardening fix. Snapshots the touched state first; rollback
 /// restores exactly what was snapshotted (never guesses).
 pub async fn apply(action_id: &str) -> Result<String> {
-    let snap = snapshot_current(action_id)?;
+    // The snapshot runs unelevated on purpose — recording a value must never
+    // raise a UAC prompt — but a few of these reads are admin-only, so a
+    // permission failure there gets the same actionable wording as the apply
+    // path instead of a raw CMDlet dump.
+    let snap = snapshot_current(action_id).map_err(|e| {
+        anyhow::anyhow!(
+            "{e}\nIf the message above mentions permissions, reading this setting needs \
+             administrator rights: use \"Relaunch as administrator\" in Settings (or start \
+             MI CS as administrator), then retry."
+        )
+    })?;
     let storage = Storage::open()?;
     storage.save_hardening_snapshot(action_id, &snap)?;
 
@@ -198,17 +208,31 @@ pub async fn apply(action_id: &str) -> Result<String> {
     } else {
         ps_run(&cmd)
             .map(|_| ())
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "{e}\nIf the message above mentions permissions, MI CS is running without \
-                     administrator rights."
-                )
-            })
+            .map_err(|e| anyhow::anyhow!("{e}\n{}", permission_hint(action_id)))
     };
     match result {
-        Ok(()) => {
+        Ok(()) if action_id == "defender_scan_quick" || applied_state(action_id) => {
             storage.mark_hardening_applied(action_id, true)?;
             Ok(snap)
+        }
+        // Exiting 0 is not proof: a policy override, tamper protection or
+        // another security product can put the old value straight back. Say so
+        // instead of reporting a fix that a re-scan would contradict.
+        Ok(()) => {
+            storage.mark_hardening_applied(action_id, false)?;
+            let reason = if action_id == "pua_protection" {
+                "Defender's tamper protection reverts changes to its own preferences, and a \
+                 Group Policy value outranks anything MI CS writes — change it in Windows \
+                 Security (Virus & threat protection → Manage settings) or by whoever set \
+                 the policy"
+            } else {
+                "a policy or another security product on this machine is putting the old \
+                 value back"
+            };
+            anyhow::bail!(
+                "the command completed but Windows still reports this setting as unchanged: \
+                 {reason}."
+            )
         }
         Err(e) => {
             storage.mark_hardening_applied(action_id, false)?;
@@ -217,11 +241,81 @@ pub async fn apply(action_id: &str) -> Result<String> {
     }
 }
 
+/// The "so what do I do?" half of a permission failure. Defender is the one
+/// setting where a missing administrator token is not the only possible
+/// refusal, so it gets its own wording instead of a guess that is wrong half
+/// the time.
+fn permission_hint(action_id: &str) -> &'static str {
+    if action_id == "pua_protection" {
+        "If the message above mentions permissions, MI CS is running without administrator \
+         rights, or Defender's tamper protection refused the change. The same switch lives in \
+         Windows Security → Virus & threat protection → Manage settings (\"Potentially unwanted \
+         app blocking\"); turn tamper protection off temporarily to let MI CS apply it."
+    } else {
+        "If the message above mentions permissions, MI CS is running without administrator rights."
+    }
+}
+
+/// Re-reads the same state the UI shows, so "the command exited 0" can never be
+/// mistaken for "the setting changed".
+fn applied_state(action_id: &str) -> bool {
+    list_actions()
+        .into_iter()
+        .find(|a| a.id == action_id)
+        .map(|a| a.applied)
+        .unwrap_or(true)
+}
+
+/// Read-only PowerShell that reports Defender's effective PUA state (policy
+/// first, then the local preference store — the same precedence the audit
+/// check uses) as `pua=<0|1|2|absent>`.
+const PUA_STATE_SCRIPT: &str = r"$p=(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine' -ErrorAction SilentlyContinue).PUAProtection; $l=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender' -ErrorAction SilentlyContinue).PUAProtection; $v=if($null -ne $p){$p}elseif($null -ne $l){$l}else{'absent'}; Write-Output ('pua=' + $v)";
+
+/// Extracts the value `PUA_STATE_SCRIPT` printed. `None` means Defender had
+/// nothing set there, which a rollback has to reproduce exactly (remove the
+/// value) rather than guess a default.
+pub(crate) fn parse_pua_state(output: &str) -> Result<Option<u32>> {
+    for line in output.lines() {
+        let Some(value) = line.trim().strip_prefix("pua=") else {
+            continue;
+        };
+        if value.eq_ignore_ascii_case("absent") {
+            return Ok(None);
+        }
+        return value
+            .parse::<u32>()
+            .map(Some)
+            .with_context(|| format!("unexpected PUAProtection value {value:?}"));
+    }
+    anyhow::bail!(
+        "could not read the current PUA protection state: {}",
+        output.trim()
+    )
+}
+
+/// The command that restores exactly the state a snapshot recorded: the same
+/// registry value, or its absence when nothing was set.
+pub(crate) fn pua_rollback(value: Option<u32>) -> String {
+    const KEY: &str = r"HKLM\SOFTWARE\Microsoft\Windows Defender";
+    match value {
+        Some(v) => format!("reg add \"{KEY}\" /v PUAProtection /t REG_DWORD /d {v} /f"),
+        None => format!("reg delete \"{KEY}\" /v PUAProtection /f"),
+    }
+}
+
 /// Captures the exact values a rollback would restore, as a PowerShell
 /// script that re-applies the OLD state.
 fn snapshot_current(action_id: &str) -> Result<String> {
+    // PUA state is *read* here — never written back. The previous script
+    // recorded the old value by calling `Set-MpPreference` itself, which needs
+    // an elevated token and therefore made every repair fail with a raw
+    // PowerShell permission error before it could even reach the elevation
+    // path below.
+    if action_id == "pua_protection" {
+        let out = ps_run(PUA_STATE_SCRIPT)?;
+        return Ok(pua_rollback(parse_pua_state(&out)?));
+    }
     let script = match action_id {
-        "pua_protection" => "Set-MpPreference -PUAProtection (Get-MpPreference).PUAProtection",
         "smbv1_off" => {
             "$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10' -ErrorAction SilentlyContinue).Start; \"Set-SmbServerConfiguration -EnableSMB1Protocol `$s -Force; reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\\\" /v Start /t REG_DWORD /d $m /f\""
         }

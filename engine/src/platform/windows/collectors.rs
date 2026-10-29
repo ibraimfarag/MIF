@@ -167,40 +167,37 @@ impl PlatformCollectors for WindowsCollectors {
                 false,
             )),
             None => {
-                // Policy/live keys absent — ask Defender itself via PowerShell.
-                let ps = std::process::Command::new("powershell")
-                    .args(["-NoProfile", "-Command",
-                        "(Get-MpComputerStatus).RealTimeProtectionEnabled"])
-                    .output();
-                match ps {
-                    Ok(out) if out.status.success() => {
-                        let txt = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                        if txt == "True" {
-                            findings.push(finding(
-                                "Defender",
-                                "Real-time Protection",
-                                FindingStatus::Secure,
-                                Severity::Critical,
-                                "Real-time protection is enabled".to_string(),
-                                false,
-                            ));
-                        } else {
-                            findings.push(finding(
-                                "Defender",
-                                "Real-time Protection",
-                                FindingStatus::Vulnerable,
-                                Severity::Critical,
-                                "Windows Defender real-time protection is DISABLED".to_string(),
-                                true,
-                            ));
-                        }
-                    }
-                    _ => findings.push(finding(
+                // Policy/live keys absent — ask Defender itself. A refused WMI
+                // query still exits 0 with empty stdout, and reading that as
+                // "disabled" raised a Critical false alarm on a healthy machine;
+                // only a real boolean counts, everything else is honestly
+                // unknown.
+                match defender_rtp_state() {
+                    Some(true) => findings.push(finding(
+                        "Defender",
+                        "Real-time Protection",
+                        FindingStatus::Secure,
+                        Severity::Critical,
+                        "Real-time protection is enabled".to_string(),
+                        false,
+                    )),
+                    Some(false) => findings.push(finding(
+                        "Defender",
+                        "Real-time Protection",
+                        FindingStatus::Vulnerable,
+                        Severity::Critical,
+                        "Windows Defender real-time protection is DISABLED".to_string(),
+                        true,
+                    )),
+                    None => findings.push(finding(
                         "Defender",
                         "Real-time Protection",
                         FindingStatus::Unknown,
                         Severity::High,
-                        "Real-time protection state not readable (may be managed by another AV)".to_string(),
+                        "Real-time protection state not readable (Defender's status API \
+                         refused the query — another security product may own the machine, \
+                         or MI CS may need administrator rights)"
+                            .to_string(),
                         false,
                     )),
                 }
@@ -218,26 +215,21 @@ impl PlatformCollectors for WindowsCollectors {
             true,
         )) }
 
-        // PUA protection: 1 = block, 0/absent = audit or off.
-        const PUA: &str = r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine";
-        match read_dword(HKEY_LOCAL_MACHINE, PUA, "PUAProtection") {
-            Some(1) => findings.push(finding(
-                "Defender",
-                "PUA Protection",
-                FindingStatus::Secure,
-                Severity::Medium,
-                "Potentially unwanted app blocking is enabled".to_string(),
-                false,
-            )),
-            _ => findings.push(finding(
-                "Defender",
-                "PUA Protection",
-                FindingStatus::Warning,
-                Severity::Medium,
-                "PUA protection is not explicitly enabled".to_string(),
-                true,
-            )),
-        }
+        // PUA (potentially unwanted app) blocking, in Defender's own enum:
+        // 0 = off, 1 = block, 2 = audit. Reading only the Group Policy key (as
+        // this check used to) reported "not explicitly enabled" for a machine
+        // that had the setting on through the Windows Security toggle or
+        // Set-MpPreference, and then offered a repair that could not change
+        // anything — a false positive with a broken fix attached.
+        let (pua_status, pua_detail, pua_fixable) = pua_verdict(pua_state());
+        findings.push(finding(
+            "Defender",
+            "PUA Protection",
+            pua_status,
+            Severity::Medium,
+            pua_detail,
+            pua_fixable,
+        ));
 
         // Defender exclusions are a classic malware persistence trick — enumerate them all.
         const EXCL: &str = r"SOFTWARE\Microsoft\Windows Defender\Exclusions";
@@ -830,13 +822,84 @@ impl PlatformCollectors for WindowsCollectors {
 
 // ---- state helpers used by the Hardening Center (mirror the audit checks) ----
 
+/// Defender's effective `PUAProtection` value: a Group Policy / MDM setting
+/// wins over Defender's local preference store, which is where the Windows
+/// Security switch and `Set-MpPreference -PUAProtection` persist the choice —
+/// the same precedence the real-time protection check above already applies,
+/// and the one `Get-MpPreference` reports.
+pub fn pua_state() -> Option<u32> {
+    pua_effective(
+        read_dword(HKEY_LOCAL_MACHINE, PUA_POLICY_KEY, "PUAProtection"),
+        read_dword(HKEY_LOCAL_MACHINE, PUA_LIVE_KEY, "PUAProtection"),
+    )
+}
+
+/// Group Policy / MDM (`HKLM\SOFTWARE\Policies\...`) outranks the local
+/// preference store (`HKLM\SOFTWARE\Microsoft\Windows Defender`).
+pub fn pua_effective(policy: Option<u32>, live: Option<u32>) -> Option<u32> {
+    policy.or(live)
+}
+
+const PUA_POLICY_KEY: &str = r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine";
+const PUA_LIVE_KEY: &str = r"SOFTWARE\Microsoft\Windows Defender";
+
+/// Asks Defender for its real-time protection state; `Some` only when Defender
+/// actually answered with a boolean.
+pub(crate) fn defender_rtp_state() -> Option<bool> {
+    let mut command = std::process::Command::new("powershell");
+    command
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-MpComputerStatus).RealTimeProtectionEnabled",
+        ])
+        .stdin(std::process::Stdio::null());
+    // A console app started from a GUI process must not flash a console window.
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let out = command.output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_mp_bool(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// PowerShell prints booleans as `True`/`False`. Anything else — empty output
+/// from a denied WMI query (which still exits 0), a localised string, banner
+/// noise — is not an answer, and must not be turned into "protection is off".
+pub(crate) fn parse_mp_bool(stdout: &str) -> Option<bool> {
+    match stdout.trim().to_ascii_lowercase().as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
+/// Maps a `PUAProtection` value to the audit verdict: status, description and
+/// whether the fix button should be offered. Audit mode logs suspicious apps
+/// but never blocks them, so it is a warning, not a pass.
+pub fn pua_verdict(state: Option<u32>) -> (FindingStatus, &'static str, bool) {
+    match state {
+        Some(1) => (
+            FindingStatus::Secure,
+            "Potentially unwanted app blocking is enabled",
+            false,
+        ),
+        Some(2) => (
+            FindingStatus::Warning,
+            "PUA protection is in audit mode — unwanted apps are reported but not blocked",
+            true,
+        ),
+        _ => (
+            FindingStatus::Warning,
+            "PUA protection is not explicitly enabled",
+            true,
+        ),
+    }
+}
+
 impl WindowsCollectors {
     pub fn pua_enabled(&self) -> bool {
-        read_dword(
-            HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine",
-            "PUAProtection",
-        ) == Some(1)
+        pua_state() == Some(1)
     }
 
     pub fn smbv1_enabled(&self) -> bool {

@@ -9,9 +9,10 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-29 · P1, P2 (settings/i18n/sounds/theme) and P3 (badge +
-> update flow) done · **next: P1.5 (single-elevation helper)**, then P4 packaging,
-> P5 documentation/hardening, P6 QA harness. README is written; the app runs
+> Last updated: 2026-10-29 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> update flow, sticky data dir) and the P3d real-run sweep (Defender PUA) done ·
+> **next: P1.5 (single-elevation helper)**, then P4 packaging, P5
+> documentation/hardening, P6 QA harness. README is written; the app runs
 > unelevated and was verified end-to-end on a real machine.
 
 ---
@@ -34,13 +35,13 @@ Repo layout: Flutter app at **repo root** (`lib/`, `windows/`), engine in
 cd engine
 $env:YRX_REGENERATE_MODULES_RS = "false"     # yara-x build script writes into the cargo registry
 cargo build --release
-cargo test                                    # expected: 6 passed
+cargo test                                    # expected: 16 passed
 cargo clippy --release -- -D warnings         # expected: zero warnings
 
 # App
 cd ..
 flutter analyze --no-pub                      # expected: No issues found
-flutter test --no-pub                         # expected: 4 passed
+flutter test --no-pub                         # expected: 24 passed
 flutter build windows --release
 
 # Package the two binaries together (the app resolves mics-engine.exe beside itself)
@@ -107,6 +108,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3a** | Offline badge, sync status, update flow, unelevated UI, real error messages, no console windows (D-010) | **done — `8836402`** |
 | **P3b** | Sticky data directory with a real write test (D-011) | **done — `9ad3ad9`** |
 | **README** | Bilingual, honest README (what it does / does not, requirements, data, privacy, build, testing) | **done** |
+| **P3d** | Second real-run bug sweep: Defender PUA false positive, read-only snapshot, verified apply | **done** |
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
 | P3c | Incremental intel pipeline + dedicated sync screen; default update manifest URL | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
@@ -115,6 +117,54 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **P3d — second real-run bug sweep: the Defender checks that guessed instead of reading**
+  - **False positive.** "Defender PUA Protection — *PUA protection is not
+    explicitly enabled*" was reported on a machine where PUA blocking was
+    already on: the check read only the Group Policy key
+    (`…\Policies\Microsoft\Windows Defender\MpEngine\PUAProtection`) and ignored
+    Defender's own preference store (`…\Microsoft\Windows Defender\
+    PUAProtection`), which is where the Windows Security toggle and
+    `Set-MpPreference -PUAProtection` persist the choice. PUA state now resolves
+    policy first and then the live store — the same precedence the real-time
+    protection check already used, and what `Get-MpPreference` reports — so the
+    audit, the hardening card and `Get-MpPreference` finally agree. Audit mode
+    (2) is reported as a warning (reported, not blocked), not as a pass.
+  - **The repair itself failed before it could elevate.** Every click on Fix
+    returned `EngineException(-32000) … powershell failed: Set-MpPreference :
+    You don't have enough permissions to perform the requested operation`,
+    because `snapshot_current` recorded the old value by *calling
+    `Set-MpPreference`* — so the snapshot needed an elevated token, ran through
+    the unelevated PowerShell path, and the request died before it could reach
+    the `RunAs` fallback. The snapshot is strictly read-only now (registry
+    read — no WMI provider, works unelevated), and the rollback restores the
+    exact value the snapshot saw, removing the value when Defender had nothing
+    set instead of guessing its default. A snapshot that still needs
+    administrator rights now says so instead of dumping the raw CMDlet error.
+  - **A refused status query is not "protection is off".** The real-time
+    protection fallback asked `Get-MpComputerStatus` and checked only the exit
+    code — a denied WMI query exits 0 with empty stdout, so a healthy machine
+    was flagged **Critical: "real-time protection is DISABLED"** (seen live in
+    the sandboxed run, audit score 45). Only a real `True`/`False` answer counts
+    now; anything else is reported as *unknown* with the reason. That call also
+    flashed a console window (the only spawn that skipped `CREATE_NO_WINDOW`) —
+    fixed while there.
+  - **Exit code 0 is no longer treated as proof.** `hardening.apply` re-reads
+    the same state check the UI shows and now fails honestly if Windows still
+    reports the setting unchanged (a policy override or Defender tamper
+    protection putting the old value back); the PUA permission hint names
+    tamper protection and points at Virus & threat protection → Manage
+    settings, instead of blaming a missing administrator token alone.
+  - Evidence: `cargo test` 16/16 (four new tests: policy-vs-live precedence,
+    the verdict mapping, the exact rollback command, and "an empty Defender
+    answer is not a false alarm"), `cargo clippy` clean, `flutter analyze`
+    clean ("No issues found"), `flutter test` 24/24. Live `serve`-mode check: `audit.run` reports
+    PUA = `Secure` / `fix_available:false` (was `Warning` with a broken Fix
+    button) and real-time protection = `Unknown` instead of the false
+    Critical, and `hardening.list` agrees (`pua_protection applied=true`). On
+    the reference machine PUA is already blocking (`…\Microsoft\Windows Defender\
+    PUAProtection = 1`) while Tamper Protection is on (`Features\
+    TamperProtection = 5`), which is why the setting refused to be written
+    programmatically — and why the honest "unchanged" error matters.
 - **P4b — two icon designs, three files, no upscaling anywhere**
   - The shipping art is now vector: `assets/icons/task.svg` (taskbar, Alt-Tab,
     Explorer, title bar, tray) and `assets/icons/Desktop.svg` (desktop shortcut
@@ -407,6 +457,7 @@ money (P4 signing certificate).
 | HIGH | Admin-only fixes (firewall/hosts/hardening) need the user to press "Relaunch as administrator" until the single-elevation helper (P1.5) lands | `dispatcher.rs`, Settings |
 | HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
+| MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
