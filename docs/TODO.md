@@ -9,7 +9,10 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-28 · P1 + P2a + P2b(i18n/theme) done · next: sounds, P1.5 elevation.
+> Last updated: 2026-10-29 · P1, P2 (settings/i18n/sounds/theme) and P3 (badge +
+> update flow) done · **next: P1.5 (single-elevation helper)**, then P4 packaging,
+> P5 documentation/hardening, P6 QA harness. README is written; the app runs
+> unelevated and was verified end-to-end on a real machine.
 
 ---
 
@@ -87,20 +90,46 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ## 3. Where we are
 
+**Start here if you are new:** run the four checks in section 2, launch
+`build\windows\x64\runner\Release\mics_app.exe`, and read the Done log below.
+Everything that could be verified without administrator rights is done; the
+remaining work needs a UAC prompt you can click (P1.5) or a purchased certificate
+(P4).
+
 | Phase | Scope | State |
 |---|---|---|
 | P0 | Environment (Flutter/Rust) | done (pre-existing) |
 | **P1** | Pipe transport, single instance, resumable jobs, window corners, engine file log, decisions log | **done — `dcce43f`** |
-| **P2a** | Settings as the single source of truth + full Settings screen | **done — see Done log** |
-| **P1.5** | Single-elevation privileged helper (D-007) | **pending — needs one interactive UAC prompt, so it is scheduled for a session where the user is present** |
-| P2b | i18n split, sounds, theme polish | **next** |
-| P3 | App self-update channels, intel/CVE update paths, offline badge/sync screen | planned |
+| **P2a** | Settings as the single source of truth + full Settings screen (D-008) | **done — `341b57c`** |
+| **P2b** | Per-module i18n + live system theme (D-009) | **done — `98bd15b`** |
+| **P2c** | In-house sounds, engine + UI playback (D-004) | **done — `36572cd`** |
+| **P2d** | First real-run bug sweep (SMBv1 false positive, static layer cards, hang on UAC, mojibake) | **done — `747faf9`** |
+| **P3a** | Offline badge, sync status, update flow, unelevated UI, real error messages, no console windows (D-010) | **done — `8836402`** |
+| **P3b** | Sticky data directory with a real write test (D-011) | **done — `9ad3ad9`** |
+| **README** | Bilingual, honest README (what it does / does not, requirements, data, privacy, build, testing) | **done** |
+| **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
+| P3c | Incremental intel pipeline + dedicated sync screen; default update manifest URL | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
-| P5 | Threat model, integrity/anti-tamper, honest README + protection matrix | planned |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
 
+- **P3b — sticky data directory (last blocker for unelevated runs)**
+  - An unelevated engine still failed with *"attempt to write a readonly
+    database"*: `%PROGRAMDATA%\MICS` was writable as a folder, but the database
+    and its WAL sidecars had been created by a raised run and were read-only for
+    the user.
+  - Writability is now proven with a real `BEGIN IMMEDIATE` transaction plus
+    per-file append checks; the chosen directory is recorded in
+    `%LOCALAPPDATA%\MICS\.data-dir` and reused, so an elevated run and the
+    unelevated autostart can never disagree about where state lives (D-011).
+  - Verified: `mics-engine.exe scan --path …` runs unelevated against
+    `%LOCALAPPDATA%\MICS`, scans the files and reports the YARA match; the app
+    launches with no UAC, polls `sync.status` and completes an audit.
+  - Docs: bilingual, honest `README.md` (what it does / does **not** do,
+    requirements, data locations, privacy, five-layer matrix, build, testing,
+    troubleshooting) replaces the stub.
 - **P3a — updates, offline badge, sync status; elevation and data-dir fixes**
   - **Offline badge + intel freshness** in the title bar (`_IntelChip`): reads the
     engine's `sync.status` once a minute, shows Online/Offline and "intel 12m
@@ -245,8 +274,8 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | 7 | CVE/intel update paths | **partial** — NVD keyword search + cache; no incremental sync, no scheduler UI | P3 |
 | 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; light contrast audit still pending | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
-| 10 | README: what it does / does not + requirements | **todo P5** | `README.md` is still a stub |
-| 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter) | D-003; build legs in P4 |
+| 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
+| 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
 | 12 | Protection types | **todo P5** — one matrix doc: layer → protects against / does not | `docs/PROTECTION-MATRIX.md` |
 | 13 | Full test walk-through with a report | **todo P6** — two smoke tools exist; no feature-wide harness/report | P6 |
 | 14 | Malware corpus for testing | **deferred** — EICAR only, and only inside a VM lab | P6 (later) |
@@ -254,13 +283,18 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
 | 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; no SBOM/NOTICES/cost sheet | P4 |
-| 19 | Professional README | **todo P5** | — |
+| 19 | Professional README | **done** — see row 10 | `README.md` |
 | 20 | L5 wording vs reality (LLM) | **decided** — optional local LLM + templates; wording fix in P5 | D-005 |
 | 21 | Living TODO/handoff file | **done** — this file | — |
 
 ---
 
-## 5. Next up — P1.5 (elevation), then P2
+## 5. Next up — P1.5 (single elevation)
+
+Everything else in P2/P3 that could be verified without administrator rights is
+done (settings, i18n, sounds, theme, offline badge, update flow, transport,
+resumable jobs). What remains needs either one interactive UAC prompt (P1.5) or
+money (P4 signing certificate).
 
 ### P1.5 — one UAC prompt, publisher-attributed (D-007)
 - [ ] `docs/PRIVILEGED-OPS.md`: enumerate every admin operation (firewall
@@ -269,30 +303,19 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 - [ ] Windows service `MICSHelper` installed once (`sc create`) via a one-shot
       elevated helper; UI stays `asInvoker`.
 - [ ] Helper protocol over its own named pipe with an ACL limited to the
-      interactive user; every call logged to `%PROGRAMDATA%\MICS\logs\priv.log`.
+      interactive user; every call logged to the state folder's `logs\priv.log`.
 - [ ] Engine routes the privileged operations through the helper; remove the
       per-operation `Start-Process -Verb RunAs` calls in `firewall/mod.rs`,
-      `ids/mod.rs`, `hardening/mod.rs`.
-- [ ] Acceptance: enabling Default-Deny, SMBv1 off, and a hosts import in one
+      `ids/mod.rs`, `hardening/mod.rs`, and the "Relaunch as administrator" stop
+      gap in the Settings screen.
+- [ ] Acceptance: enabling Default-Deny, SMBv1 off and a hosts import in one
       session produces **one** UAC prompt during install and **zero** after.
 - Note: the prompt shows "MI CS" as publisher only with a trusted certificate
   (D-002) — until then it shows the helper's unsigned identity.
 
-### P2b — language, sounds, theme (settings are done, see Done log)
-- [x] `settings.json` in `%PROGRAMDATA%\MICS\` read by **both** UI and engine.
-- [x] Full Settings screen, 8 sections, every field persisted + validated.
-- [x] Fix: changing language/theme no longer wipes the other settings.
-- [x] i18n: `assets/i18n/<lang>/<module>.json` (16 modules) + loader that merges
-      namespaces + parity test + no-hardcoded-copy lint test.
-- [x] Extract every user-facing literal from the 13 screens (brand/legal/path
-      strings stay by design, listed in the lint test).
-- [x] Theme: `didChangePlatformBrightness` observer, so System mode follows a
-      live Windows theme switch.
-- [x] Sounds (D-004): in-house `assets/sounds/*.wav`, engine cue with the UI
-      closed, UI cues via `audioplayers` with volume/mute/DND, test button.
+### Leftovers from P2 (non-blocking)
 - [ ] Light-mode contrast audit (text/borders/severity colours) with screenshots.
-- [ ] Acceptance: `flutter analyze` clean, `flutter test` green, zero hardcoded
-      UI strings.
+- [ ] `docs/PROTECTION-MATRIX.md` (today the README carries the matrix).
 
 ---
 
@@ -357,10 +380,11 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
 | MED | `firewall` and `ids` still call `netsh` / elevated PowerShell **without a timeout** (hardening was fixed) — an unanswered UAC prompt can block those requests | `firewall/mod.rs`, `ids/mod.rs` |
-| MED | No offline badge / freshness indicator anywhere in the UI | shell |
+| MED | Offline badge/freshness exists in the title bar, but there is no dedicated sync screen with per-source results | `app_shell.dart` |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
-| LOW | `docs/` has no THREAT-MODEL yet; README is still a stub | `docs/`, `README.md` |
+| LOW | `docs/` has no THREAT-MODEL yet (the README carries the layer matrix) | `docs/` |
 | LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
+| LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);
