@@ -305,3 +305,47 @@ data directory that silently cannot be written is worse than a second location.
 (`data=...`) and in the README; the installer (P4) must create the machine-wide
 directory with the right ACL so (3) never triggers on a normal install.
 
+## D-012 — Intel is a registry of named sources, each with its own state and backoff
+
+**Context.** Until P3c the sync was one pass over two hard-coded URLs guarded by
+a single `last_success` row. Testing it against the live endpoints exposed two
+problems at once: the abuse.ch CSV exports now answer `410 Gone` (they require
+an Auth-Key), so the only source the engine had was permanently broken, and
+because the state was a single number the UI could only ever say "never synced"
+- it could not name the dead feed, let alone keep the healthy ones running.
+
+**Decision.** Intel is a fixed registry of named sources:
+
+| source | what it feeds | default | cadence |
+|---|---|---|---|
+| `ioc_hashes` | file-hash blocklist (`ioc_hashes`) | none - needs a URL (abuse.ch now wants an Auth-Key) | sync interval |
+| `ioc_domains` | DNS blocklist (`ioc_domains`) | StevenBlack/hosts (MIT) | sync interval |
+| `kev` | `kev_cves`, annotates vulnerability results | CISA KEV catalog (public domain) | sync interval |
+| `geoip_blocklists` | country CIDR lists already on disk | none - read from disk, never downloaded | sync interval |
+| `nvd` | CVE cache (`cve_cache`) | NVD 2.0 during a vulnerability scan | on demand |
+
+1. Every source stores `last_success`, `last_attempt`, `failures`, `last_error`,
+   `next_due`, `detail` and `items`. The scheduled pass runs only what is due; a
+   manual "sync now" runs everything.
+2. A failure backs off `15 min x 2^n`, capped at the normal cadence: a dead feed
+   is retried *less* often than the schedule, never more often.
+3. "Not configured" is a state of its own: it counts as neither success nor
+   failure, never claims freshness, and never spends the backoff ladder.
+4. `age_seconds`/`last_success` in `sync.status` mean the newest successful
+   *network* source, so a local list refresh cannot make an offline machine look
+   up to date.
+5. No source ships a URL we cannot honestly fetch: country CIDR lists are read
+   from disk because the public country-list licences are unclear, and YARA/IOC
+   packs beyond what the bundled `engine/rules/` already carries (Neo23x0's
+   signature-base is CC BY-NC) wait for a real signature-delivery mechanism.
+6. `nvd` is reported as an on-demand row recorded by the vulnerability scan
+   itself, rather than scheduled - there is no feed to poll.
+
+**Why.** One aggregate freshness number hides exactly what an operator needs:
+which feed is stale, why it failed, and when the next attempt happens. Keeping a
+dead default URL in the code is worse than shipping no default at all.
+
+**Commits us to.** Adding a source means adding it to the registry, an i18n
+label and a row on the Intel screen. StevenBlack and CISA must be credited in
+the README/NOTICES when their data is used, and any new feed must be live-probed
+before it becomes a default.

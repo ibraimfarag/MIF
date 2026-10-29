@@ -117,4 +117,243 @@ mod tests {
         // guessing a default.
         assert!(pua_rollback(None).contains("reg delete"));
     }
+
+    // ---- intel sync (P3c) ----
+
+    /// Throwaway database file; each test gets its own directory.
+    fn temp_db(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("mics-test-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir.join("mics.db")
+    }
+
+    #[test]
+    fn hosts_blocklist_keeps_domains_and_drops_loopback() {
+        use crate::sync::feeds::parse_hosts_blocklist;
+        let text = "# Title: test\n\
+                    127.0.0.1 localhost\n\
+                    0.0.0.0 ads.example.com\n\
+                    255.255.255.255 broadcasthost\n\
+                    0.0.0.0 bad-domain.example.org # inline comment\n\
+                    broken\n";
+        let domains = parse_hosts_blocklist(text);
+        // The loopback names every hosts file ships are not indicators, and a
+        // line without a hostname is not a domain.
+        assert!(!domains.contains(&"localhost".to_string()));
+        assert!(!domains.contains(&"broadcasthost".to_string()));
+        assert!(domains.contains(&"ads.example.com".to_string()));
+        assert!(
+            domains.contains(&"bad-domain.example.org".to_string()),
+            "an inline comment must not swallow the hostname"
+        );
+        assert_eq!(domains.len(), 2, "unexpected extra rows: {domains:?}");
+    }
+
+    #[test]
+    fn hash_feed_reads_the_sha256_column_after_the_header() {
+        use crate::sync::feeds::parse_hash_feed;
+        let h = "a".repeat(64);
+        let csv = format!("\"firstseen\",\"sha256_hash\"\n\"2026-01-01\",\"{h}\"\n");
+        assert_eq!(parse_hash_feed(&csv), vec![h.clone()]);
+        // Plain lists and `hash;tags` exports both keep working.
+        assert_eq!(parse_hash_feed(&format!("{h}\n")), vec![h.clone()]);
+        assert_eq!(parse_hash_feed(&format!("{h};trojan;win32\n")), vec![h]);
+        assert!(parse_hash_feed("not-a-hash\n").is_empty());
+    }
+
+    #[test]
+    fn kev_catalog_parser_flags_known_ransomware() {
+        use crate::sync::feeds::parse_kev_catalog;
+        let json = serde_json::json!({
+            "catalogVersion": "2026.10.29",
+            "count": 1,
+            "vulnerabilities": [{
+                "cveID": "CVE-2026-0001",
+                "vendorProject": "Vendor",
+                "product": "Product",
+                "dateAdded": "2026-10-01",
+                "dueDate": "2026-10-21",
+                "knownRansomwareCampaignUse": "Known"
+            }]
+        });
+        let (version, rows) = parse_kev_catalog(&json);
+        assert_eq!(version, "2026.10.29");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].due_date, "2026-10-21");
+        assert!(rows[0].ransomware);
+    }
+
+    #[test]
+    fn cidr_parser_rejects_anything_that_is_not_an_ipv4_network() {
+        use crate::ids::geoip::parse_cidr_line;
+        assert!(parse_cidr_line("1.2.3.0/24").is_some());
+        assert!(parse_cidr_line("  1.2.3.0/24   ").is_some());
+        assert!(parse_cidr_line("1.2.3.0/33").is_none());
+        assert!(parse_cidr_line("1.2.3.0").is_none());
+        assert!(parse_cidr_line("# comment").is_none());
+    }
+
+    #[test]
+    fn backoff_ladder_doubles_then_settles_on_the_cadence() {
+        let cadence = 6 * 3600;
+        assert_eq!(crate::sync::backoff_secs(1, cadence), 900);
+        assert_eq!(crate::sync::backoff_secs(2, cadence), 1800);
+        assert_eq!(crate::sync::backoff_secs(3, cadence), 3600);
+        // A feed that keeps failing is retried at the normal cadence, never
+        // more often (which would hammer a dead host) and never less.
+        assert_eq!(crate::sync::backoff_secs(9, cadence), cadence);
+    }
+
+    #[test]
+    fn sync_state_keeps_the_last_success_through_failures() {
+        use crate::storage::sqlite::Storage;
+        use crate::sync::state_of;
+        let path = temp_db("sync-state");
+        let storage = Storage::open_at(&path).unwrap();
+        storage
+            .record_sync_success("ioc_domains", "stevenblack", "10 new", 10, Some(1000))
+            .unwrap();
+        storage.record_sync_failure("ioc_domains", "HTTP 500", Some(2000)).unwrap();
+        storage.record_sync_failure("ioc_domains", "HTTP 502", Some(3000)).unwrap();
+
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "ioc_domains")
+            .expect("row for ioc_domains");
+        assert_eq!(row.failures, 2, "consecutive failures must count");
+        assert!(row.last_success.is_some(), "the last good sync must survive");
+        assert_eq!(row.last_error.as_deref(), Some("HTTP 502"));
+        assert_eq!(row.next_due, Some(3000));
+        assert_eq!(state_of(Some(&row)), "failed");
+
+        // A success clears the error and restarts the ladder.
+        storage
+            .record_sync_success("ioc_domains", "stevenblack", "20 new", 20, Some(4000))
+            .unwrap();
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "ioc_domains")
+            .unwrap();
+        assert_eq!(row.failures, 0);
+        assert_eq!(row.last_error, None);
+        assert_eq!(state_of(Some(&row)), "ok");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn unconfigured_source_is_not_reported_as_a_failure() {
+        use crate::storage::sqlite::Storage;
+        use crate::sync::state_of;
+        let path = temp_db("sync-skip");
+        let storage = Storage::open_at(&path).unwrap();
+        storage
+            .record_sync_skipped("ioc_hashes", "no feed configured", Some(5000))
+            .unwrap();
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "ioc_hashes")
+            .unwrap();
+        assert_eq!(row.failures, 0, "nothing was attempted, so nothing failed");
+        assert_eq!(row.last_success, None, "a skipped source is not fresh");
+        assert_eq!(state_of(Some(&row)), "not_configured");
+        assert_eq!(state_of(None), "never");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn old_sync_state_table_is_migrated_in_place() {
+        use crate::storage::sqlite::Storage;
+        let path = temp_db("sync-migrate");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // The table exactly as a shipped build created it.
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE sync_state (
+                    source TEXT PRIMARY KEY,
+                    last_success INTEGER,
+                    version TEXT
+                 );",
+            )
+            .unwrap();
+        }
+        // Opening it must add the intel columns instead of failing or losing
+        // the row that is already there.
+        let storage = Storage::open_at(&path).unwrap();
+        storage.record_sync_success("kev", "2026.10.29", "3 CVEs", 3, Some(123)).unwrap();
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "kev")
+            .expect("row written into the migrated table");
+        assert_eq!(row.items, 3);
+        assert_eq!(row.failures, 0);
+        assert_eq!(row.next_due, Some(123));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn kev_catalog_swap_does_not_accumulate_entries() {
+        use crate::storage::sqlite::{KevRow, Storage};
+        let path = temp_db("kev");
+        let storage = Storage::open_at(&path).unwrap();
+        let row = |id: &str| KevRow {
+            cve_id: id.into(),
+            vendor: "V".into(),
+            product: "P".into(),
+            date_added: "2026-10-01".into(),
+            due_date: "2026-10-21".into(),
+            ransomware: true,
+        };
+        storage.set_kev_catalog(&[row("CVE-2026-0001")]).unwrap();
+        storage.set_kev_catalog(&[row("CVE-2026-0002")]).unwrap();
+        assert_eq!(
+            storage.kev_count().unwrap(),
+            1,
+            "a CVE dropped upstream must not linger in the catalog"
+        );
+        let catalog = storage.kev_catalog().unwrap();
+        assert_eq!(catalog[0].cve_id, "CVE-2026-0002");
+        assert_eq!(catalog[0].due_date, "2026-10-21");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn vulnerability_annotation_marks_only_exploited_cves() {
+        use crate::storage::sqlite::KevRow;
+        use crate::vulns::{Vulnerability, annotate_kev};
+        let mut kev = std::collections::HashMap::new();
+        kev.insert(
+            "CVE-2026-0001".to_string(),
+            KevRow {
+                cve_id: "CVE-2026-0001".into(),
+                vendor: "V".into(),
+                product: "P".into(),
+                date_added: "2026-10-01".into(),
+                due_date: "2026-10-21".into(),
+                ransomware: false,
+            },
+        );
+        let make = |id: &str| Vulnerability {
+            cve_id: id.into(),
+            cvss: 9.8,
+            description: "x".into(),
+            published: "2026-10-01".into(),
+            known_exploited: false,
+            kev_due: None,
+        };
+        let mut vulns = vec![make("CVE-2026-0001"), make("CVE-2026-0009")];
+        annotate_kev(&mut vulns, &kev);
+        assert!(vulns[0].known_exploited, "a catalogued CVE is exploited now");
+        assert_eq!(vulns[0].kev_due.as_deref(), Some("2026-10-21"));
+        assert!(!vulns[1].known_exploited, "an uncatalogued CVE is not");
+        assert!(vulns[1].kev_due.is_none());
+    }
 }

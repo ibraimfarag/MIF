@@ -9,12 +9,13 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-29 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
-> update flow, sticky data dir) and the P3d/P3e real-run sweeps (Defender
-> checks, pipe concurrency) done · **next: P1.5 (single-elevation helper)**,
-> then P4 packaging, P5 documentation/hardening, P6 QA harness. README is
-> written; the app runs unelevated and was verified end-to-end on a real
-> machine.
+> Last updated: 2026-10-30 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
+> pipe concurrency) and P3c1 (intel source registry, D-012) done · **next:
+> P3c2 (vulnerability scan as a job) then P3c3 (Intel screen)**, P1.5
+> (single-elevation helper), P4 packaging, P5 documentation/hardening, P6 QA
+> harness. README is written; the app runs unelevated and was verified
+> end-to-end on a real machine.
 
 ---
 
@@ -111,14 +112,38 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **README** | Bilingual, honest README (what it does / does not, requirements, data, privacy, build, testing) | **done** |
 | **P3d** | Second real-run bug sweep: Defender PUA false positive, read-only snapshot, verified apply | **done** |
 | **P3e** | Third real-run bug sweep: concurrent pipe dispatch, heartbeat only when idle, vuln-scan deadline | **done** |
+| **P3c1** | Intel source registry: per-source state, backoff/next-due, DNS-blocklist domains, CISA KEV catalog | **done** |
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
-| P3c | Incremental intel pipeline + dedicated sync screen; default update manifest URL | planned |
+| P3c2 | Vulnerability scan as a cancellable job with progress (UI + engine) | planned |
+| P3c3 | Dedicated Intel/Sync screen with per-source results, last errors and on-demand NVD row | planned |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
 
+- **P3c1 — the intel pipeline could not tell one dead feed from another (it was all dead)**
+  - Symptom: the sync chip always showed "never synced" and `sync.now` returned
+    `HTTP 410 Gone`. The default URLhaus export is gone: abuse.ch now requires an
+    Auth-Key for every public export, so the only source the engine had was
+    permanently broken — and the single aggregate `last_success` row could not
+    show which feed was the problem.
+  - Fix: intel is now a registry of named sources (`ioc_hashes`, `ioc_domains`,
+    `kev`, `geoip_blocklists`, plus the on-demand `nvd` row the vulnerability
+    scan records itself). Each keeps `last_success`, `last_attempt`, `failures`,
+    `last_error`, `next_due`, `detail` and `items`; the scheduler runs only what
+    is due; a failure backs off 15 min × 2ⁿ capped at the cadence; "not
+    configured" is its own state that never counts as a failure and never
+    claims freshness. Defaults are feeds that actually answer today:
+    StevenBlack/hosts (MIT) for DNS-blocklist domains and the CISA KEV catalog
+    (public domain) for actively-exploited CVEs. `Vulnerability` now carries
+    `known_exploited` + `kev_due`.
+  - Evidence (throwaway engine, `MICS_DATA_DIR` isolated, `sync.now` in 2.5 s):
+    `ioc_domains` 76,737 blocked names, `kev` 1,764 exploited CVEs (catalog
+    2026.10.29), `ioc_hashes` `not_configured` with the Auth-Key reason,
+    `geoip_blocklists` `not_configured` with the directory it looked in; a second
+    sync added 0 rows; `sync_state` rows carry a ~6 h `next_due` and
+    `failures: 0`. `cargo test` 26/26, `cargo clippy` clean.
 - **P3e — the Vulnerabilities screen could not survive its own scan**
   - Symptom: pressing Scan showed `EngineException(-1): engine connection
     lost: heartbeat failed` while the engine was alive and answering a second
@@ -376,7 +401,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | 4 | Permissions asked once, publisher name | **todo P1.5** — today every admin op spawns its own UAC prompt | D-007 |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are now real settings and `update.check` uses them; no extraction/apply UI, no rollback screen | P3 |
-| 7 | CVE/intel update paths | **partial** — NVD keyword search + cache; no incremental sync, no scheduler UI | P3 |
+| 7 | CVE/intel update paths | **partial** — NVD keyword search + cache and a per-source scheduled sync (DNS blocklist + CISA KEV, D-012); the dedicated screen and the scan-as-a-job are P3c2/P3c3 | D-012 |
 | 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; light contrast audit still pending | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
@@ -432,10 +457,11 @@ money (P4 signing certificate).
 - [ ] Default update manifest URL compiled in (still user-supplied) and a signed
       manifest check before applying.
 - [x] OFFLINE badge + "intel last updated Xh ago" in the title bar, tap to sync.
-- [ ] Intel pipeline hardening: IOC domains → YARA packs → GeoIP in the same
-      scheduled pass; per-source backoff; `sync_state.next_due`.
+- [x] Intel pipeline hardening: named sources in one scheduled pass, per-source
+      state + backoff + `sync_state.next_due`, DNS-blocklist domains, CISA KEV
+      catalog (D-012). YARA/IPC packs wait for a signature-delivery mechanism.
 - [ ] A dedicated sync/intel screen with per-source results and last-error text
-      (today the chip + a Settings row cover it).
+      (today the chip + a Settings row cover it) — P3c3.
 
 ### P4 — release engineering
 - [ ] Authenticode: OV/EV or Azure Trusted Signing; sign DLLs then EXEs;
@@ -480,15 +506,17 @@ money (P4 signing certificate).
 | HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
-| MED | `vuln.scan` is a blocking RPC, not a job: no progress, no cancel, and a cold scan keeps the screen on a spinner for minutes (job-ifying it belongs with P3c's sync screen) | `vulns/mod.rs`, `vuln_scanner_screen.dart` |
+| MED | `vuln.scan` is a blocking RPC, not a job: no progress, no cancel, and a cold scan keeps the screen on a spinner for minutes (P3c2 job-ifies it) | `vulns/mod.rs`, `vuln_scanner_screen.dart` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
 | MED | `firewall` and `ids` still call `netsh` / elevated PowerShell **without a timeout** (hardening was fixed) — an unanswered UAC prompt can block those requests | `firewall/mod.rs`, `ids/mod.rs` |
-| MED | Offline badge/freshness exists in the title bar, but there is no dedicated sync screen with per-source results | `app_shell.dart` |
+| MED | Offline badge/freshness exists in the title bar; the per-source detail is only in the `sync.status` payload until the Intel screen lands (P3c3) | `app_shell.dart` |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
+| LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
+| LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until a URL is supplied (`MICS_IOC_FEED_URL` / a future Settings row) | `sync/mod.rs` |
 | LOW | `docs/` has no THREAT-MODEL yet (the README carries the layer matrix) | `docs/` |
 | LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |

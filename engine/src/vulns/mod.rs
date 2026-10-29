@@ -11,6 +11,13 @@ pub struct Vulnerability {
     pub cvss: f64,
     pub description: String,
     pub published: String,
+    /// In CISA's Known Exploited Vulnerabilities catalog: this one is being
+    /// exploited in the wild, which outranks its CVSS score for prioritisation.
+    #[serde(default)]
+    pub known_exploited: bool,
+    /// The catalog's remediation due date (only when `known_exploited`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kev_due: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +34,9 @@ pub struct SoftwareVulns {
 pub struct VulnScanner {
     client: Client,
     storage: Storage,
+    /// CVE id -> KEV entry, read once per scanner: a couple of thousand rows,
+    /// and the difference between "this CVE exists" and "it is exploited now".
+    kev: std::collections::HashMap<String, crate::storage::sqlite::KevRow>,
 }
 
 /// Known-app -> NVD keyword map. Real CPE matching needs the Phase-5 intel
@@ -63,6 +73,22 @@ const KEYWORD_MAP: &[(&str, &str)] = &[
     ("internet download manager", "Internet Download Manager"),
 ];
 
+/// Marks CVEs that CISA lists as exploited in the wild. Free-standing so the
+/// annotation can be tested without a network client or a database.
+pub fn annotate_kev(
+    vulns: &mut [Vulnerability],
+    kev: &std::collections::HashMap<String, crate::storage::sqlite::KevRow>,
+) {
+    for vuln in vulns {
+        if let Some(entry) = kev.get(&vuln.cve_id) {
+            vuln.known_exploited = true;
+            if !entry.due_date.is_empty() {
+                vuln.kev_due = Some(entry.due_date.clone());
+            }
+        }
+    }
+}
+
 impl VulnScanner {
     pub fn new() -> Result<Self> {
         let client = Client::builder()
@@ -70,7 +96,17 @@ impl VulnScanner {
             .user_agent("MI-CS-Engine/0.1")
             .build()
             .context("build http client")?;
-        Ok(Self { client, storage: Storage::open()? })
+        let storage = Storage::open()?;
+        let kev = match storage.kev_catalog() {
+            Ok(rows) => rows.into_iter().map(|r| (r.cve_id.clone(), r)).collect(),
+            Err(e) => {
+                // No catalog yet (never synced) is normal on a fresh install;
+                // the scan still works, it just cannot flag exploited CVEs.
+                tracing::warn!("KEV catalog unavailable: {e:#}");
+                std::collections::HashMap::new()
+            }
+        };
+        Ok(Self { client, storage, kev })
     }
 
     pub async fn scan(&self, max_apps: usize) -> Result<Vec<SoftwareVulns>> {
@@ -92,6 +128,9 @@ impl VulnScanner {
         }
 
         let mut results = Vec::new();
+        let mut live = 0usize;
+        let mut served_cache = 0usize;
+        let mut last_error: Option<String> = None;
         for (name, keyword) in &targets {
             let version = inventory
                 .iter()
@@ -101,32 +140,42 @@ impl VulnScanner {
 
             let cached = self.storage.cached_cves_for(name)?;
             if !cached.is_empty() {
+                let mut vulnerabilities: Vec<Vulnerability> = cached
+                    .into_iter()
+                    .map(|c| Vulnerability {
+                        cve_id: c.cve_id,
+                        cvss: c.cvss,
+                        description: c.description,
+                        published: c.published,
+                        known_exploited: false,
+                        kev_due: None,
+                    })
+                    .collect();
+                annotate_kev(&mut vulnerabilities, &self.kev);
+                served_cache += 1;
                 results.push(SoftwareVulns {
                     software: name.clone(),
                     version: version.clone(),
                     from_cache: true,
-                    vulnerabilities: cached
-                        .into_iter()
-                        .map(|c| Vulnerability {
-                            cve_id: c.cve_id,
-                            cvss: c.cvss,
-                            description: c.description,
-                            published: c.published,
-                        })
-                        .collect(),
+                    vulnerabilities,
                 });
                 continue;
             }
 
             match self.fetch_nvd(keyword, name).await {
-                Ok(vulns) => results.push(SoftwareVulns {
-                    software: name.clone(),
-                    version,
-                    from_cache: false,
-                    vulnerabilities: vulns,
-                }),
+                Ok(mut vulns) => {
+                    annotate_kev(&mut vulns, &self.kev);
+                    live += 1;
+                    results.push(SoftwareVulns {
+                        software: name.clone(),
+                        version,
+                        from_cache: false,
+                        vulnerabilities: vulns,
+                    });
+                }
                 Err(e) => {
                     tracing::warn!("NVD fetch failed for {name}: {e:#}");
+                    last_error = Some(format!("{e:#}"));
                     results.push(SoftwareVulns {
                         software: name.clone(),
                         version,
@@ -138,7 +187,36 @@ impl VulnScanner {
             // NVD public rate limit: 5 requests / 30 s without a key.
             tokio::time::sleep(Duration::from_millis(6500)).await;
         }
+        self.record_nvd_state(live, served_cache, last_error.as_deref());
         Ok(results)
+    }
+
+    /// Records the scan as the `nvd` intel source, so CVE freshness sits next
+    /// to the feed freshness on the Intel screen. Called only after real work:
+    /// a scan that found nothing to look up must not claim a successful sync.
+    fn record_nvd_state(&self, live: usize, served_cache: usize, last_error: Option<&str>) {
+        if live == 0 && served_cache == 0 && last_error.is_none() {
+            return;
+        }
+        let cadence = crate::settings::current().sync_hours().clamp(1, 168) as i64 * 3600;
+        let now = chrono::Utc::now().timestamp();
+        let cached = self.storage.cached_cve_count().unwrap_or(0) as i64;
+        if live > 0 || last_error.is_none() {
+            let detail = if live > 0 {
+                format!("{live} live NVD lookups ({served_cache} from cache)")
+            } else {
+                format!("{served_cache} applications served from cache")
+            };
+            let _ = self
+                .storage
+                .record_sync_success("nvd", "NVD 2.0", &detail, cached, Some(now + cadence));
+        } else if let Some(err) = last_error {
+            let _ = self.storage.record_sync_failure(
+                "nvd",
+                err,
+                Some(now + crate::sync::backoff_secs(1, cadence)),
+            );
+        }
     }
 
     async fn fetch_nvd(&self, keyword: &str, software_key: &str) -> Result<Vec<Vulnerability>> {
@@ -191,6 +269,8 @@ impl VulnScanner {
                     cvss,
                     description: desc,
                     published,
+                    known_exploited: false,
+                    kev_due: None,
                 });
             }
         }

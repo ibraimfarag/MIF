@@ -13,7 +13,17 @@ impl Storage {
     pub fn open() -> Result<Self> {
         let base = crate::settings::Settings::base_dir();
         std::fs::create_dir_all(&base).context("create MICS data dir")?;
-        let conn = Connection::open(base.join("mics.db"))
+        Self::open_at(&base.join("mics.db"))
+    }
+
+    /// One database file. `open()` is this plus the resolved data directory;
+    /// the split lets tests use a throwaway file instead of the process-wide
+    /// data directory (and the `OnceLock` behind it).
+    pub fn open_at(path: &std::path::Path) -> Result<Self> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).context("create MICS data dir")?;
+        }
+        let conn = Connection::open(path)
             .context("open mics.db")?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
@@ -32,7 +42,24 @@ impl Storage {
              CREATE TABLE IF NOT EXISTS sync_state (
                 source TEXT PRIMARY KEY,
                 last_success INTEGER,
-                version TEXT
+                version TEXT,
+                last_attempt INTEGER,
+                last_error TEXT,
+                failures INTEGER DEFAULT 0,
+                next_due INTEGER,
+                detail TEXT,
+                items INTEGER DEFAULT 0
+             );
+             -- CISA Known Exploited Vulnerabilities catalog: the difference
+             -- between a CVE that merely exists and one being exploited now.
+             CREATE TABLE IF NOT EXISTS kev_cves (
+                cve_id TEXT PRIMARY KEY,
+                vendor TEXT,
+                product TEXT,
+                date_added TEXT,
+                due_date TEXT,
+                ransomware INTEGER DEFAULT 0,
+                synced_at INTEGER
              );
              CREATE TABLE IF NOT EXISTS ioc_hashes (
                 sha256 TEXT PRIMARY KEY,
@@ -119,6 +146,19 @@ impl Storage {
              );",
         )
         .context("init schema")?;
+        // `CREATE TABLE IF NOT EXISTS` never upgrades a table that already
+        // exists, so an installed database needs the new intel columns added
+        // explicitly. Idempotent: a fresh database already has them.
+        for (column, decl) in [
+            ("last_attempt", "INTEGER"),
+            ("last_error", "TEXT"),
+            ("failures", "INTEGER DEFAULT 0"),
+            ("next_due", "INTEGER"),
+            ("detail", "TEXT"),
+            ("items", "INTEGER DEFAULT 0"),
+        ] {
+            ensure_column(&conn, "sync_state", column, decl)?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -156,6 +196,12 @@ impl Storage {
         Ok(rows.flatten().collect())
     }
 
+    /// How many CVEs the local cache holds (the NVD source reports this).
+    pub fn cached_cve_count(&self) -> Result<u64> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.query_row("SELECT COUNT(*) FROM cve_cache", [], |r| r.get(0))?)
+    }
+
     pub fn all_cached_cves(&self) -> Result<Vec<(String, String, f64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -168,13 +214,110 @@ impl Storage {
         Ok(rows)
     }
 
-    pub fn set_sync_state(&self, source: &str, version: &str) -> Result<()> {
+    /// Records a successful source run: freshness, what it produced, and when
+    /// it is due again. Failures are cleared, so the backoff ladder restarts
+    /// from the bottom on the next problem.
+    pub fn record_sync_success(
+        &self,
+        source: &str,
+        version: &str,
+        detail: &str,
+        items: i64,
+        next_due: Option<i64>,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO sync_state VALUES (?1, strftime('%s','now'), ?2)",
-            rusqlite::params![source, version],
+            "INSERT INTO sync_state
+               (source, last_success, version, last_attempt, last_error,
+                failures, next_due, detail, items)
+             VALUES (?1, strftime('%s','now'), ?2, strftime('%s','now'), NULL, 0, ?3, ?4, ?5)
+             ON CONFLICT(source) DO UPDATE SET
+               last_success = strftime('%s','now'),
+               version      = excluded.version,
+               last_attempt = strftime('%s','now'),
+               last_error   = NULL,
+               failures     = 0,
+               next_due     = excluded.next_due,
+               detail       = excluded.detail,
+               items        = excluded.items",
+            rusqlite::params![source, version, next_due, detail, items],
         )?;
         Ok(())
+    }
+
+    /// Records a failed attempt. The previous success is deliberately kept: the
+    /// UI has to be able to say "last good intel was 3 h ago" while the retry
+    /// ladder climbs.
+    pub fn record_sync_failure(
+        &self,
+        source: &str,
+        error: &str,
+        next_due: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO sync_state (source, last_attempt, last_error, failures, next_due)
+             VALUES (?1, strftime('%s','now'), ?2, 1, ?3)
+             ON CONFLICT(source) DO UPDATE SET
+               last_attempt = strftime('%s','now'),
+               last_error   = excluded.last_error,
+               failures     = sync_state.failures + 1,
+               next_due     = excluded.next_due",
+            rusqlite::params![source, error, next_due],
+        )?;
+        Ok(())
+    }
+
+    /// Records a source that has nothing to do until it is configured. The
+    /// previous success (if any) is kept, no failure is counted, and the UI can
+    /// tell this apart from both "ok" and "failed".
+    pub fn record_sync_skipped(
+        &self,
+        source: &str,
+        detail: &str,
+        next_due: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO sync_state (source, version, last_attempt, last_error, failures, next_due, detail)
+             VALUES (?1, ?2, strftime('%s','now'), NULL, 0, ?3, ?4)
+             ON CONFLICT(source) DO UPDATE SET
+               version      = excluded.version,
+               last_attempt = strftime('%s','now'),
+               last_error   = NULL,
+               failures     = 0,
+               next_due     = excluded.next_due,
+               detail       = excluded.detail",
+            rusqlite::params![source, crate::sync::NOT_CONFIGURED, next_due, detail],
+        )?;
+        Ok(())
+    }
+
+    /// One row per source that has ever run (the Intel screen reads these).
+    pub fn sync_states(&self) -> Result<Vec<SyncStateRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT source, last_success, last_attempt, version, detail,
+                    failures, last_error, next_due, items
+             FROM sync_state ORDER BY source ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(SyncStateRow {
+                    source: r.get(0)?,
+                    last_success: r.get(1)?,
+                    last_attempt: r.get(2)?,
+                    version: r.get(3)?,
+                    detail: r.get(4)?,
+                    failures: r.get::<_, i64>(5)?.max(0) as u32,
+                    last_error: r.get(6)?,
+                    next_due: r.get(7)?,
+                    items: r.get(8)?,
+                })
+            })?
+            .flatten()
+            .collect();
+        Ok(rows)
     }
 
     pub fn get_sync_state(&self, source: &str) -> Result<Option<(i64, String)>> {
@@ -247,6 +390,90 @@ impl Storage {
     pub fn ioc_hash_count(&self) -> Result<u64> {
         let conn = self.conn.lock().unwrap();
         Ok(conn.query_row("SELECT COUNT(*) FROM ioc_hashes", [], |r| r.get(0))?)
+    }
+
+    /// Bulk domain insert for a feed; returns how many were new. `INSERT OR
+    /// IGNORE` keeps a re-sync from rewriting 76k rows every time.
+    pub fn add_ioc_domains(&self, domains: &[(String, String)], category: &str) -> Result<usize> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let mut inserted = 0usize;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR IGNORE INTO ioc_domains
+                   (domain, source, category, added_at)
+                 VALUES (?1, ?2, ?3, strftime('%s','now'))",
+            )?;
+            for (domain, source) in domains {
+                inserted += stmt.execute(rusqlite::params![domain, source, category])?;
+            }
+        }
+        tx.commit()?;
+        Ok(inserted)
+    }
+
+    pub fn ioc_domain_count(&self) -> Result<u64> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.query_row("SELECT COUNT(*) FROM ioc_domains", [], |r| r.get(0))?)
+    }
+
+    // ---- CISA KEV catalog ----
+
+    /// Replaces the catalog. The feed is authoritative and small (a few
+    /// thousand rows), so a swap is simpler and safer than diffing: a CVE
+    /// removed upstream must stop being reported as actively exploited.
+    pub fn set_kev_catalog(&self, rows: &[KevRow]) -> Result<usize> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM kev_cves", [])?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO kev_cves
+                   (cve_id, vendor, product, date_added, due_date, ransomware, synced_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,strftime('%s','now'))",
+            )?;
+            for r in rows {
+                stmt.execute(rusqlite::params![
+                    r.cve_id,
+                    r.vendor,
+                    r.product,
+                    r.date_added,
+                    r.due_date,
+                    r.ransomware as i64
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(rows.len())
+    }
+
+    pub fn kev_count(&self) -> Result<u64> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.query_row("SELECT COUNT(*) FROM kev_cves", [], |r| r.get(0))?)
+    }
+
+    /// The whole catalog, for annotation passes (the vulnerability scan marks
+    /// every CVE it finds that is being exploited in the wild).
+    pub fn kev_catalog(&self) -> Result<Vec<KevRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT cve_id, vendor, product, date_added, due_date, ransomware
+             FROM kev_cves",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(KevRow {
+                    cve_id: r.get(0)?,
+                    vendor: r.get(1)?,
+                    product: r.get(2)?,
+                    date_added: r.get(3)?,
+                    due_date: r.get(4)?,
+                    ransomware: r.get::<_, i64>(5)? != 0,
+                })
+            })?
+            .flatten()
+            .collect();
+        Ok(rows)
     }
 
     // ---- quarantine ----
@@ -722,6 +949,25 @@ impl Storage {
     }
 }
 
+/// Adds a column to an existing table when an older database lacks it.
+/// `CREATE TABLE IF NOT EXISTS` never upgrades a table that already exists, so
+/// this is what keeps a shipped install in step with the schema. Names are
+/// compile-time constants at every call site (never feed data).
+fn ensure_column(conn: &Connection, table: &str, column: &str, decl: &str) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let present = stmt
+        .query_map([], |r| r.get::<_, String>(1))?
+        .flatten()
+        .any(|name| name == column);
+    drop(stmt);
+    if !present {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {table} ADD COLUMN {column} {decl};"
+        ))?;
+    }
+    Ok(())
+}
+
 fn map_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<JobRow> {
     Ok(JobRow {
         job_id: r.get(0)?,
@@ -764,4 +1010,30 @@ pub struct CachedCve {
     pub cvss: f64,
     pub description: String,
     pub published: String,
+}
+
+/// Per-source intel state. `next_due` is what the scheduler reads and the Intel
+/// screen shows; `last_success` survives failures on purpose.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SyncStateRow {
+    pub source: String,
+    pub last_success: Option<i64>,
+    pub last_attempt: Option<i64>,
+    pub version: Option<String>,
+    pub detail: Option<String>,
+    pub failures: u32,
+    pub last_error: Option<String>,
+    pub next_due: Option<i64>,
+    pub items: i64,
+}
+
+/// One CISA KEV catalog entry (actively exploited in the wild).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KevRow {
+    pub cve_id: String,
+    pub vendor: String,
+    pub product: String,
+    pub date_added: String,
+    pub due_date: String,
+    pub ransomware: bool,
 }

@@ -257,6 +257,14 @@ a copy of the task icon.
 - [`AGENTS.md`](AGENTS.md) — rules for automated contributors.
 - **License: GPL-3.0-or-later.** Every dependency must be GPL-compatible; no
   telemetry, no paid tiers, optional donation link only.
+- **Third-party intel feeds.** Two public data sets are fetched by the scheduled
+  sync and keep their own licenses: [StevenBlack/hosts](https://github.com/StevenBlack/hosts)
+  (MIT) is used as the DNS blocklist, and the
+  [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+  (US Government work, public domain) marks CVEs that are exploited in the wild.
+  Both are downloaded to your machine and are never redistributed with the app.
+  The hash blocklist has no bundled default: abuse.ch's public exports now need
+  an Auth-Key, so `ioc_hashes` stays empty until you supply your own feed URL.
 
 ---
 
