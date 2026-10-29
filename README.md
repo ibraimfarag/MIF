@@ -24,7 +24,8 @@ explains, and suggests the next action instead of dumping raw data.
 | **Process guard (L3)** | Watches process creation against Sigma-like JSON rules (`rules/guard/*.json`, hot-reloaded). Alerts, optional kill-tree response, canary (decoy) files that raise a CRITICAL alert when touched, an incident correlator that groups related events into one kill-chain timeline, and a noise learner that offers to mute what you keep dismissing. |
 | **Network monitor** | Live TCP/UDP connections with owning process, plus a firewall manager: default-deny outbound toggle and every rule MI CS creates is prefixed `MICS-`. Country blocking works from a locally synced CIDR list. |
 | **IDS (L2, minimal)** | Domain blocklist enforced through a managed section of the hosts file, so every application on the machine is blocked from those domains. |
-| **Vulnerability scanner** | Matches installed software against the NVD database (API 2.0), with an offline cache and honest "from cache" labelling. |
+| **Vulnerability scanner** | Matches installed software against the NVD database (API 2.0), with an offline cache and honest "from cache" labelling. Runs as a cancellable job with live progress, and flags CVEs that CISA lists as **exploited in the wild** (KEV badge with the remediation date). |
+| **Intelligence** | One card per intel source (DNS blocklist, CISA KEV, file hashes, country lists, NVD) with its own state, count, next attempt and last error, plus what the machine actually holds. Sources that need a URL or key say so instead of silently staying empty. |
 | **Hardening center** | Five one-click fixes (Defender PUA protection, SMBv1 off, RDP off, UAC + secure desktop, Defender quick scan). Every change takes a snapshot first and can be rolled back. |
 | **Reports** | One-click Markdown security report (score, findings, startup entries, incident kill-chains) written to `Documents\MICS-Reports\`. |
 | **Notifications** | Windows toasts with real actions (quarantine / open MI CS) that fire **even when the window is closed**, in-house notification sounds with volume, mute and do-not-disturb, and an assistant that explains a finding — locally, offline, never in the cloud. |
@@ -126,8 +127,8 @@ One screen, eight sections; every field is validated and persisted by the engine
   auto-quarantine, canary paths.
 - **Notifications & sounds** — do-not-disturb, sounds on/off, volume, test toast,
   test sound.
-- **Intelligence & schedule** — refresh interval (1–168 h), NVD key, sync now,
-  live connectivity and freshness.
+- **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
+  feed URL and Auth-Key, sync now, live connectivity and freshness.
 - **Integrations** — VirusTotal key, LM Studio URL and model.
 - **Updates** — manifest URL, stable/beta channel, check, download and install.
 - **Engine** — executable path, connection state, start with Windows, relaunch as
@@ -264,7 +265,10 @@ a copy of the task icon.
   (US Government work, public domain) marks CVEs that are exploited in the wild.
   Both are downloaded to your machine and are never redistributed with the app.
   The hash blocklist has no bundled default: abuse.ch's public exports now need
-  an Auth-Key, so `ioc_hashes` stays empty until you supply your own feed URL.
+  an Auth-Key, so `ioc_hashes` stays empty until you paste your own feed URL and
+  key into Settings → Intelligence. The
+  [Intelligence screen](lib/features/intel/screens/intel_screen.dart) shows what
+  each source produced, when it is due next and the last error if it is failing.
 
 ---
 

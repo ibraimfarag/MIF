@@ -6,6 +6,7 @@ import 'package:mics_app/features/guard/screens/guard_screen.dart';
 import 'package:mics_app/features/hardening/screens/hardening_screen.dart';
 import 'package:mics_app/features/ids/screens/ids_screen.dart';
 import 'package:mics_app/features/incidents/screens/incidents_screen.dart';
+import 'package:mics_app/features/intel/screens/intel_screen.dart';
 import 'package:mics_app/features/network/screens/network_monitor_screen.dart';
 import 'package:mics_app/features/reports/screens/reports_screen.dart';
 import 'package:mics_app/features/scanner/screens/scanner_screen.dart';
@@ -34,6 +35,7 @@ final appRouter = GoRouter(
         GoRoute(
             path: '/incidents', builder: (_, _) => const IncidentsScreen()),
         GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
+        GoRoute(path: '/intel', builder: (_, _) => const IntelScreen()),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       ],
     ),

@@ -119,11 +119,20 @@ class Vuln {
   final double cvss;
   final String description;
   final String published;
+
+  /// CISA lists this CVE as exploited in the wild, which outranks its score.
+  final bool knownExploited;
+
+  /// The catalog's remediation due date (only when [knownExploited]).
+  final String? kevDue;
+
   Vuln({
     required this.cveId,
     required this.cvss,
     required this.description,
     required this.published,
+    this.knownExploited = false,
+    this.kevDue,
   });
 
   factory Vuln.fromJson(Map<String, dynamic> j) => Vuln(
@@ -131,5 +140,7 @@ class Vuln {
         cvss: (j['cvss'] as num?)?.toDouble() ?? 0,
         description: j['description'] as String? ?? '',
         published: j['published'] as String? ?? '',
+        knownExploited: j['known_exploited'] as bool? ?? false,
+        kevDue: j['kev_due'] as String?,
       );
 }

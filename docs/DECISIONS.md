@@ -349,3 +349,14 @@ dead default URL in the code is worse than shipping no default at all.
 label and a row on the Intel screen. StevenBlack and CISA must be credited in
 the README/NOTICES when their data is used, and any new feed must be live-probed
 before it becomes a default.
+
+**Addendum (P3c3).** The one source a user can legitimately supply is the hash
+feed, so `ioc_feed_url`/`ioc_feed_key` are stored in the settings document (env
+hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still win, as everywhere else) and
+edited from Settings → Intelligence; the key is sent as an `Auth-Key` header, not
+a query parameter, so it cannot leak into a logged URL. `sync.status` carries the
+per-source rows (`source`, `state`, `items`, `detail`, `last_error`, `failures`,
+`age_seconds`, `seconds_to_due`, `on_demand`) so the UI renders the registry
+instead of inventing its own summary. Exploit status is data, not decoration:
+`Vulnerability` carries `known_exploited`/`kev_due` and the UI shows a KEV badge,
+because a CVSS score alone cannot say which of two 8.8s is being exploited today.

@@ -32,6 +32,7 @@ const i18nModules = <String>[
   'network',
   'ids',
   'vulns',
+  'intel',
   'guard',
   'canaries',
   'hardening',
@@ -89,6 +90,10 @@ class AppSettings {
   final int syncIntervalHours;
   final String vtApiKey;
   final String nvdApiKey;
+  /// Custom sha256 hash feed for `ioc_hashes`; empty = not configured.
+  final String iocFeedUrl;
+  /// Auth-Key for that feed (abuse.ch style header).
+  final String iocFeedKey;
   final String lmUrl;
   final String lmModel;
   final String updateManifestUrl;
@@ -108,6 +113,8 @@ class AppSettings {
     this.syncIntervalHours = 6,
     this.vtApiKey = '',
     this.nvdApiKey = '',
+    this.iocFeedUrl = '',
+    this.iocFeedKey = '',
     this.lmUrl = 'http://127.0.0.1:1234',
     this.lmModel = 'local-model',
     this.updateManifestUrl = '',
@@ -140,6 +147,8 @@ class AppSettings {
         syncIntervalHours: (j['sync_interval_hours'] as num?)?.toInt() ?? 6,
         vtApiKey: j['vt_api_key'] as String? ?? '',
         nvdApiKey: j['nvd_api_key'] as String? ?? '',
+        iocFeedUrl: j['ioc_feed_url'] as String? ?? '',
+        iocFeedKey: j['ioc_feed_key'] as String? ?? '',
         lmUrl: j['lm_url'] as String? ?? '',
         lmModel: j['lm_model'] as String? ?? '',
         updateManifestUrl: j['update_manifest_url'] as String? ?? '',
@@ -163,6 +172,8 @@ class AppSettings {
         'sync_interval_hours': syncIntervalHours,
         'vt_api_key': vtApiKey,
         'nvd_api_key': nvdApiKey,
+        'ioc_feed_url': iocFeedUrl,
+        'ioc_feed_key': iocFeedKey,
         'lm_url': lmUrl,
         'lm_model': lmModel,
         'update_manifest_url': updateManifestUrl,
@@ -317,6 +328,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<void> setVtKey(String key) => patch({'vt_api_key': key});
 
   Future<void> setNvdKey(String key) => patch({'nvd_api_key': key});
+
+  Future<void> setIocFeed(String url, String key) =>
+      patch({'ioc_feed_url': url, 'ioc_feed_key': key});
 
   Future<void> setLm(String url, String model) =>
       patch({'lm_url': url, 'lm_model': model});

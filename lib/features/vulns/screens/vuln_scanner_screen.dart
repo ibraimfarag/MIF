@@ -438,6 +438,27 @@ class _SoftwareCard extends StatelessWidget {
                                   '{score}', v.cvss.toStringAsFixed(1)),
                               style: AppTheme.mono(
                                   size: 10, color: cvssColor(v.cvss))),
+                          if (v.knownExploited)
+                            Tooltip(
+                              message: v.kevDue == null
+                                  ? context.tr('vulns.kevTooltipNoDue')
+                                  : context.tr('vulns.kevTooltip').replaceAll(
+                                      '{due}', v.kevDue!),
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: AppColors.red
+                                          .withValues(alpha: 0.7)),
+                                ),
+                                child: Text(context.tr('vulns.kev'),
+                                    style: AppTheme.mono(
+                                        size: 9, color: AppColors.red)),
+                              ),
+                            ),
                         ]),
                   ),
                   Expanded(

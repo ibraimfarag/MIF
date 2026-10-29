@@ -38,6 +38,13 @@ pub struct Settings {
     pub vt_api_key: String,
     /// NVD API key (optional; raises the public rate limit).
     pub nvd_api_key: String,
+    /// Custom sha256 hash-feed URL for `ioc_hashes`; empty = not configured
+    /// (abuse.ch's public exports now need an Auth-Key). Env
+    /// `MICS_IOC_FEED_URL` still overrides it.
+    pub ioc_feed_url: String,
+    /// Auth-Key sent to that feed (abuse.ch style header); env
+    /// `MICS_IOC_FEED_KEY` overrides it.
+    pub ioc_feed_key: String,
     /// LM Studio base URL (OpenAI-compatible), e.g. http://127.0.0.1:1234.
     pub lm_url: String,
     pub lm_model: String,
@@ -68,6 +75,8 @@ impl Default for Settings {
             sync_interval_hours: 6,
             vt_api_key: String::new(),
             nvd_api_key: String::new(),
+            ioc_feed_url: String::new(),
+            ioc_feed_key: String::new(),
             lm_url: "http://127.0.0.1:1234".into(),
             lm_model: "local-model".into(),
             update_manifest_url: String::new(),
@@ -122,6 +131,14 @@ impl Settings {
                 }
                 "vt_api_key" => self.vt_api_key = string(value, key)?,
                 "nvd_api_key" => self.nvd_api_key = string(value, key)?,
+                "ioc_feed_url" => {
+                    let v = string(value, key)?;
+                    if !v.is_empty() && !(v.starts_with("http://") || v.starts_with("https://")) {
+                        bail!("ioc_feed_url must start with http:// or https:// (or be empty)");
+                    }
+                    self.ioc_feed_url = v;
+                }
+                "ioc_feed_key" => self.ioc_feed_key = string(value, key)?,
                 "lm_url" => {
                     let v = string(value, key)?;
                     if !v.is_empty() && !(v.starts_with("http://") || v.starts_with("https://")) {
@@ -186,6 +203,17 @@ impl Settings {
 
     pub fn vt_key(&self) -> String {
         std::env::var("MICS_VT_API_KEY").unwrap_or_else(|_| self.vt_api_key.clone())
+    }
+
+    /// Effective custom hash-feed URL (environment wins, as with every other
+    /// test hook).
+    pub fn ioc_feed_url(&self) -> String {
+        std::env::var("MICS_IOC_FEED_URL").unwrap_or_else(|_| self.ioc_feed_url.clone())
+    }
+
+    /// Auth-Key for that feed, sent as `Auth-Key:` when non-empty.
+    pub fn ioc_feed_key(&self) -> String {
+        std::env::var("MICS_IOC_FEED_KEY").unwrap_or_else(|_| self.ioc_feed_key.clone())
     }
 
     pub fn lm_base(&self) -> String {

@@ -11,11 +11,11 @@
 >
 > Last updated: 2026-10-30 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
-> pipe concurrency), P3c1 (intel source registry, D-012) and P3c2 (vulnerability
-> scan as a cancellable job) done · **next: P3c3 (Intel screen)**, then P1.5
-> (single-elevation helper), P4 packaging, P5 documentation/hardening, P6 QA
-> harness. README is written; the app runs unelevated and was verified
-> end-to-end on a real machine.
+> pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
+> scan as a cancellable job) and P3c3 (Intel screen, configurable hash feed, KEV
+> badge) done · **next: P1.5 (single-elevation helper)**, then P4 packaging,
+> P5 documentation/hardening, P6 QA harness. README is written; the app runs
+> unelevated and was verified end-to-end on a real machine.
 
 ---
 
@@ -115,13 +115,39 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3c1** | Intel source registry: per-source state, backoff/next-due, DNS-blocklist domains, CISA KEV catalog | **done** |
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
 | **P3c2** | Vulnerability scan as a cancellable job with live progress | **done** |
-| P3c3 | Dedicated Intel/Sync screen with per-source results, last errors and on-demand NVD row | planned |
+| P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
 
+- **P3c3 — intel was only visible as one aggregate "last synced" number**
+  - Symptom: after P3c1 the engine knew exactly which feed was fresh, which was
+    failing and which had never been configured — and none of it reached the
+    user. The only surface was a top-bar chip showing one age, and the one source
+    a user *could* have fixed (`ioc_hashes`, the sha256 blocklist whose public
+    abuse.ch export now needs an Auth-Key) was configurable only through an
+    environment variable.
+  - Fix: a 13th module, Intelligence (`/intel`, new `intel.json` pack in both
+    languages). It reports the totals the machine actually holds (blocked
+    domains, KEV CVEs, cached CVEs, hashes, country lists) and then one card per
+    source with its own state chip (OK / Failing / Not configured / Never ran),
+    its own count in the right unit, freshness, when the next attempt is due
+    (or "on demand" for the NVD row a scan produces), and the last error when it
+    is failing. Offline says so instead of showing a stale timestamp.
+  - Also in this phase: `ioc_feed_url` / `ioc_feed_key` are now real settings
+    (engine document + Settings → Intelligence rows, env hooks preserved) and the
+    Auth-Key is sent as an `Auth-Key` header rather than a query parameter, so it
+    cannot end up in a logged URL; `Vuln` carries `known_exploited`/`kev_due` and
+    vulnerability cards show a `KEV` badge with the catalog's remediation date,
+    because "exploited in the wild" outranks the CVSS number next to it.
+  - Tests: the second widget test suite (`test/intel_screen_test.dart`) pins the
+    report's honesty — every source visible with its own numbers, the failing
+    source naming `HTTP 503`, the on-demand NVD row, and the offline state — and
+    it reads the real language packs from disk so a copy regression fails the
+    test rather than the user's screen. `cargo test` 29/29, `flutter test` 28/28,
+    clippy and analyze clean.
 - **P3c2 — the Vulnerabilities screen was a spinner you could not cancel**
   - Symptom: `vuln.scan` was one blocking RPC covering NVD lookups plus a 6.5 s
     rate-limit pause per application, so a cold scan left the screen spinning

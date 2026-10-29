@@ -206,6 +206,26 @@ class SettingsScreen extends ConsumerWidget {
                 onSave: notifier.setNvdKey,
               ),
               const SizedBox(height: 8),
+              _TextSetting(
+                label: context.tr('settings.iocFeedUrl'),
+                hint: 'https://…/hashes.csv',
+                initial: s.iocFeedUrl,
+                onSave: (v) => notifier.setIocFeed(v, s.iocFeedKey),
+              ),
+              const SizedBox(height: 8),
+              _TextSetting(
+                label: context.tr('settings.iocFeedKey'),
+                hint: 'Auth-Key',
+                initial: s.iocFeedKey,
+                obscure: true,
+                onSave: (v) => notifier.setIocFeed(s.iocFeedUrl, v),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.tr('settings.iocFeedHint'),
+                style: TextStyle(color: AppColors.muted, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
               Row(children: [
                 OutlinedButton.icon(
                   onPressed: () async {

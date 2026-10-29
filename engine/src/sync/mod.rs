@@ -87,6 +87,12 @@ impl Source {
     }
 
     pub fn feed_url(self) -> String {
+        // The hash feed is user-configured (Settings → Intelligence) because no
+        // key-free public export exists any more; the env hook lives in
+        // `Settings::ioc_feed_url` so both paths agree.
+        if self == Source::IocHashes {
+            return crate::settings::current().ioc_feed_url().trim().to_string();
+        }
         let env = self.env_override();
         if !env.is_empty()
             && let Ok(url) = std::env::var(env)
@@ -340,7 +346,17 @@ impl SyncManager {
     }
 
     async fn fetch_text(&self, url: &str) -> Result<String> {
-        let resp = self.client.get(url).send().await.context("request")?;
+        self.fetch_text_auth(url, "").await
+    }
+
+    /// Some feeds (abuse.ch) authenticate with an `Auth-Key` header rather than
+    /// a query parameter, so the key never lands in a URL that gets logged.
+    async fn fetch_text_auth(&self, url: &str, auth_key: &str) -> Result<String> {
+        let mut req = self.client.get(url);
+        if !auth_key.trim().is_empty() {
+            req = req.header("Auth-Key", auth_key.trim());
+        }
+        let resp = req.send().await.context("request")?;
         if !resp.status().is_success() {
             anyhow::bail!("HTTP {}", resp.status());
         }
@@ -351,10 +367,13 @@ impl SyncManager {
         let url = Source::IocHashes.feed_url();
         if url.is_empty() {
             return Outcome::not_configured(
-                "no hash feed configured — the public abuse.ch export now requires an Auth-Key",
+                "no hash feed configured — set one in Settings → Intelligence (abuse.ch needs an Auth-Key)",
             );
         }
-        let text = match self.fetch_text(&url).await {
+        let text = match self
+            .fetch_text_auth(&url, &crate::settings::current().ioc_feed_key())
+            .await
+        {
             Ok(t) => t,
             Err(e) => return Outcome::failed(format!("{e:#}")),
         };

@@ -10,7 +10,7 @@ import 'package:window_manager/window_manager.dart';
 
 /// MI CS shell — macOS-style custom title bar (traffic lights + drag area),
 /// branded header with live score, omnibox and quick controls, and a
-/// 12-module navigation rail.
+/// 13-module navigation rail.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
   final Widget child;
@@ -39,6 +39,7 @@ final _navItems = [
   _NavDest('/hardening', Icons.lock_reset_outlined, 'nav.hardening', AppColors.cyan),
   _NavDest('/incidents', Icons.timeline_outlined, 'nav.incidents', AppColors.red),
   _NavDest('/reports', Icons.description_outlined, 'nav.reports', AppColors.cyan),
+  _NavDest('/intel', Icons.cloud_sync_outlined, 'nav.intel', AppColors.cyan),
   _NavDest('/settings', Icons.settings_outlined, 'nav.settings', AppColors.muted),
 ];
 
@@ -65,7 +66,7 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
 
     final loc = GoRouterState.of(context).uri.path;
     final selectedIndex =
-        _navItems.indexWhere((d) => loc.startsWith(d.route)).clamp(0, 11);
+        _navItems.indexWhere((d) => loc.startsWith(d.route)).clamp(0, 12);
 
     return Directionality(
       textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,

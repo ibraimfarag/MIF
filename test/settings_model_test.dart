@@ -41,6 +41,8 @@ void main() {
       'guard_autostart',
       'auto_resume_scans',
       'nvd_api_key',
+      'ioc_feed_url',
+      'ioc_feed_key',
       'lm_url',
       'lm_model',
       'update_manifest_url',
@@ -64,6 +66,8 @@ void main() {
       syncIntervalHours: 12,
       vtApiKey: 'vt',
       nvdApiKey: 'nvd',
+      iocFeedUrl: 'https://example.com/hashes.csv',
+      iocFeedKey: 'auth-key',
       lmUrl: 'http://localhost:1234',
       lmModel: 'qwen',
       updateManifestUrl: 'https://example.com/m.json',
@@ -83,6 +87,8 @@ void main() {
     expect(back.syncIntervalHours, 12);
     expect(back.vtApiKey, 'vt');
     expect(back.nvdApiKey, 'nvd');
+    expect(back.iocFeedUrl, 'https://example.com/hashes.csv');
+    expect(back.iocFeedKey, 'auth-key');
     expect(back.lmUrl, 'http://localhost:1234');
     expect(back.lmModel, 'qwen');
     expect(back.updateManifestUrl, 'https://example.com/m.json');
