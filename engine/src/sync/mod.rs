@@ -169,8 +169,12 @@ pub fn backoff_secs(failures: u32, cadence: i64) -> i64 {
 pub fn state_of(row: Option<&SyncStateRow>) -> &'static str {
     match row {
         None => "never",
-        Some(r) if r.version.as_deref() == Some(NOT_CONFIGURED) => "not_configured",
+        // The newest attempt decides the state: a source can be configured today
+        // after months of "not configured", so a failure must win over that
+        // stale marker — otherwise the UI would report the one thing that is
+        // definitely no longer true about it.
         Some(r) if r.failures > 0 && r.last_error.is_some() => "failed",
+        Some(r) if r.version.as_deref() == Some(NOT_CONFIGURED) => "not_configured",
         Some(r) if r.last_success.is_none() => "never",
         Some(_) => "ok",
     }

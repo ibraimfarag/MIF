@@ -247,7 +247,8 @@ impl Storage {
 
     /// Records a failed attempt. The previous success is deliberately kept: the
     /// UI has to be able to say "last good intel was 3 h ago" while the retry
-    /// ladder climbs.
+    /// ladder climbs. A stale "not configured" marker is cleared instead, so the
+    /// row cannot claim a source has no feed while it is failing to fetch one.
     pub fn record_sync_failure(
         &self,
         source: &str,
@@ -256,9 +257,10 @@ impl Storage {
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO sync_state (source, last_attempt, last_error, failures, next_due)
-             VALUES (?1, strftime('%s','now'), ?2, 1, ?3)
+            "INSERT INTO sync_state (source, version, last_attempt, last_error, failures, next_due)
+             VALUES (?1, NULL, strftime('%s','now'), ?2, 1, ?3)
              ON CONFLICT(source) DO UPDATE SET
+               version      = NULL,
                last_attempt = strftime('%s','now'),
                last_error   = excluded.last_error,
                failures     = sync_state.failures + 1,

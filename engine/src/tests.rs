@@ -266,6 +266,46 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
+    /// Found by live-probing the P3c3 feed settings: a source that had been
+    /// reported as "not configured" kept that label after the user configured it
+    /// and the fetch failed, so the screen showed the one thing that was no
+    /// longer true about it.
+    #[test]
+    fn a_configured_source_that_fails_stops_reading_as_unconfigured() {
+        use crate::storage::sqlite::Storage;
+        use crate::sync::state_of;
+        let path = temp_db("sync-configured-then-failed");
+        let storage = Storage::open_at(&path).unwrap();
+        storage
+            .record_sync_skipped("ioc_hashes", "no feed configured", Some(5000))
+            .unwrap();
+        storage
+            .record_sync_failure("ioc_hashes", "no sha256 hash found in feed", Some(900))
+            .unwrap();
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "ioc_hashes")
+            .unwrap();
+        assert_eq!(row.failures, 1);
+        assert_eq!(row.version, None, "the stale marker must be cleared");
+        assert_eq!(state_of(Some(&row)), "failed");
+
+        // Taking the URL away again puts it back into the honest state.
+        storage
+            .record_sync_skipped("ioc_hashes", "no feed configured", Some(5000))
+            .unwrap();
+        let row = storage
+            .sync_states()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.source == "ioc_hashes")
+            .unwrap();
+        assert_eq!(state_of(Some(&row)), "not_configured");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
     #[test]
     fn old_sync_state_table_is_migrated_in_place() {
         use crate::storage::sqlite::Storage;

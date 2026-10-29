@@ -122,6 +122,23 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **fix — a source that failed after being configured still read "Not configured"**
+  - Found by live-probing the new feed settings rather than by a test: point
+    `ioc_feed_url` at a local feed that returns no usable rows, and `sync.status`
+    reported `ioc_hashes` as `state=not_configured` *while* carrying
+    `failures=1` and `last_error="no sha256 hash found in ..."`. `state_of`
+    checked the stored "not configured" version marker before the failure, so the
+    screen showed the one thing that was definitely no longer true about the
+    source — exactly the misleading-state class P3c3 exists to remove.
+  - Fix: the newest attempt decides the state (failure before the marker), and
+    `record_sync_failure` clears the marker so a row cannot contradict itself.
+    Taking the URL away again still puts the source back to `not_configured`.
+    Regression test added (`cargo test` 30/30).
+  - Live evidence after the fix: with the feed URL configured, `sync.status`
+    reports `ioc_hashes state=failed items=0 fail=1 err="no sha256 hash found in
+    http://127.0.0.1:8799/hashes.csv"`, and the captured request from the
+    throwaway listener shows the key travelling as a header (`auth-key:
+    probe-key`), never in the URL.
 - **P3c3 — intel was only visible as one aggregate "last synced" number**
   - Symptom: after P3c1 the engine knew exactly which feed was fresh, which was
     failing and which had never been configured — and none of it reached the
