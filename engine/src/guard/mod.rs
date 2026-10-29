@@ -70,12 +70,11 @@ pub fn load_rules() -> Result<Vec<GuardRule>> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for e in entries.flatten() {
             let path = e.path();
-            if path.extension().map(|x| x == "json").unwrap_or(false) {
-                if let Ok(text) = std::fs::read_to_string(&path)
-                    && let Ok(parsed) = serde_json::from_str::<Vec<GuardRule>>(&text)
-                {
-                    rules.extend(parsed);
-                }
+            if path.extension().map(|x| x == "json").unwrap_or(false)
+                && let Ok(text) = std::fs::read_to_string(&path)
+                && let Ok(parsed) = serde_json::from_str::<Vec<GuardRule>>(&text)
+            {
+                rules.extend(parsed);
             }
         }
     }

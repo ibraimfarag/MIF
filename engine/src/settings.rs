@@ -339,6 +339,34 @@ fn can_write(path: &std::path::Path) -> bool {
     std::fs::OpenOptions::new().append(true).open(path).is_ok()
 }
 
+/// True when this process could actually persist state in `dir`: the folder is
+/// writable *and* SQLite can take a write lock on the database. A folder
+/// created by an earlier elevated run can be writable while the database (or
+/// its WAL sidecars) is read-only for this user — exactly the "readonly
+/// database" trap that makes scans and settings fail silently.
+fn state_writable(dir: &std::path::Path) -> bool {
+    if !can_write(dir) {
+        return false;
+    }
+    for name in ["mics.db", "mics.db-wal", "mics.db-shm", "settings.json"] {
+        let file = dir.join(name);
+        if file.exists() && !can_write(&file) {
+            return false;
+        }
+    }
+    // The definitive test: an immediate transaction actually takes write locks.
+    let db = dir.join("mics.db");
+    match rusqlite::Connection::open_with_flags(
+        &db,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_CREATE,
+    ) {
+        Ok(conn) => conn
+            .execute_batch("BEGIN IMMEDIATE; COMMIT;")
+            .is_ok(),
+        Err(_) => false,
+    }
+}
+
 static BASE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn machine_dir() -> PathBuf {
@@ -353,28 +381,58 @@ fn resolve_base_dir() -> PathBuf {
     {
         return PathBuf::from(dir);
     }
+
+    // Sticky choice: the first successful resolution is recorded per user, so an
+    // elevated run and an autostart (unelevated) run never disagree about where
+    // state lives — that would silently show different settings and scans.
+    let pointer = data_dir_pointer();
+    if let Some(text) = pointer
+        .as_ref()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+    {
+        let dir = PathBuf::from(text.trim());
+        if state_writable(&dir) {
+            return dir;
+        }
+    }
+
     let machine = machine_dir();
     // The probe needs the directory to exist; creating it is itself part of the
     // writability test (a user without rights cannot create it).
     let _ = std::fs::create_dir_all(&machine);
-    // An elevated engine can always make the machine-wide directory writable
-    // (see `ensure_data_dir`), so keep it even if the probe fails.
-    if can_write(&machine) || crate::platform::windows::elevation::is_elevated() {
-        return machine;
+    // An elevated engine can repair the machine-wide directory (see
+    // `ensure_data_dir`), so keep it even when the probe fails.
+    let chosen = if state_writable(&machine) || crate::platform::windows::elevation::is_elevated() {
+        machine
+    } else {
+        per_user_dir().unwrap_or(machine)
+    };
+
+    if !state_writable(&chosen) {
+        tracing::warn!(
+            "data dir {} is not fully writable — state changes may fail",
+            chosen.display()
+        );
     }
-    if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        let per_user = PathBuf::from(local).join("MICS");
-        let _ = std::fs::create_dir_all(&per_user);
-        if can_write(&per_user) {
-            tracing::warn!(
-                "{} is not writable by this user — using {} instead",
-                machine.display(),
-                per_user.display()
-            );
-            return per_user;
+    if let Some(p) = pointer {
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
+        let _ = std::fs::write(p, chosen.display().to_string());
     }
-    machine
+    chosen
+}
+
+/// Per-user state directory (`%LOCALAPPDATA%\MICS`).
+fn per_user_dir() -> Option<PathBuf> {
+    std::env::var("LOCALAPPDATA")
+        .ok()
+        .map(|local| PathBuf::from(local).join("MICS"))
+}
+
+/// Where the chosen data directory is remembered (`%LOCALAPPDATA%\MICS\.data-dir`).
+fn data_dir_pointer() -> Option<PathBuf> {
+    per_user_dir().map(|dir| dir.join(".data-dir"))
 }
 
 /// Current settings (cheap clone of a small struct).

@@ -279,9 +279,18 @@ one-click way to elevate deliberately.
 **Decision.** State lives in the first location that is actually usable:
 
 1. `MICS_DATA_DIR` (explicit override: portable mode, tests, isolated runs);
-2. `%PROGRAMDATA%\MICS` (the documented machine-wide layout);
-3. `%LOCALAPPDATA%\MICS` (per-user fallback when (2) is not writable by the
-   signed-in user).
+2. the directory remembered in `%LOCALAPPDATA%\MICS\.data-dir`;
+3. `%PROGRAMDATA%\MICS` (the documented machine-wide layout) — chosen when the
+   folder *and* the existing database/`settings.json` are writable, or when the
+   engine is elevated (it can then repair them);
+4. `%LOCALAPPDATA%\MICS` otherwise.
+
+The choice is sticky: the first successful resolution is written to the pointer
+file, so an elevated run and an unelevated autostart run can never disagree
+about where the state lives. "Writable" is proven with a real
+`BEGIN IMMEDIATE` transaction on the database, not just a folder probe — a
+directory created by an earlier elevated run can be writable while its database
+and WAL sidecars are read-only for this user.
 
 When the engine is elevated and the machine-wide directory is not fully writable
 for the current user, it grants that user modify rights once (`icacls /T`,
