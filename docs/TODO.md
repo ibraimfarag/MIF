@@ -115,6 +115,18 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **P4a — the icon is now everywhere, at every size**
+  - Both Windows icons shipped only 16/32/48/256, so 20/24/40/64/96/128 were
+    upscaled by the shell and looked blurry. `tool/make_icons.py` now renders
+    all ten standard sizes from a 256×256 PNG master (`assets/icons/mics.png`)
+    into `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`)
+    and `assets/icons/mics.ico` (tray), and `test/icon_test.dart` fails the build
+    if a size disappears or the two icons drift apart.
+  - Verified on the built binary: the icon embedded in `mics_app.exe` is
+    pixel-identical to the master at 32×32 (mean channel difference 0.00), and
+    the runner loads it for the window class (`IDI_APP_ICON`), so Explorer,
+    taskbar, Alt-Tab and the title bar all get the same art. The portable folder
+    was refreshed and the stale `mics-engine.old.exe` removed.
 - **P3b — sticky data directory (last blocker for unelevated runs)**
   - An unelevated engine still failed with *"attempt to write a readonly
     database"*: `%PROGRAMDATA%\MICS` was writable as a folder, but the database

@@ -157,6 +157,20 @@ Copy-Item engine\rules build\windows\x64\runner\Release\rules -Recurse -Force
 
 `MICS_ENGINE_PATH` overrides the engine location if you keep it elsewhere.
 
+**Icons.** `assets/icons/mics.png` is the 256×256 master art. Both Windows icons
+— `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`, so it is
+what Explorer, the taskbar, Alt-Tab, the title bar and the UAC dialog show) and
+`assets/icons/mics.ico` (the tray icon) — are generated from it at every
+standard size:
+
+```powershell
+python tool/make_icons.py            # regenerate both from the master
+python tool/make_icons.py logo.png   # adopt new art as the master first
+```
+
+`test/icon_test.dart` fails the build if either icon loses a size
+(16/20/24/32/40/48/64/96/128/256) or if the two drift apart.
+
 ## Testing
 
 ```powershell
