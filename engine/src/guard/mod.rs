@@ -64,22 +64,37 @@ pub fn rules_dir() -> PathBuf {
 pub fn load_rules() -> Result<Vec<GuardRule>> {
     let mut rules = Vec::new();
     let dir = rules_dir();
-    let entries = std::fs::read_dir(&dir)
-        .with_context(|| format!("read rules dir {}", dir.display()))?;
-    for e in entries.flatten() {
-        let path = e.path();
-        if path.extension().map(|x| x == "json").unwrap_or(false) {
-            let text = std::fs::read_to_string(&path)
-                .with_context(|| format!("read {}", path.display()))?;
-            let parsed: Vec<GuardRule> = serde_json::from_str(&text)
-                .with_context(|| format!("parse {}", path.display()))?;
-            rules.extend(parsed);
+    // The packaged layout ships `rules/` next to the binaries, but a dev or
+    // partial copy may not have it. The starter pack is compiled into the
+    // binary, so the guard is never left with zero rules.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.extension().map(|x| x == "json").unwrap_or(false) {
+                if let Ok(text) = std::fs::read_to_string(&path)
+                    && let Ok(parsed) = serde_json::from_str::<Vec<GuardRule>>(&text)
+                {
+                    rules.extend(parsed);
+                }
+            }
+        }
+    }
+    if rules.is_empty() {
+        match serde_json::from_str::<Vec<GuardRule>>(starter_rules_source()) {
+            Ok(embedded) => {
+                tracing::info!(
+                    "guard: using the built-in starter rules ({} rule(s)) — {} not found",
+                    embedded.len(),
+                    dir.display()
+                );
+                rules = embedded;
+            }
+            Err(e) => tracing::warn!("guard: starter rules unreadable: {e}"),
         }
     }
     Ok(rules)
 }
 
-#[allow(dead_code)]
 pub fn starter_rules_source() -> &'static str {
     include_str!("../../rules/guard/starter.json")
 }
@@ -292,10 +307,10 @@ fn rule_matches(
 
 /// Optional tree-kill responder (usermode): taskkill /T /F.
 pub fn kill_tree(pid: u32) -> Result<()> {
-    let out = std::process::Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .output()
-        .context("launch taskkill")?;
+    let mut command = std::process::Command::new("taskkill");
+    command.args(["/PID", &pid.to_string(), "/T", "/F"]);
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let out = command.output().context("launch taskkill")?;
     if !out.status.success() {
         anyhow::bail!(
             "taskkill failed: {}",

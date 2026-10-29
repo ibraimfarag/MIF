@@ -46,5 +46,9 @@
     "settings.updates":  "Updates",
     "settings.volume":  "Volume",
     "settings.vtKey":  "VirusTotal API key (optional)",
-    "settings.testSound":  "Play a test sound"
+    "settings.testSound":  "Play a test sound",
+    "settings.manifestHint":  "No manifest URL configured — updates are disabled. Paste the release manifest URL above.",
+    "settings.relaunchElevated":  "Relaunch as administrator",
+    "settings.relaunchDone":  "MI CS is restarting with administrator rights",
+    "settings.relaunchHint":  "Only needed for firewall, hosts-file and hardening changes. The app itself always runs without admin rights."
 }

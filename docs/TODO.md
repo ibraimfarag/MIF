@@ -101,6 +101,38 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 ### Done log (append only)
 
+- **P3a — updates, offline badge, sync status; elevation and data-dir fixes**
+  - **Offline badge + intel freshness** in the title bar (`_IntelChip`): reads the
+    engine's `sync.status` once a minute, shows Online/Offline and "intel 12m
+    ago" (or "never synced"), and syncs on tap. `sync.status` gained
+    `last_success` / `age_seconds` / `sync_interval_hours`, and the engine's
+    reachability probe is now cached (30 s) with a 3 s deadline so an offline
+    machine cannot stall a poll.
+  - **Update flow** in Settings: check → show current/latest + release notes +
+    channel → "Download and install" (`update.download` then `update.apply`),
+    with the real error surfaced when it fails.
+  - **UI is `asInvoker`** (D-010): no UAC at launch. Hardening/firewall commands
+    run directly when the engine is elevated, otherwise fall back to RunAs with
+    a clear message; new `app.relaunch_elevated` RPC + "Relaunch as
+    administrator" button for deliberate elevation.
+  - **Errors are no longer swallowed**: 33 dispatcher error paths now return the
+    real reason instead of "Method failed internally".
+  - **No console windows**: every `powershell` / `netsh` / `taskcmd` / `reg`
+    spawn uses `CREATE_NO_WINDOW` (this is what made PowerShell flash during an
+    audit fix).
+  - **Data directory** resolution + one-time ACL repair (D-011); engine log falls
+    back to a per-pid file when an elevated predecessor's log is not writable.
+  - **Guard rules are embedded**: a missing `rules/guard` directory now falls
+    back to the compiled-in starter pack instead of leaving the guard with zero
+    rules; `rules/` is also shipped next to the app.
+  - **Fixed a real build bug**: `windows/runner/CMakeLists.txt` added a
+    `/MANIFESTUAC:requireAdministrator` link option that conflicted with
+    `runner.exe.manifest`, making every build fail with
+    `LNK1327 / c1010001`. The manifest is now the single source of the level.
+  - Evidence: `cargo test` 12/12, `cargo clippy` clean, `flutter analyze` clean,
+    `flutter test` 18/18; live run shows the app launching with no UAC, the chip
+    polling `sync.status`, the guard loading the embedded rules, and a fresh
+    `engine-<pid>.log` because the old log belonged to an elevated run.
 - **P2d — first real run on the user's machine (bug sweep)**
   - Ran the built app for real and inspected screenshots. Found and fixed:
     - **L1–L5 cards were static** (`layersProvider` was never consumed); they now
@@ -267,14 +299,15 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 ## 6. Backlog by phase
 
 ### P3 — updates & intel
-- [ ] Default update manifest URL compiled in, `stable`/`beta` channels, staged
-      download, SHA256 + signature verify, rollback, update screen with AR/EN
-      notes.
-- [ ] Intel pipeline: ioc hashes → ioc domains → YARA packs → GeoIP → CVE
-      incremental (`lastModStartDate` + API key), per-source backoff,
-      `sync_state.next_due`, documented file layout under `%PROGRAMDATA%`.
-- [ ] OFFLINE badge + "intel last updated Xh ago" in the top bar; Sync-now button;
-      a `sync.status`/`sync.now` driven screen.
+- [x] Update check + channels + download/apply **UI** (`update.check`,
+      `update.download`, `update.apply`), with release notes and real errors.
+- [ ] Default update manifest URL compiled in (still user-supplied) and a signed
+      manifest check before applying.
+- [x] OFFLINE badge + "intel last updated Xh ago" in the title bar, tap to sync.
+- [ ] Intel pipeline hardening: IOC domains → YARA packs → GeoIP in the same
+      scheduled pass; per-source backoff; `sync_state.next_due`.
+- [ ] A dedicated sync/intel screen with per-source results and last-error text
+      (today the chip + a Settings row cover it).
 
 ### P4 — release engineering
 - [ ] Authenticode: OV/EV or Azure Trusted Signing; sign DLLs then EXEs;
@@ -315,7 +348,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | Every admin operation opens its own UAC prompt attributed to "Windows PowerShell", not MI CS | `firewall/mod.rs`, `ids/mod.rs`, `hardening/mod.rs` |
+| HIGH | Admin-only fixes (firewall/hosts/hardening) need the user to press "Relaunch as administrator" until the single-elevation helper (P1.5) lands | `dispatcher.rs`, Settings |
 | HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |

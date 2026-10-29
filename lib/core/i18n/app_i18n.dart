@@ -38,6 +38,7 @@ const i18nModules = <String>[
   'incidents',
   'reports',
   'settings',
+  'sync',
   'about',
 ];
 

@@ -36,9 +36,11 @@ fn run_netsh(args: &[&str]) -> Result<String> {
 }
 
 fn run_netsh_plain(args: &[&str]) -> Result<String> {
-    let out = std::process::Command::new("netsh")
-        .args(["advfirewall"])
-        .args(args)
+    let mut command = std::process::Command::new("netsh");
+    command.args(["advfirewall"]).args(args);
+    // The engine is a GUI-adjacent process: a console window must never flash.
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let out = command
         .output()
         .context("failed to launch netsh (firewall op)")?;
     let text = format!(
@@ -63,8 +65,10 @@ fn run_netsh_elevated(args: &[&str]) -> Result<String> {
     let ps_arg = format!(
         "Start-Process -FilePath netsh -ArgumentList {arg_line} -Verb RunAs -Wait -WindowStyle Hidden"
     );
-    let out = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_arg])
+    let mut command = std::process::Command::new("powershell");
+    command.args(["-NoProfile", "-Command", &ps_arg]);
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let out = command
         .output()
         .context("failed to launch elevated netsh")?;
     if !out.status.success() {

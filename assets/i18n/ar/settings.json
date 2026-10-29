@@ -46,5 +46,9 @@
     "settings.updates":  "التحديثات",
     "settings.volume":  "مستوى الصوت",
     "settings.vtKey":  "مفتاح VirusTotal (اختياري)",
-    "settings.testSound":  "جرّب الصوت"
+    "settings.testSound":  "جرّب الصوت",
+    "settings.manifestHint":  "مفيش رابط تحديث متظبّط — التحديثات متوقفة. الصق رابط ملف الإصدار فوق.",
+    "settings.relaunchElevated":  "أعد التشغيل كمسؤول",
+    "settings.relaunchDone":  "MI CS هيعيد التشغيل بصلاحيات المدير",
+    "settings.relaunchHint":  "محتاجها بس لتغييرات الفايروول وملف hosts والتقوية. التطبيق نفسه دايمًا بيشتغل من غير صلاحيات مدير."
 }

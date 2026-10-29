@@ -213,18 +213,14 @@ impl Settings {
             .unwrap_or(self.dnd)
     }
 
+    /// Where MI CS keeps its state. Resolved once per process:
+    ///
+    /// 1. `MICS_DATA_DIR` — explicit override (portable mode, tests, isolated runs);
+    /// 2. `%PROGRAMDATA%\MICS` — the documented machine-wide layout;
+    /// 3. `%LOCALAPPDATA%\MICS` — per-user fallback when (2) is not writable by
+    ///    this user (an unelevated engine must never die on "readonly database").
     pub fn base_dir() -> PathBuf {
-        // `MICS_DATA_DIR` is the explicit override (portable mode, tests, and
-        // the app passing its own data dir to the engine it spawns). Falling
-        // back to PROGRAMDATA keeps the documented Windows layout.
-        if let Ok(dir) = std::env::var("MICS_DATA_DIR")
-            && !dir.trim().is_empty()
-        {
-            return PathBuf::from(dir);
-        }
-        std::env::var("PROGRAMDATA")
-            .map(|p| PathBuf::from(p).join("MICS"))
-            .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS"))
+        BASE_DIR.get_or_init(resolve_base_dir).clone()
     }
 
     pub fn path() -> PathBuf {
@@ -269,9 +265,116 @@ fn cache() -> &'static RwLock<Settings> {
 
 /// Loads the settings once (called at engine startup).
 pub fn init() -> Settings {
+    ensure_data_dir();
     let loaded = Settings::load();
     *cache().write().unwrap_or_else(|e| e.into_inner()) = loaded.clone();
     loaded
+}
+
+/// Creates the data directory and makes sure the signed-in user can write it.
+///
+/// `%PROGRAMDATA%\MICS` is usually created by the elevated app, so its ACL
+/// gives Administrators full control and the interactive user read-only. The
+/// engine started by the autostart entry is **not** elevated, and would then
+/// fail with "attempt to write a readonly database" on every state change.
+/// Granting the current user modify rights once fixes that without weakening
+/// anything the usermode product already relies on.
+pub fn ensure_data_dir() -> PathBuf {
+    let dir = Settings::base_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    // A writable *directory* is not enough: files created by an earlier
+    // elevated run (database, log, quarantine blobs) can still be read-only for
+    // this user. The marker records that the recursive grant already ran.
+    let marker = dir.join(".acl-granted");
+    let files_ok = !dir.join("mics.db").exists() || can_write(&dir.join("mics.db"));
+    if can_write(&dir) && files_ok {
+        return dir;
+    }
+    if !crate::platform::windows::elevation::is_elevated() {
+        tracing::warn!(
+            "data dir {} is not fully writable by this user — start MI CS once as \
+             administrator to repair permissions",
+            dir.display()
+        );
+        return dir;
+    }
+    if marker.exists() && can_write(&dir) {
+        return dir;
+    }
+    if let Ok(user) = std::env::var("USERNAME") {
+        let mut command = std::process::Command::new("icacls");
+        command
+            .arg(&dir)
+            // /T so existing files (database, logs, quarantine blobs) created
+            // by an earlier elevated run become writable too.
+            .arg(format!("{user}:(OI)(CI)M"))
+            .arg("/T")
+            .arg("/C")
+            .arg("/Q");
+        crate::platform::windows::elevation::hide_console(&mut command);
+        match command.output() {
+            Ok(out) if out.status.success() => {
+                tracing::info!("granted {user} modify rights on {}", dir.display())
+            }
+            Ok(out) => tracing::warn!(
+                "icacls failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+            Err(e) => tracing::warn!("icacls launch failed: {e}"),
+        }
+        let _ = std::fs::write(&marker, b"1");
+    }
+    dir
+}
+
+/// Writable check that also covers an existing *file* (not just the folder).
+fn can_write(path: &std::path::Path) -> bool {
+    if path.is_dir() {
+        let probe = path.join(".write-probe");
+        let ok = std::fs::write(&probe, b"1").is_ok();
+        let _ = std::fs::remove_file(&probe);
+        return ok;
+    }
+    // Existing file: opening for append is the real test.
+    std::fs::OpenOptions::new().append(true).open(path).is_ok()
+}
+
+static BASE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+fn machine_dir() -> PathBuf {
+    std::env::var("PROGRAMDATA")
+        .map(|p| PathBuf::from(p).join("MICS"))
+        .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS"))
+}
+
+fn resolve_base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("MICS_DATA_DIR")
+        && !dir.trim().is_empty()
+    {
+        return PathBuf::from(dir);
+    }
+    let machine = machine_dir();
+    // The probe needs the directory to exist; creating it is itself part of the
+    // writability test (a user without rights cannot create it).
+    let _ = std::fs::create_dir_all(&machine);
+    // An elevated engine can always make the machine-wide directory writable
+    // (see `ensure_data_dir`), so keep it even if the probe fails.
+    if can_write(&machine) || crate::platform::windows::elevation::is_elevated() {
+        return machine;
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let per_user = PathBuf::from(local).join("MICS");
+        let _ = std::fs::create_dir_all(&per_user);
+        if can_write(&per_user) {
+            tracing::warn!(
+                "{} is not writable by this user — using {} instead",
+                machine.display(),
+                per_user.display()
+            );
+            return per_user;
+        }
+    }
+    machine
 }
 
 /// Current settings (cheap clone of a small struct).

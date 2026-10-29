@@ -184,6 +184,19 @@ impl Storage {
         Ok(None)
     }
 
+    /// Timestamp of the last successful sync for a source (None = never).
+    pub fn sync_last_success(&self, source: &str) -> Result<Option<i64>> {
+        let conn = self.conn.lock().unwrap();
+        let value: Option<i64> = conn
+            .query_row(
+                "SELECT last_success FROM sync_state WHERE source = ?1",
+                [source],
+                |r| r.get(0),
+            )
+            .ok();
+        Ok(value)
+    }
+
     // ---- IOC hashes ----
 
     pub fn ioc_hash_lookup(&self, sha256: &str) -> Result<Option<String>> {

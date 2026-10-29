@@ -18,6 +18,22 @@ fn error_response(req: JsonRpcRequest, message: &str) -> JsonRpcResponse {
     }
 }
 
+/// A known method that failed: keep the real reason instead of the generic
+/// "Method failed internally", so the UI can show something actionable
+/// ("requires administrator rights", "the operation timed out", ...).
+fn detailed_error(req: JsonRpcRequest, method: &str, e: anyhow::Error) -> JsonRpcResponse {
+    JsonRpcResponse {
+        jsonrpc: "2.0".to_string(),
+        result: None,
+        error: Some(json!(JsonRpcError {
+            code: -32000,
+            message: format!("{method} failed: {e:#}"),
+            data: None,
+        })),
+        id: req.id,
+    }
+}
+
 impl Dispatcher {
     pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
@@ -307,9 +323,9 @@ impl Dispatcher {
                 match crate::scanner::quarantine::QuarantineManager::new() {
                     Ok(m) => match m.list() {
                         Ok(items) => Some(json!(items)),
-                        Err(e) => { error!("quarantine.list: {e:#}"); None }
+                        Err(e) => { error!("quarantine.list: {e:#}"); return detailed_error(req, "quarantine.list", e); }
                     },
-                    Err(e) => { error!("quarantine.list: {e:#}"); None }
+                    Err(e) => { error!("quarantine.list: {e:#}"); return detailed_error(req, "quarantine.list", e); }
                 }
             }
             "quarantine.restore" => {
@@ -319,9 +335,9 @@ impl Dispatcher {
                 match crate::scanner::quarantine::QuarantineManager::new() {
                     Ok(m) => match m.restore_file(&id).await {
                         Ok(orig) => Some(json!({"status": "restored", "path": orig})),
-                        Err(e) => { error!("quarantine.restore: {e:#}"); None }
+                        Err(e) => { error!("quarantine.restore: {e:#}"); return detailed_error(req, "quarantine.restore", e); }
                     },
-                    Err(e) => { error!("quarantine.restore: {e:#}"); None }
+                    Err(e) => { error!("quarantine.restore: {e:#}"); return detailed_error(req, "quarantine.restore", e); }
                 }
             }
             "quarantine.delete" => {
@@ -331,18 +347,20 @@ impl Dispatcher {
                 match crate::scanner::quarantine::QuarantineManager::new() {
                     Ok(m) => match m.delete_blob(&id).await {
                         Ok(()) => Some(json!({"status": "deleted"})),
-                        Err(e) => { error!("quarantine.delete: {e:#}"); None }
+                        Err(e) => { error!("quarantine.delete: {e:#}"); return detailed_error(req, "quarantine.delete", e); }
                     },
-                    Err(e) => { error!("quarantine.delete: {e:#}"); None }
+                    Err(e) => { error!("quarantine.delete: {e:#}"); return detailed_error(req, "quarantine.delete", e); }
                 }
             }
             "defender.scan.quick" => {
-                // Defender orchestration: MpCmdRun quick scan.
-                let out = tokio::process::Command::new("powershell")
-                    .args(["-NoProfile", "-Command",
-                        r#"Start-Process -FilePath 'C:\Program Files\Windows Defender\MpCmdRun.exe' -ArgumentList '-Scan','-ScanType','1' -Wait"#])
-                    .output()
-                    .await;
+                // Defender orchestration: MpCmdRun quick scan (no console flash).
+                let mut command = tokio::process::Command::new("powershell");
+                command.args(["-NoProfile", "-Command",
+                    r#"Start-Process -FilePath 'C:\Program Files\Windows Defender\MpCmdRun.exe' -ArgumentList '-Scan','-ScanType','1' -Wait"#]);
+                command.creation_flags(
+                    crate::platform::windows::elevation::CREATE_NO_WINDOW,
+                );
+                let out = command.output().await;
                 match out {
                     Ok(o) if o.status.success() => Some(json!({"status": "done"})),
                     Ok(o) => {
@@ -375,9 +393,9 @@ impl Dispatcher {
                 match crate::sync::SyncManager::new() {
                     Ok(sm) => match sm.sync_now().await {
                         Ok(res) => Some(json!({"status": "success", "report": res})),
-                        Err(e) => { error!("sync.now: {e:#}"); None }
+                        Err(e) => { error!("sync.now: {e:#}"); return detailed_error(req, "sync.now", e); }
                     },
-                    Err(e) => { error!("sync.now: {e:#}"); None }
+                    Err(e) => { error!("sync.now: {e:#}"); return detailed_error(req, "sync.now", e); }
                 }
             }
             "sync.status" => {
@@ -385,9 +403,9 @@ impl Dispatcher {
                 match crate::sync::SyncManager::new() {
                     Ok(sm) => match sm.get_status().await {
                         Ok(state) => Some(state),
-                        Err(e) => { error!("sync.status: {e:#}"); None }
+                        Err(e) => { error!("sync.status: {e:#}"); return detailed_error(req, "sync.status", e); }
                     },
-                    Err(e) => { error!("sync.status: {e:#}"); None }
+                    Err(e) => { error!("sync.status: {e:#}"); return detailed_error(req, "sync.status", e); }
                 }
             }
             "guard.start" => {
@@ -401,7 +419,7 @@ impl Dispatcher {
             "guard.status" => Some(crate::guard::status_json()),
             "guard.rules.list" => match crate::guard::load_rules() {
                 Ok(r) => Some(json!(r)),
-                Err(e) => { error!("guard.rules.list: {e:#}"); None }
+                Err(e) => { error!("guard.rules.list: {e:#}"); return detailed_error(req, "guard.rules.list", e); }
             },
             "guard.rules.add" => {
                 // Rules live in JSON files (hot-reloaded every 30 s); add appends
@@ -423,7 +441,7 @@ impl Dispatcher {
                     .map_err(|e| anyhow::anyhow!("serialize rules: {e}"));
                 match payload.and_then(|p| std::fs::write(&path, p).map_err(|e| anyhow::anyhow!("write rules: {e}"))) {
                     Ok(()) => Some(json!({"status": "added", "file": path})),
-                    Err(e) => { error!("guard.rules.add: {e:#}"); None }
+                    Err(e) => { error!("guard.rules.add: {e:#}"); return detailed_error(req, "guard.rules.add", e); }
                 }
             }
             "canary.list" => Some(json!(crate::guard::canary::list_decoys())),
@@ -437,18 +455,18 @@ impl Dispatcher {
                         let _ = crate::guard::canary::deploy_decoys();
                         Some(json!({"status": "saved"}))
                     }
-                    Err(e) => { error!("canary.configure: {e:#}"); None }
+                    Err(e) => { error!("canary.configure: {e:#}"); return detailed_error(req, "canary.configure", e); }
                 }
             }
             "canary.deploy" => match crate::guard::canary::deploy_decoys() {
                 Ok(n) => Some(json!({"created": n})),
-                Err(e) => { error!("canary.deploy: {e:#}"); None }
+                Err(e) => { error!("canary.deploy: {e:#}"); return detailed_error(req, "canary.deploy", e); }
             },
             "incident.list" => {
                 let limit = req.params.as_ref().and_then(|p| p.get("limit")).and_then(|v| v.as_u64()).unwrap_or(50) as u32;
                 match crate::smart::correlator::list_incidents(limit) {
                     Ok(list) => Some(json!(list)),
-                    Err(e) => { error!("incident.list: {e:#}"); None }
+                    Err(e) => { error!("incident.list: {e:#}"); return detailed_error(req, "incident.list", e); }
                 }
             }
             "incident.close" => {
@@ -457,12 +475,12 @@ impl Dispatcher {
                 };
                 match crate::smart::correlator::close_incident(id) {
                     Ok(()) => Some(json!({"status": "closed"})),
-                    Err(e) => { error!("incident.close: {e:#}"); None }
+                    Err(e) => { error!("incident.close: {e:#}"); return detailed_error(req, "incident.close", e); }
                 }
             }
             "noise.stats" => match crate::smart::noise_learner::stats() {
                 Ok(s) => Some(json!(s)),
-                Err(e) => { error!("noise.stats: {e:#}"); None }
+                Err(e) => { error!("noise.stats: {e:#}"); return detailed_error(req, "noise.stats", e); }
             },
             "noise.mute" => {
                 let Some(cat) = req.params.as_ref().and_then(|p| p.get("category")).and_then(|v| v.as_str()).map(String::from) else {
@@ -470,7 +488,7 @@ impl Dispatcher {
                 };
                 match crate::smart::noise_learner::mute_category(&cat) {
                     Ok(()) => Some(json!({"status": "muted"})),
-                    Err(e) => { error!("noise.mute: {e:#}"); None }
+                    Err(e) => { error!("noise.mute: {e:#}"); return detailed_error(req, "noise.mute", e); }
                 }
             }
             "noise.unmute" => {
@@ -479,7 +497,7 @@ impl Dispatcher {
                 };
                 match crate::smart::noise_learner::unmute_category(&cat) {
                     Ok(()) => Some(json!({"status": "unmuted"})),
-                    Err(e) => { error!("noise.unmute: {e:#}"); None }
+                    Err(e) => { error!("noise.unmute: {e:#}"); return detailed_error(req, "noise.unmute", e); }
                 }
             }
             "guard.event.dismiss" => {
@@ -493,7 +511,7 @@ impl Dispatcher {
             }
             "ids.status" => match crate::ids::status() {
                 Ok(s) => Some(json!(s)),
-                Err(e) => { error!("ids.status: {e:#}"); None }
+                Err(e) => { error!("ids.status: {e:#}"); return detailed_error(req, "ids.status", e); }
             },
             "ids.block.add" => {
                 let Some(domains) = req
@@ -507,7 +525,7 @@ impl Dispatcher {
                 };
                 match crate::ids::add_domains(&domains) {
                     Ok(n) => Some(json!({"added": n})),
-                    Err(e) => { error!("ids.block.add: {e:#}"); None }
+                    Err(e) => { error!("ids.block.add: {e:#}"); return detailed_error(req, "ids.block.add", e); }
                 }
             }
             "ids.block.remove" => {
@@ -522,7 +540,7 @@ impl Dispatcher {
                 };
                 match crate::ids::remove_domain(&d) {
                     Ok(()) => Some(json!({"status": "removed"})),
-                    Err(e) => { error!("ids.block.remove: {e:#}"); None }
+                    Err(e) => { error!("ids.block.remove: {e:#}"); return detailed_error(req, "ids.block.remove", e); }
                 }
             }
             "ids.blocklist.import" => {
@@ -537,7 +555,7 @@ impl Dispatcher {
                 };
                 match crate::ids::import_blocklist(&p) {
                     Ok(n) => Some(json!({"imported": n})),
-                    Err(e) => { error!("ids.blocklist.import: {e:#}"); None }
+                    Err(e) => { error!("ids.blocklist.import: {e:#}"); return detailed_error(req, "ids.blocklist.import", e); }
                 }
             }
             "geoip.lookup" => {
@@ -555,7 +573,7 @@ impl Dispatcher {
             "update.download" => {
                 match crate::update::download_and_verify().await {
                     Ok(path) => Some(json!({"status": "staged", "path": path})),
-                    Err(e) => { error!("update.download: {e:#}"); None }
+                    Err(e) => { error!("update.download: {e:#}"); return detailed_error(req, "update.download", e); }
                 }
             }
             "update.apply" => {
@@ -572,7 +590,7 @@ impl Dispatcher {
                     });
                 match crate::update::apply(&p) {
                     Ok(msg) => Some(json!({"status": "applied", "detail": msg})),
-                    Err(e) => { error!("update.apply: {e:#}"); None }
+                    Err(e) => { error!("update.apply: {e:#}"); return detailed_error(req, "update.apply", e); }
                 }
             }
             "notify.test" => {
@@ -595,7 +613,7 @@ impl Dispatcher {
                 };
                 match crate::hardening::apply(&id).await {
                     Ok(_) => Some(json!({"status": "applied", "action": id})),
-                    Err(e) => { error!("hardening.apply: {e:#}"); None }
+                    Err(e) => { error!("hardening.apply: {e:#}"); return detailed_error(req, "hardening.apply", e); }
                 }
             }
             "hardening.rollback" => {
@@ -604,19 +622,19 @@ impl Dispatcher {
                 };
                 match crate::hardening::rollback(&id).await {
                     Ok(()) => Some(json!({"status": "rolled_back", "action": id})),
-                    Err(e) => { error!("hardening.rollback: {e:#}"); None }
+                    Err(e) => { error!("hardening.rollback: {e:#}"); return detailed_error(req, "hardening.rollback", e); }
                 }
             }
             "report.export" => match crate::reports::export_markdown().await {
                 Ok(path) => Some(json!({"status": "exported", "path": path})),
-                Err(e) => { error!("report.export: {e:#}"); None }
+                Err(e) => { error!("report.export: {e:#}"); return detailed_error(req, "report.export", e); }
             },
             "llm.explain" => {
                 let finding = req.params.as_ref().and_then(|p| p.get("finding")).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let lang = req.params.as_ref().and_then(|p| p.get("lang")).and_then(|v| v.as_str()).unwrap_or("ar").to_string();
                 match crate::llm::LmClient::new().explain(&finding, &lang).await {
                     Ok(text) => Some(json!({"explanation": text})),
-                    Err(e) => { error!("llm.explain: {e:#}"); None }
+                    Err(e) => { error!("llm.explain: {e:#}"); return detailed_error(req, "llm.explain", e); }
                 }
             }
             "nl.command" => {
@@ -650,6 +668,51 @@ impl Dispatcher {
                 }
                 Some(json!({"nl": result}))
             }
+            "app.relaunch_elevated" => {
+                // One-shot elevation of the UI, requested explicitly by the user
+                // from Settings. The engine stays unelevated; only the new UI
+                // process (and the engine it starts) gets an elevated token.
+                let engine = std::env::current_exe().unwrap_or_default();
+                let app = engine
+                    .parent()
+                    .map(|d| d.join("mics_app.exe"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("mics_app.exe"));
+                if !app.exists() {
+                    return detailed_error(
+                        req,
+                        "app.relaunch_elevated",
+                        anyhow::anyhow!("mics_app.exe not found next to the engine"),
+                    );
+                }
+                let ps_arg = format!(
+                    "Start-Process -FilePath '{}' -Verb RunAs",
+                    app.display()
+                );
+                let mut command = std::process::Command::new("powershell");
+                command.args(["-NoProfile", "-Command", &ps_arg]);
+                crate::platform::windows::elevation::hide_console(&mut command);
+                match command.output() {
+                    Ok(o) if o.status.success() => Some(json!({"status": "launched"})),
+                    Ok(o) => {
+                        let text = String::from_utf8_lossy(&o.stderr).trim().to_string();
+                        return detailed_error(
+                            req,
+                            "app.relaunch_elevated",
+                            anyhow::anyhow!(
+                                "elevation was refused or cancelled{}",
+                                if text.is_empty() { String::new() } else { format!(": {text}") }
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        return detailed_error(
+                            req,
+                            "app.relaunch_elevated",
+                            anyhow::Error::new(e),
+                        );
+                    }
+                }
+            }
             "service.install" => {
                 // Boot-with-windows: scheduled task running the engine --service at logon.
                 let exe = match std::env::current_exe() {
@@ -674,7 +737,7 @@ impl Dispatcher {
                 match out {
                     Ok(o) if o.status.success() => Some(json!({"status": "installed"})),
                     Ok(o) => { error!("service.install: {}", String::from_utf8_lossy(&o.stderr)); None }
-                    Err(e) => { error!("service.install: {e:#}"); None }
+                    Err(e) => { error!("service.install: {e:#}"); return detailed_error(req, "service.install", anyhow::Error::new(e)); }
                 }
             }
             "service.remove" => {
@@ -689,7 +752,7 @@ impl Dispatcher {
                 match out {
                     Ok(o) if o.status.success() => Some(json!({"status": "removed"})),
                     Ok(o) => { error!("service.remove: {}", String::from_utf8_lossy(&o.stderr)); None }
-                    Err(e) => { error!("service.remove: {e:#}"); None }
+                    Err(e) => { error!("service.remove: {e:#}"); return detailed_error(req, "service.remove", anyhow::Error::new(e)); }
                 }
             }
             "settings.get" => Some(json!(crate::settings::current())),
@@ -731,9 +794,9 @@ impl Dispatcher {
                     match crate::sync::SyncManager::new() {
                         Ok(sm) => match sm.check_update(&url).await {
                             Ok(info) => Some(json!(info)),
-                            Err(e) => { error!("update.check: {e:#}"); None }
+                            Err(e) => { error!("update.check: {e:#}"); return detailed_error(req, "update.check", e); }
                         },
-                        Err(e) => { error!("update.check: {e:#}"); None }
+                        Err(e) => { error!("update.check: {e:#}"); return detailed_error(req, "update.check", e); }
                     }
                 }
             }

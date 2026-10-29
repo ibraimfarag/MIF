@@ -74,13 +74,15 @@ pub fn list_actions() -> Vec<HardeningAction> {
 fn ps_run_with_timeout(args: &[&str], timeout: std::time::Duration) -> Result<(bool, String)> {
     use std::io::Read;
     use std::process::Stdio;
-    let mut child = std::process::Command::new("powershell")
+    let mut command = std::process::Command::new("powershell");
+    command
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .spawn()
-        .context("launch powershell")?;
+        .stdin(Stdio::null());
+    // Never flash a console window at the user (GUI parent process).
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let mut child = command.spawn().context("launch powershell")?;
     let deadline = std::time::Instant::now() + timeout;
     loop {
         match child.try_wait()? {
@@ -153,7 +155,8 @@ pub async fn apply(action_id: &str) -> Result<String> {
     let (cmd, needs_admin) = match action_id {
         "pua_protection" => (
             "Set-MpPreference -PUAProtection Enabled".to_string(),
-            false,
+            // Defender's own settings API requires an elevated token.
+            true,
         ),
         "smbv1_off" => (
             "Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force; \
@@ -180,10 +183,27 @@ pub async fn apply(action_id: &str) -> Result<String> {
         _ => anyhow::bail!("unknown hardening action {action_id}"),
     };
 
-    let result = if needs_admin {
-        ps_run_elevated(&cmd)
+    // If the engine already has an elevated token (the normal case: the UI
+    // manifest requests administrator), run the command directly — a second
+    // self-elevation would only add a pointless UAC prompt attributed to
+    // PowerShell. Only unelevated engines need the RunAs path.
+    let result = if needs_admin && !crate::platform::windows::elevation::is_elevated() {
+        ps_run_elevated(&cmd).map_err(|e| {
+            anyhow::anyhow!(
+                "{e}\nThis fix changes a system-wide setting. Start MI CS from its normal \
+                 shortcut (Windows asks for permission once at launch) or run it as \
+                 administrator, then retry."
+            )
+        })
     } else {
-        ps_run(&cmd).map(|_| ())
+        ps_run(&cmd)
+            .map(|_| ())
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "{e}\nIf the message above mentions permissions, MI CS is running without \
+                     administrator rights."
+                )
+            })
     };
     match result {
         Ok(()) => {

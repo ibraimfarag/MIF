@@ -98,8 +98,10 @@ fn rewrite_hosts(_content: &str, new_section: &str) -> Result<()> {
         tmp.display(),
         path.display()
     );
-    let out2 = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_arg])
+    let mut command = std::process::Command::new("powershell");
+    command.args(["-NoProfile", "-Command", &ps_arg]);
+    crate::platform::windows::elevation::hide_console(&mut command);
+    let out2 = command
         .output()
         .context("elevated hosts copy")?;
     if !out2.status.success() {

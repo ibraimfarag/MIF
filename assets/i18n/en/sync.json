@@ -1,0 +1,18 @@
+{
+  "sync.done": "Intelligence refreshed",
+  "sync.every": "Auto-refresh every {hours} h",
+  "sync.hashes": "{count} known IOC hashes",
+  "sync.intel": "intel {age} ago",
+  "sync.never": "never synced",
+  "sync.offline": "Offline",
+  "sync.online": "Online",
+  "sync.tooltip": "Connectivity and intelligence freshness. Tap to sync now.",
+  "update.available": "Update available: {version}",
+  "update.current": "You are running {version}",
+  "update.download": "Download and install",
+  "update.failed": "Update failed",
+  "update.installed": "Update staged — MI CS will restart",
+  "update.notes": "Release notes",
+  "update.upToDate": "You are up to date",
+  "update.checking": "Checking for updates…"
+}

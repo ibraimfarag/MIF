@@ -1,0 +1,18 @@
+{
+  "sync.done": "تم تحديث الاستخبارات",
+  "sync.every": "تحديث تلقائي كل {hours} ساعة",
+  "sync.hashes": "{count} بصمة IOC معروفة",
+  "sync.intel": "الاستخبارات قبل {age}",
+  "sync.never": "لم تُحدَّث بعد",
+  "sync.offline": "أوفلاين",
+  "sync.online": "متصل",
+  "sync.tooltip": "حالة الاتصال وعمر الاستخبارات. اضغط للتحديث الآن.",
+  "update.available": "يوجد تحديث: {version}",
+  "update.current": "إصدارك الحالي {version}",
+  "update.download": "نزّل وثبّت",
+  "update.failed": "التحديث فشل",
+  "update.installed": "التحديث جاهز — MI CS هيعيد التشغيل",
+  "update.notes": "ملاحظات الإصدار",
+  "update.upToDate": "إنت على أحدث إصدار",
+  "update.checking": "بيتأكد من التحديثات…"
+}

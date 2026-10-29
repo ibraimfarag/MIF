@@ -81,13 +81,37 @@ impl SyncManager {
     }
 
     pub async fn online(&self) -> bool {
-        // Real reachability probe against two independent endpoints.
+        // The UI polls the status once a minute: cache a positive probe for
+        // 30 s and give each probe a short deadline, otherwise an offline
+        // machine would tie up a request for the 30 s client timeout.
+        static LAST: std::sync::OnceLock<std::sync::Mutex<Option<(bool, std::time::Instant)>>> =
+            std::sync::OnceLock::new();
+        let cache = LAST.get_or_init(|| std::sync::Mutex::new(None));
+        if let Ok(guard) = cache.lock()
+            && let Some((value, at)) = *guard
+            && at.elapsed() < std::time::Duration::from_secs(30)
+        {
+            return value;
+        }
+
+        let mut online = false;
         for url in ["https://dns.google/resolve?name=example.com", "https://1.1.1.1/"] {
-            if self.client.get(url).send().await.is_ok() {
-                return true;
+            if self
+                .client
+                .get(url)
+                .timeout(Duration::from_secs(3))
+                .send()
+                .await
+                .is_ok()
+            {
+                online = true;
+                break;
             }
         }
-        false
+        if let Ok(mut guard) = cache.lock() {
+            *guard = Some((online, std::time::Instant::now()));
+        }
+        online
     }
 
     pub async fn sync_now(&self) -> Result<SyncReport> {
@@ -230,10 +254,17 @@ impl SyncManager {
 
     pub async fn get_status(&self) -> Result<serde_json::Value> {
         let online = self.online().await;
+        let last_success = self.storage.sync_last_success("ioc_hashes")?;
+        let now = chrono::Utc::now().timestamp();
         Ok(serde_json::json!({
             "online": online,
             "ioc_hash_total": self.storage.ioc_hash_count()?,
             "vt_queue_len": self.storage.queue_len("vt_lookup")?,
+            "last_success": last_success,
+            // Seconds since the last successful intel sync; null when the
+            // machine has never synced (fresh, fully-offline install).
+            "age_seconds": last_success.map(|t| (now - t).max(0)),
+            "sync_interval_hours": crate::settings::current().sync_hours(),
         }))
     }
 }

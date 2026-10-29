@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 
 /// Complete application settings (D-008).
@@ -211,8 +212,8 @@ class SettingsScreen extends ConsumerWidget {
                     final messenger = ScaffoldMessenger.of(context);
                     final done = context.tr('settings.syncDone');
                     try {
-                      final res = await ipc.request('sync.now');
-                      _snack(messenger, '$done: $res');
+                      await ref.read(syncStatusProvider.notifier).syncNow();
+                      _snack(messenger, done);
                     } catch (e) {
                       _snack(messenger, '$e', error: true);
                     }
@@ -220,6 +221,8 @@ class SettingsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.sync, size: 16),
                   label: Text(context.tr('settings.syncNow')),
                 ),
+                const SizedBox(width: 8),
+                _SyncLive(),
               ]),
             ],
           ),
@@ -291,18 +294,9 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ]),
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    final res = await ipc.request('update.check');
-                    _snack(messenger, '$res');
-                  } catch (e) {
-                    _snack(messenger, '$e', error: true);
-                  }
-                },
-                icon: const Icon(Icons.cloud_download_outlined, size: 16),
-                label: Text(context.tr('settings.checkNow')),
+              _UpdatePanel(
+                manifestUrl: s.updateManifestUrl,
+                channel: s.updateChannel,
               ),
             ],
           ),
@@ -340,6 +334,26 @@ class SettingsScreen extends ConsumerWidget {
                   style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ]),
+              const SizedBox(height: 10),
+              Text(
+                context.tr('settings.relaunchHint'),
+                style: TextStyle(color: AppColors.muted, fontSize: 10.5),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final done = context.tr('settings.relaunchDone');
+                  try {
+                    await ipc.request('app.relaunch_elevated');
+                    _snack(messenger, done);
+                  } catch (e) {
+                    _snack(messenger, '$e', error: true);
+                  }
+                },
+                icon: const Icon(Icons.admin_panel_settings_outlined, size: 16),
+                label: Text(context.tr('settings.relaunchElevated')),
+              ),
               const SizedBox(height: 10),
               Wrap(spacing: 8, children: [
                 FilledButton.icon(
@@ -413,6 +427,171 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 // ---------------- building blocks ----------------
+
+/// Live connectivity + intel freshness, next to the manual sync button.
+class _SyncLive extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(syncStatusProvider).value ?? SyncStatus.empty;
+    final color = status.online ? AppColors.green : AppColors.orange;
+    final text = status.neverSynced
+        ? context.tr('sync.never')
+        : context
+            .tr('sync.intel')
+            .replaceAll('{age}', status.ageLabel);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 6),
+      Text(
+        '${status.online ? context.tr('sync.online') : context.tr('sync.offline')}'
+        ' · $text · ${context.tr('sync.hashes').replaceAll('{count}', '${status.iocHashes}')}',
+        style: TextStyle(color: AppColors.muted, fontSize: 10.5),
+      ),
+    ]);
+  }
+}
+
+/// Update flow: check → show version + notes → download → apply.
+class _UpdatePanel extends ConsumerStatefulWidget {
+  const _UpdatePanel({required this.manifestUrl, required this.channel});
+  final String manifestUrl;
+  final String channel;
+
+  @override
+  ConsumerState<_UpdatePanel> createState() => _UpdatePanelState();
+}
+
+class _UpdatePanelState extends ConsumerState<_UpdatePanel> {
+  bool _checking = false;
+  bool _installing = false;
+  Map<String, dynamic>? _info;
+  String? _error;
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+    try {
+      final res = await ref.read(engineIpcProvider).request('update.check');
+      setState(() => _info = (res as Map).cast<String, dynamic>());
+    } catch (e) {
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _install() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _installing = true;
+      _error = null;
+    });
+    try {
+      await ref.read(engineIpcProvider).request('update.download');
+      await ref.read(engineIpcProvider).request('update.apply');
+      if (!mounted) return;
+      messenger.showSnackBar(
+          SnackBar(content: Text(context.tr('update.installed'))));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+      messenger.showSnackBar(SnackBar(
+          content: Text('${context.tr('update.failed')}: $e'),
+          backgroundColor: AppColors.red.withValues(alpha: 0.85)));
+    } finally {
+      if (mounted) setState(() => _installing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _info?['status'] as String?;
+    final current = _info?['current']?.toString() ?? '';
+    final latest = _info?['latest']?.toString() ?? '';
+    final notes = _info?['notes_en']?.toString() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: _checking ? null : _check,
+            icon: _checking
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.cloud_download_outlined, size: 16),
+            label: Text(context.tr('settings.checkNow')),
+          ),
+          const SizedBox(width: 10),
+          Text(widget.channel,
+              style: AppTheme.mono(size: 10, color: AppColors.muted)),
+        ]),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: TextStyle(color: AppColors.orange, fontSize: 11)),
+        ],
+        if (status == 'disabled') ...[
+          const SizedBox(height: 8),
+          Text(context.tr('settings.manifestHint'),
+              style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        ],
+        if (status == 'up_to_date') ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Icon(Icons.check_circle, size: 14, color: AppColors.green),
+            const SizedBox(width: 6),
+            Text(
+                '${context.tr('update.upToDate')} · '
+                '${context.tr('update.current').replaceAll('{version}', current)}',
+                style: TextStyle(color: AppColors.text, fontSize: 11.5)),
+          ]),
+        ],
+        if (status == 'available') ...[
+          const SizedBox(height: 8),
+          Text(
+              context
+                  .tr('update.available')
+                  .replaceAll('{version}', latest),
+              style: TextStyle(
+                  color: AppColors.cyan,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(context.tr('update.current').replaceAll('{version}', current),
+              style: AppTheme.mono(size: 10.5, color: AppColors.muted)),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(context.tr('update.notes'),
+                style: TextStyle(color: AppColors.text, fontSize: 11)),
+            Text(notes,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppColors.muted, fontSize: 10.5)),
+          ],
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _installing ? null : _install,
+            icon: _installing
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.system_update_alt, size: 16),
+            label: Text(context.tr('update.download')),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 
 class _Section extends StatelessWidget {
   const _Section({

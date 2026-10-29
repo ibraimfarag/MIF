@@ -245,3 +245,54 @@ one screen touches one file.
 `bundledLangs`. Adding a key = same commit in every language folder. No widget
 may hardcode copy.
 
+---
+
+## D-010 — The UI runs unelevated; elevation is explicit and per-need
+
+**Status:** implemented (2026-10-29)
+
+**Decision.** `mics_app.exe` is manifested `asInvoker`. It never asks for
+administrator rights at launch. Privileged work is done by the engine, which:
+
+1. runs the command directly when its token is already elevated, and only falls
+   back to `Start-Process -Verb RunAs` when it is not;
+2. returns the real failure reason over JSON-RPC (never the generic
+   "Method failed internally"), including a hint when the cause is permissions;
+3. offers `app.relaunch_elevated`, which the Settings screen exposes as
+   "Relaunch as administrator" for the user who actually wants those fixes.
+
+**Why.** The previous manifest asked for `requireAdministrator`, which made every
+launch a UAC prompt attributed to an unsigned "unknown publisher" — the single
+most alarming thing a security tool can do — and contradicted the architecture
+rule that the UI starts unelevated. It also hid failures behind a generic error.
+
+**Commits us to.** Keeping the single-elevation helper (D-007) as the end state;
+until then, admin-only actions must fail with a clear, actionable message and a
+one-click way to elevate deliberately.
+
+---
+
+## D-011 — Data directory resolution and permissions
+
+**Status:** implemented (2026-10-29)
+
+**Decision.** State lives in the first location that is actually usable:
+
+1. `MICS_DATA_DIR` (explicit override: portable mode, tests, isolated runs);
+2. `%PROGRAMDATA%\MICS` (the documented machine-wide layout);
+3. `%LOCALAPPDATA%\MICS` (per-user fallback when (2) is not writable by the
+   signed-in user).
+
+When the engine is elevated and the machine-wide directory is not fully writable
+for the current user, it grants that user modify rights once (`icacls /T`,
+idempotent, recorded with a marker file).
+
+**Why.** Running the engine unelevated (D-010, and the autostart entry) against a
+directory created by an earlier elevated run produced "attempt to write a
+readonly database" — the engine could start but could not persist anything. A
+data directory that silently cannot be written is worse than a second location.
+
+**Commits us to.** Documenting the resolved path in the startup log line
+(`data=...`) and in the README; the installer (P4) must create the machine-wide
+directory with the right ACL so (3) never triggers on a normal install.
+

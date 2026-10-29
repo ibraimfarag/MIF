@@ -8,8 +8,10 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
-        <!-- MI CS runs elevated once at launch; every child process (the engine) inherits this - the user approves UAC exactly once. -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <!-- The UI always starts unelevated (architecture rule 3). Privileged
+             operations are performed by the engine, which requests elevation
+             only when an action actually needs it. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>

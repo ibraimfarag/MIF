@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 import 'package:mics_app/providers/providers.dart';
 import 'package:window_manager/window_manager.dart';
@@ -100,6 +101,71 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
   }
 }
 
+// ---------------- intel / connectivity chip ----------------
+
+/// OFFLINE badge + intelligence freshness (spec section 6/7).
+///
+/// Offline is a first-class state: the app keeps working with the last synced
+/// intel, and the chip says exactly how old that intel is.
+class _IntelChip extends ConsumerWidget {
+  const _IntelChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(syncStatusProvider).value ?? SyncStatus.empty;
+    final online = status.online;
+    final color = online ? AppColors.green : AppColors.orange;
+    final label = online ? context.tr('sync.online') : context.tr('sync.offline');
+    final freshness = status.neverSynced
+        ? context.tr('sync.never')
+        : context.tr('sync.intel').replaceAll('{age}', status.ageLabel);
+
+    return Tooltip(
+      message: '${context.tr('sync.tooltip')}\n'
+          '${context.tr('sync.hashes').replaceAll('{count}', '${status.iocHashes}')}\n'
+          '${context.tr('sync.every').replaceAll('{hours}', '${status.intervalHours}')}',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () async {
+          final messenger = ScaffoldMessenger.of(context);
+          final done = context.tr('sync.done');
+          try {
+            await ref.read(syncStatusProvider.notifier).syncNow();
+            messenger.showSnackBar(SnackBar(
+                content: Text(done), duration: const Duration(seconds: 2)));
+          } catch (e) {
+            messenger.showSnackBar(SnackBar(content: Text('$e')));
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
+            color: color.withValues(alpha: 0.08),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: color, fontSize: 11)),
+            const SizedBox(width: 8),
+            Container(width: 1, height: 11, color: AppColors.border),
+            const SizedBox(width: 8),
+            Icon(Icons.storage_outlined, size: 11, color: AppColors.muted),
+            const SizedBox(width: 4),
+            Text(freshness,
+                style: TextStyle(color: AppColors.muted, fontSize: 10.5)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------- title bar (macOS style) ----------------
 
 class _TitleBar extends ConsumerWidget {
@@ -179,6 +245,8 @@ class _TitleBar extends ConsumerWidget {
               ]),
             ),
             const Spacer(),
+            const _IntelChip(),
+            const SizedBox(width: 8),
             if (ref.watch(settingsProvider).value?.nlBarEnabled ?? true)
               const _Omnibox(),
             const SizedBox(width: 8),

@@ -34,9 +34,9 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-# UAC level must match runner.exe.manifest (requireAdministrator) or mt.exe
-# rejects the merged manifest with c1010001.
-target_link_options(${BINARY_NAME} PRIVATE "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+# The requested execution level lives in runner.exe.manifest only (asInvoker).
+# A /MANIFESTUAC link option here would be merged with it and mt.exe rejects the
+# mismatch with "c1010001: Values of attribute level not equal".
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

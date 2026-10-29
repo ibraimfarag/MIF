@@ -333,10 +333,17 @@ fn log_file_writer() -> TeeWriter {
         && meta.len() > 5 * 1024 * 1024 {
             let _ = std::fs::rename(&path, dir.join("engine.old.log"));
         }
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
+    let open = |p: &std::path::Path| {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+    };
+    // An existing log written by an *elevated* engine may not be writable by
+    // the unelevated one (per-user autostart). Falling straight to the NUL sink
+    // would silently lose all diagnostics, so try a fresh per-pid file first.
+    let file = open(&path)
+        .or_else(|_| open(&dir.join(format!("engine-{}.log", std::process::id()))))
         .or_else(|_| std::fs::OpenOptions::new().append(true).open("NUL"))
         .unwrap_or_else(|_| std::fs::File::create("NUL").expect("NUL sink"));
     let mut f = file;
