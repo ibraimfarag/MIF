@@ -115,6 +115,27 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ### Done log (append only)
 
+- **P4b — two icon designs, three files, no upscaling anywhere**
+  - The shipping art is now vector: `assets/icons/task.svg` (taskbar, Alt-Tab,
+    Explorer, title bar, tray) and `assets/icons/Desktop.svg` (desktop shortcut
+    only — a `.lnk` keeps its own icon location, which is how the desktop can
+    differ from the taskbar).
+  - Pipeline: `tool/rasterize_icons.ps1` renders both SVGs at 1024 px with
+    transparency (headless Chrome/Edge — the only offline rasteriser available),
+    then `tool/make_icons.py` trims the transparent border, centres the art at
+    94 % of a square canvas and writes `windows/runner/resources/app_icon.ico`
+    (task), `assets/icons/mics.ico` (task) and `assets/icons/desktop.ico`
+    (desktop) with all ten sizes.
+  - `scripts/create-shortcuts.ps1` creates the desktop shortcut (desktop art)
+    and the Start-Menu shortcut (embedded task art); both were created and
+    verified on the reference machine.
+  - Fixed two real defects: the files were crossed (the executable carried the
+    desktop art while the tray carried the task art), and the artwork filled only
+    ~55 % of the canvas, which made every icon look undersized next to others.
+  - `test/icon_test.dart` now fails if `desktop.ico` is a copy of the task icon
+    or if the SVG sources/masters disappear. Verified on the rebuilt binary: the
+    embedded icon matches `task.png` exactly (mean channel difference 0.00) and
+    differs from the desktop art (110.15).
 - **P4a — the icon is now everywhere, at every size**
   - Both Windows icons shipped only 16/32/48/256, so 20/24/40/64/96/128 were
     upscaled by the shell and looked blurry. `tool/make_icons.py` now renders
@@ -398,6 +419,33 @@ money (P4 signing certificate).
 | LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
+## Icon sizes required for the application
+
+The Windows UI uses a single master PNG (`assets/icons/mics.png`, 256 × 256) that is
+converted by `tool/make_icons.py` into the standard set of **ten** icon sizes. All
+three delivery formats (embedded app icon, tray icon, installer resources) must
+contain each of the following dimensions:
+
+| Size (px) | Usage inside Windows |
+|----------|----------------------|
+| 16 × 16   | Toolbar, small menus |
+| 20 × 20   | Title‑bar icons in Small‑size mode |
+| 24 × 24   | Desktop shortcuts (Large‑icons) |
+| 32 × 32   | Window / Explorer icon |
+| 40 × 40   | Control panel icons (Large‑icons) |
+| 48 × 48   | Start menu icon (Medium) |
+| 64 × 64   | Task‑bar icon at High‑DPI |
+| 96 × 96   | Task‑bar / Start at High‑DPI |
+| 128 × 128 | Tile in Start‑menu |
+| 256 × 256 *master* | Source for generating all the above sizes |
+
+**Pending icon‑related tasks**
+- [ ] Ensure `test/icon_test.dart` passes for all sizes without loss.
+- [ ] Verify `windows/runner/resources/app_icon.ico` includes all sizes.
+
+**Other remaining tasks**
+- [ ] Light‑mode contrast audit and add screenshots to documentation.
+- [ ] Complete `docs/PROTECTION-MATRIX.md` as a standalone document (currently only in README).
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);
 `scan.start` blocked the UI for the whole scan; engine had no log file; settings

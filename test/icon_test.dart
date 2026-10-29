@@ -9,24 +9,20 @@ import 'package:flutter_test/flutter_test.dart';
 /// project shipped before — so this test pins the full size set.
 const expectedSizes = {16, 20, 24, 32, 40, 48, 64, 96, 128, 256};
 
-/// The two ICOs that must stay in sync:
-///  * `windows/runner/resources/app_icon.ico` is embedded in `mics_app.exe`;
-///  * `assets/icons/mics.ico` is the tray icon.
-const icons = <String>[
+/// The icon files that must stay in sync:
+///  * `windows/runner/resources/app_icon.ico` is embedded in `mics_app.exe`
+///    (taskbar, Alt-Tab, Explorer, title bar);
+///  * `assets/icons/mics.ico` is the tray icon;
+///  * `assets/icons/desktop.ico` belongs to the desktop shortcut only — that is
+///    how the desktop can show different art from the taskbar.
+const taskIcons = <String>[
   'windows/runner/resources/app_icon.ico',
   'assets/icons/mics.ico',
 ];
+const desktopIcon = 'assets/icons/desktop.ico';
 
 void main() {
-  test('the icon master (PNG) exists', () {
-    final master = File('assets/icons/mics.png');
-    expect(master.existsSync(), isTrue,
-        reason: 'assets/icons/mics.png is the source of truth; '
-            'regenerate it (or pass new art) via tool/make_icons.py');
-    expect(master.lengthSync(), greaterThan(1000));
-  });
-
-  for (final path in icons) {
+  for (final path in [...taskIcons, desktopIcon]) {
     test('$path carries every standard icon size', () {
       final file = File(path);
       expect(file.existsSync(), isTrue, reason: '$path is missing');
@@ -37,14 +33,39 @@ void main() {
     });
   }
 
-  test('both icons are byte-identical (one art, no drift)', () {
-    final a = File(icons[0]).readAsBytesSync();
-    final b = File(icons[1]).readAsBytesSync();
-    expect(a.length, b.length);
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) fail('icons differ at byte $i');
+  test('the task icons are byte-identical (one art, no drift)', () {
+    final a = File(taskIcons[0]).readAsBytesSync();
+    final b = File(taskIcons[1]).readAsBytesSync();
+    expect(_sameBytes(a, b), isTrue,
+        reason: 'app_icon.ico and mics.ico must be the same task art');
+  });
+
+  test('the desktop art differs from the taskbar art', () {
+    final task = File(taskIcons[0]).readAsBytesSync();
+    final desktop = File(desktopIcon).readAsBytesSync();
+    expect(_sameBytes(task, desktop), isFalse,
+        reason: 'desktop.ico is a copy of the task icon — choosing the desktop '
+            'art is the whole point of shipping it');
+  });
+
+  test('the source art (SVG) and its rasterised master exist', () {
+    for (final path in [
+      'assets/icons/task.svg',
+      'assets/icons/Desktop.svg',
+      'assets/icons/task.png',
+      'assets/icons/Desktop.png',
+    ]) {
+      expect(File(path).existsSync(), isTrue, reason: '$path is missing');
     }
   });
+}
+
+bool _sameBytes(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// Reads the ICONDIR/ICONDIRENTRY table of an ICO file.

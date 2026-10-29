@@ -192,6 +192,39 @@ Test hooks exist so an isolated engine can be run without touching production
 code: `MICS_DATA_DIR`, `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`,
 `MICS_NO_AUTO_RESUME`, `MICS_ENGINE_PATH`.
 
+## Icons
+
+Two designs, three icon files, one pipeline:
+
+| Source (vector) | Used for | Output |
+|---|---|---|
+| `assets/icons/task.svg` | taskbar, Alt-Tab, Explorer, window title bar | `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`) |
+| `assets/icons/task.svg` | tray icon and any packaged copy | `assets/icons/mics.ico` |
+| `assets/icons/Desktop.svg` | the **desktop shortcut only** | `assets/icons/desktop.ico` |
+
+The desktop can show different art from the taskbar because a `.lnk` keeps its
+own icon location — `scripts/create-shortcuts.ps1` writes a desktop shortcut
+pointing at `desktop.ico` and a Start-Menu shortcut that uses the executable's
+embedded icon.
+
+```powershell
+# 1) render the SVGs to 1024 px transparent masters (Chrome/Edge headless)
+powershell -ExecutionPolicy Bypass -File tool\rasterize_icons.ps1
+
+# 2) trim, centre and write every Windows size into the three .ico files
+python tool\make_icons.py
+
+# 3) create desktop + Start-Menu shortcuts with the right art
+powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1
+```
+
+Every icon carries the ten sizes Windows actually asks for — **16, 20, 24, 32,
+40, 48, 64, 96, 128, 256** — so no surface has to upscale and look soft. Give
+the rasteriser art at **256×256 or larger** (Windows never uses more than 256;
+1024 is what keeps that 256 frame crisp). `test/icon_test.dart` fails the build
+if a size disappears, if the task icons drift apart, or if `desktop.ico` becomes
+a copy of the task icon.
+
 ## Project layout
 
 | Path | What |
@@ -201,8 +234,10 @@ code: `MICS_DATA_DIR`, `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`,
 | `engine/rules/` | Bundled YARA pack and Sigma-like guard rules (hot-reloaded). |
 | `assets/i18n/<lang>/<module>.json` | Translation packs — one file per module, one folder per language. |
 | `assets/sounds/` | In-house notification cues. |
+| `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
+| `scripts/` | User-facing helpers: code signing, shortcut creation. |
 | `docs/` | `TODO.md` (live status), `DECISIONS.md` (why things are the way they are). |
-| `tool/` | Developer probes and one-off helpers (not shipped). |
+| `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
 

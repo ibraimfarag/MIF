@@ -1,101 +1,103 @@
-"""Injects the MI CS icon into every Windows surface that carries one.
+"""Turns the rendered masters into the three shipping Windows icon files.
 
-Canonical art: ``assets/icons/mics.png`` (RGBA master). From it the script
-renders every standard Windows size into two ICOs:
+Pipeline (step 1 is tool/rasterize_icons.ps1):
 
-* ``windows/runner/resources/app_icon.ico`` — embedded in ``mics_app.exe``.
-  This is what Explorer, the taskbar, Alt-Tab, the window title bar and the UAC
-  dialog actually display.
-* ``assets/icons/mics.ico`` — the tray icon and any packaged copies.
+    1. rasterize_icons.ps1   task.svg / Desktop.svg -> 1024px transparent PNGs
+    2. make_icons.py         trim the empty border, centre the art on a square
+                             canvas, then write every standard icon size
+
+Why the trim matters: an SVG canvas usually carries padding, so the artwork can
+sit at ~55 % of the frame and the icon then looks tiny next to other taskbar
+icons.
+
+Outputs (all ten sizes: 16/20/24/32/40/48/64/96/128/256):
+
+    windows/runner/resources/app_icon.ico   embedded in mics_app.exe  (TASK art)
+    assets/icons/mics.ico                   tray icon + packaged copy  (TASK art)
+    assets/icons/desktop.ico                desktop shortcut only      (DESKTOP art)
+
+The desktop can show different art from the taskbar because a .lnk keeps its own
+icon location — see scripts/create-shortcuts.ps1.
 
 Usage:
-    python tool/make_icons.py                     # master -> both icons
-    python tool/make_icons.py path/to/art.png     # use new art as the master
-
-The first run also creates the master from the existing ``mics.ico`` if no
-``mics.png`` exists yet, so nothing is lost.
+    python tool/make_icons.py
 """
 
 from __future__ import annotations
 
-import shutil
-import sys
 from pathlib import Path
 
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 ICONS = ROOT / "assets" / "icons"
-MASTER = ICONS / "mics.png"
+
+TASK_MASTER = ICONS / "task.png"
+DESKTOP_MASTER = ICONS / "Desktop.png"
+
 EXE_ICON = ROOT / "windows" / "runner" / "resources" / "app_icon.ico"
 TRAY_ICON = ICONS / "mics.ico"
+DESKTOP_ICON = ICONS / "desktop.ico"
 
-# Every size Windows asks for: Explorer at all zoom levels, taskbar, Alt-Tab,
-# small title bars, jumbo icons and the 256 px thumbnail cache.
 SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
+# How much of the square the artwork should fill: Windows icons look right when
+# the glyph nearly touches the edge, with a hair of margin for soft shadows.
+FILL = 0.94
 
 
-def frames(path: Path) -> list[tuple[int, int]]:
-    """Sizes actually stored inside an .ico file."""
-    with Image.open(path) as ico:
-        return sorted(set(ico.info.get("sizes", [ico.size])))
+def square_art(path: Path, canvas: int = 1024) -> Image.Image:
+    """Crops the transparent border, then centres the art on a square canvas."""
+    with Image.open(path) as raw:
+        art = raw.convert("RGBA")
+    box = art.getchannel("A").getbbox()
+    if box is None:
+        raise SystemExit(f"{path.name} is fully transparent — render it first")
+    art = art.crop(box)
+
+    target = int(canvas * FILL)
+    scale = min(target / art.width, target / art.height)
+    size = (max(1, round(art.width * scale)), max(1, round(art.height * scale)))
+    art = art.resize(size, Image.LANCZOS)
+
+    out = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    out.paste(art, ((canvas - size[0]) // 2, (canvas - size[1]) // 2), art)
+    return out
 
 
-def ensure_master() -> Image.Image:
-    """Returns the RGBA master, creating it from the shipping .ico if needed."""
-    if len(sys.argv) > 1:
-        source = Path(sys.argv[1]).resolve()
-        image = Image.open(source).convert("RGBA")
-        image.save(MASTER)
-        print(f"master updated from {source} -> {MASTER.relative_to(ROOT)}")
-        return image
-    if MASTER.exists():
-        return Image.open(MASTER).convert("RGBA")
-    if not TRAY_ICON.exists():
-        raise SystemExit(f"no art found: neither {MASTER} nor {TRAY_ICON}")
-    # Promote the largest frame of the existing icon to a lossless master.
-    largest = max(frames(TRAY_ICON), key=lambda size: size[0] * size[1])
-    with Image.open(TRAY_ICON) as ico:
-        ico.size = largest
-        ico.load()
-        ico.convert("RGBA").save(MASTER)
-    print(f"master created from {TRAY_ICON.name} at {largest[0]}x{largest[1]}")
-    return Image.open(MASTER).convert("RGBA")
-
-
-def write_ico(master: Image.Image, target: Path) -> None:
-    """Writes a multi-size ICO containing every size in SIZES.
-
-    Pillow generates each frame from the image it is handed, so the master is a
-    256×256 RGBA PNG: small frames are downscaled with its default high-quality
-    filter.
-    """
+def write_ico(master: Image.Image, target: Path) -> list[int]:
     target.parent.mkdir(parents=True, exist_ok=True)
-    if master.width < max(SIZES):
-        master = master.resize((max(SIZES), max(SIZES)), Image.LANCZOS)
     master.save(target, format="ICO", sizes=[(s, s) for s in SIZES])
+    with Image.open(target) as ico:
+        return sorted(size[0] for size in ico.info.get("sizes", []))
 
 
 def main() -> int:
-    master = ensure_master()
-    if master.width != master.height:
-        print(f"WARNING: art is not square ({master.width}x{master.height})")
+    for master in (TASK_MASTER, DESKTOP_MASTER):
+        if not master.exists():
+            raise SystemExit(
+                f"{master.name} is missing — run tool/rasterize_icons.ps1 first"
+            )
 
-    write_ico(master, EXE_ICON)
-    write_ico(master, TRAY_ICON)
+    task = square_art(TASK_MASTER)
+    desktop = square_art(DESKTOP_MASTER)
+    task.save(TASK_MASTER)
+    desktop.save(DESKTOP_MASTER)
 
+    jobs = [
+        ("exe: taskbar, Alt-Tab, Explorer, title bar", task, EXE_ICON),
+        ("tray icon + packaged assets", task, TRAY_ICON),
+        ("desktop shortcut only", desktop, DESKTOP_ICON),
+    ]
     ok = True
-    for target in (EXE_ICON, TRAY_ICON):
-        sizes = frames(target)
-        found = {size[0] for size in sizes}
-        missing = [s for s in SIZES if s not in found]
-        print(f"\n{target.relative_to(ROOT)}  ({target.stat().st_size:,} bytes)")
-        print(f"  {', '.join(f'{s[0]}x{s[1]}' for s in sizes)}")
+    for label, art, target in jobs:
+        sizes = write_ico(art, target)
+        missing = [s for s in SIZES if s not in sizes]
+        print(f"{target.relative_to(ROOT)}  ({target.stat().st_size:,} bytes)")
+        print(f"  {label}: {', '.join(str(s) for s in sizes)}")
         if missing:
             print(f"  MISSING: {missing}")
             ok = False
-
-    print("\nOK: every standard size present" if ok else "\nFAILED: incomplete icon set")
+    print("\nOK" if ok else "\nFAILED")
     return 0 if ok else 1
 
 
