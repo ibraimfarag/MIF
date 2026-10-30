@@ -445,3 +445,45 @@ adding it in both languages (the alert tests pin every key the producers use);
 `cargo test`, `cargo clippy --release -- -D warnings`, `flutter analyze` and
 `flutter test` stay green; and a release is only "alerting" once
 `scripts/verify-toast.ps1` reports PASS against the **deployed** binary.
+
+## D-014 — A section re-check merges into the last full audit; the engine owns the score
+
+**Context.** `audit.run` can run named `params.sections` (7 ms for one check
+against ~1.7 s for the sweep), and the fix buttons needed it: after a fix the
+audit screen left the card claiming the machine was still vulnerable (it never
+refreshed at all), and the hardening screen re-ran every collector to move one
+number. Replacing the report with the partial one is not an option — a score over
+part of the checks is not comparable with the full one. Live on the reference
+machine the `hosts` section alone scores 85 where the full audit scores 70, so the
+dashboard would have shown a number that means something different from the one it
+had just replaced.
+
+**Decision.** `audit.run {sections:[...], merge:true}` re-reads those sections and
+merges them into the last full audit the engine process remembers.
+
+1. The base is a *full* audit (`audit.run` without `sections`) — the only pass
+   that is remembered. A merge with no base is refused (`-32000`, "run the full
+   audit first") instead of guessing; the UI turns that refusal into the full
+   sweep.
+2. The merged report stays complete: `partial:false`, every section listed, and
+   one score computed over every finding by `AuditPass::report`. `merged:true`
+   with `refreshed:[ids]` says what was re-read, so a complete-looking report is
+   explainable rather than suspicious.
+3. Merging is keyed by **section id**, not by a finding's display `section`:
+   `rdp` and `remote_tools` both report under "Remote Access", so a display-name
+   merge would delete one of them and flatter the score. A unit test pins it.
+4. A section whose collector fails on the re-read is dropped from the report
+   (reported by omission from `sections`), never kept as a stale finding.
+5. `merge` must be a boolean and requires `sections`; anything else is `-32602`.
+
+**Why.** A fix is a state change, and the UI must show the machine as it is now
+without paying for every collector. Keeping the score in one place — the engine —
+is what makes "re-check one section" safe: a client never re-derives a security
+number.
+
+**Commits us to.** Any client that re-checks a section passes `merge:true` (or
+accepts `partial:true` explicitly); the action-id → section-id table stays in one
+place per side (`lib/models/audit_models.dart`, pinned by a Dart test); the merge
+keeps its tests (id-keyed replacement, the display-name collision, a failed
+re-read, the refusal without a base); and the engine stays the only place that
+turns findings into a score.

@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// Which audit section each hardening action changes, so a fix can re-read just
+/// that section (`audit.run {sections:[id], merge:true}`) instead of the whole
+/// sweep. Ids are the engine's (`engine/src/platform/traits.rs` AUDIT_SECTIONS);
+/// action ids are `engine/src/hardening/mod.rs::list_actions`.
+const Map<String, String> auditSectionForHardeningAction = {
+  'pua_protection': 'defender',
+  'defender_scan_quick': 'defender',
+  'smbv1_off': 'smbv1',
+  'rdp_off': 'rdp',
+  'uac_on': 'uac',
+};
+
 /// Mirrors the engine's audit JSON (engine/src/platform/traits.rs).
 class AuditFinding {
   final String section;

@@ -27,7 +27,8 @@
 > **Authenticode signing works locally** (`make-release.ps1 -Sign`: every binary
 > `Valid`, `signtool verify /pa` passes) and **every external tool call now has a
 > deadline** (one `ToolCall` choke point; a test fails on any other
-> `Command::new`) · **next: install the helper once (one
+> `Command::new`) plus **a fix re-checks one audit section and still reports the
+> whole machine's score** (D-014) · **next: install the helper once (one
 > UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -73,20 +74,16 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **The UI should re-run one audit section, not the whole audit (LOW).**
-   `audit.run` accepts `params.sections` (7 ms for one section vs 1.7 s for all,
-   unknown names refused); `lib/providers/providers.dart` still asks for
-   everything after a fix. Change the caller, keep the full audit for first load.
-2. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
+1. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
    Assets, adversaries, trust boundaries, what a usermode product cannot do (no
    kernel driver), and per layer what is detected/blocked and what is not
    (hosts-based L2, polling canaries, `netsh` firewall, no ClamAV/CAPA).
-3. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
+2. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
    (polling intervals, cheaper process enumeration) or move the budget to a
    measured, justified number and say so in the README.
-4. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
+3. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
-5. **AUMID registration (LOW, fold into the installer)** — register
+4. **AUMID registration (LOW, fold into the installer)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
    Cards work without it; nothing about toast delivery depends on it.
@@ -259,6 +256,41 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **audit — a fix re-checks one section, and the score still means the whole
+  machine (D-014)**
+  - `audit.run {sections:[...], merge:true}` re-reads those sections and merges
+    them into the last full audit the engine remembers, so the client pays for
+    one collector and still gets a **complete** report: `partial:false`, every
+    section listed, one score computed by the same code over every finding
+    (`merged:true` + `refreshed:[ids]` say what was just re-read). The base is a
+    full audit only: a merge with nothing remembered is refused (`-32000`, "run
+    the full audit first") and the UI falls back to the sweep.
+  - The merge is keyed by **section id**, never by a finding's display `section`:
+    `rdp` and `remote_tools` both report under "Remote Access", so a
+    display-name merge would have deleted one of them and flattered the score.
+    A section whose collector fails on the re-read is dropped, not left stale.
+  - **Both fix buttons use it.** The audit screen used to leave the fixed card
+    claiming the machine was still vulnerable (it never refreshed at all); the
+    hardening screen re-ran every collector to move one number. Each now calls
+    `refreshAfterFix(action)`, which names the section via one table
+    (`auditSectionForHardeningAction`, `lib/models/audit_models.dart`) and does
+    the full audit for an action the engine has no section for.
+  - `cargo test` 58/58 (4 new: the merged report keeps every section and score,
+    the "Remote Access" collision, a failed re-read leaving no stale finding, and
+    the `merge` parameter validation), clippy clean, `flutter analyze` clean,
+    `flutter test` 36/36 (5 new in `test/audit_merge_test.dart`: the request
+    shape, the mapping table, the no-mapping fallback, the refused-merge
+    fallback, and a plain full audit).
+  - Live on this machine (throwaway `serve` engine, isolated `MICS_DATA_DIR`):
+    full audit `score 70, 12 findings, 10 sections, partial false`; then
+    `{sections:["hosts"], merge:true}` → `score 70, 12 findings, 10 sections,
+    partial false, merged true, refreshed [hosts]`. A lone `{sections:["hosts"]}`
+    returns `score 85, 1 finding, partial true` — exactly the uncomparable number
+    the merge exists to avoid. `{sections:[], merge:true}` → `-32602` ("merge
+    needs sections"), `{sections:["nope"], merge:true}` → `-32602` (unknown
+    section), and a merge on a fresh engine → `-32000` ("no full audit to merge
+    into"). Nine of nine checks PASS.
 
 - **spawns — no external tool can wedge a request any more, and a test now
   enforces that instead of trusting the code**
@@ -1071,7 +1103,10 @@ signing certificate respectively), so this is the work that is always available.
 - [x] `status` returns the real crate version and platform instead of hardcoded
       `0.1.0` / `windows` (now `windows-x86_64` + pid).
 - [x] `audit.run` honours `params.sections` instead of running everything
-      (7 ms for one section instead of 1.7 s; unknown names are refused).
+      (7 ms for one section instead of 1.7 s; unknown names are refused). A fix
+      now uses it: `audit.run {sections:[id], merge:true}` re-reads one section
+      and merges it into the last full audit (D-014), so the UI pays for one
+      collector and still shows the engine-computed score over every check.
 - [x] Add timeouts to the `netsh` / elevated-PowerShell calls in `firewall/mod.rs`
       and `ids/mod.rs`, the way hardening was fixed — an unanswered prompt or a
       stalled service must not wedge a request. Done as a shared runner
@@ -1161,7 +1196,7 @@ signing certificate respectively), so this is the work that is always available.
 |---|---|---|
 | HIGH | No installer: the portable ZIP + `SHA256SUMS` are produced and verified, but there is no NSIS installer, no code signing and no published download | `dist/`, P4 |
 | HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
-| LOW | `audit.run` can now re-check one section in milliseconds, but the UI still re-runs the whole audit after a fix (the engine side is ready, the caller is not) | `dispatcher.rs`, `providers.dart` |
+| LOW | A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age (it re-reads the section it just changed, which is where the staleness would matter) | `traits.rs`, `providers.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | LOW | Alerts are attributed by AUMID `MICS` without registering an AppUserModelID (no Start-Menu shortcut property, no `HKCU\Software\Classes\AppUserModelId\MICS`), so Windows' own notification settings/Action Center label the source as `MICS` rather than "MI CS". Registration is not required for the card to appear (proven with cards in the history), and adding it changes a shortcut outside the app folder — fold it into the P4 installer | `notify/toast.rs`, `scripts/create-shortcuts.ps1` |

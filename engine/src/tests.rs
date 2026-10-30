@@ -886,4 +886,228 @@ mod tests {
             assert_deadline_is_enforced(call);
         }
     }
+
+    /// One finding per section, secure or failing on demand.
+    ///
+    /// It reproduces the real collectors' display-name collision on purpose:
+    /// `rdp` and `remote_tools` both report their findings under "Remote Access",
+    /// which is exactly what a merge keyed by display name would get wrong.
+    #[derive(Default)]
+    struct SectionMock {
+        secure: Vec<&'static str>,
+        failing: Vec<&'static str>,
+    }
+
+    impl SectionMock {
+        fn secure_only(ids: &[&'static str]) -> Self {
+            Self {
+                secure: ids.to_vec(),
+                failing: Vec::new(),
+            }
+        }
+
+        fn section(
+            &self,
+            id: &'static str,
+        ) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            if self.failing.contains(&id) {
+                anyhow::bail!("{id} collector failed");
+            }
+            let display = match id {
+                "rdp" | "remote_tools" => "Remote Access",
+                "defender" => "Defender",
+                "firewall" => "Firewall",
+                "smbv1" => "Legacy Protocols",
+                "uac" => "Account Control",
+                "admins" => "Local Admins",
+                _ => "Hosts File",
+            };
+            let secure = self.secure.contains(&id);
+            Ok(vec![crate::platform::traits::AuditFinding {
+                section: display.to_string(),
+                item: format!("{id} check"),
+                status: if secure {
+                    crate::platform::traits::FindingStatus::Secure
+                } else {
+                    crate::platform::traits::FindingStatus::Vulnerable
+                },
+                // Low = penalty 3, so eight insecure sections score 76 and one
+                // fix is a visible +3 rather than a saturating 0.
+                severity: crate::platform::traits::Severity::Low,
+                description: format!("{id} state"),
+                fix_available: true,
+            }])
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::platform::traits::PlatformCollectors for SectionMock {
+        async fn audit_defender(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("defender")
+        }
+        async fn audit_firewall(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("firewall")
+        }
+        async fn audit_rdp(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("rdp")
+        }
+        async fn audit_smbv1(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("smbv1")
+        }
+        async fn audit_uac(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("uac")
+        }
+        async fn audit_admins(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("admins")
+        }
+        async fn audit_hosts_file(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("hosts")
+        }
+        async fn audit_remote_tools(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.section("remote_tools")
+        }
+        async fn audit_startup(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::StartupEntry>> {
+            Ok(Vec::new())
+        }
+        async fn audit_scheduled_tasks(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::ScheduledTaskEntry>> {
+            Ok(Vec::new())
+        }
+        async fn get_network_connections(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::NetworkConnection>> {
+            Ok(Vec::new())
+        }
+        async fn get_software_inventory(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::SoftwareEntry>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_merged_audit_keeps_the_score_and_every_other_section() {
+        use crate::platform::traits::{collect_audit, AuditCache};
+
+        let mut cache = AuditCache::default();
+        let base = collect_audit(&SectionMock::default(), None).await;
+        cache.remember(base);
+
+        // The user fixed RDP: only that section is re-read.
+        let fresh = collect_audit(
+            &SectionMock::secure_only(&["rdp"]),
+            Some(&["rdp".to_string()]),
+        )
+        .await;
+        let report = cache
+            .merge(fresh, &["rdp".to_string()])
+            .expect("a remembered full audit is a base");
+
+        assert_eq!(report["partial"], serde_json::json!(false), "the merged report is complete");
+        assert_eq!(report["merged"], serde_json::json!(true));
+        assert_eq!(report["refreshed"], serde_json::json!(["rdp"]));
+        assert_eq!(
+            report["sections"].as_array().map(|s| s.len()),
+            Some(10),
+            "every section is still reported (8 checks + 2 inventory lists)"
+        );
+
+        let findings = report["findings"].as_array().expect("findings");
+        assert_eq!(findings.len(), 8, "the RDP finding is replaced, not duplicated");
+        let remote: Vec<&serde_json::Value> = findings
+            .iter()
+            .filter(|f| f["section"] == "Remote Access")
+            .collect();
+        assert_eq!(
+            remote.len(),
+            2,
+            "both sections that display as 'Remote Access' survive a merge"
+        );
+        let rdp = remote.iter().find(|f| f["item"] == "rdp check").expect("rdp");
+        assert_eq!(rdp["status"], serde_json::json!("Secure"));
+        let tools = remote
+            .iter()
+            .find(|f| f["item"] == "remote_tools check")
+            .expect("remote_tools");
+        assert_eq!(
+            tools["status"],
+            serde_json::json!("Vulnerable"),
+            "an untouched section keeps its finding"
+        );
+        // Eight insecure Low findings = 24 penalty -> 76; fixing RDP -> 21 -> 79.
+        assert_eq!(report["score"], serde_json::json!(79));
+    }
+
+    #[tokio::test]
+    async fn a_section_that_fails_on_the_re_read_leaves_no_stale_finding() {
+        use crate::platform::traits::{collect_audit, AuditCache};
+
+        let mut cache = AuditCache::default();
+        cache.remember(collect_audit(&SectionMock::default(), None).await);
+        let failing = SectionMock {
+            failing: vec!["rdp"],
+            ..Default::default()
+        };
+        let fresh = collect_audit(&failing, Some(&["rdp".to_string()])).await;
+        let report = cache
+            .merge(fresh, &["rdp".to_string()])
+            .expect("the base is there");
+
+        assert_eq!(
+            report["sections"].as_array().map(|s| s.len()),
+            Some(9),
+            "a section whose collector failed is reported as not run (7 checks + 2 lists)"
+        );
+        assert!(
+            report["findings"]
+                .as_array()
+                .expect("findings")
+                .iter()
+                .all(|f| f["item"] != "rdp check"),
+            "the old finding must not stay behind pretending to be fresh"
+        );
+    }
+
+    #[tokio::test]
+    async fn merging_without_a_full_audit_is_refused() {
+        use crate::platform::traits::{collect_audit, AuditCache};
+
+        let mut cache = AuditCache::default();
+        let fresh = collect_audit(
+            &SectionMock::secure_only(&["rdp"]),
+            Some(&["rdp".to_string()]),
+        )
+        .await;
+        let err = cache
+            .merge(fresh, &["rdp".to_string()])
+            .expect_err("a partial report cannot be the base");
+        let message = format!("{err:#}");
+        assert!(message.contains("no full audit"), "{message}");
+    }
+
+    #[test]
+    fn merge_needs_sections_and_a_boolean() {
+        use crate::platform::traits::merge_requested;
+        use serde_json::json;
+
+        let sections = vec!["rdp".to_string()];
+        assert!(!merge_requested(None, None).unwrap());
+        assert!(!merge_requested(Some(&json!({})), None).unwrap());
+        assert!(
+            !merge_requested(Some(&json!({"merge": false})), None).unwrap(),
+            "an explicit false is still a normal audit"
+        );
+        assert!(merge_requested(Some(&json!({"merge": true})), Some(&sections)).unwrap());
+        assert!(
+            merge_requested(Some(&json!({"merge": true})), None).is_err(),
+            "merging with nothing to re-read is a full audit, not a merge"
+        );
+        assert!(
+            merge_requested(Some(&json!({"merge": "yes"})), Some(&sections)).is_err(),
+            "a non-boolean merge must be refused, never guessed"
+        );
+    }
 }

@@ -168,8 +168,12 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                       final err = await ref
                           .read(hardeningProvider.notifier)
                           .apply(a.id);
-                      // Rescan so the score delta flashes immediately.
-                      await ref.read(auditProvider.notifier).runAudit();
+                      // Re-read the section this action changes — merged into the
+                      // full report — so the score delta flashes immediately
+                      // without re-running every collector.
+                      await ref
+                          .read(auditProvider.notifier)
+                          .refreshAfterFix(a.id);
                       final after = ref.read(auditProvider).report?.score;
                       final delta = (after != null && before != null)
                           ? after - before
@@ -193,6 +197,11 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                       final err = await ref
                           .read(hardeningProvider.notifier)
                           .rollback(a.id);
+                      // The rollback moves the same section back: re-read it so
+                      // the audit agrees with the hardening card.
+                      await ref
+                          .read(auditProvider.notifier)
+                          .refreshAfterFix(a.id);
                       setState(() {
                         _busy = null;
                         _message = err ??

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use async_trait::async_trait;
+use std::sync::{LazyLock, Mutex};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuditFinding {
@@ -153,17 +154,118 @@ pub fn requested_sections(params: Option<&serde_json::Value>) -> Result<Option<V
     Ok(Some(wanted))
 }
 
-/// Runs the requested audit sections and reduces the findings into a 0–100
-/// security score plus the flat findings list.
+/// Parses `params.merge` for `audit.run`.
 ///
-/// `sections` is what [`requested_sections`] returned: `None` is the full audit
-/// the dashboard shows, `Some` is a subset (the report then carries
-/// `"partial": true`, because a score over part of the checks is not comparable
-/// with the full one). One definition so the score is always consistent.
-pub async fn run_audit(
+/// `true` means "re-read the named sections and merge them into the last full
+/// audit", so the caller gets a *complete* report whose score is comparable with
+/// the one the dashboard already showed. A partial report cannot be a base, and a
+/// merge with nothing to re-read would be a full audit, so both are refused
+/// rather than guessed.
+pub fn merge_requested(
+    params: Option<&serde_json::Value>,
+    sections: Option<&[String]>,
+) -> Result<bool> {
+    let Some(value) = params.and_then(|p| p.get("merge")) else {
+        return Ok(false);
+    };
+    let Some(merge) = value.as_bool() else {
+        anyhow::bail!("\"merge\" must be true or false, not {value}");
+    };
+    if merge && sections.is_none() {
+        anyhow::bail!(
+            "\"merge\" needs \"sections\": re-reading nothing is a full audit, not a merge"
+        );
+    }
+    Ok(merge)
+}
+
+/// The position of a section in the report: `AUDIT_SECTIONS` order, then the
+/// inventory lists (which are not in that list).
+fn section_rank(id: &str) -> usize {
+    AUDIT_SECTIONS
+        .iter()
+        .position(|s| *s == id)
+        .unwrap_or(AUDIT_SECTIONS.len())
+}
+
+/// One audit pass, grouped by the section id that produced each finding.
+///
+/// Grouping by id — not by the finding's display `section` — is what makes a
+/// merge correct: `rdp` and `remote_tools` both report under "Remote Access", so
+/// re-reading one must not erase the other's findings.
+#[derive(Debug, Clone, Default)]
+pub struct AuditPass {
+    /// Check findings per section id, in `AUDIT_SECTIONS` order.
+    pub checks: Vec<(String, Vec<AuditFinding>)>,
+    /// Inventory lists: `None` when that section did not run in this pass.
+    pub startup: Option<Vec<StartupEntry>>,
+    pub scheduled_tasks: Option<Vec<ScheduledTaskEntry>>,
+}
+
+impl AuditPass {
+    /// Replaces (or inserts, in report order) one section's findings.
+    fn set(&mut self, id: &str, findings: Vec<AuditFinding>) {
+        match self.checks.iter_mut().find(|(existing, _)| existing == id) {
+            Some(slot) => slot.1 = findings,
+            None => {
+                self.checks.push((id.to_string(), findings));
+                self.checks.sort_by_key(|(id, _)| section_rank(id));
+            }
+        }
+    }
+
+    /// Drops a section entirely: a collector that failed on a re-read must not
+    /// leave its previous finding behind, pretending to be fresh.
+    fn drop_section(&mut self, id: &str) {
+        self.checks.retain(|(existing, _)| existing != id);
+    }
+
+    /// Reduces the pass to the report shape the UI and the CLI read.
+    ///
+    /// `partial` is true when only a subset of the checks ran. `refreshed` names
+    /// the sections a merge re-read just now, which is what makes a complete
+    /// report explainable rather than suspiciously identical.
+    pub fn report(&self, partial: bool, refreshed: &[String]) -> serde_json::Value {
+        let findings: Vec<&AuditFinding> = self
+            .checks
+            .iter()
+            .flat_map(|(_, section)| section.iter())
+            .collect();
+        let mut penalty = 0u32;
+        for f in &findings {
+            if f.status.is_insecure() {
+                penalty += f.severity.penalty();
+            }
+        }
+        let score = 100u32.saturating_sub(penalty.min(100));
+        let ran: Vec<&str> = self
+            .checks
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .chain(self.startup.is_some().then_some("startup"))
+            .chain(self.scheduled_tasks.is_some().then_some("scheduled_tasks"))
+            .collect();
+        serde_json::json!({
+            "score": score,
+            "findings": findings,
+            "startup_entries": self.startup.clone().unwrap_or_default(),
+            "scheduled_tasks": self.scheduled_tasks.clone().unwrap_or_default(),
+            "sections": ran,
+            "partial": partial,
+            "merged": !refreshed.is_empty(),
+            "refreshed": refreshed,
+        })
+    }
+}
+
+/// Runs the requested audit sections and groups what ran by section id.
+///
+/// Never fails: a broken collector is logged and its section is omitted from the
+/// report (the score must never silently count a check that did not run).
+pub async fn collect_audit(
     collectors: &dyn PlatformCollectors,
     sections: Option<&[String]>,
-) -> Result<serde_json::Value> {
+) -> AuditPass {
     let wants = |name: &str| match sections {
         None => true,
         Some(list) => list.iter().any(|s| s == name),
@@ -178,53 +280,100 @@ pub async fn run_audit(
         ("hosts", collectors.audit_hosts_file()),
         ("remote_tools", collectors.audit_remote_tools()),
     ];
-    let mut findings: Vec<AuditFinding> = Vec::new();
-    let mut ran: Vec<&str> = Vec::new();
+    let mut pass = AuditPass::default();
     for (name, section) in all {
         if !wants(name) {
             continue;
         }
-        ran.push(name);
         match section.await {
-            Ok(v) => findings.extend(v),
-            // A section that fails is reported by omission from `ran`, not by a
-            // silent zero penalty that would flatter the score.
+            Ok(findings) => pass.checks.push((name.to_string(), findings)),
             Err(e) => {
                 tracing::warn!("{name} audit failed: {e:#}");
-                ran.retain(|r| *r != name);
             }
         }
     }
+    pass.checks.sort_by_key(|(id, _)| section_rank(id));
 
-    let startup = if wants("startup") {
-        ran.push("startup");
-        collectors.audit_startup().await.unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let tasks = if wants("scheduled_tasks") {
-        ran.push("scheduled_tasks");
-        collectors.audit_scheduled_tasks().await.unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let mut penalty = 0u32;
-    for f in &findings {
-        if f.status.is_insecure() {
-            penalty += f.severity.penalty();
-        }
+    if wants("startup") {
+        pass.startup = Some(collectors.audit_startup().await.unwrap_or_default());
     }
-    let score = 100u32.saturating_sub(penalty.min(100));
+    if wants("scheduled_tasks") {
+        pass.scheduled_tasks = Some(collectors.audit_scheduled_tasks().await.unwrap_or_default());
+    }
+    pass
+}
 
-    Ok(serde_json::json!({
-        "score": score,
-        "findings": findings,
-        "startup_entries": startup,
-        "scheduled_tasks": tasks,
-        "sections": ran,
-        "partial": sections.is_some(),
-    }))
+/// The last full audit, so a section re-check can be merged into a complete
+/// report instead of replacing it with an uncomparable partial one.
+#[derive(Debug, Default)]
+pub struct AuditCache {
+    last_full: Option<AuditPass>,
+}
+
+impl AuditCache {
+    /// Remembers a full audit as the base for later merges.
+    pub fn remember(&mut self, pass: AuditPass) {
+        self.last_full = Some(pass);
+    }
+
+    /// Re-reads `fresh`'s sections on top of the remembered full audit and
+    /// returns the complete report. One definition of the score, over every
+    /// section, so a fix cannot flatter or spoil it.
+    pub fn merge(&mut self, fresh: AuditPass, refreshed: &[String]) -> Result<serde_json::Value> {
+        let Some(base) = self.last_full.as_mut() else {
+            anyhow::bail!(
+                "no full audit to merge into — run the full audit first (a partial \
+                 report is not a base)"
+            );
+        };
+        for id in refreshed {
+            match id.as_str() {
+                "startup" => {
+                    if fresh.startup.is_some() {
+                        base.startup = fresh.startup.clone();
+                    }
+                }
+                "scheduled_tasks" => {
+                    if fresh.scheduled_tasks.is_some() {
+                        base.scheduled_tasks = fresh.scheduled_tasks.clone();
+                    }
+                }
+                _ => match fresh.checks.iter().find(|(fid, _)| fid == id) {
+                    Some((_, findings)) => base.set(id, findings.clone()),
+                    None => base.drop_section(id),
+                },
+            }
+        }
+        Ok(base.report(false, refreshed))
+    }
+}
+
+/// The engine serves one UI session, so one process-wide cache is enough.
+static AUDIT_CACHE: LazyLock<Mutex<AuditCache>> =
+    LazyLock::new(|| Mutex::new(AuditCache::default()));
+
+/// Runs `f` with the engine's audit cache. A poisoned lock (a panic elsewhere)
+/// must not take the audit down with it, so the guard is recovered instead of
+/// unwrapped — and the lock is never held across an await: callers collect the
+/// sections first, then merge.
+pub fn with_audit_cache<T>(f: impl FnOnce(&mut AuditCache) -> T) -> T {
+    let mut guard = AUDIT_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    f(&mut guard)
+}
+
+/// Runs the requested audit sections and reduces the findings into a 0–100
+/// security score plus the flat findings list.
+///
+/// `sections` is what [`requested_sections`] returned: `None` is the full audit
+/// the dashboard shows, `Some` is a subset (the report then carries
+/// `"partial": true`, because a score over part of the checks is not comparable
+/// with the full one). One definition so the score is always consistent.
+pub async fn run_audit(
+    collectors: &dyn PlatformCollectors,
+    sections: Option<&[String]>,
+) -> Result<serde_json::Value> {
+    let pass = collect_audit(collectors, sections).await;
+    Ok(pass.report(sections.is_some(), &[]))
 }
 
 /// Runs every audit section (the CLI and the default `audit.run` behaviour).

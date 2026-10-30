@@ -297,6 +297,12 @@ class _FindingCard extends ConsumerWidget {
                         await ref
                             .read(engineIpcProvider)
                             .request('hardening.apply', {'action': action});
+                        // Re-read just this section (the engine merges it into the
+                        // full report), so the card and the score stop claiming
+                        // the machine is still in its previous state.
+                        await ref
+                            .read(auditProvider.notifier)
+                            .refreshAfterFix(action);
                         messenger.showSnackBar(SnackBar(
                             content: Text(fixedLabel
                                 .replaceAll('{item}', finding.item))));

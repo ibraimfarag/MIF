@@ -81,17 +81,41 @@ impl Dispatcher {
                     Ok(sections) => sections,
                     Err(e) => return error_response(req, &format!("audit.run: {e:#}")),
                 };
-                match &requested {
-                    Some(list) => info!("Running audit for: {}", list.join(", ")),
-                    None => info!("Running full system audit..."),
+                // `params.merge: true` re-reads those sections on top of the last
+                // full audit, so a fix refreshes one section in milliseconds
+                // without replacing the report with an uncomparable partial one.
+                let merge = match crate::platform::traits::merge_requested(
+                    req.params.as_ref(),
+                    requested.as_deref(),
+                ) {
+                    Ok(merge) => merge,
+                    Err(e) => return error_response(req, &format!("audit.run: {e:#}")),
+                };
+                match (&requested, merge) {
+                    (Some(list), true) => info!("Re-reading audit sections: {}", list.join(", ")),
+                    (Some(list), false) => info!("Running audit for: {}", list.join(", ")),
+                    (None, _) => info!("Running full system audit..."),
                 }
                 let collectors = crate::platform::windows::collectors::WindowsCollectors;
-                match crate::platform::traits::run_audit(&collectors, requested.as_deref()).await {
-                    Ok(report) => Some(report),
-                    Err(e) => {
-                        error!("audit.run failed: {e:#}");
-                        None
+                if merge {
+                    let names = requested.unwrap_or_default();
+                    // Collected before the cache is locked: the lock is never held
+                    // across an await.
+                    let fresh = crate::platform::traits::collect_audit(&collectors, Some(&names)).await;
+                    match crate::platform::traits::with_audit_cache(|cache| cache.merge(fresh, &names)) {
+                        Ok(report) => Some(report),
+                        Err(e) => {
+                            error!("audit.run merge: {e:#}");
+                            return detailed_error(req, "audit.run", e);
+                        }
                     }
+                } else {
+                    let pass = crate::platform::traits::collect_audit(&collectors, requested.as_deref()).await;
+                    // Only a full audit is a valid base for a later merge.
+                    if requested.is_none() {
+                        crate::platform::traits::with_audit_cache(|cache| cache.remember(pass.clone()));
+                    }
+                    Some(pass.report(requested.is_some(), &[]))
                 }
             }
             "net.connections" => {

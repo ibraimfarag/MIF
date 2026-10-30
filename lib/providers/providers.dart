@@ -20,13 +20,49 @@ class AuditNotifier extends Notifier<AuditState> {
 
   EngineIpc get _ipc => ref.read(engineIpcProvider);
 
-  Future<void> runAudit() async {
+  /// Runs the audit.
+  ///
+  /// [sections] asks for a subset of the engine's checks (unknown names are
+  /// refused by the engine, never ignored). [merge] re-reads those sections *on
+  /// top of the last full audit*: the engine keeps the base, so the report stays
+  /// complete and its score comparable. That is what a fix uses — one section in
+  /// milliseconds instead of the whole sweep.
+  Future<void> runAudit({List<String>? sections, bool merge = false}) =>
+      _run(sections: sections, merge: merge, fallbackToFull: merge);
+
+  /// Re-checks the audit section a hardening action changes, so the finding and
+  /// the score stop claiming the machine is in its previous state. An action the
+  /// engine has no section for falls back to the full audit.
+  Future<void> refreshAfterFix(String actionId) {
+    final section = auditSectionForHardeningAction[actionId];
+    return runAudit(
+        sections: section == null ? null : [section], merge: section != null);
+  }
+
+  Future<void> _run({
+    List<String>? sections,
+    bool merge = false,
+    bool fallbackToFull = false,
+  }) async {
     if (state.loading) return;
     state = AuditState(loading: true, report: state.report);
+    final params = <String, dynamic>{
+      'sections': ?sections,
+      if (merge) 'merge': true,
+    };
     try {
-      final result = await _ipc.request('audit.run');
+      final result = await _ipc.request(
+          'audit.run', params.isEmpty ? null : params);
       state = AuditState(report: AuditReport.fromJson(result));
     } catch (e) {
+      if (fallbackToFull) {
+        // The engine refuses a merge with no full audit behind it (a partial
+        // report is not a base). The caller asked for a re-check, so take the
+        // full sweep rather than surfacing an error nobody can act on.
+        state = AuditState(report: state.report);
+        await _run();
+        return;
+      }
       state = AuditState(report: state.report, error: e.toString());
     }
   }
