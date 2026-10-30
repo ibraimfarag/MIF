@@ -149,12 +149,14 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 | `dns.google`, `1.1.1.1` | a HEAD/GET probe with no payload | the "online?" check, cached 30 s (`sync/mod.rs::online`) |
 | LM Studio (`lm_url`, default `http://127.0.0.1:1234`) | the finding text to explain | LLM explain, explicit |
 
-`settings.rs` accepts `http://` **or** `https://` for `ioc_feed_url`, `lm_url` and
-`update_manifest_url`. `http://127.0.0.1` is correct for a local LM Studio;
-`http://` for a feed or an update manifest is a cleartext downgrade an on-path
-attacker can use (F-3). `AGENTS.md` rule 8 now carries this table's list instead of
-a shorter one — the intel sources and the connectivity probe used to be missing from
-it (F-7, closed).
+`settings.rs` accepts `https://` everywhere and `http://` **only for loopback**
+(`127.0.0.0/8`, `::1`, the literal name `localhost`) — that is what a local LM
+Studio needs, and it is the one case where the traffic never leaves the machine.
+A cleartext feed or update manifest is refused at `settings.set` and cleared again
+on load, so a hand-edited file cannot smuggle one in (the half of F-3 that is
+closed; `WinVerifyTrust` on the extracted binary is still open).
+`AGENTS.md` rule 8 now carries this table's list instead of a shorter one — the
+intel sources and the connectivity probe used to be missing from it (F-7, closed).
 
 ### B7 — The package directory
 
@@ -205,7 +207,7 @@ ask the engine to do through the pipe.
 | AP-1 | "write any file as SYSTEM through the helper" | Refused: marker + line-shape validation, ≤ 4 MiB, `MICS-` prefix owned by the helper | `Op::validate`, `scripts/verify-helper.ps1` |
 | AP-2 | "make the engine run arbitrary PowerShell" | No op takes a command; hardening ids come from a fixed table (`validate_action`) | `hardening/mod.rs`, helper tests |
 | AP-3 | "make the audit lie" | The engine computes the score, flags `partial`, and omits a section whose collector failed instead of reporting it secure; a refused Defender query is `Unknown`, never `Secure` | audit tests, D-014 |
-| AP-4 | "poison an update" | SHA-256 from the manifest over TLS — but no signature check by the updater and `http://` manifests are allowed | F-3 |
+| AP-4 | "poison an update" | SHA-256 from the manifest over TLS, and a cleartext manifest is refused outside loopback — but the updater still does not check the Authenticode signature | F-3a closed, F-3b open |
 | AP-5 | "steal quarantined samples" | AES-256-GCM + machine-scope DPAPI: an off-box copy is useless, local code can decrypt | `scanner/quarantine.rs` (F-6) |
 | AP-6 | "hide from the scanner" | Acknowledged: user-mode, hash-IOC + YARA only — no unpacking, emulation, memory scanning. A custom packer wins round one; the guard's behavioural rules are round two | `scanner/`, F-9 |
 | AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the copy says "modified" and never claims otherwise | `guard/canary.rs` (F-4, copy fixed) |
@@ -220,7 +222,7 @@ ask the engine to do through the pipe.
 | # | Risk | Why it is accepted today | Mitigation if we want it |
 |---|---|---|---|
 | F-2 | Helper pipe grants `INTERACTIVE` full access: a standard user can make SYSTEM open a firewall rule, rewrite the managed hosts section, or run a hardening action, with no prompt | D-007 exists to remove per-action prompts | Verify the caller before executing: `GetNamedPipeClientProcessId` → image path + token SID must be the running engine's, or restrict the ACL to `BA`+`SY` and accept a prompt |
-| F-3 | Update provenance = SHA-256 in a manifest fetched over TLS; the updater never verifies the Authenticode signature, and `http://` manifests/feeds are accepted | Signing the *release* was P2; verifying it in the updater is not written yet | `WinVerifyTrust` on the extracted binary, and refuse `http://` for anything but loopback |
+| F-3 | Update provenance = SHA-256 in a manifest fetched over TLS; the updater never verifies the Authenticode signature | Signing the *release* was P2; verifying it in the updater is not written yet. **The cleartext half is closed**: `http://` is refused outside loopback (F-3a) | `WinVerifyTrust` on the extracted binary before it replaces a running one |
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |

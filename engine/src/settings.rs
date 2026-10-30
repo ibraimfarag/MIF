@@ -136,25 +136,19 @@ impl Settings {
                 "nvd_api_key" => self.nvd_api_key = string(value, key)?,
                 "ioc_feed_url" => {
                     let v = string(value, key)?;
-                    if !v.is_empty() && !(v.starts_with("http://") || v.starts_with("https://")) {
-                        bail!("ioc_feed_url must start with http:// or https:// (or be empty)");
-                    }
+                    check_url(key, &v)?;
                     self.ioc_feed_url = v;
                 }
                 "ioc_feed_key" => self.ioc_feed_key = string(value, key)?,
                 "lm_url" => {
                     let v = string(value, key)?;
-                    if !v.is_empty() && !(v.starts_with("http://") || v.starts_with("https://")) {
-                        bail!("lm_url must start with http:// or https:// (or be empty)");
-                    }
+                    check_url(key, &v)?;
                     self.lm_url = v;
                 }
                 "lm_model" => self.lm_model = string(value, key)?,
                 "update_manifest_url" => {
                     let v = string(value, key)?;
-                    if !v.is_empty() && !(v.starts_with("http://") || v.starts_with("https://")) {
-                        bail!("update_manifest_url must start with http:// or https:// (or be empty)");
-                    }
+                    check_url(key, &v)?;
                     self.update_manifest_url = v;
                 }
                 "update_channel" => {
@@ -260,12 +254,26 @@ impl Settings {
     }
 
     /// Reads the file; a missing or corrupt file falls back to defaults (and
-    /// never blocks the engine from starting).
+    /// never blocks the engine from starting). A URL that the RPC patch would
+    /// refuse is cleared here too, so a hand-edited `http://` feed cannot be used
+    /// just because it arrived through the file instead of the UI (F-3).
     pub fn load() -> Self {
         let path = Self::path();
         match std::fs::read_to_string(&path) {
             Ok(text) => match serde_json::from_str::<Settings>(&text) {
-                Ok(s) => s,
+                Ok(mut s) => {
+                    for (key, value) in [
+                        ("ioc_feed_url", &mut s.ioc_feed_url),
+                        ("lm_url", &mut s.lm_url),
+                        ("update_manifest_url", &mut s.update_manifest_url),
+                    ] {
+                        if let Err(e) = check_url(key, value.as_str()) {
+                            tracing::warn!("{e} — clearing {key}");
+                            value.clear();
+                        }
+                    }
+                    s
+                }
                 Err(e) => {
                     tracing::warn!("settings.json is invalid ({e}) — using defaults");
                     Settings::default()
@@ -506,6 +514,46 @@ fn boolean(value: &Value, key: &str) -> Result<bool> {
         .with_context(|| format!("{key} must be true or false"))
 }
 
+/// Refuses a cleartext URL that is not loopback.
+///
+/// `http://127.0.0.1:1234` is the LM Studio default and never leaves the machine,
+/// so it stays accepted. `http://feeds.example.com` is a cleartext downgrade an
+/// on-path attacker can rewrite into whatever feed or update manifest it likes,
+/// and the engine would trust it (`docs/THREAT-MODEL.md`, F-3), so it is refused
+/// outright rather than warned about. An empty value means "not configured".
+fn check_url(key: &str, value: &str) -> Result<()> {
+    if value.is_empty() {
+        return Ok(());
+    }
+    let url = reqwest::Url::parse(value).with_context(|| format!("{key} is not a URL"))?;
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if host_is_loopback(&url) => Ok(()),
+        "http" => bail!(
+            "{key} must use https:// (http:// is only accepted for loopback: 127.0.0.1, ::1 or localhost)"
+        ),
+        other => bail!("{key} must use http:// or https://, not {other}://"),
+    }
+}
+
+/// True for `127.0.0.0/8`, `::1` and the literal name `localhost`.
+///
+/// The host comes from the parser (so `http://0x7f000001/` is seen as `127.0.0.1`),
+/// but the decision is a numeric one: a domain that merely ends in `localhost`
+/// (`localhost.evil.test`) is not loopback and is refused.
+fn host_is_loopback(url: &reqwest::Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    bare.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -548,6 +596,47 @@ mod tests {
         assert!(s.apply_patch(&json!({"unknown_key": 1})).is_err());
         assert!(s.apply_patch(&json!({"dnd": "yes"})).is_err());
         assert!(s.apply_patch(&json!({"toast_enabled": "no"})).is_err());
+    }
+
+    #[test]
+    fn cleartext_urls_are_only_accepted_for_loopback() {
+        let mut s = Settings::default();
+        // The LM Studio default and every honest way to spell loopback.
+        for ok in [
+            "",
+            "http://127.0.0.1:1234",
+            "http://127.0.0.2:8080/v1",
+            "http://[::1]:1234",
+            "http://localhost:1234",
+            "https://feeds.example.com/hashes.txt",
+        ] {
+            for key in ["ioc_feed_url", "lm_url", "update_manifest_url"] {
+                s.apply_patch(&json!({ key: ok }))
+                    .unwrap_or_else(|e| panic!("{key} rejected {ok}: {e}"));
+            }
+        }
+
+        // Cleartext to anywhere else is refused — including a domain that merely
+        // starts with "localhost" and a scheme other than http(s).
+        for bad in [
+            "http://feeds.example.com/hashes.txt",
+            "http://localhost.evil.test:80/",
+            "http://192.168.1.10:1234",
+            "ftp://feeds.example.com/",
+            "feeds.example.com",
+        ] {
+            for key in ["ioc_feed_url", "lm_url", "update_manifest_url"] {
+                assert!(
+                    s.apply_patch(&json!({ key: bad })).is_err(),
+                    "{key} accepted {bad}"
+                );
+            }
+        }
+
+        // A refused patch changes nothing: the last accepted values survive.
+        assert_eq!(s.ioc_feed_url, "https://feeds.example.com/hashes.txt");
+        assert_eq!(s.lm_url, "https://feeds.example.com/hashes.txt");
+        assert_eq!(s.update_manifest_url, "https://feeds.example.com/hashes.txt");
     }
 
     #[test]

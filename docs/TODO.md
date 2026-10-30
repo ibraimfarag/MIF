@@ -259,6 +259,25 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **Cleartext feeds and update manifests are refused (F-3a closed)**
+  - `settings.rs` accepted `http://` for `ioc_feed_url`, `lm_url` and
+    `update_manifest_url`. For a local LM Studio that is correct; for a feed or an
+    update manifest it is a downgrade an on-path attacker can rewrite, and the
+    engine would trust what came back (F-3).
+  - One rule now: `https://` anywhere, `http://` **only** for loopback
+    (`127.0.0.0/8`, `::1`, the literal `localhost`). The host is taken from the
+    parser (so `http://0x7f000001/` is seen as `127.0.0.1`) and the decision is
+    numeric, so `localhost.evil.test` is not mistaken for loopback.
+  - It is enforced twice on purpose: `settings.set` refuses it with a message the
+    UI can show, and `load()` clears such a value with a warning, so a hand-edited
+    `settings.json` cannot smuggle a cleartext feed past the UI.
+  - Live acceptance over JSON-RPC (isolated engine): `http://feeds.example.com/…`
+    answers `-32602 ioc_feed_url must use https:// (http:// is only accepted for
+    loopback…)`, and `http://127.0.0.1:1234` is accepted. `cargo test` 62/62
+    (1 new: five accepted and five refused spellings, times three keys, plus the
+    "a refused patch changes nothing" case).
+  - Still open: the updater does not verify Authenticode on the extracted binary
+    before replacing a running one (F-3b, next step).
 - **`AGENTS.md` rule 8 now names the real network calls (F-7 closed)**
   - The rule said "nothing leaves the machine except explicit VT/NVD/LM lookups",
     which was not the list: the engine also fetches the intel sources it shows you
@@ -1350,7 +1369,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
-| MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
+| MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust` before replacing a running binary. (The cleartext half is fixed: `http://` is refused outside loopback, F-3a) | `update.rs`, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
