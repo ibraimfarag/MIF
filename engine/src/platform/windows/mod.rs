@@ -1,4 +1,5 @@
 pub mod caller;
+pub mod pids;
 pub mod pipe;
 pub mod process;
 pub mod signature;

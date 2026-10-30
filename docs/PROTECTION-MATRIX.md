@@ -239,5 +239,5 @@ administrator can delete it (F-10).
 | Both pipe ACLs are what the threat model says | `scripts/verify-pipe-acl.ps1` (18 checks, both pipes) |
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release loads its own rule packs instead of the built-in starter | `scripts/verify-release.ps1` |
-| The guard's CPU/RAM cost | `scripts/measure-guard-cpu.ps1` — measured 2026-10-30: **1.56 % of one core = 0.03 % of this 56-thread machine**, guard on minus `MICS_NO_GUARD=1`; 3.52 % before the poll loop was trimmed. The `< 1 %` budget still needs a stated definition |
+| The guard's CPU/RAM cost | `scripts/measure-guard-cpu.ps1` — measured 2026-10-30: **0.156 % of one core = 0.0028 % of this 56-thread machine** (guard on minus `MICS_NO_GUARD=1`, one inert rule in force), down from 1.56 % after the benchmark fix and 3.52 % before the poll loop was trimmed; `mics-engine benchmark` reports the engine process itself (`cpu_percent`, `cpu_percent_of_machine`, `budget_ok`) |
 | The scanner resumes instead of restarting after a crash | the durable-job tests in `tests.rs` |

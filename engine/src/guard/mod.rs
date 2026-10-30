@@ -209,6 +209,7 @@ pub fn start_guard() {
         // The pid set of the previous pass. Local on purpose: a fresh start means a
         // fresh set, so nothing outside this thread needs to see it.
         let mut known: HashSet<u32> = HashSet::new();
+        let mut ticks: u32 = 0;
         loop {
             if !guard().running.load(Ordering::SeqCst) {
                 info!("Guard loop stopped");
@@ -223,21 +224,30 @@ pub fn start_guard() {
                 continue;
             }
 
-            // Cheap pass: which pids exist. `nothing()` skips the expensive reads
-            // (command line, image path, parent) for processes the rules already
-            // saw; those are fetched below for the new ones only.
-            sys.refresh_processes_specifics(
-                ProcessesToUpdate::All,
-                true,
-                ProcessRefreshKind::nothing(),
-            );
-            let mut current = HashSet::new();
+            // Cheap pass: which pids exist, from one `EnumProcesses` call instead of
+            // refreshing every process through sysinfo (that cost ~31 ms per tick,
+            // measured — docs/TODO.md §0.1). The expensive reads (command line,
+            // image path, parent) are then done only for the new pids.
+            let pids = match crate::platform::windows::pids::list_pids() {
+                Ok(pids) => pids,
+                Err(e) => {
+                    // Enumeration failing is not a reason to stop watching: fall back
+                    // to the sysinfo snapshot for this tick.
+                    warn!("guard: process enumeration failed ({e:#}), falling back");
+                    sys.refresh_processes_specifics(
+                        ProcessesToUpdate::All,
+                        true,
+                        ProcessRefreshKind::nothing(),
+                    );
+                    sys.processes().keys().map(|pid| pid.as_u32()).collect()
+                }
+            };
+            let mut current = HashSet::with_capacity(pids.len());
             let mut fresh_pids: Vec<Pid> = Vec::new();
-            for pid in sys.processes().keys() {
-                let pid_u32 = pid.as_u32();
+            for pid_u32 in pids {
                 current.insert(pid_u32);
                 if first || !known.contains(&pid_u32) {
-                    fresh_pids.push(*pid);
+                    fresh_pids.push(Pid::from_u32(pid_u32));
                 }
             }
             known = current;
@@ -293,6 +303,17 @@ pub fn start_guard() {
                 }
             }
             crate::guard::canary::check_touches();
+            // `ProcessesToUpdate::Some` only ever *adds* to sysinfo's map, so entries
+            // for exited processes would pile up. Pruning costs one full snapshot and
+            // happens rarely (about every 30 minutes at a 2 s tick).
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(900) {
+                sys.refresh_processes_specifics(
+                    ProcessesToUpdate::All,
+                    true,
+                    ProcessRefreshKind::nothing(),
+                );
+            }
             std::thread::sleep(Duration::from_millis(2000));
         }
     });

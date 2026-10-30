@@ -75,11 +75,13 @@ Honesty is a feature. Today, MI CS does **not**:
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
-- claim **idle CPU below the 1 % budget** — measured **1.56 % of one core, 0.03 % of
-  a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on versus
-  `MICS_NO_GUARD=1`; it was 3.52 % before the poll loop was trimmed). The budget does
-  not yet say *which* percentage it means, and that ambiguity is listed in
-  `docs/TODO.md` §0.1 instead of being papered over (RAM is ~11 MB, inside budget).
+- claim **idle CPU below the 1 % budget**: the guard loop costs **0.156 % of one
+  core = 0.0028 % of a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on
+  versus `MICS_NO_GUARD=1`), so the budget holds whether it is read per core or per
+  machine — and it did not before: 3.52 % of a core until the poll loop was trimmed,
+  and the "2.97 %" quoted earlier came from a benchmark that was mostly measuring its
+  own probe (`mics-engine benchmark` now reports its own `GetProcessTimes`, with
+  `cpu_percent` and `cpu_percent_of_machine`). RAM is ~12 MB, inside budget.
 
 ## Requirements
 

@@ -79,24 +79,15 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **Guard CPU: measured, and the measuring tool fixed.** `scripts\measure-guard-cpu.ps1`
-   gives the differential against `MICS_NO_GUARD=1`: **3.52 % → 1.56 % of one core
-   (0.06 % → 0.03 % of this 56-thread machine)** after the poll loop was trimmed. The
-   old "2.97 %" came from `mics-engine benchmark`, which sampled `sysinfo` while
-   refreshing every process six times in three seconds — with the guard *off* it
-   reported 9.94 %, i.e. it mostly measured its own probe. `benchmark` now reads its
-   own `GetProcessTimes` over one idle window and reports both denominators
-   (`cpu_percent`, `cpu_percent_of_machine`), so `budget_ok` finally means something:
-   idle engine = 0.0 % CPU / 12.5 MB. Remaining: the unelevated poll loop enumerates
-   every process every 2 s (~1.5 % of one core, 0.03 % of the machine); `EnumProcesses`
-   for the pid diff is the next candidate, and the `< 1 %` budget now has a stated
-   basis (share of all logical processors).
-2. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
+1. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
-3. **AUMID registration (LOW, fold into the installer)** — register
+2. **AUMID registration (LOW, fold into the installer)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
    Cards work without it; nothing about toast delivery depends on it.
+3. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
+   core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
+   either definition of it.
 
 ### 0.2 Blocked on the user
 
@@ -268,6 +259,26 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The guard's pid diff is one `EnumProcesses` call now, and the cost is 0.156 % of a core**
+  - `platform/windows/pids.rs` lists the pids in a single kernel call (with the
+    buffer-too-small retry the API asks for), and the guard uses it instead of
+    `sysinfo`'s full snapshot: 0.156 % of one core / 0.0028 % of this 56-thread
+    machine, down from 1.56 % / 0.03 % and from 3.52 % at the start. `sysinfo` still
+    reads command line, image path and parent — for the new pids only — and its map is
+    pruned with one full snapshot every 900 ticks (~30 min) because
+    `ProcessesToUpdate::Some` only ever adds. If `EnumProcesses` fails the loop warns
+    and falls back to the old snapshot for that tick rather than going blind.
+  - The differential probe had a bug worth recording: it set `MICS_RULES_DIR` to
+    `<scratch>\rules`, but `guard::rules_dir()` appends `rules\guard` to whatever it is
+    given, so every earlier run measured the **shipped starter pack** instead of the
+    inert rule — six rules, real alerts (one popped a Windows toast at the user) and
+    the `kill` action armed. Fixed: the variable points at the scratch root, the header
+    says why, and `-RealRules` exists for anyone who wants that configuration on
+    purpose. The numbers above are with the inert rule, confirmed in the engine log
+    (`1 rule(s) from ...\rules\guard`).
+  - With the budget met under both readings (0.156 % of one core, 0.0028 % of the
+    machine), §0.1 no longer carries this item; the `benchmark` fix from the previous
+    commit is what makes `budget_ok` trustworthy.
 - **`benchmark` no longer measures itself (the 2.97 % was an artefact)**
   - `mics-engine benchmark` sampled `sysinfo` while refreshing **every** process six
     times in three seconds, then compared the result against 1 %. Run with
@@ -1423,9 +1434,9 @@ signing certificate respectively), so this is the work that is always available.
       (`scripts\make-release.ps1` + `scripts\verify-release.ps1`; the folder now
       also ships `rules\`, which every previous deploy had dropped).
 - [ ] ARM64 build leg (Flutter + `aarch64-pc-windows-msvc` engine), per D-003.
-- [ ] Finish the guard CPU work: 3.52 % → 1.56 % of one core so far (0.03 % of a
-      56-thread machine); the remaining cost is the unelevated poll loop, and the
-      `< 1 %` budget needs a stated definition (per core or per machine) — §0.1.
+- [x] Guard CPU: 3.52 % → 1.56 % → **0.156 % of one core** (0.0028 % of a 56-thread
+      machine), budget met under either definition, and the measuring tool fixed
+      (`benchmark` was reporting its own probe) — §0.1, log entries below.
 - [ ] `docs/PROTECTION-MATRIX.md` + `docs/THREAT-MODEL.md` (P5 wording work, no
       code involved).
 
@@ -1509,7 +1520,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| LOW | **The guard's poll loop still enumerates every process every 2 s**: 1.56 % of one core = 0.03 % of this 56-thread machine (`scripts\measure-guard-cpu.ps1`, guard on minus `MICS_NO_GUARD=1`; was 3.52 %). Under the stated budget (share of all logical processors it is 0.39 % even on the 4-core minimum spec), but the pid diff could come from `EnumProcesses` instead of sysinfo | `guard/mod.rs`, §0.1 |
+| LOW | The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** (`scripts\measure-guard-cpu.ps1`) *with one inert rule in force*; with the shipped starter pack the earlier runs measured 0.234 % — the difference is one-time startup matching, and it is not re-measured per rule pack | `guard/mod.rs`, `platform/windows/pids.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
