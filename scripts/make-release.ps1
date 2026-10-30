@@ -31,7 +31,13 @@ param(
   [string]$Version = "",
   [string]$Configuration = "Release",
   [string]$EnginePath = "",
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  # Sign the staged binaries before they are hashed and zipped. Without -PfxPath
+  # this uses a self-signed certificate trusted on this machine (fine for local
+  # testing, no reputation for downloads); with -PfxPath it uses a real one.
+  [switch]$Sign,
+  [string]$PfxPath = "",
+  [string]$PfxPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -144,6 +150,27 @@ if ($missing.Count -gt 0) {
   exit 1
 }
 
+if ($Sign -or $PfxPath) {
+  Write-Host "signing the staged binaries..."
+  $signArgs = @()
+  if ($PfxPath) { $signArgs = @("-PfxPath", (Resolve-Path $PfxPath).Path, "-PfxPassword", $PfxPassword) }
+  else { $signArgs = @("-SelfSigned") }
+  $stopPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "sign.ps1") `
+      @signArgs -BuildDir $staging
+    $signExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $stopPreference
+  }
+  if ($signExit -ne 0) {
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Output "RESULT: FAIL - signing failed; nothing was published"
+    exit 1
+  }
+}
+
 $engine = Join-Path $staging "mics-engine.exe"
 $app = Join-Path $staging "mics_app.exe"
 $engineHash = (Get-FileHash $engine -Algorithm SHA256).Hash
@@ -151,8 +178,10 @@ $appHash = (Get-FileHash $app -Algorithm SHA256).Hash
 $ruleCount = (Get-ChildItem (Join-Path $staging "rules") -Recurse -File).Count
 # Say it out loud rather than let the first launch surprise anyone: an unsigned exe
 # makes Windows show "Unknown publisher", and SmartScreen cannot vouch for a
-# brand-new binary. Signing is the real fix (see docs/TODO.md, P4).
+# brand-new binary. Signing is the real fix (see docs/TODO.md, P4); the hashes above
+# are taken after signing, so the zip and SHA256SUMS describe the signed files.
 $signature = (Get-AuthenticodeSignature $app).Status
+$signer = (Get-AuthenticodeSignature $app).SignerCertificate.Subject
 # What Task Manager calls the engine. Empty means the version resource did not get
 # embedded, and the engine will appear under its file name instead.
 $engineName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
@@ -211,10 +240,11 @@ Write-Output ("  engine : {0}" -f $engineHash)
 Write-Output "  rules  : $ruleCount file(s)"
 Write-Output "  engine name: $engineName"
 if ($signature -eq "Valid") {
-  Write-Output "  signed : $signature"
+  Write-Output "  signed : $signature - $signer"
 } else {
   Write-Output "  signed : $signature - Windows will show 'Unknown publisher' and SmartScreen"
   Write-Output "           may ask before the first run; see the SmartScreen row in the README troubleshooting table"
+  Write-Output "           (re-run with -Sign to sign it with a certificate trusted on this machine)"
 }
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "RESULT: PASS"

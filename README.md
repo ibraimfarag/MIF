@@ -198,6 +198,28 @@ its **own** rules rather than the fallback:
 powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1
 ```
 
+**Signing (this is what stops the SmartScreen prompt).** Windows blocks an
+unsigned binary it has never seen. Sign the package in the same step as the build:
+
+```powershell
+# self-signed certificate, trusted on this machine only - no certificate to buy,
+# no elevation, and Windows shows the publisher instead of refusing the app
+powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
+
+# or with a real OV/EV certificate for a public release (this also timestamps)
+powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign `
+  -PfxPath cert.pfx -PfxPassword "***"
+```
+
+`-Sign` signs `mics_app.exe`, `mics-engine.exe` and the bundled DLLs **before**
+they are hashed and zipped, so `SHA256SUMS` describes the signed files. The
+self-signed mode creates `CN=MI CS Code Signing` in `Cert:\CurrentUser\My` and
+trusts it in `CurrentUser\Root` + `CurrentUser\TrustedPublisher` (neither needs
+administrator rights), then verifies every file and fails the release if one does
+not come back `Valid`. A self-signed signature is **local trust only**: it removes
+the prompt on your machine, it does not give the file a public reputation — that
+needs a real certificate and downloads by strangers (see `docs/TODO.md`, P4).
+
 **Icons.** `assets/icons/mics.png` is the 256×256 master art. Both Windows icons
 — `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`, so it is
 what Explorer, the taskbar, Alt-Tab, the title bar and the UAC dialog show) and
@@ -294,7 +316,7 @@ a copy of the task icon.
 
 | Symptom | Meaning / what to do |
 |---|---|
-| "Unknown publisher" warning | Expected for unsigned builds; a trusted code-signing certificate is planned. |
+| "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV/EV certificate; see [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder: move MI CS to a normal folder, or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine says so itself in `notify.test`'s error and in the log. |
@@ -393,15 +415,25 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 مايمسحش ملفات مستخدمة (ده اللي حصل مرة وخلى الفولدر أنقص). لوج المحرك بيقول حمّل
 قواعد منين — لو قال «built-in starter pack» يبقى مجلد `rules` ناقص من النسخة.
 
-**لو ظهرت رسالة SmartScreen** («SmartScreen can't be reached right now» أو «Windows
-protected your PC») فده مش تحذير فيروس: ويندوز بيقول إنه مش قادر يتأكد من الناشر،
-ولو الرسالة بتقول *can't be reached* يبقى محاولة التحقق نفسها فشلت (بروكسي، VPN،
-أو نت متقطع). اختار **More info → Run anyway**، أو شغّل التطبيق من غير هوك
-الـ Explorer: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. وقبل ما تشغّل
-أي حاجة نزّلتها، اتأكد منها:
+**لو ظهرت رسالة SmartScreen** («Windows protected your PC» أو «SmartScreen can't be
+reached right now» أو «ناشر غير معروف») فالحل إنك توقّع النسخة بمفتاح موثوق على
+جهازك، من غير فلوس ومن غير صلاحيات مدير:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
+```
+
+ده بيعمل شهادة `CN=MI CS Code Signing` ويحطها في `CurrentUser\Root` و
+`CurrentUser\TrustedPublisher`، ويوقّع `mics_app.exe` و`mics-engine.exe` وكل
+الـ DLLs **قبل** الهاش والـ zip، فويّندوز بيبقى عنده ناشر يسمّيه بدل ما يرفض
+التطبيق. التوقيع الذاتي ثقة **محلية** بس — بيشيل الرسالة على جهازك، لكنه مش
+سمعة عامة؛ النشر للناس محتاج شهادة حقيقية (P4).
+
+ولو الرسالة لسه ظاهرة: اختار **More info → Run anyway**، أو شغّل التطبيق من غير
+هوك الـ Explorer: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. وقبل ما
+تشغّل أي حاجة نزّلتها، اتأكد منها:
 `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` وقارنه بالـ
-`SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه،
-والملفات المستخرجة مش هتاخد mark-of-the-web. الحل الدائم هو شهادة توقيع (P4).
+`SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي

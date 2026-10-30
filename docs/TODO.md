@@ -141,6 +141,33 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **signing — a locally trusted certificate, one flag away**
+  - Second SmartScreen report, now the hard block: *"Windows protected your PC —
+    Microsoft Defender SmartScreen prevented an unrecognized app from starting"*.
+    That is the reputation path refusing an unsigned file it has never seen; no
+    policy on this machine is wrong (Smart App Control off, SmartScreen default,
+    endpoints reachable — measured last phase).
+  - `scripts/sign.ps1` already had a `-SelfSigned` mode but could not work: it
+    always asked a public timestamp server to countersign a self-signed signature
+    (rejected), and it only printed `signtool verify` for one file. It now skips
+    timestamping in that mode, trusts the certificate in `CurrentUser\Root` +
+    `CurrentUser\TrustedPublisher` through `certutil -user` (no elevation, no
+    prompt), verifies **every** target, and exits non-zero unless all of them come
+    back `Valid`.
+  - `make-release.ps1 -Sign` (and `-PfxPath/-PfxPassword` for a real certificate)
+    signs the **staged** binaries before hashing and zipping, so `SHA256SUMS`
+    describes the signed files rather than the unsigned ones, and a failed
+    signature aborts the release without publishing anything.
+  - Verified: all eight binaries `Valid` with
+    `CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`; `certutil`-installed trust
+    present in both stores; `signtool verify /pa /all` →
+    `Successfully verified`; `verify-release.ps1` → `RESULT: PASS` on the signed
+    zip; `%LOCALAPPDATA%\MI CS` refreshed from it (69 files).
+  - Honest limit: this is **local** trust. It removes the prompt on this machine;
+    it gives the file no public reputation. A public release still needs an OV/EV
+    certificate (P4), and until then anyone else downloading the zip sees the same
+    block and must choose *More info → Run anyway*.
+
 - **naming — the engine now has a name in Task Manager**
   - Request: in Task Manager the engine appeared as `mics-engine`; it should read
     **MiShild Background**.
@@ -852,8 +879,12 @@ signing certificate respectively), so this is the work that is always available.
       reachable — yet Windows still shows "SmartScreen can't be reached right now"
       / "Unknown publisher", because an unsigned first-seen binary has no
       reputation to look up. Even a working lookup would only say "unknown".
-      Signing (and the reputation that follows it) is the only real fix; the
-      workaround is documented in README troubleshooting.
+      => The **local** half is solved (`make-release.ps1 -Sign` with a self-signed
+      certificate trusted in `CurrentUser\Root` + `TrustedPublisher`: all binaries
+      `Valid`, `signtool verify /pa` passes, prompts stop on this machine). What
+      remains in this item is only the **public** half: a real OV/EV (or Azure
+      Trusted Signing) certificate, timestamping through the `-PfxPath` path, and
+      CI wiring — the scripts already take it.
 - [ ] Build legs: x64 (primary) + ARM64 (app + `aarch64-pc-windows-msvc` engine);
       optional x86 **CLI** build only (D-003).
 - [ ] NSIS installer (bundled engine + rules + offline intel) next to the portable
