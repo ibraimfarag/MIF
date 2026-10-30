@@ -47,5 +47,10 @@ If cargo complains about `.cargo-build-lock` access, set
    reversible; hardening snapshots before changes.
 7. Never disable or bypass `docs/DECISIONS.md` decisions without recording a new
    decision entry that supersedes the old one.
-8. Do not add telemetry, cloud calls, or telemetry-adjacent analytics. Nothing
-   leaves the machine except explicit VT/NVD/LM lookups.
+8. **No telemetry, no analytics, no cloud.** The only outbound traffic is the list
+   in `docs/THREAT-MODEL.md` §B6: the intel sources the user can see and configure
+   (StevenBlack hosts, CISA KEV, NVD), VirusTotal by file **hash** only with the
+   user's own key, a 30 s connectivity probe to `dns.google`/`1.1.1.1`, and
+   whatever the user points the engine at (LM Studio, an IOC hash feed, an update
+   manifest). Any other destination is a decision for `docs/DECISIONS.md`, not a
+   detail to slip into a commit.

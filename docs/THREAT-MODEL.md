@@ -152,9 +152,9 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 `settings.rs` accepts `http://` **or** `https://` for `ioc_feed_url`, `lm_url` and
 `update_manifest_url`. `http://127.0.0.1` is correct for a local LM Studio;
 `http://` for a feed or an update manifest is a cleartext downgrade an on-path
-attacker can use (F-3). `AGENTS.md` rule 8 says "nothing leaves the machine except
-explicit VT/NVD/LM lookups" — the accurate list is the table above (intel sources
-and the connectivity probe are the omissions, F-7).
+attacker can use (F-3). `AGENTS.md` rule 8 now carries this table's list instead of
+a shorter one — the intel sources and the connectivity probe used to be missing from
+it (F-7, closed).
 
 ### B7 — The package directory
 
@@ -224,7 +224,6 @@ ask the engine to do through the pipe.
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |
-| F-7 | `AGENTS.md` rule 8 lists only VT/NVD/LM while the engine also calls the intel sources and a connectivity probe | The intel sources are a visible, user-configured feature | Fix the rule's wording to match section B6 — the honest list |
 | F-8 | No self-defense: same-token code can kill the engine, replace binaries, edit `rules\`, or point the engine at another data dir through its environment | Stopping a same-token attacker requires kernel callbacks or a second service — A-9 territory | Run the engine under a watchdog service and verify the package's signature before loading rules |
 | F-9 | No memory scanning, no unpacking/emulation, no AMSI, no pre-execution blocking (no minifilter) | Usermode-only and driver-free is a product decision (no driver install, no BSOD risk) | Documented in `PROTECTION-MATRIX.md`; the guard's behaviour rules are the compensating control |
 | F-10 | A local admin can turn everything off and delete the evidence | Unavoidable without kernel enforcement | Ship the audit trail to a location the admin cannot reach (a real solution is an external log sink — out of scope) |
@@ -241,6 +240,9 @@ and still open. **F-4 (the copy)**: the canary alert now says the decoy was
 *modified* — in the event detail, the card title (ar/en) and the incident title —
 because mtime/size is all the detector compares. The detection gap itself is not
 closed: a pure read is still invisible, and that part stays in the table above.
+**F-7 (the rule)**: `AGENTS.md` rule 8 now lists what section B6 measures — the
+configured intel sources and the 30 s connectivity probe included — instead of
+claiming "nothing leaves the machine except VT/NVD/LM".
 
 ## 7. What is proven, and how
 

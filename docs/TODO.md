@@ -259,6 +259,17 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **`AGENTS.md` rule 8 now names the real network calls (F-7 closed)**
+  - The rule said "nothing leaves the machine except explicit VT/NVD/LM lookups",
+    which was not the list: the engine also fetches the intel sources it shows you
+    (StevenBlack hosts, CISA KEV, NVD), runs a 30 s connectivity probe against
+    `dns.google`/`1.1.1.1`, and sends to whatever the user configures (LM Studio, an
+    IOC hash feed, an update manifest).
+  - A rule that a future contributor reads as "we only talk to three hosts" is a
+    rule that gets broken by accident, so it now carries the honest list and points
+    at `docs/THREAT-MODEL.md` §B6, where every destination has what is sent and what
+    triggers it. Any new destination is a decision entry, not a commit detail.
+  - The threat model closes F-7 in its "closed since" note and drops the row.
 - **One answer to "what is this pipe name" for both test hooks**
   - `MICS_PIPE_NAME` wanted a full `\\.\pipe\...` path and `MICS_HELPER_PIPE` a
     bare name. The forms are not interchangeable by accident: Windows accepts
@@ -1341,7 +1352,6 @@ signing certificate respectively), so this is the work that is always available.
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
 | MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
-| LOW | `AGENTS.md` rule 8 says "nothing leaves the machine except explicit VT/NVD/LM lookups", but the engine also fetches the intel sources and probes `dns.google`/`1.1.1.1` for connectivity (cached 30 s) — the rule should carry the honest list | `AGENTS.md`, `sync/mod.rs`, THREAT-MODEL B6/F-7 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
