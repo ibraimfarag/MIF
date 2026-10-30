@@ -66,18 +66,27 @@ if (-not (Test-Path $sums)) {
 }
 
 Write-Output "1) checksums in $sums"
+# The zip is the artifact and is hashed where it sits. The `MICS-portable/...`
+# lines describe the *contents* of that zip, so they are checked against the
+# extracted copy further down - not against `dist\MICS-portable`, which is a
+# working folder that may be an older build (or the copy someone is running).
 $zipLine = $null
+$contents = @()
 foreach ($line in Get-Content $sums) {
   if (-not $line.Trim()) { continue }
   $parts = $line -split "\s+", 2
   $expected = $parts[0].ToLower()
   $name = $parts[1].Trim()
-  # Paths in SHA256SUMS are relative to dist\ (see make-release.ps1).
-  $path = Join-Path $DistDir ($name -replace "/", "\")
-  if ($name -like "*.zip") { $zipLine = $path }
-  if (-not (Test-Path $path)) { Fail "listed but missing: $name"; continue }
-  $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
-  if ($actual -eq $expected) { Pass "$name" } else { Fail "$name hash mismatch`n         listed   $expected`n         actual   $actual" }
+  if ($name -like "*.zip") {
+    # Paths in SHA256SUMS are relative to dist\ (see make-release.ps1).
+    $path = Join-Path $DistDir ($name -replace "/", "\")
+    $zipLine = $path
+    if (-not (Test-Path $path)) { Fail "listed but missing: $name"; continue }
+    $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
+    if ($actual -eq $expected) { Pass "$name" } else { Fail "$name hash mismatch`n         listed   $expected`n         actual   $actual" }
+  } else {
+    $contents += , @{ Expected = $expected; Name = $name }
+  }
 }
 
 if (-not $zipLine -or -not (Test-Path $zipLine)) {
@@ -107,6 +116,17 @@ try {
     Fail "rules folder holds $($ruleFiles.Count) file(s): $(($ruleFiles | ForEach-Object { $_.FullName.Substring($work.Length + 1) }) -join ', ')"
   }
   $engine = Join-Path $work "mics-engine.exe"
+
+  # The published hashes for what is inside the zip: an extracted file can be
+  # compared with SHA256SUMS without knowing which build the working folder holds.
+  foreach ($entry in $contents) {
+    $rel = $entry.Name -replace "^MICS-portable/", "" -replace "/", "\"
+    $extracted = Join-Path $work $rel
+    if (-not (Test-Path $extracted)) { Fail "listed in SHA256SUMS but not in the zip: $($entry.Name)"; continue }
+    $actual = (Get-FileHash $extracted -Algorithm SHA256).Hash.ToLower()
+    if ($actual -eq $entry.Expected) { Pass "$($entry.Name) (inside the zip)" }
+    else { Fail "$($entry.Name) hash mismatch`n         listed   $($entry.Expected)`n         actual   $actual" }
+  }
 
   Write-Output "3) privileged helper protocol (from the package)"
   $helperOut = Join-Path $env:TEMP "rel-helper.out"

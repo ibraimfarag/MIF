@@ -78,7 +78,10 @@ still to come):
 1. Take `MICS-portable-<version>-x64.zip`, or the already-unpacked
    `dist\MICS-portable` folder, and put it anywhere (for example
    `C:\Program Files\MI CS\`). `dist\SHA256SUMS` lists the SHA-256 of the zip and
-   of the files inside it.
+   of the files inside it, so a single extracted file can be checked too. The
+   unpacked folder is a convenience copy: if MI CS is running from it,
+   `make-release.ps1` leaves it alone rather than deleting files in use — the zip
+   is the release.
 2. Run `mics_app.exe`. Windows may warn about an unknown publisher — see
    [What MI CS does not do](#what-mi-cs-does-not-do).
 3. The app starts the engine automatically, runs a first audit (~10 s) and shows
@@ -168,11 +171,13 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
 ```
 
 `MICS_ENGINE_PATH` overrides the engine location if you keep it elsewhere.
-`make-release.ps1` rebuilds into `dist\MICS-portable` from a clean folder, copies
-`engine\rules` next to the binaries (the guard and YARA packs are hot-reloaded
-from there — a package without them silently falls back to the compiled-in pack),
-refuses to continue if anything required is missing, writes `VERSION`, and
-produces `dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. Add
+`make-release.ps1` assembles into a staging folder, copies `engine\rules` next to
+the binaries (the guard and YARA packs are hot-reloaded from there — a package
+without them silently falls back to the compiled-in pack), refuses to continue if
+anything required is missing, writes `VERSION`, and produces
+`dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. The staging build
+is then swapped into `dist\MICS-portable` — unless MI CS is running from that
+folder, in which case it is left untouched and only the zip is refreshed. Add
 `-SkipBuild` to repackage without rebuilding the app, or `-EnginePath <exe>` when
 cargo builds somewhere else.
 
@@ -202,7 +207,7 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ```powershell
 cd engine
-cargo test                                # 48 tests
+cargo test                                # 51 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
@@ -356,7 +361,7 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (48) و `cargo clippy` نضيف، و`flutter analyze`
+**الاختبارات:** `cargo test` (51) و `cargo clippy` نضيف، و`flutter analyze`
 بدون ملاحظات و`flutter test` (31). وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
 `tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
@@ -364,11 +369,13 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 النسخة المنشورة مطابقة للـ SHA256SUMS وكاملة وإن نسختها المستخرجة بتشتغل فعلًا
 وبتحمّل قواعدها من جوه الحزمة نفسها.
 
-**النسخة الجاهزة:** `scripts\make-release.ps1` بيبني `dist\MICS-portable` من
-الصفر (المحرك + مجلد `rules` + الواجهة) وبيطلّع
+**النسخة الجاهزة:** `scripts\make-release.ps1` بيجهّز النسخة في فولدر مؤقت
+(المحرك + مجلد `rules` + الواجهة) وبيطلّع
 `dist\MICS-portable-<version>-x64.zip` مع `dist\SHA256SUMS`، وبيرفض يكمّل لو أي
-ملف أساسي ناقص. لوج المحرك بيقول حمّل قواعد منين — لو قال «built-in starter pack»
-يبقى مجلد `rules` ناقص من النسخة.
+ملف أساسي ناقص. الفولدر المؤقت بيتنقل مكان `dist\MICS-portable` بعد كده — إلا لو
+فيه نسخة من MI CS شغالة منه، ساعتها بيسيبه زي ما هو وبيحدّث الـ zip بس، عشان
+مايمسحش ملفات مستخدمة (ده اللي حصل مرة وخلى الفولدر أنقص). لوج المحرك بيقول حمّل
+قواعد منين — لو قال «built-in starter pack» يبقى مجلد `rules` ناقص من النسخة.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي

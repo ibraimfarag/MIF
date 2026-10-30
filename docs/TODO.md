@@ -141,6 +141,29 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **packaging — a release build no longer eats the copy you are running**
+  - Found the hard way: MI CS was running from `dist\MICS-portable` when
+    `make-release.ps1` began by deleting that folder. The delete failed on a
+    plugin DLL the running app had loaded — *after* removing `data\` and `rules\`
+    — leaving a package without an asset bundle and a victim still running from
+    it. Restored the folder and fixed the cause, not the symptom.
+  - `make-release.ps1` now assembles into `dist\MICS-portable.staging`, runs the
+    required-file checks there, zips from there, and only then swaps the staging
+    build into `dist\MICS-portable` — and only when no process is running from
+    that folder. Otherwise it leaves the folder untouched and says which process
+    is using it; the zip is the release either way.
+  - `SHA256SUMS` kept the same shape but changed meaning: the zip line is checked
+    where the zip sits, and the `MICS-portable/...` lines are checked **inside the
+    extracted zip**, so a working folder that lags (or is absent) can no longer
+    produce a false "hash mismatch". That false alarm is exactly what the
+    verification printed first (`listed b7361e67 / actual d092f559`), which is
+    the harness doing its job on a real ambiguity.
+  - Verified end to end: `RESULT: PASS` with `MICS-portable/mics-engine.exe
+    (inside the zip)`, the helper protocol from the extracted engine, a real card
+    on the desktop, and the package's own `rules\` loaded (6 guard rules + the
+    extracted `starter.yar`). The live folder was left alone, as designed, while
+    `mics_app`/`mics-engine` were running from it.
+
 - **protocol fidelity — the RPC layer stopped guessing**
   - `status` used to answer with literals (`version: "0.1.0"`, `platform:
     "windows"`). It now reports the crate version, the real `os-arch`
@@ -924,6 +947,17 @@ settings and read environment variables only.
     the outer folder and find nothing. Packaging scripts must delete the
     destination first (and a probe should assert the layout, not just that the
     files exist somewhere).
+15. **Never delete the live package folder in place.** `make-release.ps1` used to
+    `Remove-Item dist\MICS-portable -Recurse -Force` before assembling, and MI CS
+    was running from that folder: the delete died on `audioplayers_windows_plugin.dll`
+    (loaded by the running app) *after* it had already removed `data\` and
+    `rules\` — a half-empty package, and a running app missing its assets. Two
+    rules now: assemble into `MICS-portable.staging` and swap it in only when no
+    process is running from the target (otherwise leave the folder alone and say
+    so), and let `SHA256SUMS` describe **the zip and its contents** rather than the
+    mutable folder — `verify-release.ps1` checks those entries against the
+    extracted copy, so a stale working folder can no longer fail the release
+    verification (it did, with `listed b7361e67 / actual d092f559`).
 
 ---
 

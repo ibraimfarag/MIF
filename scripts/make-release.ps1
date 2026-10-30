@@ -86,35 +86,40 @@ $required = @(
   "rules\guard\starter.json"
 )
 
-Write-Host "assembling $portable ..."
-# A clean folder, so no file from an older build can survive into the package.
-if (Test-Path $portable) { Remove-Item $portable -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $portable | Out-Null
-Copy-Item (Join-Path $buildDir "*") $portable -Recurse -Force
-Copy-Item $rulesSrc (Join-Path $portable "rules") -Recurse -Force
+# Assemble into a staging folder first. The live `dist\MICS-portable` may be the
+# copy someone is running right now: deleting it in place is how the first version
+# of this script left a half-empty folder behind (the cleanup died on a DLL that
+# the running app had loaded). Build, check and zip from staging, then swap.
+$staging = Join-Path $root "dist\MICS-portable.staging"
+Write-Host "assembling $staging ..."
+if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $staging | Out-Null
+Copy-Item (Join-Path $buildDir "*") $staging -Recurse -Force
+Copy-Item $rulesSrc (Join-Path $staging "rules") -Recurse -Force
 # The one file that comes from cargo rather than from the Flutter build.
-Copy-Item $EnginePath (Join-Path $portable "mics-engine.exe") -Force
+Copy-Item $EnginePath (Join-Path $staging "mics-engine.exe") -Force
 Copy-Item $EnginePath (Join-Path $buildDir "mics-engine.exe") -Force
 Write-Host ("engine   : {0}" -f $EnginePath)
 
 $missing = @()
 foreach ($rel in $required) {
-  if (-not (Test-Path (Join-Path $portable $rel))) { $missing += $rel }
+  if (-not (Test-Path (Join-Path $staging $rel))) { $missing += $rel }
 }
 if ($missing.Count -gt 0) {
   Write-Output "RESULT: FAIL - the package is incomplete:"
   foreach ($m in $missing) { Write-Output "  missing: $m" }
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
   exit 1
 }
 
-$engine = Join-Path $portable "mics-engine.exe"
-$app = Join-Path $portable "mics_app.exe"
+$engine = Join-Path $staging "mics-engine.exe"
+$app = Join-Path $staging "mics_app.exe"
 $engineHash = (Get-FileHash $engine -Algorithm SHA256).Hash
 $appHash = (Get-FileHash $app -Algorithm SHA256).Hash
-$ruleCount = (Get-ChildItem (Join-Path $portable "rules") -Recurse -File).Count
+$ruleCount = (Get-ChildItem (Join-Path $staging "rules") -Recurse -File).Count
 $built = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
-$versionFile = Join-Path $portable "VERSION"
+$versionFile = Join-Path $staging "VERSION"
 @(
   "MI CS $Version (portable, x64)",
   "built   $built",
@@ -126,7 +131,7 @@ $versionFile = Join-Path $portable "VERSION"
 $zip = Join-Path $root ("dist\MICS-portable-$Version-x64.zip")
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Write-Host "zipping $zip ..."
-Compress-Archive -Path (Join-Path $portable "*") -DestinationPath $zip -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip -CompressionLevel Optimal
 
 $sums = Join-Path $root "dist\SHA256SUMS"
 $lines = @()
@@ -135,12 +140,28 @@ $lines = @()
 $lines += "$((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())  MICS-portable-$Version-x64.zip"
 $lines += "$($engineHash.ToLower())  MICS-portable/mics-engine.exe"
 $lines += "$($appHash.ToLower())  MICS-portable/mics_app.exe"
-$lines += "$((Get-FileHash (Join-Path $portable "rules\yara\starter.yar") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/yara/starter.yar"
-$lines += "$((Get-FileHash (Join-Path $portable "rules\guard\starter.json") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/guard/starter.json"
+$lines += "$((Get-FileHash (Join-Path $staging "rules\yara\starter.yar") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/yara/starter.yar"
+$lines += "$((Get-FileHash (Join-Path $staging "rules\guard\starter.json") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/guard/starter.json"
 $lines | Set-Content -Path $sums -Encoding ASCII
 
+# Swap the staging build into place - unless someone is running MI CS from that
+# folder right now, in which case leave their copy exactly as it is. The zip is
+# already complete either way.
+$prefix = $portable.TrimEnd('\') + '\'
+$users = @(Get-Process -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -and $_.Path.StartsWith($prefix, 'OrdinalIgnoreCase') } |
+  ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+if ($users.Count -eq 0) {
+  if (Test-Path $portable) { Remove-Item $portable -Recurse -Force }
+  Rename-Item $staging $portable
+  Write-Output "  folder : $portable  (refreshed, $((Get-ChildItem $portable -Recurse -File | Measure-Object Length -Sum).Sum / 1MB) MB, $((Get-ChildItem $portable -Recurse -File).Count) file(s))"
+} else {
+  Write-Output ("  folder : left as it is - {0} is running from it" -f ($users -join ", "))
+  Write-Output "           close MI CS and run this again to refresh the unpacked folder"
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Output "MI CS $Version portable release"
-Write-Output ("  folder : {0}  ({1:N1} MB)" -f $portable, ((Get-ChildItem $portable -Recurse -File | Measure-Object Length -Sum).Sum / 1MB))
 Write-Output ("  zip    : {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
 Write-Output ("  sums   : {0}" -f $sums)
 Write-Output ("  engine : {0}" -f $engineHash)
