@@ -534,3 +534,42 @@ service-mode engine running as `SYSTEM` would have to name the interactive user
 deliberately — a new decision); keeping the ACL tests that read the DACL back with
 `GetSecurityInfo`; and updating the threat model's F-1 entry whenever this
 boundary moves.
+
+## D-016 — An update payload must carry a signature Windows trusts inside the file
+
+**Context.** `update.apply` extracted the release ZIP and copied the binaries over
+the running ones while trusting only the manifest's SHA-256. That hash says "this is
+the archive the manifest described"; it does not say "someone with a code-signing
+certificate produced it". A manifest served by a compromised mirror (or a mirror the
+user pointed the engine at) could describe any archive and the hash would match it.
+The manifest cannot be cleartext outside loopback any more (F-3a), which narrows the
+window but does not close it.
+
+**Decision.** Before a single byte is copied, `mics-engine.exe` and `mics_app.exe`
+in the extracted payload must pass `WinVerifyTrust` with
+`WINTRUST_ACTION_GENERIC_VERIFY_V2`, `WTD_CHOICE_FILE`, `WTD_UI_NONE` and no
+revocation checking (`platform/windows/signature.rs`). Windows builds the chain and
+checks the signature over the PE image; anything unsigned, tampered or signed by an
+untrusted root aborts the apply and nothing is replaced.
+
+1. **Embedded signatures only.** Catalog-signed files (most Windows system
+   binaries) answer `TRUST_E_NOSIGNATURE` to this call. That is correct for this
+   use: a payload must carry its own signature, not rely on a catalog entry that a
+   different machine may not have.
+2. **The payload is checked where it is extracted**, before `copy_over`, so a
+   refusal costs nothing and leaves the running install untouched.
+3. **The signer is not pinned yet.** Any identity Windows trusts passes. Pinning
+   the subject to `CN=MI CS Code Signing` is the stronger form, and it is on the
+   register (F-3): it waits because a locally created certificate has to be trusted
+   on the target machine first and the release pipeline does not install it.
+
+**Why.** It turns the update path from "trust the bytes because a document agreed
+with them" into "the bytes are signed by an identity Windows accepted". A tampered
+payload can no longer replace the running binaries even when the manifest and the
+archive hash agree — an attacker would also need a certificate the machine trusts.
+
+**Commits us to.** Keeping the two signed payload names (`mics-engine.exe`,
+`mics_app.exe`) as the ones the update stages; keeping the three tests (a junk file
+is refused, the signed release passes, a single flipped byte is refused) and the
+signed artifact that makes the positive case real; and recording F-3's remaining
+half — the identity pin — rather than treating this as "updates are verified".

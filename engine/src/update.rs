@@ -118,6 +118,18 @@ pub fn apply(staged_zip: &std::path::Path) -> Result<String> {
     // The zip root may be MICS-portable/ or flat — find mics-engine.exe.
     let src_root = find_root(&extract_dir).context("update zip missing mics-engine.exe")?;
 
+    // F-3b: the extracted binaries must carry a signature Windows trusts before
+    // they are allowed to replace the running ones. The manifest's SHA-256 only
+    // proves the archive is the one the manifest described; this proves the
+    // binaries inside were produced by someone with a code-signing certificate.
+    for name in ["mics-engine.exe", "mics_app.exe"] {
+        let candidate = src_root.join(name);
+        if candidate.exists() {
+            crate::platform::windows::signature::require_signed(&candidate)
+                .with_context(|| format!("update payload refused: {name}"))?;
+        }
+    }
+
     // Copy everything over, renaming locked binaries to .old first.
     copy_over(&src_root, &target_dir)?;
 

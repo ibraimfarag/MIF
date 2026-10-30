@@ -259,6 +259,27 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **An update payload must be signed, not just hashed (F-3b closed, D-016)**
+  - `update.apply` used to trust the manifest's SHA-256 alone, which only proves the
+    archive matches what a document said — not who produced it. A mirror (or a URL
+    the user was talked into) could describe any payload and the hash would agree.
+  - The extracted `mics-engine.exe` and `mics_app.exe` must now pass
+    `WinVerifyTrust` (generic verify, no UI, embedded signature, chain built by
+    Windows) **before** `copy_over` runs, so a refusal leaves the running install
+    untouched. The check is `platform/windows/signature.rs`; `update.rs` calls it
+    with the file name in the error so the message names what was refused.
+  - Three tests, and the numbers are from this machine rather than guesses: a junk
+    file answers `0x800B0003` and is refused, the signed release answers
+    `0x00000000` and passes, and a copy with **one byte** flipped in the middle
+    answers `0x80096010` (`TRUST_E_BAD_DIGEST`) and is refused. `cargo test` 65/65
+    (3 new).
+  - Measured along the way: `notepad.exe` is *catalog*-signed and answers
+    `0x800B0100` (`TRUST_E_NOSIGNATURE`) to a file-level check — so a Windows
+    system binary is not a positive fixture, and the test uses the release artifact
+    (skipping with a printed line when `dist\` is absent).
+  - D-016 records the decision, including the honest limit: **the signer is not
+    pinned**, so any certificate Windows trusts passes. That identity pin is the
+    remaining half of F-3 and stays in the register.
 - **Cleartext feeds and update manifests are refused (F-3a closed)**
   - `settings.rs` accepted `http://` for `ioc_feed_url`, `lm_url` and
     `update_manifest_url`. For a local LM Studio that is correct; for a feed or an
@@ -1369,7 +1390,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
-| MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust` before replacing a running binary. (The cleartext half is fixed: `http://` is refused outside loopback, F-3a) | `update.rs`, THREAT-MODEL F-3 |
+| MED | **Update signer identity is not pinned**: the payload must now carry an embedded Authenticode signature Windows trusts (D-016) and `http://` is refused outside loopback, but *any* trusted certificate passes — the subject is not checked against the MI CS one | `update.rs`, `platform/windows/signature.rs`, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
