@@ -77,7 +77,8 @@ pub fn start() -> bool {
             }
         }
         // IOC hash check happens on-demand later (hashing at every start is
-        // too hot); the scanner + scheduled scans cover the hash dimension.
+        // too hot); the scanner covers the hash dimension when a scan runs.
+        // There is no scan scheduler yet, so this is not a safety net.
         let _ = ioc_hashes;
     };
 

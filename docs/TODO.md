@@ -31,7 +31,9 @@
 > whole machine's score** (D-014), **`docs/THREAT-MODEL.md` exists with the two
 > pipe ACLs measured and eight residual risks filed**, and **the engine pipe now
 > refuses every caller but its owner, SYSTEM and administrators** (F-1 closed,
-> D-015) · **next: install the helper once (one
+> D-015) and **`docs/PROTECTION-MATRIX.md` says per layer what detects, what
+> blocks and what is missed** (with the starter-pack and no-scheduler limits
+> written down instead of implied) · **next: install the helper once (one
 > UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -77,17 +79,12 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **`docs/PROTECTION-MATRIX.md`** (P5, wording only) — per layer what is
-   detected / blocked / missed (hosts-based L2, polling canaries, `netsh`
-   firewall, no ClamAV/CAPA), pointing at `THREAT-MODEL.md` for the boundaries
-   and asset list, which is **done** (with the two pipe ACLs measured and eight
-   residual risks filed in the register below).
-2. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
+1. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
    (polling intervals, cheaper process enumeration) or move the budget to a
    measured, justified number and say so in the README.
-3. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
+2. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
-4. **AUMID registration (LOW, fold into the installer)** — register
+3. **AUMID registration (LOW, fold into the installer)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
    Cards work without it; nothing about toast delivery depends on it.
@@ -262,6 +259,33 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **`docs/PROTECTION-MATRIX.md` — what each layer sees, detects, blocks and misses**
+  - Written from the code, not from intent, and it is deliberately unflattering:
+    where a claim could not be backed by code or a test it is either labelled an
+    assumption or filed in the register.
+  - It states the thing the product's own copy should not have to be read twice to
+    learn: **MI CS leans on Windows Defender for real-time protection.** It is a
+    posture, triage and response tool — nothing in it blocks code before it runs.
+  - Per layer: L1 on-demand file scanning (hash + YARA, 50 000 files / 200 MB per
+    file, archives ranked but never expanded), L2 name resolution (hosts sinkhole)
+    and firewall (`netsh`: default-deny outbound, `MICS-` rules, IPv4-only country
+    lists that must already be on disk), L3 process guard (ETW when elevated, a
+    2 s poll otherwise; `kill` is `taskkill /T /F` **after** the start), canaries
+    (mtime/size only — a pure read is invisible, F-4), the correlator, the
+    vulnerability layer (NVD keyword mapping plus KEV, no CPE matching, no
+    patching), the audit/hardening posture, Defender orchestration, and delivery.
+  - Three limits are now written down rather than implied: the bundled detection
+    content is a **starter pack** (6 guard rules, 10 YARA rules) and is a
+    demonstration of the mechanism, not a signature database; there is **no scan
+    scheduler** and no real-time file watching, so the hash/rule dimensions apply
+    only when someone runs a scan; and the guard's ETW callback **loads the IOC
+    hash list without using it** (hashing every process start was judged too hot),
+    so a known-bad hash that matches no rule is only caught by a scan.
+  - The stale comment in `guard/etw.rs` that implied "scheduled scans" covered the
+    hash dimension is corrected in the same commit — the documentation and the code
+    now say the same thing.
+  - New register rows: no scheduled scan (MED), starter-pack content (LOW), the
+    guard's unused IOC hashes (LOW).
 - **`scripts\verify-pipe-acl.ps1` — the pipe boundaries are now re-measurable
   instead of quoted**
   - `docs/THREAT-MODEL.md` states two security descriptors. Both are now checked
@@ -1278,6 +1302,9 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | LOW | Alerts are attributed by AUMID `MICS` without registering an AppUserModelID (no Start-Menu shortcut property, no `HKCU\Software\Classes\AppUserModelId\MICS`), so Windows' own notification settings/Action Center label the source as `MICS` rather than "MI CS". Registration is not required for the card to appear (proven with cards in the history), and adding it changes a shortcut outside the app folder — fold it into the P4 installer | `notify/toast.rs`, `scripts/create-shortcuts.ps1` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
+| MED | **No scheduled scan and no real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection at all (Windows Defender is the real-time layer, and the audit says so loudly when it is off) | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
+| LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
+| LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
