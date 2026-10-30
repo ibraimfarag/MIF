@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::info;
@@ -22,24 +22,27 @@ pub struct FirewallRule {
     pub remote_port: String,
 }
 
+/// How long one `netsh` call may take. The firewall service can restart or get
+/// stuck; a request thread must not wait for it forever.
+const NETSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
 fn run_netsh(args: &[&str]) -> Result<String> {
     run_netsh_plain(args)
 }
 
 fn run_netsh_plain(args: &[&str]) -> Result<String> {
-    let mut command = std::process::Command::new("netsh");
-    command.args(["advfirewall"]).args(args);
-    // The engine is a GUI-adjacent process: a console window must never flash.
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let out = command
-        .output()
-        .context("failed to launch netsh (firewall op)")?;
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    if !out.status.success() && !text.contains("Ok.") && !text.contains("OK") {
+    let mut full = vec!["advfirewall"];
+    full.extend_from_slice(args);
+    // Deadline + background readers: `show rule verbose` prints far more than a
+    // pipe buffer, so waiting without draining would time out a healthy netsh.
+    let out = crate::platform::windows::process::run_with_deadline(
+        "netsh",
+        &full,
+        "netsh (firewall)",
+        NETSH_TIMEOUT,
+    )?;
+    let text = out.text;
+    if !out.success && !text.contains("Ok.") && !text.contains("OK") {
         anyhow::bail!("netsh failed: {}", text.trim());
     }
     Ok(text)

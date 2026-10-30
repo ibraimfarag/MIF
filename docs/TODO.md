@@ -141,6 +141,29 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **reliability — no external tool can wedge a request any more**
+  - `engine/src/platform/windows/process.rs`: one `run_with_deadline(program,
+    args, what, timeout)` used by `firewall::run_netsh` (20 s) and
+    `hardening::ps_run_with_timeout` (60 s), replacing two ad-hoc
+    `Command::output()`/poll implementations.
+  - **The real bug it fixes:** the old hardening loop polled `try_wait` without
+    reading the child's pipes, so any command that printed more than a pipe buffer
+    (64 KiB) blocked on write and never exited — a timeout would then fire on a
+    process that was about to finish, and its output was lost. The new runner
+    drains stdout/stderr on their own threads while it waits. `netsh advfirewall
+    show rule name=all verbose` is exactly that kind of output.
+  - Live proof: `fw.rules.list` over the real pipe returned the machine's MICS
+    rule in 3.4 s through the new path (`MICS-TEST-BLOCK-EXAMPLE`,
+    203.0.113.0/24) — that call is a full `netsh` dump, the >64 KiB case.
+  - Tests (3 new, 48 total): a command that finishes is captured; a ~10 s ping
+    with a 300 ms budget fails at the deadline with the operation named and
+    returns in well under 5 s; ~200 KiB of output is collected whole.
+  - Honest scope: `ids` spawns nothing itself (it goes through the privileged
+    helper), so its register row was about the wrong module. The remaining
+    deadline-free spawns are the audit collectors, the update step and two
+    `reg query` reads — recorded as the new MED row instead of being claimed as
+    fixed.
+
 - **release — the portable package is now assembled, published and provable**
   - What shipped: `scripts\make-release.ps1` builds `dist\MICS-portable` from a
     clean folder (Flutter release output + the cargo-built engine + `engine\rules`
@@ -684,9 +707,11 @@ signing certificate respectively), so this is the work that is always available.
 - [ ] `status` returns the real crate version and platform instead of hardcoded
       `0.1.0` / `windows` (MED).
 - [ ] `audit.run` honours `params.sections` instead of running everything (MED).
-- [ ] Add timeouts to the `netsh` / elevated-PowerShell calls in `firewall/mod.rs`
-      and `ids/mod.rs`, the way hardening was fixed — an unanswered UAC prompt
-      must not wedge a request (MED).
+- [x] Add timeouts to the `netsh` / elevated-PowerShell calls in `firewall/mod.rs`
+      and `ids/mod.rs`, the way hardening was fixed — an unanswered prompt or a
+      stalled service must not wedge a request. Done as a shared runner
+      (`platform/windows/process.rs`) for every spawn in `firewall` and
+      `hardening`; `ids` spawns nothing itself (it goes through the helper).
 - [ ] Decide the VirusTotal client's fate: wire the sync queue that fills it, or
       delete the dead code and say so in the README (MED).
 - [x] Regenerate the portable ZIP + `SHA256SUMS` from the current
@@ -765,7 +790,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| MED | `firewall` and `ids` still call `netsh` / elevated PowerShell **without a timeout** (hardening was fixed) — an unanswered UAC prompt can block those requests | `firewall/mod.rs`, `ids/mod.rs` |
+| MED | `firewall` and `hardening` now run every external tool through a deadline; the remaining plain `Command::output()` calls (`collectors.rs` audit probes, `update.rs`, two `reg query` reads) have no deadline, so a stalled PowerShell could still hold one audit or update request | `collectors.rs`, `update.rs`, `dispatcher.rs` |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |

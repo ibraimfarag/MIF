@@ -68,48 +68,17 @@ pub fn list_actions() -> Vec<HardeningAction> {
 
 /// Runs PowerShell with a hard deadline.
 ///
-/// A UAC prompt that nobody answers used to block this thread (and the UI's
-/// busy spinner) forever, because `Start-Process -Verb RunAs -Wait` simply
-/// waits. A timeout turns that into a clear, actionable error instead.
+/// An unanswered prompt or a Defender cmdlet that waits used to block this thread
+/// (and the UI's busy spinner) forever. The shared runner kills the child at the
+/// deadline and says which step hung instead of returning a bare timeout.
 fn ps_run_with_timeout(args: &[&str], timeout: std::time::Duration) -> Result<(bool, String)> {
-    use std::io::Read;
-    use std::process::Stdio;
-    let mut command = std::process::Command::new("powershell");
-    command
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .stdin(Stdio::null());
-    // Never flash a console window at the user (GUI parent process).
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let mut child = command.spawn().context("launch powershell")?;
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        match child.try_wait()? {
-            Some(status) => {
-                let mut text = String::new();
-                if let Some(mut out) = child.stdout.take() {
-                    let _ = out.read_to_string(&mut text);
-                }
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = err.read_to_string(&mut text);
-                }
-                return Ok((status.success(), text));
-            }
-            None => {
-                if std::time::Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    anyhow::bail!(
-                        "the operation did not finish within {}s — a UAC prompt may have been \
-                         cancelled or left unanswered",
-                        timeout.as_secs()
-                    );
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        }
-    }
+    let out = crate::platform::windows::process::run_with_deadline(
+        "powershell",
+        args,
+        "the hardening step",
+        timeout,
+    )?;
+    Ok((out.success, out.text))
 }
 
 fn ps_run(command: &str) -> Result<String> {

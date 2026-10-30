@@ -202,7 +202,7 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ```powershell
 cd engine
-cargo test                                # 45 tests
+cargo test                                # 48 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
@@ -356,7 +356,7 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (45) و `cargo clippy` نضيف، و`flutter analyze`
+**الاختبارات:** `cargo test` (48) و `cargo clippy` نضيف، و`flutter analyze`
 بدون ملاحظات و`flutter test` (31). وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
 `tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
