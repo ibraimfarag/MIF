@@ -3,8 +3,7 @@
 //! Task Manager's Processes tab does not show a file name: it shows the
 //! `FileDescription` string from the executable's version resource, then falls
 //! back to the file name when there is none. The engine had no resource at all,
-//! so it appeared as `mics-engine.exe` next to an app that appeared as
-//! "MI CS Command Center".
+//! so it appeared as `mics-engine.exe` next to an app that appeared as "MIF".
 //!
 //! The file name stays `mics-engine.exe` on purpose: the app's lookup, the helper
 //! service registration, the probes and `MICS_ENGINE_PATH` all depend on it, and a

@@ -197,6 +197,19 @@ click (P1.5) or a purchased certificate (P4).
     `explorer.exe` for Explorer — so the assertion uses the version resource.)
   - Note for the user: `MiShild` is spelled exactly as requested; if the intended
     brand is `MiShield`, it is a one-line change in `engine/build.rs`.
+  - Follow-up in the same area: the **app** is now `MIF` (its `FileDescription`
+    and `ProductName` in `windows/runner/Runner.rc`, and `sign.ps1`'s `/d`), so
+    the Processes tab reads `MIF` + `MiShild Background`. File names are unchanged
+    (`mics_app.exe`, `mics-engine.exe`) because the scripts, the app's engine
+    lookup and `MICS_ENGINE_PATH` depend on them. Verified through the shell API
+    the Task Manager uses: `mics_app.exe -> 'MIF'`, `mics-engine.exe ->
+    'MiShild Background'`, both `Valid` after signing.
+  - Still carrying the old product string on purpose, pending a decision: the
+    window title, tray tooltip and in-app name (`lib/main.dart`,
+    `lib/core/window/window_corners.dart` — which must match the window title
+    exactly — and `assets/i18n/*/app.json`), plus the notification card header
+    (`MI CS`). Renaming those is a product-wide branding change, not a Task
+    Manager one.
 
 - **first-run friction — the SmartScreen prompt, explained and documented**
   - Report: *"SmartScreen can't be reached right now / Publisher: Unknown

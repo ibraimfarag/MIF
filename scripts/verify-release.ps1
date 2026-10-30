@@ -125,6 +125,13 @@ try {
   } else {
     Fail "engine FileDescription is '$engineName', expected 'MiShild Background'"
   }
+  $appName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
+    (Join-Path $work "mics_app.exe")).FileDescription
+  if ($appName -eq "MIF") {
+    Pass "the app presents itself as '$appName' (Task Manager, Properties)"
+  } else {
+    Fail "app FileDescription is '$appName', expected 'MIF'"
+  }
 
   # The published hashes for what is inside the zip: an extracted file can be
   # compared with SHA256SUMS without knowing which build the working folder holds.
