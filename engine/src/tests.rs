@@ -657,4 +657,21 @@ mod tests {
         assert!(text.contains("sha256="), "{text}");
         assert!(!text.contains("no marker here"), "the log must not carry payloads: {text}");
     }
+
+    #[test]
+    fn the_rules_source_is_reported_once_per_change() {
+        // Guard rules hot-reload every 30 s; repeating the same line forever would
+        // bury the log, and the file a scan used is evidence that a package is
+        // complete (its own `rules\guard` folder, not the built-in pack).
+        assert!(crate::guard::note_rules_source(r"C:\x\rules\guard", 2));
+        assert!(
+            !crate::guard::note_rules_source(r"C:\x\rules\guard", 2),
+            "an unchanged source must not be logged again"
+        );
+        assert!(
+            crate::guard::note_rules_source(r"C:\x\rules\guard", 3),
+            "a changed rule count is news"
+        );
+        assert!(crate::guard::note_rules_source("the built-in starter pack", 3));
+    }
 }

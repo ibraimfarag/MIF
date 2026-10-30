@@ -17,11 +17,15 @@
 > copy, AUMID-free toast proven by Windows' own notification history)** and
 > **P1.5 (the privileged helper: closed op set, validate-before-run, audit-first,
 > one-prompt install, `verify-helper.ps1` — only the elevated install itself is
-> left, and that needs one click from you)** done,
+> left, and that needs one click from you)** and **the portable release
+> (`make-release.ps1` → ZIP + `SHA256SUMS` + `rules\`, and `verify-release.ps1`
+> which extracts the archive and proves it serves the helper protocol, shows a
+> card and loads its own rules)** done,
 > plus the state-reporting fix those live probes found · **next: install the
-> helper once (one UAC prompt), then packaging/QA**; the cheap wins below need
-> neither elevation nor money, then P4, P5, P6. README is written; the app runs
-> unelevated and was verified end-to-end on a real machine.
+> helper once (one UAC prompt), then the NSIS installer and the P6 QA harness**;
+> the cheap wins below need neither elevation nor money, then P4, P5, P6. README
+> is written; the app runs unelevated and was verified end-to-end on a real
+> machine.
 
 ---
 
@@ -95,6 +99,8 @@ not implemented yet, see D-008).
 | `scripts\verify-helper.ps1` | The privileged helper's protocol **unelevated**: ping/version answer, a privileged op is refused without an elevated token, an unmarked hosts document and a malformed firewall rule are refused, an op outside the closed set is refused, the audit log keeps intent/outcome but never the payload, `helper-status` sees it |
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
 | `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
+| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder |
+| `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), and the **extracted** copy answers the helper protocol, puts a real card on the desktop, and loads its own `rules\guard` + `rules\yara` rather than the built-in fallback |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
@@ -106,9 +112,9 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 **Start here if you are new:** run the four checks in section 2, launch
 `build\windows\x64\runner\Release\mics_app.exe`, and read the Done log below.
-Everything that could be verified without administrator rights is done; the
-remaining work needs a UAC prompt you can click (P1.5) or a purchased certificate
-(P4).
+Everything that could be verified without administrator rights is done, including
+the published portable archive; the remaining work needs a UAC prompt you can
+click (P1.5) or a purchased certificate (P4).
 
 | Phase | Scope | State |
 |---|---|---|
@@ -124,15 +130,53 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3d** | Second real-run bug sweep: Defender PUA false positive, read-only snapshot, verified apply | **done** |
 | **P3e** | Third real-run bug sweep: concurrent pipe dispatch, heartbeat only when idle, vuln-scan deadline | **done** |
 | **P3c1** | Intel source registry: per-source state, backoff/next-due, DNS-blocklist domains, CISA KEV catalog | **done** |
-| **P1.5** | Single-elevation privileged helper (D-007): closed op set, validation, audit-first, install/uninstall, Settings card, `verify-helper.ps1` | **code complete + unelevated acceptance passed — one interactive UAC prompt left (enabling the service itself)** |
+| **P1.5** | Single-elevation privileged helper (D-007): closed op set, validation, audit-first, install/uninstall, Settings card, `verify-helper.ps1` | **code complete + unelevated acceptance passed — one interactive UAC prompt left (enabling the service itself) — `e406275`** |
 | **P3c2** | Vulnerability scan as a cancellable job with live progress | **done** |
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
-| **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — this commit** |
+| **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
+| **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **release — the portable package is now assembled, published and provable**
+  - What shipped: `scripts\make-release.ps1` builds `dist\MICS-portable` from a
+    clean folder (Flutter release output + the cargo-built engine + `engine\rules`
+    + `VERSION`), refuses to continue when any required file is missing, and
+    produces `dist\MICS-portable-0.1.0-x64.zip` + `dist\SHA256SUMS` (paths
+    relative to `dist\`, so a plain `Get-FileHash` loop verifies them).
+    `scripts\verify-release.ps1` then checks the artifact the way a user would:
+    every checksum, the file list *and* the rules layout, then it extracts the zip
+    to a temp folder and runs the two existing probes against the extracted copy
+    plus a scan.
+  - **Found while doing it:** the deployed `dist\MICS-portable` had **no `rules\`
+    folder at all**, so the shipped product could not have its rule packs updated
+    (the guard and YARA loaders silently fall back to the compiled-in packs). The
+    README's build step 3 said to copy them, but every hand-run deploy since then
+    copied only the binaries. That is why packaging is now one script instead of
+    three remembered commands.
+  - **Found by the probe:** the first version of the script produced
+    `rules\rules\...` - `Copy-Item -Recurse` into an existing destination nests the
+    source folder instead of merging (trap 14) - and `verify-release.ps1` now
+    asserts the rules layout, not just that two files exist somewhere.
+  - **The engine now says which rules it loaded** (`YARA rules from <path>`,
+    `guard: N rule(s) from <dir>`), once per change so a 30 s hot-reload cannot
+    bury the log. Without that line, "the package is complete" was unprovable;
+    with it, the probe asserts the extracted copy used *its own* `rules\guard`
+    (6 rules) and `rules\yara\starter.yar`, not the built-in fallback.
+  - Live acceptance (`scripts\verify-release.ps1`, `RESULT: PASS`): 5/5 checksums
+    match; the zip holds every required file and exactly 2 rule files; the
+    extracted engine answers the helper protocol (full `verify-helper.ps1` PASS);
+    the extracted engine put a real card on the desktop
+    (`🛡️ MI CS — إشعار تجريبي`, read back from Windows' own history); the scan and
+    the guard both loaded rules from the extracted folder; `VERSION` reads
+    `MI CS 0.1.0 (portable, x64)`. Artifact: 63.7 MB folder, 24.3 MB zip.
+  - Still open for the user: the NSIS installer and a signed/trusted publisher
+    (P4), and the one interactive UAC prompt that finishes P1.5.
+  - Checks: `cargo test` 45/45 (one new test for the once-per-change rule
+    reporting), clippy clean, `flutter analyze` clean, `flutter test` 31/31.
 
 - **P1.5 — the privileged helper: one prompt instead of one per action**
   - What shipped: `MICSHelper`, a LocalSystem service that points back at the
@@ -598,12 +642,13 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ---
 
-## 5. Next up — one prompt, then packaging
+## 5. Next up — one prompt, then the installer
 
 Everything else in P2/P3 that could be verified without administrator rights is
 done (settings, i18n, sounds, theme, offline badge, update flow, transport,
-resumable jobs, desktop cards). What remains needs either one interactive UAC
-prompt (finishing P1.5) or money (P4 signing certificate).
+resumable jobs, desktop cards, and the portable ZIP + `SHA256SUMS` that
+`verify-release.ps1` checks end to end). What remains needs either one interactive
+UAC prompt (finishing P1.5) or money (P4 signing certificate).
 
 ### P1.5 — one UAC prompt, publisher-attributed (D-007)
 - [x] `docs/PRIVILEGED-OPS.md`: every admin operation enumerated (firewall
@@ -644,8 +689,10 @@ signing certificate respectively), so this is the work that is always available.
       must not wedge a request (MED).
 - [ ] Decide the VirusTotal client's fate: wire the sync queue that fills it, or
       delete the dead code and say so in the README (MED).
-- [ ] Regenerate the portable ZIP + `SHA256SUMS` from the current
-      `dist/MICS-portable`, so the published artifact matches the deployed build.
+- [x] Regenerate the portable ZIP + `SHA256SUMS` from the current
+      `dist/MICS-portable`, so the published artifact matches the deployed build
+      (`scripts\make-release.ps1` + `scripts\verify-release.ps1`; the folder now
+      also ships `rules\`, which every previous deploy had dropped).
 - [ ] ARM64 build leg (Flutter + `aarch64-pc-windows-msvc` engine), per D-003.
 - [ ] Trim the guard/benchmark CPU from 2.97 % towards the < 1 % budget, or move
       the budget to a measured, justified number (MED).
@@ -707,8 +754,8 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | Admin-only fixes (firewall/hosts/hardening) need the user to press "Relaunch as administrator" until the single-elevation helper (P1.5) lands | `dispatcher.rs`, Settings |
-| HIGH | No installer and no release archive: `dist/MICS-portable` holds the current binaries (regenerated after every deploy) but there is no ZIP + `SHA256SUMS`, and no NSIS installer | `dist/`, P4 |
+| HIGH | No installer: the portable ZIP + `SHA256SUMS` are produced and verified, but there is no NSIS installer, no code signing and no published download | `dist/`, P4 |
+| HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
@@ -821,6 +868,12 @@ settings and read environment variables only.
     streams to files instead
     (`Start-Process -Wait -RedirectStandardOutput x.json -RedirectStandardError y.txt`)
     and read the files — that is what `scripts\verify-helper.ps1` does.
+14. **`Copy-Item -Recurse` into an existing folder nests instead of merging**:
+    `Copy-Item engine\rules dist\MICS-portable\rules -Recurse` a second time
+    produces `dist\MICS-portable\rules\rules\...`, and the rule loaders then read
+    the outer folder and find nothing. Packaging scripts must delete the
+    destination first (and a probe should assert the layout, not just that the
+    files exist somewhere).
 
 ---
 

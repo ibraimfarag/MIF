@@ -73,9 +73,13 @@ pub fn starter_rules_source() -> String {
         let p = base.join("rules").join("yara").join("starter.yar");
         if p.exists()
             && let Ok(s) = std::fs::read_to_string(&p) {
+                // Which file a scan used is evidence about the install, not noise:
+                // a package is only complete when this is the shipped `rules\`.
+                tracing::info!("YARA rules from {}", p.display());
                 return s;
             }
     }
+    tracing::info!("YARA rules from the built-in starter pack (no rules\\yara\\starter.yar found)");
     include_str!("../../rules/yara/starter.yar").to_string()
 }
 

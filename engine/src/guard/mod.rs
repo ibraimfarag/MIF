@@ -81,17 +81,37 @@ pub fn load_rules() -> Result<Vec<GuardRule>> {
     if rules.is_empty() {
         match serde_json::from_str::<Vec<GuardRule>>(starter_rules_source()) {
             Ok(embedded) => {
-                tracing::info!(
-                    "guard: using the built-in starter rules ({} rule(s)) — {} not found",
+                let _ = note_rules_source(
+                    &format!("the built-in starter pack ({} not found)", dir.display()),
                     embedded.len(),
-                    dir.display()
                 );
                 rules = embedded;
             }
             Err(e) => tracing::warn!("guard: starter rules unreadable: {e}"),
         }
+    } else {
+        let _ = note_rules_source(&dir.display().to_string(), rules.len());
     }
     Ok(rules)
+}
+
+/// Where the last rules load came from, so a 30 s hot-reload does not repeat the
+/// same line forever. Which directory (or the built-in pack) is in force is
+/// evidence about the install: a shipped package is only complete when this says
+/// the `rules\guard` folder next to the executable.
+static RULES_SOURCE: std::sync::Mutex<Option<(String, usize)>> = std::sync::Mutex::new(None);
+
+/// Logs the source once per change and reports whether this call was news.
+pub(crate) fn note_rules_source(source: &str, count: usize) -> bool {
+    let Ok(mut last) = RULES_SOURCE.lock() else {
+        return false;
+    };
+    if last.as_ref().is_some_and(|(s, c)| s == source && *c == count) {
+        return false;
+    }
+    tracing::info!("guard: {count} rule(s) from {source}");
+    *last = Some((source.to_string(), count));
+    true
 }
 
 pub fn starter_rules_source() -> &'static str {

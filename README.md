@@ -72,10 +72,13 @@ Honesty is a feature. Today, MI CS does **not**:
 
 ## Install and first run
 
-Today MI CS ships as a **portable folder** (an installer is in progress):
+Today MI CS ships as a **portable folder and a portable archive** (an installer is
+still to come):
 
-1. Copy the `MICS-portable` folder anywhere (for example
-   `C:\Program Files\MI CS\`).
+1. Take `MICS-portable-<version>-x64.zip`, or the already-unpacked
+   `dist\MICS-portable` folder, and put it anywhere (for example
+   `C:\Program Files\MI CS\`). `dist\SHA256SUMS` lists the SHA-256 of the zip and
+   of the files inside it.
 2. Run `mics_app.exe`. Windows may warn about an unknown publisher — see
    [What MI CS does not do](#what-mi-cs-does-not-do).
 3. The app starts the engine automatically, runs a first audit (~10 s) and shows
@@ -83,6 +86,10 @@ Today MI CS ships as a **portable folder** (an installer is in progress):
 4. The first privileged fix asks once to install the helper
    (`Settings → Engine → Install helper` also does it explicitly); the card then
    shows **ready** and no later action prompts again.
+
+The engine log says which rule file it loaded (`rules\yara\starter.yar` and
+`rules\guard\starter.json` next to the binaries, hot-reloaded): if it ever says
+"built-in starter pack" instead, the copy is incomplete — `rules\` is missing.
 
 **Uninstall:** quit MI CS from the tray, remove the helper
 (`Settings → Engine → Remove helper`, one prompt), delete the app folder, then
@@ -100,7 +107,7 @@ by the same screen.
 | Quarantine | `Quarantine\` — AES-256-GCM blobs, master key protected with DPAPI. |
 | Reports | `Documents\MICS-Reports\` |
 | Canary decoys | `Documents` and `Desktop` by default; configurable in Settings. |
-| Rules | `rules\` next to the executable (YARA + guard JSON); a built-in starter pack is used when that folder is missing. |
+| Rules | `rules\` next to the executable (YARA + guard JSON), hot-reloaded; the shipped package includes the packs, and the engine logs which file it used. A built-in starter pack is the fallback when that folder is missing. |
 
 Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 
@@ -156,12 +163,26 @@ cd ..
 flutter pub get
 flutter build windows --release
 
-# 3) Ship the engine and rules next to the app (that is how the app finds them)
-Copy-Item engine\target\release\mics-engine.exe build\windows\x64\runner\Release\ -Force
-Copy-Item engine\rules build\windows\x64\runner\Release\rules -Recurse -Force
+# 3) Assemble the portable release (engine + rules + app + zip + SHA256SUMS)
+powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
 ```
 
 `MICS_ENGINE_PATH` overrides the engine location if you keep it elsewhere.
+`make-release.ps1` rebuilds into `dist\MICS-portable` from a clean folder, copies
+`engine\rules` next to the binaries (the guard and YARA packs are hot-reloaded
+from there — a package without them silently falls back to the compiled-in pack),
+refuses to continue if anything required is missing, writes `VERSION`, and
+produces `dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. Add
+`-SkipBuild` to repackage without rebuilding the app, or `-EnginePath <exe>` when
+cargo builds somewhere else.
+
+Check what you just produced — hashes, completeness, and that the extracted copy
+serves the privileged helper protocol, puts a real card on the desktop, and loads
+its **own** rules rather than the fallback:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1
+```
 
 **Icons.** `assets/icons/mics.png` is the 256×256 master art. Both Windows icons
 — `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`, so it is
@@ -181,7 +202,7 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ```powershell
 cd engine
-cargo test                                # 44 tests
+cargo test                                # 45 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
@@ -198,6 +219,9 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-toast.ps1
 
 # The privileged helper's protocol, refusals and audit trail - no UAC needed
 powershell -ExecutionPolicy Bypass -File scripts\verify-helper.ps1
+
+# The published archive: hashes, completeness, and the extracted copy running
+powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1
 ```
 
 Test hooks exist so an isolated engine can be run without touching production
@@ -332,11 +356,19 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (44) و `cargo clippy` نضيف، و`flutter analyze`
+**الاختبارات:** `cargo test` (45) و `cargo clippy` نضيف، و`flutter analyze`
 بدون ملاحظات و`flutter test` (31). وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
 `tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
-خدمة المساعدة ورفضها الآمن من غير أي UAC.
+خدمة المساعدة ورفضها الآمن من غير أي UAC، و`scripts\verify-release.ps1` بيتأكد إن
+النسخة المنشورة مطابقة للـ SHA256SUMS وكاملة وإن نسختها المستخرجة بتشتغل فعلًا
+وبتحمّل قواعدها من جوه الحزمة نفسها.
+
+**النسخة الجاهزة:** `scripts\make-release.ps1` بيبني `dist\MICS-portable` من
+الصفر (المحرك + مجلد `rules` + الواجهة) وبيطلّع
+`dist\MICS-portable-<version>-x64.zip` مع `dist\SHA256SUMS`، وبيرفض يكمّل لو أي
+ملف أساسي ناقص. لوج المحرك بيقول حمّل قواعد منين — لو قال «built-in starter pack»
+يبقى مجلد `rules` ناقص من النسخة.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي
