@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
@@ -162,7 +162,6 @@ fn emit(ev: GuardEvent) {
 
 pub struct GuardState {
     running: AtomicBool,
-    known: Mutex<HashSet<u32>>,
 }
 
 static GUARD: OnceLock<GuardState> = OnceLock::new();
@@ -170,7 +169,6 @@ static GUARD: OnceLock<GuardState> = OnceLock::new();
 fn guard() -> &'static GuardState {
     GUARD.get_or_init(|| GuardState {
         running: AtomicBool::new(false),
-        known: Mutex::new(HashSet::new()),
     })
 }
 
@@ -183,7 +181,6 @@ pub fn start_guard() {
     if g.running.swap(true, Ordering::SeqCst) {
         return; // already running
     }
-    g.known.lock().unwrap().clear();
 
     std::thread::spawn(move || {
         info!("Guard loop started");
@@ -209,48 +206,70 @@ pub fn start_guard() {
         let etw_live = crate::guard::etw::start();
 
         let mut first = true;
+        // The pid set of the previous pass. Local on purpose: a fresh start means a
+        // fresh set, so nothing outside this thread needs to see it.
+        let mut known: HashSet<u32> = HashSet::new();
         loop {
             if !guard().running.load(Ordering::SeqCst) {
                 info!("Guard loop stopped");
                 break;
             }
-            sys.refresh_processes(ProcessesToUpdate::All, true);
+            if etw_live && !first {
+                // ETW delivers process events as they happen, so re-reading every
+                // process once a second would burn CPU to learn nothing. Only the
+                // canary check needs the tick.
+                crate::guard::canary::check_touches();
+                std::thread::sleep(Duration::from_secs(2));
+                continue;
+            }
+
+            // Cheap pass: which pids exist. `nothing()` skips the expensive reads
+            // (command line, image path, parent) for processes the rules already
+            // saw; those are fetched below for the new ones only.
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                ProcessRefreshKind::nothing(),
+            );
             let mut current = HashSet::new();
-            let mut new_procs: Vec<(u32, String, String, String, String)> = Vec::new();
-            for (pid, proc) in sys.processes() {
+            let mut fresh_pids: Vec<Pid> = Vec::new();
+            for pid in sys.processes().keys() {
                 let pid_u32 = pid.as_u32();
                 current.insert(pid_u32);
-                let proc_name = proc.name().to_string_lossy().to_lowercase();
-                let cmd = proc
-                    .cmd()
-                    .iter()
-                    .map(|c| c.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let parent_name = proc
-                    .parent()
-                    .and_then(|p: Pid| sys.process(p))
-                    .map(|p| p.name().to_string_lossy().to_lowercase())
-                    .unwrap_or_default();
-                let exe_path = proc
-                    .exe()
-                    .map(|p| p.to_string_lossy().to_lowercase())
-                    .unwrap_or_default();
-                new_procs.push((pid_u32, proc_name, parent_name, cmd, exe_path));
+                if first || !known.contains(&pid_u32) {
+                    fresh_pids.push(*pid);
+                }
             }
-            {
-                let mut known = guard().known.lock().unwrap();
-                let fresh: Vec<_> = new_procs
-                    .into_iter()
-                    .filter(|(pid, ..)| first || !known.contains(pid))
-                    .collect();
-                *known = current;
-                                first = false;
-                drop(known);
+            known = current;
+            first = false;
 
-
+            if !fresh_pids.is_empty() {
+                sys.refresh_processes_specifics(
+                    ProcessesToUpdate::Some(&fresh_pids),
+                    false,
+                    ProcessRefreshKind::everything(),
+                );
                 let snapshot = rules.lock().unwrap().clone();
-                for (pid, name, parent, cmd, exe_path) in fresh {
+                for pid in fresh_pids {
+                    let Some(proc) = sys.process(pid) else {
+                        continue;
+                    };
+                    let name = proc.name().to_string_lossy().to_lowercase();
+                    let cmd = proc
+                        .cmd()
+                        .iter()
+                        .map(|c| c.to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let parent = proc
+                        .parent()
+                        .and_then(|p: Pid| sys.process(p))
+                        .map(|p| p.name().to_string_lossy().to_lowercase())
+                        .unwrap_or_default();
+                    let exe_path = proc
+                        .exe()
+                        .map(|p| p.to_string_lossy().to_lowercase())
+                        .unwrap_or_default();
                     for rule in &snapshot {
                         if rule_matches(rule, &name, &parent, &cmd, &exe_path) {
                             let ev = GuardEvent {
@@ -258,7 +277,7 @@ pub fn start_guard() {
                                 severity: rule.severity.clone(),
                                 rule_id: rule.id.clone(),
                                 rule_name: rule.name.clone(),
-                                pid,
+                                pid: pid.as_u32(),
                                 process: name.clone(),
                                 parent: parent.clone(),
                                 detail: format!("cmd: {cmd}"),
@@ -266,20 +285,14 @@ pub fn start_guard() {
                             };
                             emit(ev);
                             if rule.action == "kill"
-                                && let Err(e) = kill_tree(pid) {
-                                    warn!("responder kill_tree({pid}): {e:#}");
+                                && let Err(e) = kill_tree(pid.as_u32()) {
+                                    warn!("responder kill_tree({}): {e:#}", pid.as_u32());
                                 }
                         }
                     }
                 }
             }
             crate::guard::canary::check_touches();
-            if etw_live {
-                // ETW pushes instant events; the poll loop only services the
-                // canary checker.
-                std::thread::sleep(Duration::from_millis(1000));
-                continue;
-            }
             std::thread::sleep(Duration::from_millis(2000));
         }
     });

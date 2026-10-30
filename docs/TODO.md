@@ -79,9 +79,13 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
-   (polling intervals, cheaper process enumeration) or move the budget to a
-   measured, justified number and say so in the README.
+1. **Guard CPU: measured 3.52 % → 1.56 % of one core (0.06 % → 0.03 % of the
+   machine)** — the first real measurement of this, and it changes the question. The
+   old "2.97 %" was a per-core figure; on this 56-thread machine the guard costs
+   0.03 % of total CPU. `scripts\measure-guard-cpu.ps1` reproduces both numbers as a
+   differential against `MICS_NO_GUARD=1`. What is left: the unelevated poll loop
+   still enumerates every process every 2 s (~1.5 % of one core). Next candidate is
+   `EnumProcesses` for the pid diff and sysinfo only for the new pids, or a 3 s tick.
 2. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
 3. **AUMID registration (LOW, fold into the installer)** — register
@@ -259,6 +263,26 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The guard's CPU cost is measured, not assumed (first step)**
+  - `scripts\measure-guard-cpu.ps1` runs the engine twice — guard on, then with
+    `MICS_NO_GUARD=1` — in isolated data/pipe/rules dirs, samples
+    `TotalProcessorTime` over a wall-clock window and prints both definitions:
+    percent of one core and percent of the machine (the Task Manager one).
+  - Baseline on this machine (56 logical processors): **3.52 % of one core,
+    0.06 % of the machine**. That reframes §0.1's "2.97 % against a < 1 % budget":
+    the recorded figure was a per-core number, and on this machine the guard was
+    already 0.06 % of total CPU. The budget line needs that definition spelled out.
+  - Cheap win found by reading the loop instead of guessing: with ETW live it
+    refreshed every process **every second** just to service the canary check, and
+    the unelevated path fetched command lines, image paths and parents for all
+    processes on every tick even though only *new* pids are matched. Now the sweep
+    is skipped entirely once ETW is live (after the one initial sweep that catches
+    processes started before MI CS), and the poll refreshes pids cheaply
+    (`ProcessRefreshKind::nothing()`) with the expensive reads done only for new
+    pids. Re-measured: **1.56 % of one core, 0.03 % of the machine** — a 56 % cut.
+  - What is still on the table: the unelevated poll enumerates every process every
+    2 s. `EnumProcesses` for the pid diff and a 3 s tick are the next candidates;
+    the register entry and §0.1 say so instead of claiming the budget is met.
 - **The helper answers only the installer's account, not merely the engine's name (F-2b)**
   - F-2a proved *which program* is calling; it could not tell *which user*, so a
     standard user could copy `mics-engine.exe` and drive SYSTEM. The caller's token
@@ -1372,8 +1396,9 @@ signing certificate respectively), so this is the work that is always available.
       (`scripts\make-release.ps1` + `scripts\verify-release.ps1`; the folder now
       also ships `rules\`, which every previous deploy had dropped).
 - [ ] ARM64 build leg (Flutter + `aarch64-pc-windows-msvc` engine), per D-003.
-- [ ] Trim the guard/benchmark CPU from 2.97 % towards the < 1 % budget, or move
-      the budget to a measured, justified number (MED).
+- [ ] Finish the guard CPU work: 3.52 % → 1.56 % of one core so far (0.03 % of a
+      56-thread machine); the remaining cost is the unelevated poll loop, and the
+      `< 1 %` budget needs a stated definition (per core or per machine) — §0.1.
 - [ ] `docs/PROTECTION-MATRIX.md` + `docs/THREAT-MODEL.md` (P5 wording work, no
       code involved).
 
@@ -1457,7 +1482,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
+| LOW | **Guard idle CPU is 1.56 % of one core / 0.03 % of this 56-thread machine**, measured with `scripts\measure-guard-cpu.ps1` (down from 3.52 %). The `benchmark` budget check still says `budget_ok:false` because it compares the per-core figure against 1 %; the remaining cost is the unelevated poll loop re-enumerating every process every 2 s | `guard/mod.rs`, `benchmark.rs`, §0.1 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |

@@ -65,15 +65,21 @@ Honesty is a feature. Today, MI CS does **not**:
   deletes are);
 - use the **VirusTotal** client in the scan path yet (the client exists, but
   nothing queues a lookup);
-- **verify signatures** of downloaded update packages beyond SHA-256;
+- promise that an update is signed by *us* and not just by *someone*: the payload
+  must carry an embedded Authenticode signature from `CN=MI CS Code Signing` that
+  Windows trusts (`docs/THREAT-MODEL.md` F-3), but the pin is the signer's name, not
+  its thumbprint;
 - guarantee that "fix" buttons work without administrator rights: firewall,
   hosts-file and hardening changes are privileged. The app installs its
   **privileged helper** with one Windows prompt the first time you use such a
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
-- measure **idle CPU below the 1 % budget** on every machine — measured ~3 % on
-  the development machine (RAM is ~11 MB, well inside budget).
+- claim **idle CPU below the 1 % budget** — measured **1.56 % of one core, 0.03 % of
+  a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on versus
+  `MICS_NO_GUARD=1`; it was 3.52 % before the poll loop was trimmed). The budget does
+  not yet say *which* percentage it means, and that ambiguity is listed in
+  `docs/TODO.md` §0.1 instead of being papered over (RAM is ~11 MB, inside budget).
 
 ## Requirements
 

@@ -265,7 +265,7 @@ F-3 still carries is the pin's *precision*: subject name, not thumbprint.
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release is complete and signed | `scripts/verify-release.ps1` + `scripts/sign.ps1` |
 | The two pipe ACLs are what this file says | `scripts/verify-pipe-acl.ps1` — both pipes, real `service` and `helper-console` processes on private names, 18 checks, `RESULT: PASS` |
-| The guard's cost | `mics-engine benchmark` (currently 2.97 % against a < 1 % budget — §0.1, not yet met) |
+| The guard's cost | `scripts/measure-guard-cpu.ps1` — 1.56 % of one core = 0.03 % of this 56-thread machine (guard on minus `MICS_NO_GUARD=1`), down from 3.52 %. The `< 1 %` budget still needs a stated definition — §0.1 |
 
 ## 8. Open questions
 
