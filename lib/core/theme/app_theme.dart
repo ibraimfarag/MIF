@@ -10,6 +10,7 @@ class AppColors {
   static Color green = const Color(0xFF34D399);
   static Color red = const Color(0xFFF43F5E);
   static Color orange = const Color(0xFFFB923C);
+  static Color yellow = const Color(0xFFEAB308);
   static Color text = const Color(0xFFE2E8F0);
   static Color muted = const Color(0xFF64748B);
 
@@ -21,18 +22,26 @@ class AppColors {
     green = const Color(0xFF34D399);
     red = const Color(0xFFF43F5E);
     orange = const Color(0xFFFB923C);
+    yellow = const Color(0xFFEAB308);
     text = const Color(0xFFE2E8F0);
     muted = const Color(0xFF64748B);
   }
 
+  /// Every token here is measured against WCAG 2.2 on both surfaces this UI
+  /// paints (`test/light_contrast_audit_test.dart` pins the ratios, and
+  /// `docs/CONTRAST.md` records them), which is why the accents are darker than
+  /// their dark-mode counterparts: as 10-13 px text they have to clear 4.5:1 on
+  /// `#F4F7FB`, and `border` has to clear 3:1 as a boundary. Do not lighten one
+  /// without re-running that test.
   static void applyLight() {
     background = const Color(0xFFF4F7FB);
     surface = const Color(0xFFFFFFFF);
-    border = const Color(0xFFDDE4EE);
-    cyan = const Color(0xFF0891B2);
-    green = const Color(0xFF059669);
-    red = const Color(0xFFE11D48);
-    orange = const Color(0xFFEA580C);
+    border = const Color(0xFF74849B);
+    cyan = const Color(0xFF0E7490);
+    green = const Color(0xFF065F46);
+    red = const Color(0xFFBE123C);
+    orange = const Color(0xFFB23A0B);
+    yellow = const Color(0xFFB45309);
     text = const Color(0xFF0F172A);
     muted = const Color(0xFF5B6B7F);
   }

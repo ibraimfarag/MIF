@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mics_app/core/theme/app_theme.dart';
 
 /// Which audit section each hardening action changes, so a fix can re-read just
 /// that section (`audit.run {sections:[id], merge:true}`) instead of the whole
@@ -39,29 +40,32 @@ class AuditFinding {
         fixAvailable: j['fix_available'] as bool? ?? false,
       );
 
+  /// Status and severity colours come from the palette, never from literals:
+  /// a literal is the dark-mode value, and in light mode it was unreadable
+  /// (1.78:1 for green, measured in `docs/CONTRAST.md`).
   Color get statusColor {
     switch (status) {
       case 'Secure':
-        return const Color(0xFF34D399);
+        return AppColors.green;
       case 'Warning':
-        return const Color(0xFFFB923C);
+        return AppColors.orange;
       case 'Vulnerable':
-        return const Color(0xFFF43F5E);
+        return AppColors.red;
       default:
-        return const Color(0xFF64748B);
+        return AppColors.muted;
     }
   }
 
   Color get severityColor {
     switch (severity) {
       case 'Critical':
-        return const Color(0xFFF43F5E);
+        return AppColors.red;
       case 'High':
-        return const Color(0xFFFB923C);
+        return AppColors.orange;
       case 'Medium':
-        return const Color(0xFFEAB308);
+        return AppColors.yellow;
       default:
-        return const Color(0xFF64748B);
+        return AppColors.muted;
     }
   }
 }

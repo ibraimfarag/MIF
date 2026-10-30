@@ -48,9 +48,13 @@ class _IntelScreenState extends ConsumerState<IntelScreen> {
 
   void _snack(ScaffoldMessengerState messenger, String text,
       {bool error = false}) {
+    // Only the failure case recolours the bar; a success message keeps the
+    // theme's own colours. Overriding the background alone is what made this
+    // message invisible in light mode (white text on the white surface it used
+    // to set) — see `docs/CONTRAST.md`.
     messenger.showSnackBar(SnackBar(
       content: Text(text),
-      backgroundColor: error ? AppColors.red : AppColors.surface,
+      backgroundColor: error ? AppColors.red : null,
     ));
   }
 

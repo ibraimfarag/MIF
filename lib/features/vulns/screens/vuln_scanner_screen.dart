@@ -176,7 +176,7 @@ class VulnNotifier extends Notifier<VulnState> {
 Color cvssColor(double score) {
   if (score >= 9) return AppColors.red;
   if (score >= 7) return AppColors.orange;
-  if (score >= 4) return const Color(0xFFEAB308);
+  if (score >= 4) return AppColors.yellow;
   return AppColors.muted;
 }
 

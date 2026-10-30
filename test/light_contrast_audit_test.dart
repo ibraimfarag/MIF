@@ -8,18 +8,15 @@ import 'package:mics_app/core/theme/contrast.dart';
 import 'package:mics_app/features/vulns/screens/vuln_scanner_screen.dart';
 import 'package:mics_app/models/audit_models.dart';
 
-/// The light-mode contrast audit (step أ2).
+/// The light-mode contrast audit (steps أ2 and أ3).
 ///
 /// It measures every colour pair the shipped light UI paints — palette tokens,
-/// borders, the severity colours that ignore the palette, and text on the
-/// tinted banners — against WCAG 2.2 (4.5:1 body text, 3:1 large text in
-/// §1.4.3, 3:1 UI boundaries and graphics in §1.4.11) and prints the table.
-///
-/// This step *measures*: the table is the "before" record, and the assertions
-/// that pin each ratio arrive with the palette fix (step أ3). What is enforced
-/// here is that the measurement cannot silently stop covering something — every
-/// palette token, and every colour a status/severity getter can return, has to
-/// appear in the table.
+/// borders, the accent-button foregrounds, the tinted banners — against WCAG
+/// 2.2 (4.5:1 body text, 3:1 large text in §1.4.3, 3:1 UI boundaries and
+/// graphics in §1.4.11) and prints the table. Step أ2 took the "before"
+/// measurement; step أ3 fixed the palette and turned every ratio into an
+/// assertion, so the numbers in `docs/CONTRAST.md` are a floor now instead of a
+/// report.
 ///
 /// Reproduce the numbers with:
 ///   flutter test --no-pub test/light_contrast_audit_test.dart
@@ -29,10 +26,10 @@ void main() {
   AppColors.applyLight();
   final theme = AppTheme.lightTheme;
   final scheme = theme.colorScheme;
-  // No snackBarTheme is configured, so a SnackBar keeps Material's own default
-  // text colour (snack_bar.dart: `snackBarTheme.contentTextStyle ??
-  // onInverseSurface`); the three screens that snack reuse `AppColors.surface`
-  // or `AppColors.red` as the background.
+  // No snackBarTheme is configured, so a SnackBar keeps Material's own colours
+  // (`snack_bar.dart`: background `inverseSurface`, text `onInverseSurface`).
+  // A screen that recolours the bar must recolour the text with it — that is the
+  // bug light mode had.
   final snackText =
       theme.snackBarTheme.contentTextStyle?.color ?? scheme.onInverseSurface;
 
@@ -53,6 +50,7 @@ void main() {
     ('success text', 'AppColors.green', AppColors.green),
     ('danger text', 'AppColors.red', AppColors.red),
     ('warning text', 'AppColors.orange', AppColors.orange),
+    ('medium-severity text', 'AppColors.yellow', AppColors.yellow),
   ]) {
     for (final (label, bg) in surfaces) {
       pairs.add(_Pair('$what on $label', '$token / app_theme.dart', color, bg,
@@ -81,13 +79,19 @@ void main() {
         scheme.onSecondary, AppColors.green, _bodyText))
     ..add(_Pair('declared onError', 'colorScheme.onError on error',
         scheme.onError, AppColors.red, _bodyText))
-    ..add(_Pair('error snackbar text', 'SnackBar default text on AppColors.red',
+    ..add(_Pair('error snackbar text', 'SnackBar text on AppColors.red',
         snackText, AppColors.red, _bodyText))
     ..add(_Pair(
         'success snackbar text',
-        'SnackBar default text on AppColors.surface / intel_screen.dart',
+        'SnackBar text on the theme bar (inverseSurface) / intel_screen.dart',
         snackText,
-        onCard,
+        scheme.inverseSurface,
+        _bodyText))
+    ..add(_Pair(
+        'settings error snackbar text',
+        'SnackBar text on AppColors.red at 85 % / settings_screen.dart',
+        snackText,
+        blendOver(AppColors.red, 0.85, onPage),
         _bodyText));
 
   // Non-text UI: icons and the rail indicator, which WCAG scores at 3:1.
@@ -129,26 +133,6 @@ void main() {
         blendOver(AppColors.green, 0.15, onCard),
         _bodyText));
 
-  // Severity/status colours that are literals rather than palette tokens, so
-  // they keep their dark-theme values in light mode (audit_models.dart has no
-  // light variant, and the CVSS yellow is one hex shared by two screens).
-  for (final (what, color) in <(String, Color)>[
-    ('status/severity green', const Color(0xFF34D399)),
-    ('status/severity orange', const Color(0xFFFB923C)),
-    ('status/severity red', const Color(0xFFF43F5E)),
-    ('status/severity slate', const Color(0xFF64748B)),
-    ('CVSS 4.0-6.9 yellow', const Color(0xFFEAB308)),
-  ]) {
-    for (final (label, bg) in surfaces) {
-      pairs.add(_Pair(
-          '$what on $label',
-          'hardcoded in audit_models.dart / vuln_scanner_screen.dart',
-          color,
-          bg,
-          _bodyText));
-    }
-  }
-
   final measured = <Color>{
     for (final p in pairs) ...<Color>[p.fg, p.bg],
   };
@@ -172,11 +156,12 @@ void main() {
   test('the colour under audit is the shipped light palette', () {
     expect(AppColors.background, const Color(0xFFF4F7FB));
     expect(AppColors.surface, const Color(0xFFFFFFFF));
-    expect(AppColors.border, const Color(0xFFDDE4EE));
-    expect(AppColors.cyan, const Color(0xFF0891B2));
-    expect(AppColors.green, const Color(0xFF059669));
-    expect(AppColors.red, const Color(0xFFE11D48));
-    expect(AppColors.orange, const Color(0xFFEA580C));
+    expect(AppColors.border, const Color(0xFF74849B));
+    expect(AppColors.cyan, const Color(0xFF0E7490));
+    expect(AppColors.green, const Color(0xFF065F46));
+    expect(AppColors.red, const Color(0xFFBE123C));
+    expect(AppColors.orange, const Color(0xFFB23A0B));
+    expect(AppColors.yellow, const Color(0xFFB45309));
     expect(AppColors.text, const Color(0xFF0F172A));
     expect(AppColors.muted, const Color(0xFF5B6B7F));
   });
@@ -190,6 +175,7 @@ void main() {
       'green': AppColors.green,
       'red': AppColors.red,
       'orange': AppColors.orange,
+      'yellow': AppColors.yellow,
       'text': AppColors.text,
       'muted': AppColors.muted,
     };
@@ -200,58 +186,52 @@ void main() {
     }
   });
 
-  test('every status/severity colour the UI can paint is in the table', () {
-    final painted = <String, Color>{
-      for (final s in ['Secure', 'Warning', 'Vulnerable', 'Unknown'])
-        'AuditFinding(status: $s).statusColor': _finding(status: s).statusColor,
-      for (final s in ['Critical', 'High', 'Medium', 'Low'])
-        'AuditFinding(severity: $s).severityColor':
-            _finding(severity: s).severityColor,
-      'cvssColor(9.5)': cvssColor(9.5),
-      'cvssColor(7.5)': cvssColor(7.5),
-      'cvssColor(5.0)': cvssColor(5.0),
-      'cvssColor(2.0)': cvssColor(2.0),
-    };
-    for (final entry in painted.entries) {
-      expect(measured, contains(entry.value),
-          reason: '${entry.key} paints ${_hex(entry.value)}, which no audited '
-              'pair measures');
-    }
+  test('status and severity colours come from the palette, not from literals',
+      () {
+    // A literal is the dark-mode value: that is what made "Secure" green 1.78:1
+    // in light mode. Reading these getters under the light palette is what
+    // proves the screens cannot paint a colour this audit never measured.
+    expect(_finding(status: 'Secure').statusColor, AppColors.green);
+    expect(_finding(status: 'Warning').statusColor, AppColors.orange);
+    expect(_finding(status: 'Vulnerable').statusColor, AppColors.red);
+    expect(_finding(status: 'Unknown').statusColor, AppColors.muted);
+    expect(_finding(severity: 'Critical').severityColor, AppColors.red);
+    expect(_finding(severity: 'High').severityColor, AppColors.orange);
+    expect(_finding(severity: 'Medium').severityColor, AppColors.yellow);
+    expect(_finding(severity: 'Low').severityColor, AppColors.muted);
+    expect(cvssColor(9.5), AppColors.red);
+    expect(cvssColor(7.5), AppColors.orange);
+    expect(cvssColor(5.0), AppColors.yellow);
+    expect(cvssColor(2.0), AppColors.muted);
   });
 
-  testWidgets('the snackbar row measures what the widget really paints',
+  testWidgets('the success snackbar row measures what Material really paints',
       (tester) async {
-    // The worst pair in the table is a SnackBar whose background one screen
-    // overrides: the text colour is Material's default, not something this repo
-    // sets. So render the real thing and read the colour back, instead of
-    // trusting a reading of the framework source.
-    late BuildContext context;
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.lightTheme,
-      home: Scaffold(
-        body: Builder(builder: (inner) {
-          context = inner;
-          return const SizedBox();
-        }),
-      ),
-    ));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('synced'),
-      backgroundColor: AppColors.surface,
-    ));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-
-    final rendered =
-        tester.renderObject<RenderParagraph>(find.text('synced')).text.style;
+    // The row that used to be white-on-white is not taken from a reading of the
+    // framework: render the real widget and read the colour back.
+    final painted =
+        await _paintSnack(tester, const SnackBar(content: Text('msg')));
     final row = pairs.firstWhere((p) => p.what == 'success snackbar text');
-    expect(row.bg, AppColors.surface);
-    expect(row.fg, rendered?.color,
+    expect(row.bg, scheme.inverseSurface);
+    expect(row.fg, painted,
         reason: 'the table must measure the colour the SnackBar actually '
             'paints; if Material changed its default, re-measure the row');
   });
 
-  test('the shipped light palette, measured against WCAG 2.2', () {
+  testWidgets('the error snackbar row measures what Material really paints',
+      (tester) async {
+    final painted = await _paintSnack(
+        tester,
+        SnackBar(
+          content: const Text('msg'),
+          backgroundColor: AppColors.red,
+        ));
+    final row = pairs.firstWhere((p) => p.what == 'error snackbar text');
+    expect(row.bg, AppColors.red);
+    expect(row.fg, painted, reason: 're-measure the row if this drifts');
+  });
+
+  test('every measured pair clears its WCAG bar, and the table proves it', () {
     expect(pairs.map((p) => p.what).toSet(), hasLength(pairs.length),
         reason: 'two rows share a name, so the table is not readable as a '
             'record');
@@ -263,18 +243,43 @@ void main() {
       ..writeln('WCAG 2.2 contrast — MI CS light palette, ${pairs.length} pairs')
       ..writeln('  bar 4.5 = body text · bar 3.0 = large text, boundary, '
           'graphic');
-    var below = 0;
+    final below = <String>[];
     for (final p in pairs) {
       final ratio = contrastRatio(p.fg, p.bg);
       final ok = ratio >= p.bar;
-      if (!ok) below++;
+      if (!ok) {
+        below.add('${ratio.toStringAsFixed(2)}:1 < ${p.bar} — ${p.what} '
+            '(${_hex(p.fg)} on ${_hex(p.bg)}) [${p.src}]');
+      }
       report.writeln('  ${ratio.toStringAsFixed(2).padLeft(6)}:1  '
           '${ok ? 'PASS' : 'FAIL'}  >= ${p.bar}  '
           '${p.what.padRight(36)} ${_hex(p.fg)} on ${_hex(p.bg)}  [${p.src}]');
     }
-    report.writeln('  => $below of ${pairs.length} pairs are below their bar');
+    report.writeln('  => ${pairs.length - below.length} of ${pairs.length} '
+        'pairs clear their bar');
     stdout.writeln(report);
+    expect(below, isEmpty,
+        reason: 'these pairs are below their WCAG bar:\n${below.join('\n')}');
   });
+}
+
+/// Renders a real `SnackBar` over the light theme and returns the colour its
+/// text was actually painted in.
+Future<Color?> _paintSnack(WidgetTester tester, SnackBar bar) async {
+  late BuildContext context;
+  await tester.pumpWidget(MaterialApp(
+    theme: AppTheme.lightTheme,
+    home: Scaffold(
+      body: Builder(builder: (inner) {
+        context = inner;
+        return const SizedBox();
+      }),
+    ),
+  ));
+  ScaffoldMessenger.of(context).showSnackBar(bar);
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+  return tester.renderObject<RenderParagraph>(find.text('msg')).text.style?.color;
 }
 
 /// One pair the shipped light UI actually paints.
