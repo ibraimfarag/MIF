@@ -13,8 +13,10 @@
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job) and P3c3 (Intel screen, configurable hash feed, KEV
-> badge) done · **next: P1.5 (single-elevation helper)**, then P4 packaging,
-> P5 documentation/hardening, P6 QA harness. README is written; the app runs
+> badge) done, plus the state-reporting fix those live probes found · **next:
+> P1.5 (single-elevation helper — needs one UAC prompt from you)**; the cheap
+> wins below need neither elevation nor money, then P4 packaging, P5
+> documentation/hardening, P6 QA harness. README is written; the app runs
 > unelevated and was verified end-to-end on a real machine.
 
 ---
@@ -466,8 +468,8 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | 3 | Code signing | **partial** — self-signed script works; trusted cert deferred | D-002, `scripts/sign.ps1` |
 | 4 | Permissions asked once, publisher name | **todo P1.5** — today every admin op spawns its own UAC prompt | D-007 |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
-| 6 | App update paths | **partial** — the manifest URL + channel are now real settings and `update.check` uses them; no extraction/apply UI, no rollback screen | P3 |
-| 7 | CVE/intel update paths | **partial** — NVD keyword search + cache and a per-source scheduled sync (DNS blocklist + CISA KEV, D-012); the dedicated screen and the scan-as-a-job are P3c2/P3c3 | D-012 |
+| 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
+| 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
 | 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; light contrast audit still pending | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
@@ -513,6 +515,27 @@ money (P4 signing certificate).
 - [ ] Light-mode contrast audit (text/borders/severity colours) with screenshots.
 - [ ] `docs/PROTECTION-MATRIX.md` (today the README carries the matrix).
 
+### Cheap wins — no elevation, no money, no new subsystem
+These can be done in any order and each is one small commit. They are listed
+because P1.5 and P4 both need something only you can supply (a UAC prompt and a
+signing certificate respectively), so this is the work that is always available.
+
+- [ ] `status` returns the real crate version and platform instead of hardcoded
+      `0.1.0` / `windows` (MED).
+- [ ] `audit.run` honours `params.sections` instead of running everything (MED).
+- [ ] Add timeouts to the `netsh` / elevated-PowerShell calls in `firewall/mod.rs`
+      and `ids/mod.rs`, the way hardening was fixed — an unanswered UAC prompt
+      must not wedge a request (MED).
+- [ ] Decide the VirusTotal client's fate: wire the sync queue that fills it, or
+      delete the dead code and say so in the README (MED).
+- [ ] Regenerate the portable ZIP + `SHA256SUMS` from the current
+      `dist/MICS-portable`, so the published artifact matches the deployed build.
+- [ ] ARM64 build leg (Flutter + `aarch64-pc-windows-msvc` engine), per D-003.
+- [ ] Trim the guard/benchmark CPU from 2.97 % towards the < 1 % budget, or move
+      the budget to a measured, justified number (MED).
+- [ ] `docs/PROTECTION-MATRIX.md` + `docs/THREAT-MODEL.md` (P5 wording work, no
+      code involved).
+
 ---
 
 ## 6. Backlog by phase
@@ -526,8 +549,8 @@ money (P4 signing certificate).
 - [x] Intel pipeline hardening: named sources in one scheduled pass, per-source
       state + backoff + `sync_state.next_due`, DNS-blocklist domains, CISA KEV
       catalog (D-012). YARA/IPC packs wait for a signature-delivery mechanism.
-- [ ] A dedicated sync/intel screen with per-source results and last-error text
-      (today the chip + a Settings row cover it) — P3c3.
+- [x] A dedicated sync/intel screen with per-source results and last-error text,
+      plus a configurable hash feed (`ioc_feed_url`/`ioc_feed_key`) — P3c3.
 
 ### P4 — release engineering
 - [ ] Authenticode: OV/EV or Azure Trusted Signing; sign DLLs then EXEs;
@@ -569,7 +592,7 @@ money (P4 signing certificate).
 | Sev | Issue | Where |
 |---|---|---|
 | HIGH | Admin-only fixes (firewall/hosts/hardening) need the user to press "Relaunch as administrator" until the single-elevation helper (P1.5) lands | `dispatcher.rs`, Settings |
-| HIGH | No installer; `dist/` ZIP predates P1/P2 and must be regenerated (the unpacked `dist/MICS-portable` has the current binaries) | `dist/` |
+| HIGH | No installer and no release archive: `dist/MICS-portable` holds the current binaries (regenerated after every deploy) but there is no ZIP + `SHA256SUMS`, and no NSIS installer | `dist/`, P4 |
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
@@ -579,10 +602,9 @@ money (P4 signing certificate).
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
 | MED | `firewall` and `ids` still call `netsh` / elevated PowerShell **without a timeout** (hardening was fixed) — an unanswered UAC prompt can block those requests | `firewall/mod.rs`, `ids/mod.rs` |
-| MED | Offline badge/freshness exists in the title bar; the per-source detail is only in the `sync.status` payload until the Intel screen lands (P3c3) | `app_shell.dart` |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
-| LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until a URL is supplied (`MICS_IOC_FEED_URL` / a future Settings row) | `sync/mod.rs` |
+| LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | `docs/` has no THREAT-MODEL yet (the README carries the layer matrix) | `docs/` |
 | LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
