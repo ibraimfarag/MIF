@@ -144,7 +144,7 @@ pub fn guard_event(ev: &crate::guard::GuardEvent) {
 /// follows the language the user picked instead of always shouting in English.
 const COPY: &[(&str, &str, &str)] = &[
     ("guard.suspicious.title", "🛡️ MI CS — نشاط مشبوه", "🛡️ MI CS — Suspicious activity"),
-    ("guard.canary.title", "🥚 MI CS — ملف الطُعم اتحرك!", "🥚 MI CS — Canary touched!"),
+    ("guard.canary.title", "🥚 MI CS — ملف الطُعم اتغيّر!", "🥚 MI CS — Canary file modified!"),
     ("guard.action.open", "افتح MI CS", "Open MI CS"),
     ("scan.threat.title", "🛡️ MI CS — لقينا تهديد", "🛡️ MI CS — Threat found"),
     ("scan.threat.action", "اعزل الملف", "Quarantine"),

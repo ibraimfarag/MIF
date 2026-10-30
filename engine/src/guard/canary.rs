@@ -1,5 +1,7 @@
 //! Canaries (decoy files): nobody but the user should ever open these.
-//! A touch (open/rename/delete) on a decoy is a CRITICAL event.
+//! A write, rename or delete (anything that changes mtime/size) on a decoy is a
+//! CRITICAL event. A read-only open changes neither, so it is invisible here —
+//! the copy never claims otherwise (see docs/PROTECTION-MATRIX.md 4.2).
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -107,7 +109,7 @@ pub fn arm_watchers() -> Result<()> {
     Ok(())
 }
 
-/// Called every guard poll: any decoy whose mtime/size changed was touched.
+/// Called every guard poll: any decoy whose mtime/size changed was modified.
 pub fn check_touches() {
     let Some(baseline) = BASELINE.lock().unwrap().clone() else {
         return;
@@ -123,11 +125,11 @@ pub fn check_touches() {
             r#type: "canary_triggered".into(),
             severity: "critical".into(),
             rule_id: "CANARY".into(),
-            rule_name: "Decoy file touched".into(),
+            rule_name: "Decoy file modified".into(),
             pid: 0,
             process: String::new(),
             parent: String::new(),
-            detail: format!("{path} was accessed/modified — something opened your decoy!"),
+            detail: format!("{path} was modified — a program wrote to, renamed or deleted your decoy."),
             at: chrono::Utc::now().timestamp(),
         });
         warn!("CANARY TRIGGERED: {path}");

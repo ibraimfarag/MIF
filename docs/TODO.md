@@ -259,6 +259,15 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The canary copy now says what the detector sees (F-4 closed)**
+  - The alert read `was accessed/modified — something opened your decoy` while
+    `check_touches` compares mtime and size only. A read-only open changes neither,
+    so the wording claimed a detector that does not exist.
+  - The event detail, the card title (ar + en) and the incident title now say the
+    decoy file was **modified** — a write, rename or delete — and `canary.rs`'s
+    module doc states the read gap next to the code it belongs to.
+  - The detection gap itself is unchanged and stays in the register: catching a
+    pure read needs a minifilter or handle auditing, which is kernel work.
 - **`docs/PROTECTION-MATRIX.md` — what each layer sees, detects, blocks and misses**
   - Written from the code, not from intent, and it is deliberately unflattering:
     where a claim could not be backed by code or a test it is either labelled an
@@ -1313,7 +1322,6 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
 | MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
-| LOW | The canary alert copy says "accessed/modified" while the detector compares mtime/size only — a read-only open is invisible and the wording claims otherwise | `guard/canary.rs`, THREAT-MODEL F-4 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | `AGENTS.md` rule 8 says "nothing leaves the machine except explicit VT/NVD/LM lookups", but the engine also fetches the intel sources and probes `dns.google`/`1.1.1.1` for connectivity (cached 30 s) — the rule should carry the honest list | `AGENTS.md`, `sync/mod.rs`, THREAT-MODEL B6/F-7 |
 | LOW | The two pipe test hooks disagree: `MICS_PIPE_NAME` takes a full `\\.\pipe\...` path while `MICS_HELPER_PIPE` takes a bare name (a full path silently serves `\\.\pipe\\\.\pipe\...`) | `platform/windows/pipe.rs`, `privileged/ops.rs` |

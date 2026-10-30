@@ -140,10 +140,10 @@ Desktop, configurable).
 **Blocks.** Nothing.
 
 **Misses.** A **read** leaves mtime and size untouched, and NTFS last-access
-updates are off by default, so a stealer that only reads a decoy is invisible (F-4).
-The alert text says "accessed/modified", which overstates the detector; that copy is
-on the register. Decoys are also files in obvious places: they catch mass
-encryption and careless hands, not a targeted actor.
+updates are off by default, so a stealer that only reads a decoy is invisible. The
+copy no longer hides that: the event, the card title and the incident all say
+*modified*, and nothing claims "accessed". Decoys are also files in obvious places:
+they catch mass encryption and careless hands, not a targeted actor.
 
 ### 4.3 Correlator and noise learner
 

@@ -64,7 +64,7 @@ pub fn record_event(ev: &GuardEvent) -> Result<()> {
     }
 
     let title = if ev.r#type == "canary_triggered" {
-        format!("Canary touched: {}", ev.detail)
+        format!("Canary file modified: {}", ev.detail)
     } else {
         format!("{} → {} ({})", ev.parent, ev.process, ev.rule_name)
     };

@@ -208,7 +208,7 @@ ask the engine to do through the pipe.
 | AP-4 | "poison an update" | SHA-256 from the manifest over TLS — but no signature check by the updater and `http://` manifests are allowed | F-3 |
 | AP-5 | "steal quarantined samples" | AES-256-GCM + machine-scope DPAPI: an off-box copy is useless, local code can decrypt | `scanner/quarantine.rs` (F-6) |
 | AP-6 | "hide from the scanner" | Acknowledged: user-mode, hash-IOC + YARA only — no unpacking, emulation, memory scanning. A custom packer wins round one; the guard's behavioural rules are round two | `scanner/`, F-9 |
-| AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the alert copy says "accessed/modified", which overstates it | `guard/canary.rs` (F-4) |
+| AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the copy says "modified" and never claims otherwise | `guard/canary.rs` (F-4, copy fixed) |
 | AP-8 | "starve the engine with a hung tool" | Every external tool call has a deadline through one choke point, enforced by a source-scanning test | `platform/windows/process.rs`, `every_spawn_site_enforces_its_deadline` |
 | AP-9 | "forge a card to trigger a Quarantine click" | The card is display only; the action id is validated when the engine handles it | `notify/`, D-013 |
 | AP-10 | "read the engine's traffic as another local user" | Was possible through the default `WD`/`AN` read ACEs; **closed** by the explicit pipe ACL below | B2, F-1 (fixed) |
@@ -221,7 +221,7 @@ ask the engine to do through the pipe.
 |---|---|---|---|
 | F-2 | Helper pipe grants `INTERACTIVE` full access: a standard user can make SYSTEM open a firewall rule, rewrite the managed hosts section, or run a hardening action, with no prompt | D-007 exists to remove per-action prompts | Verify the caller before executing: `GetNamedPipeClientProcessId` → image path + token SID must be the running engine's, or restrict the ACL to `BA`+`SY` and accept a prompt |
 | F-3 | Update provenance = SHA-256 in a manifest fetched over TLS; the updater never verifies the Authenticode signature, and `http://` manifests/feeds are accepted | Signing the *release* was P2; verifying it in the updater is not written yet | `WinVerifyTrust` on the extracted binary, and refuse `http://` for anything but loopback |
-| F-4 | Canary decoys detect writes (mtime/size), not reads; the copy claims "accessed" | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9) | Say "modified" in the copy; keep the decoy names that make a read plausible |
+| F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |
 | F-7 | `AGENTS.md` rule 8 lists only VT/NVD/LM while the engine also calls the intel sources and a connectivity probe | The intel sources are a visible, user-configured feature | Fix the rule's wording to match section B6 — the honest list |
@@ -237,7 +237,10 @@ and `::the_pipe_acl_is_protected_and_names_a_real_user_sid`), and
 `scripts/verify-pipe-acl.ps1` re-measures both pipes end to end — protected DACL,
 three ACEs, no `WD`/`AN`/`IU`, and a same-user JSON-RPC `status` call still
 answered over the hardened pipe. The helper pipe's `IU` scope (F-2) is untouched
-and still open.
+and still open. **F-4 (the copy)**: the canary alert now says the decoy was
+*modified* — in the event detail, the card title (ar/en) and the incident title —
+because mtime/size is all the detector compares. The detection gap itself is not
+closed: a pure read is still invisible, and that part stays in the table above.
 
 ## 7. What is proven, and how
 
