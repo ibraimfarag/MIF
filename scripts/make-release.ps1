@@ -48,6 +48,7 @@ if (-not $Version) {
 
 # The engine is built by cargo, not by Flutter, and it may live outside the repo
 # (CARGO_TARGET_DIR). Find it explicitly so the package never ships a stale one.
+$EnginePathWasGiven = [bool]$EnginePath
 if (-not $EnginePath) {
   $candidates = @(
     (Join-Path $root "engine\target\release\mics-engine.exe"),
@@ -63,12 +64,43 @@ if (-not $EnginePath -or -not (Test-Path $EnginePath)) {
 $EnginePath = (Resolve-Path $EnginePath).Path
 
 if (-not $SkipBuild) {
+  # Native builds write progress to stderr, and with ErrorActionPreference=Stop
+  # PowerShell 5.1 turns a single stderr line into a terminating error. Let them
+  # write freely and judge them by their exit code instead.
+  $stopPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+
   Write-Host "building the app ($Configuration)..."
   Push-Location $root
   try {
     & flutter build windows --release
     if ($LASTEXITCODE -ne 0) { throw "flutter build windows failed ($LASTEXITCODE)" }
   } finally { Pop-Location }
+
+  # The engine is cargo's, not Flutter's - build it here so "make a release" is one
+  # command. It must carry its Windows version resource: that is what Task Manager
+  # shows instead of the file name, so a package without it ships an engine that
+  # appears as "mics-engine.exe".
+  Write-Host "building the engine..."
+  Push-Location (Join-Path $root "engine")
+  try {
+    $env:MICS_REQUIRE_VERSION_RESOURCE = "1"
+    $env:YRX_REGENERATE_MODULES_RS = "false"
+    & cargo build --release
+    $cargoExit = $LASTEXITCODE
+  } finally {
+    Pop-Location
+    $ErrorActionPreference = $stopPreference
+  }
+  if ($cargoExit -ne 0) { throw "cargo build --release failed ($cargoExit)" }
+
+  # Prefer the binary we just built over whatever the earlier lookup found.
+  if (-not $EnginePathWasGiven) {
+    $fresh = @()
+    if ($env:CARGO_TARGET_DIR) { $fresh += (Join-Path $env:CARGO_TARGET_DIR "release\mics-engine.exe") }
+    $fresh += (Join-Path $root "engine\target\release\mics-engine.exe")
+    foreach ($c in $fresh) { if (Test-Path $c) { $EnginePath = (Resolve-Path $c).Path; break } }
+  }
 }
 
 if (-not (Test-Path $buildDir)) { throw "no build output at $buildDir - build first or drop -SkipBuild" }
@@ -121,6 +153,11 @@ $ruleCount = (Get-ChildItem (Join-Path $staging "rules") -Recurse -File).Count
 # makes Windows show "Unknown publisher", and SmartScreen cannot vouch for a
 # brand-new binary. Signing is the real fix (see docs/TODO.md, P4).
 $signature = (Get-AuthenticodeSignature $app).Status
+# What Task Manager calls the engine. Empty means the version resource did not get
+# embedded, and the engine will appear under its file name instead.
+$engineName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
+  (Join-Path $staging "mics-engine.exe")).FileDescription
+if (-not $engineName) { $engineName = "(none - Task Manager will show mics-engine.exe)" }
 $built = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
 $versionFile = Join-Path $staging "VERSION"
@@ -158,7 +195,9 @@ $users = @(Get-Process -ErrorAction SilentlyContinue |
 if ($users.Count -eq 0) {
   if (Test-Path $portable) { Remove-Item $portable -Recurse -Force }
   Rename-Item $staging $portable
-  Write-Output "  folder : $portable  (refreshed, $((Get-ChildItem $portable -Recurse -File | Measure-Object Length -Sum).Sum / 1MB) MB, $((Get-ChildItem $portable -Recurse -File).Count) file(s))"
+  $sizeMb = (Get-ChildItem $portable -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+  $fileCount = (Get-ChildItem $portable -Recurse -File).Count
+  Write-Output ("  folder : {0}  (refreshed, {1:N1} MB, {2} file(s))" -f $portable, $sizeMb, $fileCount)
 } else {
   Write-Output ("  folder : left as it is - {0} is running from it" -f ($users -join ", "))
   Write-Output "           close MI CS and run this again to refresh the unpacked folder"
@@ -170,6 +209,7 @@ Write-Output ("  zip    : {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1
 Write-Output ("  sums   : {0}" -f $sums)
 Write-Output ("  engine : {0}" -f $engineHash)
 Write-Output "  rules  : $ruleCount file(s)"
+Write-Output "  engine name: $engineName"
 if ($signature -eq "Valid") {
   Write-Output "  signed : $signature"
 } else {

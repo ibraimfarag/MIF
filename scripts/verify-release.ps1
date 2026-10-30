@@ -117,6 +117,15 @@ try {
   }
   $engine = Join-Path $work "mics-engine.exe"
 
+  # The name a person reads in Task Manager's Processes tab comes from the
+  # executable's version resource, not from its file name.
+  $engineName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($engine).FileDescription
+  if ($engineName -eq "MiShild Background") {
+    Pass "the engine presents itself as '$engineName' (Task Manager, Properties)"
+  } else {
+    Fail "engine FileDescription is '$engineName', expected 'MiShild Background'"
+  }
+
   # The published hashes for what is inside the zip: an extracted file can be
   # compared with SHA256SUMS without knowing which build the working folder holds.
   foreach ($entry in $contents) {

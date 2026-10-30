@@ -36,6 +36,12 @@ explains, and suggests the next action instead of dumping raw data.
 `\\.\pipe\mics_engine` to a single Rust engine (`mics-engine.exe`), which owns
 every OS call. The UI never touches system APIs.
 
+In Task Manager the two halves are listed as **MI CS Command Center** (the app)
+and **MiShild Background** (the engine) — those names come from each
+executable's version resource, so the engine is still the file `mics-engine.exe`
+(the name every script, the app's lookup and `MICS_ENGINE_PATH` use). Right-click
+→ *Properties* → *Details* shows the same thing.
+
 ## What MI CS does **not** do
 
 Honesty is a feature. Today, MI CS does **not**:
@@ -323,6 +329,12 @@ a copy of the task icon.
 **MI CS** (مراد إبراهيم — الأمن السيبراني) تطبيق مجاني مفتوح المصدر للويندوز:
 جدار دفاع متعدد الطبقات + فاحص ملفات + مراقبة عمليات لحظية + فاحص ثغرات + مركز
 تقوية — بواجهة **ترتّب** النتائج وتشرحها وتقول لك تعمل إيه بعد كده.
+
+**في التاسك مانجر** الجزئين بيظهروا باسم **MI CS Command Center** (الواجهة) و
+**MiShild Background** (المحرك) — الأسماء دي جاية من version resource بتاع كل exe،
+فالمحرك لسه ملفه `mics-engine.exe` (الاسم اللي كل السكريبتات والبحث بتاع الواجهة
+و`MICS_ENGINE_PATH` بيعتمدوا عليه). كليك يمين → *Properties* → *Details* بيوضّح
+نفس الاسم.
 
 **اللي بيعمله فعلاً:** فحص نظام حقيقي (ديفندر، جدار الحماية، RDP، SMBv1، UAC،
 المدراء، بدء التشغيل، المهام المجدولة، ملف hosts) بدرجة من 100 وإصلاح بضغطة واحدة؛

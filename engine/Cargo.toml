@@ -4,6 +4,11 @@ description = "MI CS Engine — Mourad Ibrahim Cyber Security"
 version = "0.1.0"
 edition = "2024"
 
+# Embeds a Windows version resource so Task Manager shows the engine by name
+# ("MiShild Background") instead of by file name. See build.rs.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

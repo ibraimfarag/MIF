@@ -141,6 +141,36 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **naming — the engine now has a name in Task Manager**
+  - Request: in Task Manager the engine appeared as `mics-engine`; it should read
+    **MiShild Background**.
+  - Task Manager's Processes tab does not show a file name — it shows the
+    `FileDescription` from the executable's version resource, and falls back to the
+    file name when there is no resource. The engine had **no version resource at
+    all** (the app did, from Flutter's runner `.rc`, which is why the app read
+    "MI CS Command Center" and the engine read `mics-engine.exe`).
+  - `engine/build.rs` + `winresource` (a Windows-only build dependency) embed
+    `FileDescription = "MiShild Background"`, `ProductName = MI CS`,
+    `CompanyName = Mourad Ibrahim Cyber Security`, `FileVersion`/`ProductVersion`
+    from `CARGO_PKG_VERSION` (so the resource cannot drift from `status`), and
+    `OriginalFilename = mics-engine.exe` — honest about the real file name.
+  - The **file name stays `mics-engine.exe`**: the app's lookup, the helper service
+    registration, every probe and `MICS_ENGINE_PATH` depend on it, and a path with
+    a space would leak into all of them.
+  - `MICS_REQUIRE_VERSION_RESOURCE=1` (set by `make-release.ps1`) turns "no `rc.exe`
+    on this toolchain" into a build error instead of a silent warning, so a package
+    can never ship an engine under the wrong name. `make-release.ps1` now builds
+    the engine itself (one command per release) and prints
+    `engine name: MiShild Background`; `verify-release.ps1` asserts the extracted
+    engine reports exactly that.
+  - Verified: `[PASS] the engine presents itself as 'MiShild Background' (Task
+    Manager, Properties)` plus the full release check `RESULT: PASS`; the built PE
+    reports `FileDescription = MiShild Background`, `FileVersion = 0.1.0`.
+    (`Win32_Process.Description` is *not* the field Task Manager reads — it returns
+    `explorer.exe` for Explorer — so the assertion uses the version resource.)
+  - Note for the user: `MiShild` is spelled exactly as requested; if the intended
+    brand is `MiShield`, it is a one-line change in `engine/build.rs`.
+
 - **first-run friction — the SmartScreen prompt, explained and documented**
   - Report: *"SmartScreen can't be reached right now / Publisher: Unknown
     Publisher / App: mics_app.exe"*.
