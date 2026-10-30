@@ -97,13 +97,78 @@ pub trait PlatformCollectors: Send + Sync {
     async fn get_software_inventory(&self) -> Result<Vec<SoftwareEntry>>;
 }
 
-/// Runs every audit section and reduces the findings into a 0–100 security
-/// score plus the flat findings list. Shared by the CLI, the dispatcher and
-/// (later) the dashboard — one definition so the score is always consistent.
-pub async fn run_full_audit(collectors: &dyn PlatformCollectors) -> Result<serde_json::Value> {
-    let mut findings: Vec<AuditFinding> = Vec::new();
+/// The check sections `audit.run` can be asked for by name. Order is the order
+/// they run in, and the order a full audit reports them in.
+pub const AUDIT_SECTIONS: [&str; 8] = [
+    "defender",
+    "firewall",
+    "rdp",
+    "smbv1",
+    "uac",
+    "admins",
+    "hosts",
+    "remote_tools",
+];
 
-    let sections = [
+/// Inventory lists rather than checks: part of a full audit, and requestable by
+/// name on their own (`uac` fixed → only `defender` needs re-reading).
+pub const AUDIT_INVENTORY: [&str; 2] = ["startup", "scheduled_tasks"];
+
+/// Parses `params.sections` for `audit.run`.
+///
+/// `None` means "run everything" (the default the UI uses). An empty array is
+/// also "everything": a request that names nothing is not a request for a score
+/// of 100 over zero checks. Unknown names are an error, never silently ignored —
+/// a typo would otherwise return a perfect score.
+pub fn requested_sections(params: Option<&serde_json::Value>) -> Result<Option<Vec<String>>> {
+    let Some(value) = params.and_then(|p| p.get("sections")) else {
+        return Ok(None);
+    };
+    let Some(items) = value.as_array() else {
+        anyhow::bail!("\"sections\" must be an array of section names");
+    };
+    if items.is_empty() {
+        return Ok(None);
+    }
+    let mut wanted = Vec::with_capacity(items.len());
+    for item in items {
+        let Some(name) = item.as_str() else {
+            anyhow::bail!("\"sections\" must contain section names, not {item}");
+        };
+        if !AUDIT_SECTIONS.contains(&name) && !AUDIT_INVENTORY.contains(&name) {
+            anyhow::bail!(
+                "unknown section \"{name}\" — known sections: {}",
+                AUDIT_SECTIONS
+                    .iter()
+                    .chain(AUDIT_INVENTORY.iter())
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        if !wanted.iter().any(|w| w == name) {
+            wanted.push(name.to_string());
+        }
+    }
+    Ok(Some(wanted))
+}
+
+/// Runs the requested audit sections and reduces the findings into a 0–100
+/// security score plus the flat findings list.
+///
+/// `sections` is what [`requested_sections`] returned: `None` is the full audit
+/// the dashboard shows, `Some` is a subset (the report then carries
+/// `"partial": true`, because a score over part of the checks is not comparable
+/// with the full one). One definition so the score is always consistent.
+pub async fn run_audit(
+    collectors: &dyn PlatformCollectors,
+    sections: Option<&[String]>,
+) -> Result<serde_json::Value> {
+    let wants = |name: &str| match sections {
+        None => true,
+        Some(list) => list.iter().any(|s| s == name),
+    };
+    let all = [
         ("defender", collectors.audit_defender()),
         ("firewall", collectors.audit_firewall()),
         ("rdp", collectors.audit_rdp()),
@@ -113,15 +178,36 @@ pub async fn run_full_audit(collectors: &dyn PlatformCollectors) -> Result<serde
         ("hosts", collectors.audit_hosts_file()),
         ("remote_tools", collectors.audit_remote_tools()),
     ];
-    for (name, section) in sections {
+    let mut findings: Vec<AuditFinding> = Vec::new();
+    let mut ran: Vec<&str> = Vec::new();
+    for (name, section) in all {
+        if !wants(name) {
+            continue;
+        }
+        ran.push(name);
         match section.await {
             Ok(v) => findings.extend(v),
-            Err(e) => tracing::warn!("{name} audit failed: {e:#}"),
+            // A section that fails is reported by omission from `ran`, not by a
+            // silent zero penalty that would flatter the score.
+            Err(e) => {
+                tracing::warn!("{name} audit failed: {e:#}");
+                ran.retain(|r| *r != name);
+            }
         }
     }
 
-    let startup = collectors.audit_startup().await.unwrap_or_default();
-    let tasks = collectors.audit_scheduled_tasks().await.unwrap_or_default();
+    let startup = if wants("startup") {
+        ran.push("startup");
+        collectors.audit_startup().await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let tasks = if wants("scheduled_tasks") {
+        ran.push("scheduled_tasks");
+        collectors.audit_scheduled_tasks().await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     let mut penalty = 0u32;
     for f in &findings {
@@ -136,5 +222,12 @@ pub async fn run_full_audit(collectors: &dyn PlatformCollectors) -> Result<serde
         "findings": findings,
         "startup_entries": startup,
         "scheduled_tasks": tasks,
+        "sections": ran,
+        "partial": sections.is_some(),
     }))
+}
+
+/// Runs every audit section (the CLI and the default `audit.run` behaviour).
+pub async fn run_full_audit(collectors: &dyn PlatformCollectors) -> Result<serde_json::Value> {
+    run_audit(collectors, None).await
 }

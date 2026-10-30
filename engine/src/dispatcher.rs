@@ -45,16 +45,29 @@ impl Dispatcher {
                 Some(json!("pong"))
             }
             "status" => {
+                // The real build, not a literal: the version comes from the crate
+                // and the platform names the architecture, which is the first
+                // thing to check when someone reports an ARM64 or x64 problem.
                 Some(json!({
                     "state": "running",
-                    "version": "0.1.0",
-                    "platform": "windows"
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+                    "pid": std::process::id(),
                 }))
             }
             "audit.run" => {
-                info!("Running full system audit...");
+                // `params.sections` runs a subset (re-check one thing after a fix);
+                // absent or empty means the full audit the dashboard shows.
+                let requested = match crate::platform::traits::requested_sections(req.params.as_ref()) {
+                    Ok(sections) => sections,
+                    Err(e) => return error_response(req, &format!("audit.run: {e:#}")),
+                };
+                match &requested {
+                    Some(list) => info!("Running audit for: {}", list.join(", ")),
+                    None => info!("Running full system audit..."),
+                }
                 let collectors = crate::platform::windows::collectors::WindowsCollectors;
-                match crate::platform::traits::run_full_audit(&collectors).await {
+                match crate::platform::traits::run_audit(&collectors, requested.as_deref()).await {
                     Ok(report) => Some(report),
                     Err(e) => {
                         error!("audit.run failed: {e:#}");

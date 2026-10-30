@@ -674,4 +674,163 @@ mod tests {
         );
         assert!(crate::guard::note_rules_source("the built-in starter pack", 3));
     }
+
+    #[test]
+    fn audit_sections_are_parsed_or_refused_never_ignored() {
+        use serde_json::json;
+        let sections = crate::platform::traits::requested_sections;
+
+        // No params, no `sections`, or an empty list: the full audit.
+        assert!(sections(None).unwrap().is_none());
+        assert!(sections(Some(&json!({}))).unwrap().is_none());
+        assert!(sections(Some(&json!({"sections": []}))).unwrap().is_none());
+
+        let picked = sections(Some(&json!({"sections": ["firewall", "hosts"]})))
+            .unwrap()
+            .expect("a named subset");
+        assert_eq!(picked, vec!["firewall".to_string(), "hosts".to_string()]);
+
+        // Duplicates collapse instead of running a section twice.
+        let twice = sections(Some(&json!({"sections": ["uac", "uac"]}))).unwrap().unwrap();
+        assert_eq!(twice, vec!["uac".to_string()]);
+
+        // A typo must be an error: silently ignoring it would return a perfect
+        // score over checks that never ran.
+        let unknown = sections(Some(&json!({"sections": ["firewal"]}))).unwrap_err();
+        let message = format!("{unknown:#}");
+        assert!(message.contains("unknown section"), "{message}");
+        assert!(message.contains("firewall"), "the error lists what is known: {message}");
+
+        assert!(sections(Some(&json!({"sections": "firewall"}))).is_err());
+        assert!(sections(Some(&json!({"sections": [7]}))).is_err());
+    }
+
+    /// Counts which collectors ran, so "honours `params.sections`" is a fact and
+    /// not a claim about the dispatcher's shape.
+    struct CountingCollectors {
+        calls: std::sync::Mutex<Vec<&'static str>>,
+    }
+
+    impl CountingCollectors {
+        fn new() -> Self {
+            Self { calls: std::sync::Mutex::new(Vec::new()) }
+        }
+
+        fn note(&self, name: &'static str) {
+            self.calls.lock().unwrap().push(name);
+        }
+
+        fn called(&self) -> Vec<&'static str> {
+            self.calls.lock().unwrap().clone()
+        }
+
+        fn finding(section: &str) -> Vec<crate::platform::traits::AuditFinding> {
+            vec![crate::platform::traits::AuditFinding {
+                section: section.to_string(),
+                item: format!("{section} check"),
+                status: crate::platform::traits::FindingStatus::Vulnerable,
+                severity: crate::platform::traits::Severity::Critical,
+                description: "insecure".into(),
+                fix_available: false,
+            }]
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::platform::traits::PlatformCollectors for CountingCollectors {
+        async fn audit_defender(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("defender");
+            Ok(Self::finding("defender"))
+        }
+        async fn audit_firewall(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("firewall");
+            Ok(Self::finding("firewall"))
+        }
+        async fn audit_rdp(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("rdp");
+            Ok(Vec::new())
+        }
+        async fn audit_smbv1(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("smbv1");
+            Ok(Vec::new())
+        }
+        async fn audit_uac(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("uac");
+            Ok(Vec::new())
+        }
+        async fn audit_admins(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("admins");
+            Ok(Vec::new())
+        }
+        async fn audit_hosts_file(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("hosts");
+            Ok(Vec::new())
+        }
+        async fn audit_remote_tools(&self) -> anyhow::Result<Vec<crate::platform::traits::AuditFinding>> {
+            self.note("remote_tools");
+            Ok(Vec::new())
+        }
+        async fn audit_startup(&self) -> anyhow::Result<Vec<crate::platform::traits::StartupEntry>> {
+            self.note("startup");
+            Ok(Vec::new())
+        }
+        async fn audit_scheduled_tasks(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::ScheduledTaskEntry>> {
+            self.note("scheduled_tasks");
+            Ok(Vec::new())
+        }
+        async fn get_network_connections(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::NetworkConnection>> {
+            self.note("net.connections");
+            Ok(Vec::new())
+        }
+        async fn get_software_inventory(
+            &self,
+        ) -> anyhow::Result<Vec<crate::platform::traits::SoftwareEntry>> {
+            self.note("inventory");
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_partial_audit_runs_only_what_was_asked_for() {
+        let collectors = CountingCollectors::new();
+        let report = crate::platform::traits::run_audit(&collectors, Some(&["firewall".to_string()]))
+            .await
+            .expect("a named section runs");
+
+        assert_eq!(collectors.called(), vec!["firewall"], "only the asked-for section ran");
+        assert_eq!(report["sections"], serde_json::json!(["firewall"]));
+        assert_eq!(report["partial"], serde_json::json!(true));
+        assert_eq!(report["startup_entries"], serde_json::json!([]));
+        // One CRITICAL finding (penalty 25) and nothing else looked at.
+        assert_eq!(report["score"], serde_json::json!(75));
+        assert_eq!(report["findings"].as_array().map(|f| f.len()), Some(1));
+    }
+
+    #[tokio::test]
+    async fn a_full_audit_runs_every_section_and_is_not_partial() {
+        let collectors = CountingCollectors::new();
+        let report = crate::platform::traits::run_audit(&collectors, None)
+            .await
+            .expect("the full audit runs");
+
+        let called = collectors.called();
+        for name in [
+            "defender", "firewall", "rdp", "smbv1", "uac", "admins", "hosts", "remote_tools",
+            "startup", "scheduled_tasks",
+        ] {
+            assert!(called.contains(&name), "{name} did not run: {called:?}");
+        }
+        assert_eq!(report["partial"], serde_json::json!(false));
+        assert_eq!(
+            report["sections"].as_array().map(|s| s.len()),
+            Some(10),
+            "8 checks + 2 inventory lists"
+        );
+        // defender + firewall each contribute a CRITICAL (25 + 25).
+        assert_eq!(report["score"], serde_json::json!(50));
+    }
 }

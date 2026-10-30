@@ -141,6 +141,31 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **protocol fidelity — the RPC layer stopped guessing**
+  - `status` used to answer with literals (`version: "0.1.0"`, `platform:
+    "windows"`). It now reports the crate version, the real `os-arch`
+    (`windows-x86_64` / `windows-aarch64`) and the engine's pid, so an ARM64 or
+    x64 build problem is visible from the first response. Verified live:
+    `{"state":"running","version":"0.1.0","platform":"windows-x86_64","pid":66988}`.
+  - `audit.run` ignored `params.sections` and always ran all ten collectors. It
+    now runs exactly the sections asked for, reports `sections: [...]` and
+    `partial: true/false`, and refuses an unknown name with `-32602` plus the list
+    of known names instead of quietly scoring checks that never ran. Absent or
+    empty `sections` still means the full audit the dashboard shows, so no UI
+    change was needed.
+  - Live: `audit.run {sections:["firewall"]}` answered in **7 ms** (full audit:
+    1,747 ms), returned only the three firewall findings, `partial=true`,
+    `startup_entries=[]`. A typo (`"firewal"`) got
+    `-32602 unknown section "firewal" — known sections: defender, firewall, rdp,
+    smbv1, uac, admins, hosts, remote_tools, startup, scheduled_tasks`, and
+    `sections: "firewall"` (not an array) got its own `-32602`.
+  - Tests (3 new, 51 total): the parser (absent/empty/duplicate/unknown/non-array,
+    the error lists what is known) and a counting `PlatformCollectors` mock that
+    proves a partial audit calls **only** the requested collector, keeps the score
+    over what ran, and that a full audit runs all ten and is not partial.
+  - This is what a "fix" button needs next: after applying a fix the UI can
+    re-check that one section in milliseconds instead of re-running the audit.
+
 - **reliability — no external tool can wedge a request any more**
   - `engine/src/platform/windows/process.rs`: one `run_with_deadline(program,
     args, what, timeout)` used by `firewall::run_netsh` (20 s) and
@@ -704,9 +729,10 @@ These can be done in any order and each is one small commit. They are listed
 because P1.5 and P4 both need something only you can supply (a UAC prompt and a
 signing certificate respectively), so this is the work that is always available.
 
-- [ ] `status` returns the real crate version and platform instead of hardcoded
-      `0.1.0` / `windows` (MED).
-- [ ] `audit.run` honours `params.sections` instead of running everything (MED).
+- [x] `status` returns the real crate version and platform instead of hardcoded
+      `0.1.0` / `windows` (now `windows-x86_64` + pid).
+- [x] `audit.run` honours `params.sections` instead of running everything
+      (7 ms for one section instead of 1.7 s; unknown names are refused).
 - [x] Add timeouts to the `netsh` / elevated-PowerShell calls in `firewall/mod.rs`
       and `ids/mod.rs`, the way hardening was fixed — an unanswered prompt or a
       stalled service must not wedge a request. Done as a shared runner
@@ -781,11 +807,10 @@ signing certificate respectively), so this is the work that is always available.
 |---|---|---|
 | HIGH | No installer: the portable ZIP + `SHA256SUMS` are produced and verified, but there is no NSIS installer, no code signing and no published download | `dist/`, P4 |
 | HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
-| MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
+| LOW | `audit.run` can now re-check one section in milliseconds, but the UI still re-runs the whole audit after a fix (the engine side is ready, the caller is not) | `dispatcher.rs`, `providers.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | LOW | Alerts are attributed by AUMID `MICS` without registering an AppUserModelID (no Start-Menu shortcut property, no `HKCU\Software\Classes\AppUserModelId\MICS`), so Windows' own notification settings/Action Center label the source as `MICS` rather than "MI CS". Registration is not required for the card to appear (proven with cards in the history), and adding it changes a shortcut outside the app folder — fold it into the P4 installer | `notify/toast.rs`, `scripts/create-shortcuts.ps1` |
-| MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
