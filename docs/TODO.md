@@ -141,6 +141,31 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **first-run friction — the SmartScreen prompt, explained and documented**
+  - Report: *"SmartScreen can't be reached right now / Publisher: Unknown
+    Publisher / App: mics_app.exe"*.
+  - Investigated: both installed copies are `NotSigned` (expected), **no
+    mark-of-the-web** on either, SmartScreen policy is untouched
+    (`SmartScreenEnabled` unset in HKCU and HKLM, no `EnableSmartScreen` policy),
+    **Smart App Control is off** (`VerifiedAndReputablePolicyState = 0`), and
+    `smartscreen.microsoft.com` / `checkappexec.microsoft.com` resolve and accept
+    TCP 443. So nothing on this machine is broken: an unsigned, brand-new binary
+    has no reputation to check, and the dialog's own wording ("can't be reached")
+    means the *lookup* failed — behind a proxy/VPN/flaky link that is what you get.
+  - Integrity checked instead, which is what actually matters before running an
+    unknown exe: `sha256(mics_app.exe)` in both copies equals the published
+    `SHA256SUMS` value `e5209573…`.
+  - Bypass proven, not assumed: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`
+    started the app with no prompt (Explorer's double-click is what invokes the
+    hook); the test instance was stopped afterwards so only the user's session
+    stayed running.
+  - `make-release.ps1` now prints `signed : NotSigned` and points at the
+    troubleshooting entry instead of letting the first launch be a surprise.
+    README (EN + AR) gained the symptom, the run-anyway / `Start-Process` path,
+    the hash check and the `Unblock-File`-the-zip-before-extracting recipe.
+  - The durable fix stays P4 (a trusted code-signing certificate); until then this
+    is expected behaviour for every download, not a defect in MI CS.
+
 - **packaging — a release build no longer eats the copy you are running**
   - Found the hard way: MI CS was running from `dist\MICS-portable` when
     `make-release.ps1` began by deleting that folder. The delete failed on a
@@ -792,6 +817,13 @@ signing certificate respectively), so this is the work that is always available.
 ### P4 — release engineering
 - [ ] Authenticode: OV/EV or Azure Trusted Signing; sign DLLs then EXEs;
       timestamp; `signtool verify` in CI; document SmartScreen reality.
+      *Reality measured 2026-10-30:* the app is `NotSigned`, Smart App Control is
+      off, SmartScreen policy is default, and the reputation endpoints are
+      reachable — yet Windows still shows "SmartScreen can't be reached right now"
+      / "Unknown publisher", because an unsigned first-seen binary has no
+      reputation to look up. Even a working lookup would only say "unknown".
+      Signing (and the reputation that follows it) is the only real fix; the
+      workaround is documented in README troubleshooting.
 - [ ] Build legs: x64 (primary) + ARM64 (app + `aarch64-pc-windows-msvc` engine);
       optional x86 **CLI** build only (D-003).
 - [ ] NSIS installer (bundled engine + rules + offline intel) next to the portable

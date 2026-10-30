@@ -117,6 +117,10 @@ $app = Join-Path $staging "mics_app.exe"
 $engineHash = (Get-FileHash $engine -Algorithm SHA256).Hash
 $appHash = (Get-FileHash $app -Algorithm SHA256).Hash
 $ruleCount = (Get-ChildItem (Join-Path $staging "rules") -Recurse -File).Count
+# Say it out loud rather than let the first launch surprise anyone: an unsigned exe
+# makes Windows show "Unknown publisher", and SmartScreen cannot vouch for a
+# brand-new binary. Signing is the real fix (see docs/TODO.md, P4).
+$signature = (Get-AuthenticodeSignature $app).Status
 $built = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
 $versionFile = Join-Path $staging "VERSION"
@@ -166,5 +170,11 @@ Write-Output ("  zip    : {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1
 Write-Output ("  sums   : {0}" -f $sums)
 Write-Output ("  engine : {0}" -f $engineHash)
 Write-Output "  rules  : $ruleCount file(s)"
+if ($signature -eq "Valid") {
+  Write-Output "  signed : $signature"
+} else {
+  Write-Output "  signed : $signature - Windows will show 'Unknown publisher' and SmartScreen"
+  Write-Output "           may ask before the first run; see the SmartScreen row in the README troubleshooting table"
+}
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "RESULT: PASS"

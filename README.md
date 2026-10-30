@@ -82,8 +82,11 @@ still to come):
    unpacked folder is a convenience copy: if MI CS is running from it,
    `make-release.ps1` leaves it alone rather than deleting files in use — the zip
    is the release.
-2. Run `mics_app.exe`. Windows may warn about an unknown publisher — see
-   [What MI CS does not do](#what-mi-cs-does-not-do).
+2. Run `mics_app.exe`. Windows may warn about an unknown publisher, or SmartScreen
+   may say it **can't reach** its reputation service — the build is unsigned, so
+   there is nothing for it to verify. The
+   [Troubleshooting](#troubleshooting) table has the run-anyway, hash-check and
+   `Unblock-File` steps; signing is planned (see [What MI CS does not do](#what-mi-cs-does-not-do)).
 3. The app starts the engine automatically, runs a first audit (~10 s) and shows
    your score with the single most valuable fix to make.
 4. The first privileged fix asks once to install the helper
@@ -286,6 +289,7 @@ a copy of the task icon.
 | Symptom | Meaning / what to do |
 |---|---|
 | "Unknown publisher" warning | Expected for unsigned builds; a trusted code-signing certificate is planned. |
+| SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder: move MI CS to a normal folder, or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine says so itself in `notify.test`'s error and in the log. |
 | Engine shows *Engine not found* | `mics-engine.exe` must sit next to `mics_app.exe` (or set `MICS_ENGINE_PATH`). |
@@ -376,6 +380,16 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 فيه نسخة من MI CS شغالة منه، ساعتها بيسيبه زي ما هو وبيحدّث الـ zip بس، عشان
 مايمسحش ملفات مستخدمة (ده اللي حصل مرة وخلى الفولدر أنقص). لوج المحرك بيقول حمّل
 قواعد منين — لو قال «built-in starter pack» يبقى مجلد `rules` ناقص من النسخة.
+
+**لو ظهرت رسالة SmartScreen** («SmartScreen can't be reached right now» أو «Windows
+protected your PC») فده مش تحذير فيروس: ويندوز بيقول إنه مش قادر يتأكد من الناشر،
+ولو الرسالة بتقول *can't be reached* يبقى محاولة التحقق نفسها فشلت (بروكسي، VPN،
+أو نت متقطع). اختار **More info → Run anyway**، أو شغّل التطبيق من غير هوك
+الـ Explorer: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. وقبل ما تشغّل
+أي حاجة نزّلتها، اتأكد منها:
+`Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` وقارنه بالـ
+`SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه،
+والملفات المستخرجة مش هتاخد mark-of-the-web. الحل الدائم هو شهادة توقيع (P4).
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي
