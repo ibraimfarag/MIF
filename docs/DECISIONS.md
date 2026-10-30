@@ -558,18 +558,29 @@ untrusted root aborts the apply and nothing is replaced.
    different machine may not have.
 2. **The payload is checked where it is extracted**, before `copy_over`, so a
    refusal costs nothing and leaves the running install untouched.
-3. **The signer is not pinned yet.** Any identity Windows trusts passes. Pinning
-   the subject to `CN=MI CS Code Signing` is the stronger form, and it is on the
-   register (F-3): it waits because a locally created certificate has to be trusted
-   on the target machine first and the release pipeline does not install it.
+3. **The signer is pinned by name.** After the chain check, the signer's display
+   name is read from the same provider state (`WTHelperProvDataFromStateData` →
+   `WTHelperGetProvSignerFromChain` → `CertGetNameStringW`) and compared with
+   `EXPECTED_SIGNER_CN = "MI CS Code Signing"`. A valid signature from any other
+   certificate is refused, and the error names the signer it found. That name is
+   part of the release contract: `scripts/make-release.ps1 -Sign` must keep using
+   it.
+4. **The pin is the subject name, not the thumbprint.** A thumbprint cannot be
+   committed here while the certificate is re-issued locally — the next release
+   would refuse its own payload. So the residual is a certificate with the same CN
+   issued by a CA that failed identity validation; that is what F-3 keeps, instead
+   of the previous "any trusted certificate passes".
 
 **Why.** It turns the update path from "trust the bytes because a document agreed
-with them" into "the bytes are signed by an identity Windows accepted". A tampered
-payload can no longer replace the running binaries even when the manifest and the
-archive hash agree — an attacker would also need a certificate the machine trusts.
+with them" into "the bytes are signed by the MI CS certificate, and Windows accepts
+the chain". A tampered payload — or one signed by a different identity — can no
+longer replace the running binaries even when the manifest and the archive hash
+agree.
 
 **Commits us to.** Keeping the two signed payload names (`mics-engine.exe`,
-`mics_app.exe`) as the ones the update stages; keeping the three tests (a junk file
-is refused, the signed release passes, a single flipped byte is refused) and the
-signed artifact that makes the positive case real; and recording F-3's remaining
-half — the identity pin — rather than treating this as "updates are verified".
+`mics_app.exe`) as the ones the update stages; keeping the four tests (a junk file
+is refused, the signed release passes, a single flipped byte is refused, and a
+different CN is refused while ours is accepted) and the signed artifact that makes
+the positive cases real; keeping the CN in `make-release.ps1` and in
+`EXPECTED_SIGNER_CN` in step; and recording the thumbprint gap rather than treating
+this as "updates are fully verified".

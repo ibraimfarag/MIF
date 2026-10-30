@@ -207,7 +207,7 @@ ask the engine to do through the pipe.
 | AP-1 | "write any file as SYSTEM through the helper" | Refused: marker + line-shape validation, ≤ 4 MiB, `MICS-` prefix owned by the helper | `Op::validate`, `scripts/verify-helper.ps1` |
 | AP-2 | "make the engine run arbitrary PowerShell" | No op takes a command; hardening ids come from a fixed table (`validate_action`) | `hardening/mod.rs`, helper tests |
 | AP-3 | "make the audit lie" | The engine computes the score, flags `partial`, and omits a section whose collector failed instead of reporting it secure; a refused Defender query is `Unknown`, never `Secure` | audit tests, D-014 |
-| AP-4 | "poison an update" | SHA-256 from the manifest over TLS, `http://` refused outside loopback, and the extracted payload must pass `WinVerifyTrust` before it replaces anything (D-016) — but the signer is not pinned, so any trusted certificate still works | F-3 (identity pin open) |
+| AP-4 | "poison an update" | SHA-256 from the manifest over TLS, `http://` refused outside loopback, and the extracted payload must carry an embedded signature from `CN=MI CS Code Signing` that Windows trusts before it replaces anything (D-016) | F-3 (CN pin, thumbprint gap open) |
 | AP-5 | "steal quarantined samples" | AES-256-GCM + machine-scope DPAPI: an off-box copy is useless, local code can decrypt | `scanner/quarantine.rs` (F-6) |
 | AP-6 | "hide from the scanner" | Acknowledged: user-mode, hash-IOC + YARA only — no unpacking, emulation, memory scanning. A custom packer wins round one; the guard's behavioural rules are round two | `scanner/`, F-9 |
 | AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the copy says "modified" and never claims otherwise | `guard/canary.rs` (F-4, copy fixed) |
@@ -222,7 +222,7 @@ ask the engine to do through the pipe.
 | # | Risk | Why it is accepted today | Mitigation if we want it |
 |---|---|---|---|
 | F-2 | Helper pipe grants `INTERACTIVE` full access: a standard user can make SYSTEM open a firewall rule, rewrite the managed hosts section, or run a hardening action, with no prompt | D-007 exists to remove per-action prompts | Verify the caller before executing: `GetNamedPipeClientProcessId` → image path + token SID must be the running engine's, or restrict the ACL to `BA`+`SY` and accept a prompt |
-| F-3 | Update provenance still lacks **signer identity**: the payload must now carry an embedded Authenticode signature that Windows trusts (D-016), and `http://` is refused outside loopback (F-3a), but any trusted certificate passes — the subject is not pinned to `CN=MI CS Code Signing` | Pinning needs the release certificate installed as trusted on every target machine, which the pipeline does not do yet | Compare the signer subject (or its thumbprint) against the published one inside `WinVerifyTrust`'s result path, or ship the expected certificate and match it |
+| F-3 | The update signer is pinned by **subject name** (`CN=MI CS Code Signing`), not by thumbprint — a certificate with that same CN issued by a CA that failed identity validation would still pass | A thumbprint pin would break on every locally re-issued certificate, making the next release refuse its own payload | Pin the thumbprint once a release certificate with a stable lifetime exists, or carry the expected thumbprint inside a separately signed manifest |
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |
@@ -247,8 +247,9 @@ configured intel sources and the 30 s connectivity probe included — instead of
 claiming "nothing leaves the machine except VT/NVD/LM". **F-3's cleartext and
 signature halves (F-3a/F-3b)**: `http://` is refused outside loopback, and the
 extracted payload must carry an embedded signature Windows trusts before a single
-byte is copied over the running install (D-016). What F-3 still carries is the
-*identity* pin — any trusted certificate passes.
+byte is copied over the running install (D-016), and the signer's name must be
+`MI CS Code Signing` — a valid signature from another certificate is refused. What
+F-3 still carries is the pin's *precision*: subject name, not thumbprint.
 
 ## 7. What is proven, and how
 

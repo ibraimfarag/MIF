@@ -259,6 +259,24 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The update signer must be MI CS, not just someone Windows trusts (F-3c)**
+  - F-3b asked "is this signed by anyone Windows trusts?" — a real improvement over
+    a bare hash, but a stolen or purchased certificate from any CA would also pass.
+    The check now reads the signer's name out of the same verify state
+    (`WTHelperProvDataFromStateData` → `WTHelperGetProvSignerFromChain` →
+    `CertGetNameStringW`) and compares it with `EXPECTED_SIGNER_CN =
+    "MI CS Code Signing"`.
+  - A valid signature from another certificate is refused with the name it actually
+    found, so a support log says why. The CN is now a release contract:
+    `make-release.ps1 -Sign` must keep issuing it.
+  - The four tests cover the pair: our release binary's CN is measured to be exactly
+    `MI CS Code Signing`, `require_signed_by` accepts it, refuses `"Some Other
+    Signer"`, and the refusal text carries `MI CS Code Signing`. `cargo test` 66/66
+    (1 new). Two extra `windows` features were needed for the WTHelper bindings.
+  - Deliberate limit, in D-016 and the register: the pin is the **subject name**,
+    not the thumbprint, because a thumbprint breaks on every locally re-issued
+    certificate. A same-CN certificate from a CA that failed identity validation is
+    the residual, now filed as LOW instead of "any trusted certificate passes".
 - **An update payload must be signed, not just hashed (F-3b closed, D-016)**
   - `update.apply` used to trust the manifest's SHA-256 alone, which only proves the
     archive matches what a document said — not who produced it. A mirror (or a URL
@@ -1390,7 +1408,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
-| MED | **Update signer identity is not pinned**: the payload must now carry an embedded Authenticode signature Windows trusts (D-016) and `http://` is refused outside loopback, but *any* trusted certificate passes — the subject is not checked against the MI CS one | `update.rs`, `platform/windows/signature.rs`, THREAT-MODEL F-3 |
+| LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
