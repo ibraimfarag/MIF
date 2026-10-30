@@ -7,16 +7,33 @@
 //! the UI the moment it fires.
 //!
 //! The accept loop never exits on transient errors: a failed `create` (for
-//! example while the previous instance is still tearing down) is retried with
-//! a short backoff. This used to be the reason the pipe closed right after the
+//! example while the previous instance is still tearing down) is retried with a
+//! short backoff. This used to be the reason the pipe closed right after the
 //! first client connected.
+//!
+//! Every instance carries an explicit ACL (see [`pipe_security_attributes`]):
+//! the user running the engine, `SYSTEM` and administrators — nobody else. The
+//! default ACL Windows applies to a pipe grants `Everyone` and `ANONYMOUS LOGON`
+//! read access, which let any local account on a shared machine attach to a free
+//! instance and read the broadcast stream (`docs/THREAT-MODEL.md`, F-1).
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde_json::json;
+use std::ffi::c_void;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{info, warn};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+};
+use windows::Win32::Security::{
+    GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
+    TokenUser,
+};
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use crate::rpc::JsonRpcRequest;
 
@@ -30,18 +47,124 @@ pub fn resolved_pipe_name() -> String {
 
 const BACKOFF: std::time::Duration = std::time::Duration::from_millis(300);
 
+/// The ACL every engine pipe instance carries: full control for `SYSTEM`,
+/// administrators and the user who runs the engine — and nothing for anyone
+/// else. `P` marks it protected, so no inherited ACE can widen it.
+///
+/// The engine and the UI run as the same user in every supported mode (the UI
+/// starts the engine, or the autostart entry does), so naming that user's SID is
+/// what keeps the transport working while `Everyone`/`ANONYMOUS LOGON` lose the
+/// read access Windows' default pipe ACL would hand them.
+fn pipe_sddl() -> Result<String> {
+    let user = current_user_sid().context("resolve the current user for the pipe ACL")?;
+    Ok(format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{user})"))
+}
+
+/// `SECURITY_ATTRIBUTES` carrying [`pipe_sddl`]. The descriptor is leaked on
+/// purpose: it has to outlive every instance the accept loop creates, and the
+/// process serves one pipe for its whole life.
+fn pipe_security_attributes() -> Result<SECURITY_ATTRIBUTES> {
+    let sddl: Vec<u16> = pipe_sddl()?
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PCWSTR(sddl.as_ptr()),
+            1,
+            &mut descriptor,
+            None,
+        )
+        .context("build the engine pipe ACL")?;
+    }
+    Ok(SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0,
+        bInheritHandle: false.into(),
+    })
+}
+
+/// The current process's user SID, as an SDDL string (`S-1-5-21-…`).
+fn current_user_sid() -> Result<String> {
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token)
+            .context("open the process token")?;
+        let sid = read_token_user(token);
+        let _ = CloseHandle(token);
+        sid
+    }
+}
+
+fn read_token_user(token: HANDLE) -> Result<String> {
+    unsafe {
+        // The first call only sizes the buffer: asking for zero bytes reports
+        // the size through `needed` and fails, which is why the result is
+        // deliberately ignored.
+        let mut needed = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut needed);
+        if needed == 0 {
+            bail!("the process token reports no user information");
+        }
+        let mut buffer = vec![0u8; needed as usize];
+        GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buffer.as_mut_ptr().cast()),
+            needed,
+            &mut needed,
+        )
+        .context("read the process token's user")?;
+
+        let user = &*buffer.as_ptr().cast::<TOKEN_USER>();
+        let mut text = PWSTR::null();
+        ConvertSidToStringSidW(user.User.Sid, &mut text).context("format the user SID")?;
+        let sid = text.to_string().context("read the formatted SID")?;
+        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+        Ok(sid)
+    }
+}
+
+/// One pipe instance, with `attributes` applied when they could be built.
+///
+/// A caller that cannot build an ACL is served anyway (with the default one) and
+/// told about it: refusing to start would turn a hardening problem into a
+/// "the engine does not run" problem.
+fn create_instance(
+    name: &str,
+    first: bool,
+    attributes: Option<&mut SECURITY_ATTRIBUTES>,
+) -> std::io::Result<NamedPipeServer> {
+    let mut opts = ServerOptions::new();
+    if first {
+        // Only the very first instance is exclusive; later iterations must
+        // be allowed to create a fresh instance while one is connected.
+        opts.first_pipe_instance(true);
+    }
+    match attributes {
+        Some(attrs) => unsafe {
+            opts.create_with_security_attributes_raw(name, attrs as *mut _ as *mut c_void)
+        },
+        None => opts.create(name),
+    }
+}
+
 pub async fn run_pipe_server() -> Result<()> {
     let name = resolved_pipe_name();
+    // Built once and reused for every instance; the descriptor inside is leaked
+    // deliberately, because it must outlive the loop.
+    let mut attributes = match pipe_security_attributes() {
+        Ok(attrs) => Some(attrs),
+        Err(e) => {
+            warn!("engine pipe ACL not applied ({e:#}) — instances carry the default DACL");
+            None
+        }
+    };
     info!("Starting Named Pipe server on {name}");
     let mut first = true;
     loop {
-        let mut opts = ServerOptions::new();
-        if first {
-            // Only the very first instance is exclusive; later iterations must
-            // be allowed to create a fresh instance while one is connected.
-            opts.first_pipe_instance(true);
-        }
-        let server = match opts.create(&name) {
+        let server = match create_instance(&name, first, attributes.as_mut()) {
             Ok(s) => {
                 first = false;
                 s
@@ -155,4 +278,93 @@ async fn handle_client(stream: NamedPipeServer) -> Result<()> {
 /// Pushes a JSON-RPC notification to every connected pipe client.
 pub fn notify(method: &str, params: serde_json::Value) {
     crate::jobs::notify(method, params);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::Security::Authorization::{
+        ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
+    };
+    use windows::Win32::Security::DACL_SECURITY_INFORMATION;
+
+    /// The DACL of a live pipe object, read back from the handle the server
+    /// itself holds — the same measurement an outsider would make.
+    fn sddl_of(server: &NamedPipeServer) -> String {
+        unsafe {
+            let mut dacl = std::ptr::null_mut();
+            let mut descriptor = PSECURITY_DESCRIPTOR::default();
+            let status = GetSecurityInfo(
+                HANDLE(server.as_raw_handle()),
+                SE_KERNEL_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                Some(&mut dacl),
+                None,
+                Some(&mut descriptor),
+            );
+            assert_eq!(status, ERROR_SUCCESS, "GetSecurityInfo failed");
+
+            let mut text = PWSTR::null();
+            let mut len = 0u32;
+            assert!(
+                ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor,
+                    1,
+                    DACL_SECURITY_INFORMATION,
+                    &mut text,
+                    Some(&mut len),
+                )
+                .is_ok(),
+                "SDDL conversion failed"
+            );
+            let sddl = text.to_string().unwrap_or_default();
+            let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+            let _ = LocalFree(Some(HLOCAL(descriptor.0)));
+            sddl
+        }
+    }
+
+    fn unique_name(tag: &str) -> String {
+        format!(r"\\.\pipe\mics_test_{tag}_{}", std::process::id())
+    }
+
+    #[tokio::test]
+    async fn the_engine_pipe_grants_only_the_owner_system_and_administrators() {
+        let mut attributes = pipe_security_attributes().expect("build the pipe ACL");
+        let server = create_instance(&unique_name("acl"), true, Some(&mut attributes))
+            .expect("create the pipe");
+        let sddl = sddl_of(&server);
+        // `GA` in the SDDL is mapped to the concrete rights of a pipe object
+        // when the descriptor is applied, so it is read back as `FA` (full
+        // access) — the same grant in its stored form.
+        let user = current_user_sid().expect("current user SID");
+
+        assert!(sddl.contains(&format!("(A;;FA;;;{user})")), "{sddl}");
+        assert!(sddl.contains("(A;;FA;;;SY)"), "{sddl}");
+        assert!(sddl.contains("(A;;FA;;;BA)"), "{sddl}");
+        assert_eq!(
+            sddl.matches("(A;;").count(),
+            3,
+            "exactly three ACEs expected: {sddl}"
+        );
+        for denied in [";;;WD)", ";;;AN)", ";;;IU)"] {
+            assert!(
+                !sddl.contains(denied),
+                "{denied} must not be granted on the engine pipe: {sddl}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_pipe_acl_is_protected_and_names_a_real_user_sid() {
+        let sddl = pipe_sddl().expect("build the SDDL");
+        assert!(sddl.starts_with("D:P("), "the DACL must be protected: {sddl}");
+        let user = current_user_sid().expect("current user SID");
+        assert!(user.starts_with("S-1-"), "not a SID: {user}");
+        assert!(sddl.contains(&user), "{sddl}");
+    }
 }

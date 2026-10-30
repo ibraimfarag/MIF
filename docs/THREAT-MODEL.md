@@ -69,23 +69,26 @@ OS only through the engine (`AGENTS.md` rule 4, whitelisted JSON-RPC methods).
 ### B2 — `\\.\pipe\mics_engine` (UI ↔ engine)
 
 The engine's pipe server passes **no** security attributes
-(`platform/windows/pipe.rs`, tokio `ServerOptions`), so the object carries the
-default DACL for a pipe created by this process. Measured on the reference
-machine with an isolated `service` engine (probe in `docs/TODO.md`):
+An **explicit** SDDL (`platform/windows/pipe.rs`), measured on the reference
+machine with an isolated `service` engine:
 
 ```
-D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user-SID>)(A;;FR;;;WD)(A;;FR;;;AN)
+D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user-SID>)
 ```
 
 - Full control: SYSTEM, Administrators, and the user who started the engine.
-- **Read-only: `Everyone` and `ANONYMOUS LOGON`** — i.e. any local account can
-  attach to a free pipe instance and read the broadcast stream the engine pushes
-  to every client (`event`, `progress`; `jobs::notify`). It cannot send a request
-  (that needs write access, which only the owner/SYSTEM/Administrators have).
-- Consequence: on a multi-user machine a *standard* user can observe alerts and
-  progress (paths, detection names, incident text) — confidentiality, not
-  control. Mitigation is one explicit SDDL (drop the `WD`/`AN` read ACEs and keep
-  owner + SYSTEM + Administrators), tracked in F-1.
+  Nobody else: `Everyone` and `ANONYMOUS LOGON` are gone, and `P` marks the DACL
+  protected so no inherited ACE can widen it.
+- **This was not always so.** Until the fix below, the pipe passed no security
+  attributes at all, so it carried Windows' default ACL for a pipe created by
+  this process — `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)(A;;FR;;;WD)(A;;FR;;;AN)`.
+  The `WD`/`AN` read ACEs meant any local account on a multi-user machine could
+  attach to a free instance and read the broadcast stream (`event`, `progress`;
+  `jobs::notify`) — the paths, detection names and incident text in alerts and
+  scan progress. Such a client could never *send* a request (that needs write
+  access), so it was a confidentiality leak, not control. F-1 recorded it; the
+  explicit ACL closes it, and two tests read the ACL back from the live pipe
+  object so a regression fails the suite instead of shipping.
 - Anything running with the user's own token can call every engine method
   (`guard.kill`, `quarantine.delete`, `settings.set`, `update.apply`, the audit,
   the scanner). That is accepted: the same token can also just start the engine
@@ -206,7 +209,7 @@ ask the engine to do through the pipe.
 | AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the alert copy says "accessed/modified", which overstates it | `guard/canary.rs` (F-4) |
 | AP-8 | "starve the engine with a hung tool" | Every external tool call has a deadline through one choke point, enforced by a source-scanning test | `platform/windows/process.rs`, `every_spawn_site_enforces_its_deadline` |
 | AP-9 | "forge a card to trigger a Quarantine click" | The card is display only; the action id is validated when the engine handles it | `notify/`, D-013 |
-| AP-10 | "read the engine's traffic as another local user" | Possible today: the measured `WD`/`AN` read ACE on the engine pipe | B2, F-1 |
+| AP-10 | "read the engine's traffic as another local user" | Was possible through the default `WD`/`AN` read ACEs; **closed** by the explicit pipe ACL below | B2, F-1 (fixed) |
 | AP-11 | "redirect traffic through the managed hosts section" | Reversible, audited, shape-validated — but any interactive user may ask (B3) | `PRIVILEGED-OPS.md`, F-2 |
 | AP-12 | "kill the engine and stay quiet" | Same-token code can kill it; there is no self-defense or watchdog. The helper service survives, and the UI reconnects and reports the gap | F-8 |
 
@@ -214,7 +217,6 @@ ask the engine to do through the pipe.
 
 | # | Risk | Why it is accepted today | Mitigation if we want it |
 |---|---|---|---|
-| F-1 | Engine pipe grants `Everyone`/`ANONYMOUS` read: any local account can observe pushed alerts and progress | The default DACL; sending still requires owner/SYSTEM/Administrators | Set an explicit SDDL on the engine pipe (drop `WD`/`AN`, keep owner + `SY` + `BA`); owner rights via `OW` |
 | F-2 | Helper pipe grants `INTERACTIVE` full access: a standard user can make SYSTEM open a firewall rule, rewrite the managed hosts section, or run a hardening action, with no prompt | D-007 exists to remove per-action prompts | Verify the caller before executing: `GetNamedPipeClientProcessId` → image path + token SID must be the running engine's, or restrict the ACL to `BA`+`SY` and accept a prompt |
 | F-3 | Update provenance = SHA-256 in a manifest fetched over TLS; the updater never verifies the Authenticode signature, and `http://` manifests/feeds are accepted | Signing the *release* was P2; verifying it in the updater is not written yet | `WinVerifyTrust` on the extracted binary, and refuse `http://` for anything but loopback |
 | F-4 | Canary decoys detect writes (mtime/size), not reads; the copy claims "accessed" | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9) | Say "modified" in the copy; keep the decoy names that make a read plausible |
@@ -225,6 +227,15 @@ ask the engine to do through the pipe.
 | F-9 | No memory scanning, no unpacking/emulation, no AMSI, no pre-execution blocking (no minifilter) | Usermode-only and driver-free is a product decision (no driver install, no BSOD risk) | Documented in `PROTECTION-MATRIX.md`; the guard's behaviour rules are the compensating control |
 | F-10 | A local admin can turn everything off and delete the evidence | Unavoidable without kernel enforcement | Ship the audit trail to a location the admin cannot reach (a real solution is an external log sink — out of scope) |
 
+**Closed since this document was written.** F-1: the engine pipe now carries an
+explicit, protected ACL naming the engine's user, `SYSTEM` and administrators. Two
+tests read the DACL back from the live pipe object
+(`pipe::tests::the_engine_pipe_grants_only_the_owner_system_and_administrators`
+and `::the_pipe_acl_is_protected_and_names_a_real_user_sid`), and the acceptance
+run confirmed all nine properties at once — protected DACL, three ACEs, no
+`WD`/`AN`/`IU`, and a same-user JSON-RPC `status` call still answered over the
+hardened pipe. The helper pipe's `IU` scope (F-2) is untouched and still open.
+
 ## 7. What is proven, and how
 
 | Claim | Proof |
@@ -232,16 +243,19 @@ ask the engine to do through the pipe.
 | No external tool can hang a request | `every_spawn_site_enforces_its_deadline` + the source scan for bare `Command::new(` |
 | The helper cannot be turned into "run this as SYSTEM" | `PRIVILEGED-OPS.md` + the validation tests + `scripts/verify-helper.ps1` |
 | The audit cannot silently claim a section is fine | `tests.rs` (failed collector omitted, partial flagged, merged report keeps the engine-computed score) |
+| The engine pipe refuses everyone but its owner, SYSTEM and administrators | the two `pipe::tests` above (the DACL is read back with `GetSecurityInfo`) |
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release is complete and signed | `scripts/verify-release.ps1` + `scripts/sign.ps1` |
-| The two pipe ACLs are what this file says | the SDDL probe above (isolated pipe names, real engine `service` and `helper-console` processes) |
+| The two pipe ACLs are what this file says | the SDDL probe (isolated pipe names, real engine `service` and `helper-console` processes) |
 | The guard's cost | `mics-engine benchmark` (currently 2.97 % against a < 1 % budget — §0.1, not yet met) |
 
 ## 8. Open questions
 
-1. Should the engine pipe get an explicit SDDL (F-1)? It is a small change with a
-   test that reads the SDDL back.
-2. Should the helper verify the caller's identity instead of trusting `IU` (F-2)?
+1. Should the helper verify the caller's identity instead of trusting `IU` (F-2)?
    That is the only way to keep D-007's single prompt *and* stop a standard user.
-3. Is a watchdog service worth the second moving part (F-8)?
-4. Do we ever need `http://` outside loopback (F-3)?
+   The engine pipe answered the same question the other way (D-015): an explicit
+   ACL, no caller check.
+2. Is a watchdog service worth the second moving part (F-8)?
+3. Do we ever need `http://` outside loopback (F-3)?
+4. Should the engine refuse to start at all when it cannot apply its pipe ACL,
+   instead of falling back to the default one with a warning?

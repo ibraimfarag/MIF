@@ -28,9 +28,10 @@
 > `Valid`, `signtool verify /pa` passes) and **every external tool call now has a
 > deadline** (one `ToolCall` choke point; a test fails on any other
 > `Command::new`) plus **a fix re-checks one audit section and still reports the
-> whole machine's score** (D-014), and **`docs/THREAT-MODEL.md` exists with the
-> two pipe ACLs measured and eight residual risks filed** · **next: install the
-> helper once (one
+> whole machine's score** (D-014), **`docs/THREAT-MODEL.md` exists with the two
+> pipe ACLs measured and eight residual risks filed**, and **the engine pipe now
+> refuses every caller but its owner, SYSTEM and administrators** (F-1 closed,
+> D-015) · **next: install the helper once (one
 > UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -260,6 +261,30 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **Threat model F-1 closed — the engine pipe now names its callers**
+  - `\\.\pipe\mics_engine` used to be created with no security attributes, so it
+    carried Windows' default pipe DACL: `(A;;FR;;;WD)(A;;FR;;;AN)` let any local
+    account attach to a free instance and read the engine's broadcast stream
+    (alerts, scan progress, incident text). Sending was never possible for them;
+    it was a confidentiality leak on a multi-user machine.
+  - It is now created with `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<user SID>)`, the
+    SID read from the engine's own token at startup
+    (`platform/windows/pipe.rs`). If that descriptor cannot be built the engine
+    logs a warning and serves with the default ACL instead of refusing to start —
+    a decision recorded as D-015, together with why the engine and the UI must stay
+    in one user session.
+  - Two tests read the DACL back from the live pipe object
+    (`GetSecurityInfo` + SDDL conversion): exactly three ACEs, `D:P(`, no
+    `WD`/`AN`/`IU` in the result. `GA` is stored by Windows as the mapped `FA`,
+    which is what the measurement shows.
+  - Live acceptance (real `service` engine, isolated pipe and data dir, nine
+    checks, `RESULT: PASS`): `D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)`, and a
+    same-user JSON-RPC round trip still answers
+    `{"state":"running","version":"0.1.0","platform":"windows-x86_64","pid":…}` —
+    the hardening did not cost the UI its transport.
+  - `cargo test` 60/60 (2 new), clippy clean, `flutter analyze` clean,
+    `flutter test` 36/36. F-2 (the helper pipe's `INTERACTIVE` scope) is untouched
+    and still open.
 - **`docs/THREAT-MODEL.md` — assets, adversaries, boundaries, and what we do not
   defend (measured, not assumed)**
   - Written from the code and from two live measurements, not from intent: the
@@ -1240,7 +1265,6 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
-| MED | **The engine pipe carries Windows' default DACL** (measured): `Everyone` and `ANONYMOUS LOGON` get read access, so on a multi-user machine another local account can attach to a free instance and read the broadcast stream (alerts, scan progress). Sending still needs owner/SYSTEM/Administrators | `platform/windows/pipe.rs`, THREAT-MODEL F-1 |
 | MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
 | MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
 | LOW | The canary alert copy says "accessed/modified" while the detector compares mtime/size only — a read-only open is invisible and the wording claims otherwise | `guard/canary.rs`, THREAT-MODEL F-4 |

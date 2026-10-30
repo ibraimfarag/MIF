@@ -487,3 +487,50 @@ place per side (`lib/models/audit_models.dart`, pinned by a Dart test); the merg
 keeps its tests (id-keyed replacement, the display-name collision, a failed
 re-read, the refusal without a base); and the engine stays the only place that
 turns findings into a score.
+
+## D-015 — The engine pipe names its callers: an explicit ACL, not Windows' default
+
+**Context.** `docs/THREAT-MODEL.md` measured the engine's pipe instead of
+assuming it, and found Windows' default ACL for a pipe created by an unelevated
+process:
+
+```
+D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)(A;;FR;;;WD)(A;;FR;;;AN)
+```
+
+`Everyone` and `ANONYMOUS LOGON` had read access, so on a machine with more than
+one account, another local user could attach to a free pipe instance and read the
+broadcast stream the engine pushes to every client — guard alerts, scan progress,
+incident text. They could not send a request (that needs write access), so the
+leak was confidentiality only, but it was a leak a security product cannot shrug
+at.
+
+**Decision.** The engine creates every pipe instance with an explicit, protected
+SDDL:
+
+```
+D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<current user SID>)
+```
+
+1. The user SID is read from the engine's own token at startup and written into
+   the DACL, because the engine and the UI run as the same user in every supported
+   mode (the UI starts the engine, or the autostart entry does). That is what
+   keeps the transport working while the two permissive ACEs disappear.
+2. `P` (protected) prevents any inherited ACE from widening the DACL later.
+3. A failure to build the descriptor is **not** fatal: the engine logs a warning
+   and serves with the default ACL. Availability wins over hardening here, and the
+   choice is recorded in the threat model's open questions instead of hiding in
+   code.
+4. The helper's pipe is separate and unchanged (D-007, `PRIVILEGED-OPS.md`): it
+   grants `INTERACTIVE`, and the question of verifying the caller there is still
+   open (F-2).
+
+**Why.** A pipe that only its owner, `SYSTEM` and administrators can talk to is
+the smallest surface that still works, and the fix is measurable: the DACL is read
+back from the live object in tests, so the property cannot regress silently.
+
+**Commits us to.** Keeping the engine and the UI in one user session (a
+service-mode engine running as `SYSTEM` would have to name the interactive user
+deliberately — a new decision); keeping the ACL tests that read the DACL back with
+`GetSecurityInfo`; and updating the threat model's F-1 entry whenever this
+boundary moves.
