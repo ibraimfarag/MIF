@@ -28,7 +28,9 @@
 > `Valid`, `signtool verify /pa` passes) and **every external tool call now has a
 > deadline** (one `ToolCall` choke point; a test fails on any other
 > `Command::new`) plus **a fix re-checks one audit section and still reports the
-> whole machine's score** (D-014) · **next: install the helper once (one
+> whole machine's score** (D-014), and **`docs/THREAT-MODEL.md` exists with the
+> two pipe ACLs measured and eight residual risks filed** · **next: install the
+> helper once (one
 > UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -74,10 +76,11 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
-   Assets, adversaries, trust boundaries, what a usermode product cannot do (no
-   kernel driver), and per layer what is detected/blocked and what is not
-   (hosts-based L2, polling canaries, `netsh` firewall, no ClamAV/CAPA).
+1. **`docs/PROTECTION-MATRIX.md`** (P5, wording only) — per layer what is
+   detected / blocked / missed (hosts-based L2, polling canaries, `netsh`
+   firewall, no ClamAV/CAPA), pointing at `THREAT-MODEL.md` for the boundaries
+   and asset list, which is **done** (with the two pipe ACLs measured and eight
+   residual risks filed in the register below).
 2. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
    (polling intervals, cheaper process enumeration) or move the budget to a
    measured, justified number and say so in the README.
@@ -256,6 +259,35 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **`docs/THREAT-MODEL.md` — assets, adversaries, boundaries, and what we do not
+  defend (measured, not assumed)**
+  - Written from the code and from two live measurements, not from intent: the
+    engine pipe and the helper pipe were both started in isolation (real `service`
+    engine, real `helper-console`) and their security descriptors read back with
+    `GetSecurityInfo` + SDDL conversion.
+  - Engine pipe `\\.\pipe\mics_engine` carries Windows' default DACL:
+    `(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)(A;;FR;;;WD)(A;;FR;;;AN)` — the
+    owner, SYSTEM and Administrators can *send*, but `Everyone` and
+    `ANONYMOUS LOGON` have read access, so on a multi-user machine another local
+    account can attach to a free instance and read the broadcast stream (alerts,
+    progress). Fix filed as F-1 with the exact mitigation (explicit SDDL,
+    `create_with_security_attributes_raw`).
+  - Helper pipe measured as documented: `(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`.
+    `IU` is INTERACTIVE, so a **standard** local user can ask the LocalSystem
+    helper for the closed op set — a real, bounded multi-user risk, filed as F-2
+    with the caller-identity check as the mitigation; keeping D-007's single
+    prompt is why it is accepted for now.
+  - Eight residual risks recorded (F-1…F-10 range), each with why it is accepted
+    and what closing it would cost: pipe ACLs, updater provenance (SHA-256 from
+    the manifest, no `WinVerifyTrust`, `http://` accepted), plaintext API keys,
+    machine-scope DPAPI for quarantine, canaries that see writes but not reads
+    (the alert copy overstates this), no self-defense, and the usermode-only
+    detection limits.
+  - Corrected an honesty gap found while writing it: `AGENTS.md` rule 8 says
+    "nothing leaves the machine except explicit VT/NVD/LM lookups", while B6's
+    table is the accurate list (intel sources + a `dns.google`/`1.1.1.1`
+    connectivity probe cached for 30 s) — filed as F-7.
 
 - **audit — a fix re-checks one section, and the score still means the whole
   machine (D-014)**
@@ -1166,8 +1198,9 @@ signing certificate respectively), so this is the work that is always available.
       `docs/COST.md` (the only real cost is the signing certificate).
 
 ### P5 — trust & truth
-- [ ] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
-      usermode product cannot do: no kernel driver).
+- [x] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
+      usermode product cannot do: no kernel driver) — the two pipe ACLs measured
+      live rather than assumed; residual risks F-1…F-10 in the register below.
 - [ ] `docs/PROTECTION-MATRIX.md`: per layer, what is detected/blocked and what is
       not (hosts-based L2, polling canaries, netsh firewall, no ClamAV/CAPA).
 - [ ] Integrity: signed SHA256 manifest of shipped files, self-check at startup,
@@ -1207,8 +1240,14 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
-| LOW | `docs/` has no THREAT-MODEL yet (the README carries the layer matrix) | `docs/` |
-| LOW | Light-mode palette has not been contrast-audited | `app_theme.dart` |
+| MED | **The engine pipe carries Windows' default DACL** (measured): `Everyone` and `ANONYMOUS LOGON` get read access, so on a multi-user machine another local account can attach to a free instance and read the broadcast stream (alerts, scan progress). Sending still needs owner/SYSTEM/Administrators | `platform/windows/pipe.rs`, THREAT-MODEL F-1 |
+| MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
+| MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
+| LOW | The canary alert copy says "accessed/modified" while the detector compares mtime/size only — a read-only open is invisible and the wording claims otherwise | `guard/canary.rs`, THREAT-MODEL F-4 |
+| LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
+| LOW | `AGENTS.md` rule 8 says "nothing leaves the machine except explicit VT/NVD/LM lookups", but the engine also fetches the intel sources and probes `dns.google`/`1.1.1.1` for connectivity (cached 30 s) — the rule should carry the honest list | `AGENTS.md`, `sync/mod.rs`, THREAT-MODEL B6/F-7 |
+| LOW | The two pipe test hooks disagree: `MICS_PIPE_NAME` takes a full `\\.\pipe\...` path while `MICS_HELPER_PIPE` takes a bare name (a full path silently serves `\\.\pipe\\\.\pipe\...`) | `platform/windows/pipe.rs`, `privileged/ops.rs` |
+| LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
 ## Icon sizes required for the application
