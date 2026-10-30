@@ -79,13 +79,18 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **Guard CPU: measured 3.52 % → 1.56 % of one core (0.06 % → 0.03 % of the
-   machine)** — the first real measurement of this, and it changes the question. The
-   old "2.97 %" was a per-core figure; on this 56-thread machine the guard costs
-   0.03 % of total CPU. `scripts\measure-guard-cpu.ps1` reproduces both numbers as a
-   differential against `MICS_NO_GUARD=1`. What is left: the unelevated poll loop
-   still enumerates every process every 2 s (~1.5 % of one core). Next candidate is
-   `EnumProcesses` for the pid diff and sysinfo only for the new pids, or a 3 s tick.
+1. **Guard CPU: measured, and the measuring tool fixed.** `scripts\measure-guard-cpu.ps1`
+   gives the differential against `MICS_NO_GUARD=1`: **3.52 % → 1.56 % of one core
+   (0.06 % → 0.03 % of this 56-thread machine)** after the poll loop was trimmed. The
+   old "2.97 %" came from `mics-engine benchmark`, which sampled `sysinfo` while
+   refreshing every process six times in three seconds — with the guard *off* it
+   reported 9.94 %, i.e. it mostly measured its own probe. `benchmark` now reads its
+   own `GetProcessTimes` over one idle window and reports both denominators
+   (`cpu_percent`, `cpu_percent_of_machine`), so `budget_ok` finally means something:
+   idle engine = 0.0 % CPU / 12.5 MB. Remaining: the unelevated poll loop enumerates
+   every process every 2 s (~1.5 % of one core, 0.03 % of the machine); `EnumProcesses`
+   for the pid diff is the next candidate, and the `< 1 %` budget now has a stated
+   basis (share of all logical processors).
 2. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
 3. **AUMID registration (LOW, fold into the installer)** — register
@@ -263,6 +268,28 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **`benchmark` no longer measures itself (the 2.97 % was an artefact)**
+  - `mics-engine benchmark` sampled `sysinfo` while refreshing **every** process six
+    times in three seconds, then compared the result against 1 %. Run with
+    `MICS_NO_GUARD=1` it reported **9.94 %** for a process that was idle — so a large
+    part of the old "2.97 %" was the probe, not the engine. The guard's real cost is
+    the differential in `scripts\measure-guard-cpu.ps1`, which is where the 1.56 % /
+    0.03 % numbers come from.
+  - The measurement is now one idle window (3 s) bracketed by two reads of this
+    process's own kernel+user time (`GetProcessTimes` in `platform/windows/timing.rs`),
+    with RAM read by refreshing only this process
+    (`ProcessRefreshKind::nothing().with_memory()`). Nothing inside the window does
+    work that the window would then charge to the engine.
+  - Two numbers are reported, because "1 %" without a denominator is meaningless:
+    `cpu_percent` (share of one core, the profiler scale) and
+    `cpu_percent_of_machine` (Task Manager). **The budget compares the machine
+    figure**, and `budgets.idle_cpu_basis` now says so in the JSON, together with
+    `guard_measured_by` pointing at the script, because the guard loop lives in the
+    long-running service process and not in this one.
+  - Measured after the change: `cpu_percent: 0.0`, `cpu_percent_of_machine: 0.0`,
+    `ram_mb: 12.5`, `budget_ok: true`, `cores: 56`. A new test
+    (`cpu_time_grows_when_this_thread_works`) pins the counter: a busy loop must show
+    up in `GetProcessTimes`. `cargo test` 74/74.
 - **The guard's CPU cost is measured, not assumed (first step)**
   - `scripts\measure-guard-cpu.ps1` runs the engine twice — guard on, then with
     `MICS_NO_GUARD=1` — in isolated data/pipe/rules dirs, samples
@@ -1482,7 +1509,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| LOW | **Guard idle CPU is 1.56 % of one core / 0.03 % of this 56-thread machine**, measured with `scripts\measure-guard-cpu.ps1` (down from 3.52 %). The `benchmark` budget check still says `budget_ok:false` because it compares the per-core figure against 1 %; the remaining cost is the unelevated poll loop re-enumerating every process every 2 s | `guard/mod.rs`, `benchmark.rs`, §0.1 |
+| LOW | **The guard's poll loop still enumerates every process every 2 s**: 1.56 % of one core = 0.03 % of this 56-thread machine (`scripts\measure-guard-cpu.ps1`, guard on minus `MICS_NO_GUARD=1`; was 3.52 %). Under the stated budget (share of all logical processors it is 0.39 % even on the 4-core minimum spec), but the pid diff could come from `EnumProcesses` instead of sysinfo | `guard/mod.rs`, §0.1 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
