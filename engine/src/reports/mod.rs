@@ -9,7 +9,7 @@ pub async fn export_markdown() -> Result<PathBuf> {
     let incidents = crate::smart::correlator::list_incidents(20)?;
 
     let mut md = String::new();
-    md.push_str("# MIF Security Report\n\n");
+    md.push_str("# MI CS Security Report\n\n");
     md.push_str(&format!(
         "_Generated: {}_\n\n",
         chrono::Local::now().format("%Y-%m-%d %H:%M")

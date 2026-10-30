@@ -81,7 +81,7 @@ foreach ($file in $targets) {
     if (-not (Test-Path $file)) { continue }
     Write-Host "Signing $(Split-Path $file -Leaf) ..."
     & $signtool sign /fd SHA256 @timestampArg @certArg `
-        /d "MIF" /du "https://github.com/mourad-ibrahim/mi-cs" `
+        /d "MI Cyber Security" /du "https://github.com/mourad-ibrahim/mi-cs" `
         $file | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "signing failed for $file" }
 }

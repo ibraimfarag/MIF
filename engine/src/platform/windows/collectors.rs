@@ -196,7 +196,7 @@ impl PlatformCollectors for WindowsCollectors {
                         Severity::High,
                         "Real-time protection state not readable (Defender's status API \
                          refused the query — another security product may own the machine, \
-                         or MIF may need administrator rights)"
+                         or MI CS may need administrator rights)"
                             .to_string(),
                         false,
                     )),

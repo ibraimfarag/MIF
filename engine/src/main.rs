@@ -30,7 +30,7 @@ use tracing_subscriber::FmtSubscriber;
 
 #[derive(Parser)]
 #[command(name = "mics-engine")]
-#[command(about = "MIF Engine - Backend for Cybersecurity Command Center", long_about = None)]
+#[command(about = "MI CS Engine - Backend for Cybersecurity Command Center", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -147,7 +147,7 @@ async fn main() -> Result<()> {
         None => "idle",
     };
     tracing::info!(
-        "MIF engine {} starting (mode={mode}, pid={}, data={})",
+        "MI CS engine {} starting (mode={mode}, pid={}, data={})",
         env!("CARGO_PKG_VERSION"),
         std::process::id(),
         settings::Settings::base_dir().display()
@@ -161,7 +161,7 @@ async fn main() -> Result<()> {
             let _instance = match platform::windows::single_instance::acquire() {
                 Some(g) => g,
                 None => {
-                    eprintln!("MIF engine already running — connect to the pipe");
+                    eprintln!("MI CS engine already running — connect to the pipe");
                     return Ok(());
                 }
             };
@@ -209,7 +209,7 @@ async fn main() -> Result<()> {
             let _instance = match platform::windows::single_instance::acquire() {
                 Some(g) => g,
                 None => {
-                    tracing::info!("MIF engine already running — exiting");
+                    tracing::info!("MI CS engine already running — exiting");
                     return Ok(());
                 }
             };
@@ -320,7 +320,7 @@ async fn main() -> Result<()> {
             emit(&serde_json::to_value(privileged::status())?, json)?;
         }
         None => {
-            println!("MIF Engine v0.1.0");
+            println!("MI CS Engine v0.1.0");
             println!("Use --help for more information");
         }
     }
@@ -424,7 +424,7 @@ fn emit(value: &serde_json::Value, json: bool) -> Result<()> {
     }
 
     if let Some(score) = value.get("score") {
-        println!("MIF Security Score: {score}/100");
+        println!("MI CS Security Score: {score}/100");
         println!();
         if let Some(findings) = value.get("findings").and_then(|f| f.as_array()) {
             for f in findings {

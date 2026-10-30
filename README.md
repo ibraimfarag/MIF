@@ -36,14 +36,20 @@ explains, and suggests the next action instead of dumping raw data.
 `\\.\pipe\mics_engine` to a single Rust engine (`mics-engine.exe`), which owns
 every OS call. The UI never touches system APIs.
 
-In Task Manager the two halves are listed as **MIF** (the app) and **MiShild
-Background** (the engine) — those names come from each executable's version
-resource, so the files are still `mics_app.exe` and `mics-engine.exe` (the names
-every script, the app's engine lookup and `MICS_ENGINE_PATH` use). Right-click →
-*Properties* → *Details* shows the same thing; the *Details* tab of Task Manager
-always shows the file name. `MIF` is also the window title, the tray tooltip and
-the header of every notification card; the project itself is still *MI CS* in
-these docs, in the `MICS-*` firewall rule prefix and in the `MICS_*` test hooks.
+Two different kinds of name, on purpose. **In Task Manager** the two halves are
+listed as **MI Cyber Security** (the app) and **MiShild Background** (the engine),
+and both wear the **same icon** — those strings and that icon come from each
+executable's version resource, so the files are still `mics_app.exe` and
+`mics-engine.exe` (the names every script, the app's engine lookup and
+`MICS_ENGINE_PATH` use). Right-click → *Properties* → *Details* shows the same
+thing; the *Details* tab of Task Manager always shows the file name.
+
+**Inside the product** the name is **MI CS**: the window title, the title bar, the
+tray tooltip and the header of every notification card. The desktop shortcut is
+**MICS** and takes its icon from `mics_app.exe`, so the desktop, the taskbar,
+Alt-Tab, Explorer and the engine's Task Manager row all show one icon. The
+`MICS-*` firewall rule prefix and the `MICS_*` test hooks are identifiers and keep
+their spelling.
 
 ## What MI CS does **not** do
 
@@ -274,14 +280,16 @@ Two designs, three icon files, one pipeline:
 
 | Source (vector) | Used for | Output |
 |---|---|---|
-| `assets/icons/task.svg` | taskbar, Alt-Tab, Explorer, window title bar | `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`) |
+| `assets/icons/task.svg` | taskbar, Alt-Tab, Explorer, window title bar, **the engine's Task Manager row** and the **desktop shortcut** | `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`; the engine embeds the same file at build time) |
 | `assets/icons/task.svg` | tray icon and any packaged copy | `assets/icons/mics.ico` |
-| `assets/icons/Desktop.svg` | the **desktop shortcut only** | `assets/icons/desktop.ico` |
+| `assets/icons/Desktop.svg` | bundled alternative art, shipped but not used by any shortcut today | `assets/icons/desktop.ico` |
 
-The desktop can show different art from the taskbar because a `.lnk` keeps its
-own icon location — `scripts/create-shortcuts.ps1` writes a desktop shortcut
-pointing at `desktop.ico` and a Start-Menu shortcut that uses the executable's
-embedded icon.
+One product, one icon: `scripts/create-shortcuts.ps1` writes a desktop shortcut
+named **MICS** (plus **MI CS** in the Start Menu), and both take their icon from
+`mics_app.exe` — so the desktop, the taskbar, Alt-Tab, Explorer and the engine's
+row in Task Manager show the same art. `engine/build.rs` embeds the very same
+`.ico` into `mics-engine.exe`; without that the engine would show Windows' generic
+icon.
 
 ```powershell
 # 1) render the SVGs to 1024 px transparent masters (Chrome/Edge headless)
@@ -355,14 +363,18 @@ a copy of the task icon.
 جدار دفاع متعدد الطبقات + فاحص ملفات + مراقبة عمليات لحظية + فاحص ثغرات + مركز
 تقوية — بواجهة **ترتّب** النتائج وتشرحها وتقول لك تعمل إيه بعد كده.
 
-**في التاسك مانجر** الجزئين بيظهروا باسم **MIF** (الواجهة) و
-**MiShild Background** (المحرك) — الأسماء دي جاية من version resource بتاع كل exe،
+فيه نوعين من الأسماء، وده مقصود. **في التاسك مانجر** الجزئين بيظهروا باسم
+**MI Cyber Security** (الواجهة) و **MiShild Background** (المحرك)، والاتنين
+شايلين **نفس الأيقونة** — الاسم والأيقونة جايين من version resource بتاع كل exe،
 فالملفات لسه `mics_app.exe` و`mics-engine.exe` (الأسماء اللي كل السكريبتات والبحث
 بتاع الواجهة و`MICS_ENGINE_PATH` بيعتمدوا عليها). كليك يمين → *Properties* →
 *Details* بيوضّح نفس الاسم، وتاب *Details* في التاسك مانجر بيعرض اسم الملف دايمًا.
-و**MIF** كمان هو عنوان النافذة، ونص الأيقونة في التاسك بار، وهيدر كل كارت إشعار؛
-لكن المشروع نفسه لسه اسمه *MI CS* في المستندات دي، وفي بادئة قواعد الجدار
-`MICS-*`، وفي متغيرات الاختبار `MICS_*`.
+
+**جوه التطبيق** الاسم هو **MI CS**: عنوان النافذة، والشريط العلوي، ونص أيقونة
+التاسك بار، وهيدر كل كارت إشعار. وأيقونة سطح المكتب اسمها **MICS** وبتاخد
+أيقونتها من `mics_app.exe`، فسطح المكتب والتاسك بار وAlt-Tab والـ Explorer وسطر
+المحرك في التاسك مانجر كلهم بيوروا نفس الأيقونة. أما بادئة قواعد الجدار `MICS-*`
+ومتغيرات الاختبار `MICS_*` فهي معرّفات وباقية زي ما هي.
 
 **اللي بيعمله فعلاً:** فحص نظام حقيقي (ديفندر، جدار الحماية، RDP، SMBv1، UAC،
 المدراء، بدء التشغيل، المهام المجدولة، ملف hosts) بدرجة من 100 وإصلاح بضغطة واحدة؛

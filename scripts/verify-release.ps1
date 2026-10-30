@@ -127,10 +127,10 @@ try {
   }
   $appName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
     (Join-Path $work "mics_app.exe")).FileDescription
-  if ($appName -eq "MIF") {
+  if ($appName -eq "MI Cyber Security") {
     Pass "the app presents itself as '$appName' (Task Manager, Properties)"
   } else {
-    Fail "app FileDescription is '$appName', expected 'MIF'"
+    Fail "app FileDescription is '$appName', expected 'MI Cyber Security'"
   }
 
   # The published hashes for what is inside the zip: an extracted file can be

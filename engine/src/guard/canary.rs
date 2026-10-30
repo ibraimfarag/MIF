@@ -56,7 +56,7 @@ pub fn deploy_decoys() -> Result<usize> {
             }
             std::fs::write(
                 &p,
-                "MIF canary decoy file. If any program reads this file, something is wrong.\n",
+                "MI CS canary decoy file. If any program reads this file, something is wrong.\n",
             )
             .with_context(|| format!("create decoy {path}"))?;
             created += 1;

@@ -409,7 +409,7 @@ class SettingsScreen extends ConsumerWidget {
             icon: Icons.info_outline,
             title: context.tr('settings.about'),
             children: [
-              Text('MIF — Mourad Ibrahim Cyber Security',
+              Text('MI CS — Mourad Ibrahim Cyber Security',
                   style: TextStyle(color: AppColors.text, fontSize: 12.5)),
               const SizedBox(height: 4),
               Text(context.tr('app.tagline'),

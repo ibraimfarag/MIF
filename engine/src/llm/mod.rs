@@ -211,9 +211,9 @@ impl LmClient {
             return Ok(template_explain(finding, lang));
         }
         let sys = if lang == "ar" {
-            "أنت محلل أمني لمركز MIF. اشرح النتيجة الأمنية بالمصري المختصر: الخطر إيه، وليه مهم، وإيه الحل. بدون أي أوامر تنفيذية."
+            "أنت محلل أمني لمركز MI CS. اشرح النتيجة الأمنية بالمصري المختصر: الخطر إيه، وليه مهم، وإيه الحل. بدون أي أوامر تنفيذية."
         } else {
-            "You are the MIF security analyst. Explain the finding briefly: the risk, why it matters, and the fix. Never emit executable commands."
+            "You are the MI CS security analyst. Explain the finding briefly: the risk, why it matters, and the fix. Never emit executable commands."
         };
         let body = serde_json::json!({
             "model": self.model,

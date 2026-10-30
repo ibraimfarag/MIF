@@ -35,8 +35,8 @@ const SECURITY_MANDATORY_MEDIUM_RID: u32 = 0x2000;
 fn explain_toast_failure(code: i32, confined: bool) -> Option<&'static str> {
     if code == APPMODEL_ERROR_NO_PACKAGE && confined {
         return Some(
-            "Windows does not show notification cards for a low-integrity process: MIF is \
-             running from a confined folder. Move MIF to a normal folder, or raise the \
+            "Windows does not show notification cards for a low-integrity process: MI CS is \
+             running from a confined folder. Move MI CS to a normal folder, or raise the \
              folder's label as an administrator (`icacls \"<folder>\" /setintegritylevel \
              Medium /T`), then try again",
         );
@@ -256,9 +256,9 @@ mod tests {
     #[test]
     fn quoting_inside_the_launch_payload_is_escaped() {
         let xml = build_toast_xml(
-            "🛡️ MIF — Threat found",
+            "🛡️ MI CS — Threat found",
             r"C:\tmp\bad.exe — yara:EICAR",
-            &["Quarantine", "Open MIF"],
+            &["Quarantine", "Open MI CS"],
             r#"{"mics-action":"a1729"}"#,
         );
         // The raw JSON quotes must never appear inside the attribute.

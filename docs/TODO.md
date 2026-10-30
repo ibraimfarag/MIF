@@ -141,7 +141,42 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **naming, settled — two kinds of name on purpose, and one icon everywhere**
+  - The previous step put `MIF` on every surface; that was one word too many. What
+    the user actually wants, and what the product now does:
+    - **Task Manager / Properties**: the app is **MI Cyber Security**
+      (`FileDescription` + `ProductName` in `windows/runner/Runner.rc`), the
+      engine is **MiShild Background** (`engine/build.rs`).
+    - **Inside the product**: the name is **MI CS** — window title, title bar, tray
+      tooltip, tray menu, About line, and the header of every notification card
+      (`🛡️ MI CS — ...`), in both languages.
+    - **Desktop**: one shortcut named **MICS**, its icon taken from
+      `mics_app.exe`; the Start-Menu shortcut stays **MI CS**.
+    - Identifiers keep their spelling: the `MICS-*` firewall rule prefix, the
+      `MICS` AUMID and the `MICS_*` test hooks.
+  - **One icon for both halves.** `mics-engine.exe` had no icon resource at all,
+    so Windows substituted the generic one wherever it appeared. `engine/build.rs`
+    now adds `resource.set_icon("../windows/runner/resources/app_icon.ico")` — the
+    same file the Flutter runner embeds — with the same
+    `MICS_REQUIRE_VERSION_RESOURCE=1` strictness (a missing icon is a build error
+    in release packaging, a warning otherwise). Measured, not assumed: the icon
+    Windows reports for `mics_app.exe` and for `mics-engine.exe` hashes to the
+    same `7F64E14BA527FD48` (it differed before, `18BDCA4692AED201`).
+  - `scripts/create-shortcuts.ps1`: the desktop shortcut is `MICS.lnk` and both
+    shortcuts use `mics_app.exe,0` as the icon location, so `desktop.ico` is no
+    longer referenced by anything (the asset still ships and
+    `test/icon_test.dart` still proves it is a real, distinct icon). `-AppDir`
+    now selects the copy to launch, and the pre-rename `MI CS.lnk` was removed
+    from the desktop.
+  - Verified textually: window title `MI CS`, Task Manager names `MI Cyber
+    Security` + `MiShild Background`, identical icon hash for both binaries, a
+    card in Windows' toast history reading `🛡️ MI CS — test notification`, and
+    `verify-release.ps1` asserting `MI Cyber Security` end to end.
+    `cargo test` 51/51, clippy clean, `flutter analyze` clean, `flutter test` 31/31.
+
 - **branding — the app is "MIF" everywhere a person can see it**
+  > Superseded by the entry above: the visible name ended up **MI CS**, and the
+  > Task Manager name **MI Cyber Security**, not MIF.
   - Second naming step after `MiShild Background`: the window title, the tray
     tooltip and the title-bar text, the in-app product string (en: `MIF`, ar:
     `مركز MIF للدفاع السيبراني`), the audit assistant, the network-rules copy, the

@@ -3,17 +3,18 @@
   Creates (or removes) the MI CS shortcuts.
 
 .DESCRIPTION
-  Windows picks the icon for a shortcut from its own icon location, so the
-  desktop can show the dedicated "Desktop" art while the taskbar, Alt-Tab and
-  Explorer use the icon embedded in mics_app.exe ("task" art):
+  One product, one icon: both shortcuts point at `mics_app.exe` and take their
+  icon from it, so the desktop, the taskbar, Alt-Tab, Explorer and the engine's
+  entry in Task Manager all show the same art.
 
-    Desktop shortcut      -> assets/icons/desktop.ico
-    Start Menu shortcut   -> mics_app.exe (embedded task art)
+    Desktop shortcut      -> MICS.lnk        (target and icon: mics_app.exe)
+    Start Menu shortcut   -> MI CS.lnk       (target and icon: mics_app.exe)
 
-  Both point at mics_app.exe next to this script's parent folder.
+  `-AppDir` selects which copy of the app they launch; the default is the folder
+  this script lives in, so pass the install folder to point at a real install.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1
+  powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1 -AppDir "$env:LOCALAPPDATA\MI CS"
   powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1 -Remove
 #>
 param(
@@ -27,23 +28,14 @@ $ErrorActionPreference = "Stop"
 if (-not $AppDir) {
   $AppDir = Split-Path -Parent $PSScriptRoot
 }
+$AppDir = (Resolve-Path $AppDir).Path
 $exe = Join-Path $AppDir "mics_app.exe"
 if (-not $Remove -and -not (Test-Path $exe)) {
   throw "mics_app.exe not found in $AppDir"
 }
 
-# Prefer a copy beside the executable (packaged layout), else the bundled asset.
-$desktopIcon = Join-Path $AppDir "desktop.ico"
-if (-not (Test-Path $desktopIcon)) {
-  $desktopIcon = Join-Path $AppDir "data\flutter_assets\assets\icons\desktop.ico"
-}
-if (-not (Test-Path $desktopIcon)) {
-  Write-Warning "desktop.ico not found — the desktop shortcut will use the app icon"
-  $desktopIcon = $exe
-}
-
 $targets = @()
-$targets += Join-Path ([Environment]::GetFolderPath("Desktop")) "MI CS.lnk"
+$targets += Join-Path ([Environment]::GetFolderPath("Desktop")) "MICS.lnk"
 $startMenu = if ($AllUsers) {
   Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
 } else {
@@ -58,12 +50,11 @@ foreach ($path in $targets) {
     continue
   }
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
-  $isDesktop = $path -like "$([Environment]::GetFolderPath('Desktop'))*"
   $lnk = $shell.CreateShortcut($path)
   $lnk.TargetPath = $exe
   $lnk.WorkingDirectory = $AppDir
-  $lnk.IconLocation = if ($isDesktop) { "$desktopIcon,0" } else { "$exe,0" }
-  $lnk.Description = "MI CS — Smart. Transparent. Open-source defense."
+  $lnk.IconLocation = "$exe,0"
+  $lnk.Description = "MI CS - Smart. Transparent. Open-source defense."
   $lnk.Save()
-  Write-Output "created $path  (icon: $(Split-Path -Leaf $lnk.IconLocation))"
+  Write-Output "created $path  (target: $exe, icon: $($lnk.IconLocation))"
 }

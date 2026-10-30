@@ -165,7 +165,7 @@ pub async fn apply(action_id: &str) -> Result<String> {
         anyhow::anyhow!(
             "{e}\nIf the message above mentions permissions, reading this setting needs \
              administrator rights: install the privileged helper in Settings → Engine (one \
-             Windows prompt) or start MIF as administrator, then retry."
+             Windows prompt) or start MI CS as administrator, then retry."
         )
     })?;
     let storage = Storage::open()?;
@@ -200,7 +200,7 @@ pub async fn apply(action_id: &str) -> Result<String> {
             storage.mark_hardening_applied(action_id, false)?;
             let reason = if action_id == "pua_protection" {
                 "Defender's tamper protection reverts changes to its own preferences, and a \
-                 Group Policy value outranks anything MIF writes — change it in Windows \
+                 Group Policy value outranks anything MI CS writes — change it in Windows \
                  Security (Virus & threat protection → Manage settings) or by whoever set \
                  the policy"
             } else {
@@ -225,10 +225,10 @@ pub async fn apply(action_id: &str) -> Result<String> {
 /// the time.
 fn permission_hint(action_id: &str) -> &'static str {
     if action_id == "pua_protection" {
-        "If the message above mentions permissions, MIF is running without the privileged \
+        "If the message above mentions permissions, MI CS is running without the privileged \
          helper, or Defender's tamper protection refused the change. The same switch lives in \
          Windows Security → Virus & threat protection → Manage settings (\"Potentially unwanted \
-         app blocking\"); turn tamper protection off temporarily to let MIF apply it."
+         app blocking\"); turn tamper protection off temporarily to let MI CS apply it."
     } else {
         "If the message above mentions permissions, install the privileged helper in \
          Settings → Engine (one Windows prompt) and retry."

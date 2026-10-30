@@ -24,8 +24,8 @@ use windows::Win32::System::Threading::GetCurrentProcessId;
 use super::ops::SERVICE_NAME;
 use super::server;
 
-const DESCRIPTION: &str = "Runs MIF privileged operations (firewall, hosts, hardening) on \
-                           behalf of the unelevated MIF UI. Every call is audited in \
+const DESCRIPTION: &str = "Runs MI CS privileged operations (firewall, hosts, hardening) on \
+                           behalf of the unelevated MI CS UI. Every call is audited in \
                            %PROGRAMDATA%\\MICS\\logs\\priv.log (D-007).";
 
 /// Set by the SCM stop handler; the pipe loop polls it between clients.
@@ -48,7 +48,7 @@ pub fn sc_create_args(exe: &Path) -> Vec<String> {
         "start=".into(),
         "auto".into(),
         "DisplayName=".into(),
-        "MIF privileged helper".into(),
+        "MI CS privileged helper".into(),
         "obj=".into(),
         "LocalSystem".into(),
     ]

@@ -217,7 +217,7 @@ class _TitleBar extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('MIF',
+                Text('MI CS',
                     style: TextStyle(
                         color: AppColors.text,
                         fontWeight: FontWeight.w800,

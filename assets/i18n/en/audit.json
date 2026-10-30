@@ -1,7 +1,7 @@
 {
   "audit.applyingFix": "Applying fix… (UAC may appear)",
   "audit.askingAnalyst": "Asking the analyst…",
-  "audit.assistant": "MIF Assistant",
+  "audit.assistant": "MI CS Assistant",
   "audit.empty.action": "Run first audit",
   "audit.empty.title": "No audit has run yet",
   "audit.error": "Audit failed",

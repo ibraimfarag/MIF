@@ -11,7 +11,7 @@
   "update.current": "You are running {version}",
   "update.download": "Download and install",
   "update.failed": "Update failed",
-  "update.installed": "Update staged — MIF will restart",
+  "update.installed": "Update staged — MI CS will restart",
   "update.notes": "Release notes",
   "update.upToDate": "You are up to date",
   "update.checking": "Checking for updates…"

@@ -5,4 +5,4 @@
 /// the lookup silently finds no window and the rounded corners stop being applied.
 /// The executable's own FileDescription (`windows/runner/Runner.rc`) is the same
 /// name, and that is what Task Manager shows in its Processes tab.
-const String appDisplayName = 'MIF';
+const String appDisplayName = 'MI CS';

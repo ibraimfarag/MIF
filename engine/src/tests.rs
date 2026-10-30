@@ -573,10 +573,10 @@ mod tests {
     #[test]
     fn service_definition_quotes_the_install_path() {
         use crate::privileged::service::{bin_path, parse_query};
-        let path = Path::new(r"C:\Program Files\MIF\mics-engine.exe");
+        let path = Path::new(r"C:\Program Files\MI CS\mics-engine.exe");
         assert_eq!(
             bin_path(path),
-            "\"C:\\Program Files\\MIF\\mics-engine.exe\" --helper-service"
+            "\"C:\\Program Files\\MI CS\\mics-engine.exe\" --helper-service"
         );
         let args = crate::privileged::service::sc_create_args(path);
         assert!(args.contains(&"obj=".to_string()) && args.contains(&"LocalSystem".to_string()));

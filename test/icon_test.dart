@@ -10,11 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 const expectedSizes = {16, 20, 24, 32, 40, 48, 64, 96, 128, 256};
 
 /// The icon files that must stay in sync:
-///  * `windows/runner/resources/app_icon.ico` is embedded in `mics_app.exe`
-///    (taskbar, Alt-Tab, Explorer, title bar);
+///  * `windows/runner/resources/app_icon.ico` is embedded in `mics_app.exe` and
+///    in `mics-engine.exe`, and it is what the shortcuts point at (taskbar,
+///    Alt-Tab, Explorer, title bar, Task Manager);
 ///  * `assets/icons/mics.ico` is the tray icon;
-///  * `assets/icons/desktop.ico` belongs to the desktop shortcut only — that is
-///    how the desktop can show different art from the taskbar.
+///  * `assets/icons/desktop.ico` is bundled alternative desktop art — no shortcut
+///    points at it today, but it ships, so it must stay a real, distinct icon.
 const taskIcons = <String>[
   'windows/runner/resources/app_icon.ico',
   'assets/icons/mics.ico',
