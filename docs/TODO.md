@@ -21,11 +21,134 @@
 > (`make-release.ps1` → ZIP + `SHA256SUMS` + `rules\`, and `verify-release.ps1`
 > which extracts the archive and proves it serves the helper protocol, shows a
 > card and loads its own rules)** done,
-> plus the state-reporting fix those live probes found · **next: install the
-> helper once (one UAC prompt), then the NSIS installer and the P6 QA harness**;
-> the cheap wins below need neither elevation nor money, then P4, P5, P6. README
-> is written; the app runs unelevated and was verified end-to-end on a real
-> machine.
+> plus the state-reporting fix those live probes found · **naming is settled**
+> (Task Manager: `MI Cyber Security` + `MiShild Background`, one shared icon;
+> inside the product and on every card: `MI CS`; desktop shortcut `MICS`) and
+> **Authenticode signing works locally** (`make-release.ps1 -Sign`: every binary
+> `Valid`, `signtool verify /pa` passes) · **next: install the helper once (one
+> UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
+> below need neither elevation nor money, then P4, P5, P6. README is written;
+> the app runs unelevated and was verified end-to-end on a real machine.
+>
+> **New session? Read §0 "Resume here" first** — current state, the next
+> ordered steps, what is blocked on a human, and the environment must-knows.
+
+---
+
+## 0. Resume here — a new session starts with this section
+
+**Where the project stands** (2026-10-30, `main` @ `7f963b9`). The whole
+*unelevated* half of the product is implemented and verified on a real Windows 11
+machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
+quarantine, process guard + canaries, firewall/hosts through the privileged
+helper, intel sync (D-012), resumable jobs, desktop notification cards, bilingual
+UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
+`SHA256SUMS`, and Authenticode signing that works on this machine. The names and
+icons are settled and a probe now fails the release if they drift:
+
+| Surface | Name |
+|---|---|
+| Task Manager / Properties — the app (`mics_app.exe`) | `MI Cyber Security` |
+| Task Manager / Properties — the engine (`mics-engine.exe`) | `MiShild Background` |
+| Inside the product (window title, title bar, tray, card headers) | `MI CS` |
+| Desktop shortcut — icon taken from `mics_app.exe` | `MICS` |
+| Start Menu shortcut | `MI CS` |
+
+Both executables carry the **same icon**; the engine embeds
+`windows/runner/resources/app_icon.ico` at build time.
+
+**Artifacts on this machine.** `dist\MICS-portable\` + the signed
+`dist\MICS-portable-0.1.0-x64.zip` + `dist\SHA256SUMS` (all gitignored — the
+scripts are the versioned part; `scripts\make-release.ps1 -Sign` re-creates and
+re-hashes them), and the runnable install in `%LOCALAPPDATA%\MI CS` (69 files,
+both binaries `Valid`).
+
+> **Run the copy in `%LOCALAPPDATA%\MI CS`, never the one under `dist`.**
+> `dist` sits in a low-integrity web root (`H:\FlyEnv\...\server\www\`): Windows
+> refuses notification cards to a process launched from there
+> (`0x80073D54 ... confined folder`), and that folder has already been emptied once
+> by host tooling outside this repo (trap 16).
+
+### 0.1 Do this next — needs no elevation and no money (in this order)
+
+1. **Deadlines for the last spawns (MED).** `platform/windows/process.rs` gives
+   `run_with_deadline`; `firewall` and `hardening` already use it. The remaining
+   plain `Command::output()` calls are in `platform/windows/collectors.rs`
+   (audit probes), `update.rs` and the two `reg query` reads in `dispatcher.rs` —
+   one stalled PowerShell can still hold an audit or an update request. Extend the
+   three existing deadline tests to cover each call site.
+2. **The UI should re-run one audit section, not the whole audit (LOW).**
+   `audit.run` accepts `params.sections` (7 ms for one section vs 1.7 s for all,
+   unknown names refused); `lib/providers/providers.dart` still asks for
+   everything after a fix. Change the caller, keep the full audit for first load.
+3. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
+   Assets, adversaries, trust boundaries, what a usermode product cannot do (no
+   kernel driver), and per layer what is detected/blocked and what is not
+   (hosts-based L2, polling canaries, `netsh` firewall, no ClamAV/CAPA).
+4. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
+   (polling intervals, cheaper process enumeration) or move the budget to a
+   measured, justified number and say so in the README.
+5. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
+   before/after numbers.
+6. **AUMID registration (LOW, fold into the installer)** — register
+   `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
+   Windows' own notification settings label the source "MI CS" instead of `MICS`.
+   Cards work without it; nothing about toast delivery depends on it.
+
+### 0.2 Blocked on the user
+
+1. **One UAC prompt — install the privileged helper (this finishes P1.5).**
+   In the running app: **Settings → Engine → Install helper**. Then, in the same
+   session, enable Default-Deny, turn SMBv1 off and import a hosts list: expect
+   **zero** further prompts and one `phase=start`/`phase=done` pair per operation
+   in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything under that step is already
+   proven unelevated by `scripts\verify-helper.ps1`.
+2. **A real OV/EV certificate (this is the public half of P4).** The local half is
+   done: `scripts\make-release.ps1 -Sign` self-signs, trusts the certificate in
+   `CurrentUser\Root` + `TrustedPublisher`, signs DLLs then EXEs before hashing and
+   zipping. A public release needs the certificate (the `-PfxPath`/`-PfxPassword`
+   path already timestamps), and only then does SmartScreen stop warning strangers.
+3. **Two decisions:** the VirusTotal client is dead code — wire the sync queue that
+   is supposed to fill it, or delete it and say so in the README (MED); and whether
+   the Start-Menu shortcut should also be named `MICS` (today it is `MI CS`).
+
+### 0.3 The big phases that remain
+
+- **P4 release engineering:** NSIS installer (bundled engine + rules + offline
+  intel, one UAC prompt, shortcut + AUMID registration), the signing certificate,
+  SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md`, ARM64 leg
+  (Flutter + `aarch64-pc-windows-msvc` engine).
+- **P5 trust & truth:** signed SHA256 manifest of shipped files + startup
+  self-check and an "unofficial build" banner, build hardening (Dart
+  `--obfuscate --split-debug-info`, Rust LTO/strip/`panic=abort`, PE mitigations),
+  and the deliberate README rewrite ("what it does / does not do").
+- **P6 QA:** `qa/` harness that drives every JSON-RPC method (happy path, invalid
+  params, permission failure, schema) plus per-screen widget tests and an E2E run
+  on the built artifact, emitting `qa/report.html`/`.md`; CI fails when a feature
+  is not registered.
+- **P3:** a default update manifest URL compiled in and a signature check on the
+  manifest before applying (today both are user-supplied).
+
+### 0.4 Environment must-knows (the short version of §8)
+
+- **Before every commit**, all four from `AGENTS.md`: `cargo test`,
+  `cargo clippy --release -- -D warnings`, `flutter analyze --no-pub`,
+  `flutter test --no-pub`. Set `$env:CARGO_TARGET_DIR = "$env:TEMP\mics-target"`
+  and `$env:YRX_REGENERATE_MODULES_RS = "false"` first.
+- **One phase = one conventional commit**, and this file is updated in the same
+  commit. Commit messages are written to a file under `.git\` and passed with
+  `git commit -F` (the write tool cannot expand `$env:TEMP`).
+- **Proof is textual, never visual**: engine logs, Windows' own toast history
+  (`scripts\verify-toast.ps1 -HistoryOnly`), `Get-AuthenticodeSignature`,
+  `VersionInfo.FileDescription`, the Shell API, `verify-*.ps1` `RESULT:` lines.
+- **PowerShell 5.1 traps** (§8): native stderr + `$ErrorActionPreference = "Stop"`
+  turns progress output into a terminating error; `Copy-Item -Recurse` nests;
+  never delete the live package folder; UTF-8 must be written with
+  `[System.IO.File]::WriteAllLines(..., UTF8Encoding($false))` to avoid the
+  double-encoded README that happened once. Scripts stay ASCII-only.
+- **Reply to the user in Egyptian Arabic**; code, comments, docs and commit
+  messages in English. Never add telemetry or cloud calls; the UI never touches OS
+  APIs — everything goes through the engine over JSON-RPC (`lib/core/ipc/`).
 
 ---
 

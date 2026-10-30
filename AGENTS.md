@@ -1,8 +1,10 @@
 # AGENTS.md — read this before touching MI CS
 
-**Start here:** [`docs/TODO.md`](docs/TODO.md) (status, plan, next tasks, known
-issues, environment traps) and [`docs/DECISIONS.md`](docs/DECISIONS.md)
-(decided architecture, do not silently reverse it).
+**Start here:** [`docs/TODO.md`](docs/TODO.md) — read **§0 "Resume here"** first
+(current state, the next ordered steps, what is blocked on a human, and the
+environment must-knows), then the plan and known issues below it — and
+[`docs/DECISIONS.md`](docs/DECISIONS.md) (decided architecture, do not silently
+reverse it).
 
 ## Layout
 
