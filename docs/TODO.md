@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-30 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> Last updated: 2026-10-31 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
@@ -35,9 +35,14 @@
 > blocks and what is missed** (with the starter-pack and no-scheduler limits
 > written down instead of implied) and **the light-mode palette measured against
 > WCAG 2.2 and then fixed** (أ2: 36 pairs, 25 failing · أ3: 29 pairs, **29
-> passing**, every ratio pinned by a test — `docs/CONTRAST.md`) ·
-> **next: أ4, AUMID registration (no elevation, no money), then install the helper
-> once (one UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
+> passing**, every ratio pinned by a test — `docs/CONTRAST.md`) and **the AUMID is
+> registered** (`scripts\register-aumid.ps1`: `DisplayName "MI CS"` under
+> `HKCU\Software\Classes\AppUserModelId\MICS`, plus `System.AppUserModel.ID` on both
+> shortcuts, so the Shell files the app under `MICS` instead of under the exe path;
+> `scripts\verify-aumid.ps1` reads all of it back, and `-Remove` reverses it) ·
+> **next: ب1, the SBOM + `THIRD-PARTY-NOTICES` + `docs/COST.md` (no elevation, no
+> money), then install the helper once (one UAC prompt), then the NSIS installer —
+> which folds the AUMID in — and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
 >
@@ -52,11 +57,11 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 وابدأ من أ4
+> اقرأ docs/TODO.md §0 وابدأ من ب1
 
-That means: read this section, then do step **أ4** (AUMID registration so
-Windows' own notification settings name the source "MI CS") as one small step,
-and stop for review. The rules that session must keep, all from `AGENTS.md`:
+That means: read this section, then do step **ب1** (the CycloneDX SBOM, the
+`THIRD-PARTY-NOTICES` file and `docs/COST.md`) as one small step, and stop for
+review. The rules that session must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
   cheap in time and tokens; do not bundle steps;
@@ -73,7 +78,7 @@ and stop for review. The rules that session must keep, all from `AGENTS.md`:
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-31, `main` @ `8be4964`). The whole
+**Where the project stands** (2026-10-31, `main` @ `f1e6fd7`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
@@ -87,6 +92,7 @@ icons are settled and a probe now fails the release if they drift:
 | Task Manager / Properties — the app (`mics_app.exe`) | `MI Cyber Security` |
 | Task Manager / Properties — the engine (`mics-engine.exe`) | `MiShild Background` |
 | Inside the product (window title, title bar, tray, card headers) | `MI CS` |
+| Windows' own notification settings / Action Center — the source label | `MI CS` |
 | Desktop shortcut — icon taken from `mics_app.exe` | `MICS` |
 | Start Menu shortcut | `MI CS` |
 
@@ -120,15 +126,20 @@ both binaries `Valid`).
    every ratio is an assertion in `test/light_contrast_audit_test.dart`.
    Before/after numbers: `docs/CONTRAST.md`. Dark mode is still unmeasured (the
    register row says so).
-3. **أ4 — AUMID registration (LOW)** — register
-   `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
-   Windows' own notification settings label the source "MI CS" instead of `MICS`.
-   Cards work without it; nothing about toast delivery depends on it. Do the script
-   first, then move it into the NSIS installer when **ب3** lands. This is the first
-   step of the next session (`§0.0`).
+3. ~~**أ4 — AUMID registration (LOW)**~~ — done: `scripts\register-aumid.ps1` writes
+   `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName "MI CS"`, `IconUri` =
+   the app's own exe: no elevation, no new file) and tags both shortcuts with
+   `System.AppUserModel.ID = MICS`. `scripts\verify-aumid.ps1` reported **4
+   problems** before and **5 of 5** after, including `Get-StartApps` filing the app
+   under `MICS` instead of under the exe path; `-Remove` reverses both, and a real
+   card still reached the desktop afterwards (`verify-toast.ps1` PASS). It moves into
+   the NSIS installer with **ب3**.
 4. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
    core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
    either definition of it.
+
+**This section is empty now**: every step that needed neither elevation nor money
+is done. The next ordered step is **ب1** in §0.3.
 
 ### 0.2 Blocked on the user
 
@@ -149,7 +160,7 @@ both binaries `Valid`).
 
 ### 0.3 The plan, in order — what a new session works through
 
-Every row is one commit-sized step unless it says otherwise; **أ4 is the first**
+Every row is one commit-sized step unless it says otherwise; **ب1 is the first**
 (§0.0). "Needs you" is the list that cannot move without the user.
 
 **أ — close §0 (no elevation, no money)**
@@ -158,14 +169,14 @@ Every row is one commit-sized step unless it says otherwise; **أ4 is the first*
 |---|---|---|
 | ~~**أ2**~~ | ~~Light-mode contrast audit~~ — **done**: 36 pairs measured against WCAG 2.2, 25 below their bar (`docs/CONTRAST.md`) | measured 2026-10-30 |
 | ~~**أ3**~~ | ~~Fix the colours that fail أ2~~ — **done**: 29 of 29 pairs now clear their bar, every ratio asserted in `test/light_contrast_audit_test.dart` (`docs/CONTRAST.md`) | measured 2026-10-31 |
-| **أ4** | AUMID registration script + docs (`HKCU\Software\Classes\AppUserModelId\MICS`) | **first step of the next session**; moves into the installer with ب3 |
+| ~~**أ4**~~ | ~~AUMID registration script + docs~~ — **done**: `scripts\register-aumid.ps1` writes `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName "MI CS"`, `IconUri`) and the shortcut property, `scripts\verify-aumid.ps1` reads 5 of 5 back | measured 2026-10-31; folds into the installer with ب3 |
 
 **ب — P4 release engineering (the largest remaining piece; the register's HIGH row
 "no installer")**
 
 | Step | What | Needs you |
 |---|---|---|
-| **ب1** | SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md` | no |
+| **ب1** | SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md` | no — **first step of the next session** |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt | no |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
@@ -298,6 +309,8 @@ not implemented yet, see D-008).
 | `dart run tool/pipe_probe.dart <dir>` | Raw protocol: request/response + `progress` + `job_finished` push |
 | `mics-engine.exe benchmark` | RAM/CPU against the §15 budgets |
 | `scripts\verify-toast.ps1` | A real notification card reached the desktop: clears the AUMID's history, triggers a card, reads the history back (text + actions). `-HistoryOnly` reads cards an already-running engine produced |
+| `scripts\register-aumid.ps1` | Windows labels a card's source `MI CS`: writes `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName`, `IconUri`) and tags the shortcuts' `System.AppUserModel.ID` through `IPropertyStore` (WScript.Shell cannot set it). No elevation, no new file; `-Remove` puts both back |
+| `scripts\verify-aumid.ps1` | The registration is really there and Windows agrees: reads the registry key, the shortcut property and the Shell's own `Get-StartApps` AppID. Read-only; exits 1 with the list of what did not hold |
 | `scripts\verify-helper.ps1` | The privileged helper's protocol **unelevated**: ping/version answer, a privileged op is refused without an elevated token, an unmarked hosts document and a malformed firewall rule are refused, an op outside the closed set is refused, the audit log keeps intent/outcome but never the payload, `helper-status` sees it |
 | `scripts\verify-pipe-acl.ps1` | Both pipe ACLs are what `docs/THREAT-MODEL.md` says: reads each live DACL back with `GetSecurityInfo` (engine pipe protected to the owner/SYSTEM/Administrators, helper pipe `INTERACTIVE`), and drives a real JSON-RPC `status` call over the hardened engine pipe so the ACL cannot pass by locking the UI's own user out. Isolated pipe names + data dir, so a running MI CS is untouched |
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
@@ -343,6 +356,48 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Windows names the notification source "MI CS" now, and a probe reads it back (أ4)**
+  - The engine has always raised cards under AUMID `MICS`; what Windows *calls* that
+    source comes from a registration nobody was doing, so the Action Center and
+    Settings → Notifications showed the raw id. `scripts\register-aumid.ps1` writes
+    `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName "MI CS"`, `IconUri` =
+    the app's own exe) and tags both shortcuts with `System.AppUserModel.ID = MICS`.
+    No elevation and no new file - it is the user's own hive and the user's own
+    shortcuts - and `-Remove` puts both back.
+  - Measured, not asserted: `scripts\verify-aumid.ps1` reported **4 problems** before
+    the change (no key, neither shortcut carrying an id, and `Get-StartApps` filing
+    "MI CS" under the *exe path*) and **5 of 5** after, including the Shell's own
+    start-menu index reporting AppID `MICS`. `-Remove` was run for real and reversed
+    the three checks that depend on it, then the registration was put back. That is
+    why it is a script: a registry key and a shortcut property that cannot be undone
+    are just another thing to forget.
+  - The shortcut property is a Shell property, not a WScript field, so
+    `create-shortcuts.ps1` (WScript.Shell) cannot write it: the interop lives in
+    `scripts\aumid-interop.ps1` (IPropertyStore) and both scripts dot-source it, so
+    the writer and the reader cannot drift apart. Two things the run taught:
+    `InitPropVariantFromString` is **not** exported by `propsys.dll` on this build
+    (`EntryPointNotFoundException` - the PROPVARIANT is built by hand instead), and
+    the start-menu index lags a changed shortcut by about **5 s**, so the probe waits
+    for it instead of failing on the cache.
+  - Delivery is unchanged, and that was re-proven rather than assumed: with the AUMID
+    registered, `scripts\verify-toast.ps1` reports PASS with the card
+    "🛡️ MI CS — إشعار تجريبي" in Windows' own notification history. The card was
+    rebuilt from the runnable copy in `%LOCALAPPDATA%\MI CS` (medium integrity),
+    which is where a card can be raised at all (trap 16).
+  - Honest limits: the probe proves the fact Windows *reads* the label from, not the
+    pixels of the Settings page - nobody looked at that screen. And registration is
+    per-user and per-machine, so a fresh install needs the script again: **ب3** folds
+    it into the installer, where NSIS can write the key with `WriteRegStr` but not
+    the shortcut property, so the installer will have to call this script (or a
+    helper) rather than only touching the registry.
+  - The register's AUMID row is now a smaller, different risk: a *forged* card is
+    labelled "MI CS" too. That is written into `docs/THREAT-MODEL.md` §B10 - the
+    label was never proof, and it now looks more convincing while proving the same
+    nothing.
+  - Checks: `cargo test` 76/76, `cargo clippy --release -- -D warnings` clean,
+    `flutter analyze --no-pub` clean, `flutter test --no-pub` 43/43 (this step adds no
+    Dart and no Rust, so those two are unchanged by it).
 
 - **the light palette now clears WCAG 2.2 on every pair it paints (أ3)**
   - أ2 measured 36 pairs and 25 failed. This step repainted the palette so the
@@ -1694,7 +1749,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age (it re-reads the section it just changed, which is where the staleness would matter) | `traits.rs`, `providers.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
-| LOW | Alerts are attributed by AUMID `MICS` without registering an AppUserModelID (no Start-Menu shortcut property, no `HKCU\Software\Classes\AppUserModelId\MICS`), so Windows' own notification settings/Action Center label the source as `MICS` rather than "MI CS". Registration is not required for the card to appear (proven with cards in the history), and adding it changes a shortcut outside the app folder — fold it into the P4 installer | `notify/toast.rs`, `scripts/create-shortcuts.ps1` |
+| LOW | A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS" (the threat model already says a card is UI, not proof) | `notify/toast.rs`, THREAT-MODEL §B10 |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | **No scheduled scan and no real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection at all (Windows Defender is the real-time layer, and the audit says so loudly when it is off) | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
@@ -1739,6 +1794,10 @@ contain each of the following dimensions:
 - [x] Light‑mode contrast audit — 36 pairs measured against WCAG 2.2, 25 below their bar
   (`docs/CONTRAST.md`, steps أ2–أ3): 25 of 36 failing when measured, **29 of 29**
   passing after the fix, each ratio pinned by a test.
+- [x] AUMID registration — cards were raised under `MICS` without it being
+  registered, so Windows' own notification settings labelled the source with the raw
+  id (step أ4): `scripts\register-aumid.ps1` writes the key + the shortcut property,
+  `scripts\verify-aumid.ps1` reads 5 of 5 back and `-Remove` reverses both.
 - [ ] Screenshots of the light theme in the documentation.
 - [ ] Complete `docs/PROTECTION-MATRIX.md` as a standalone document (currently only in README).
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
@@ -1850,6 +1909,18 @@ settings and read environment variables only.
       came from an older session) and still said "MI CS" after the rename: always
       clear the history before reading it back (`verify-toast.ps1` does), and prove
       cards from `%LOCALAPPDATA%\MI CS`, not from `dist`.
+
+17. **A shortcut's AUMID is not a `WScript.Shell` field, and the start-menu index
+    lags it.** `System.AppUserModel.ID` lives only in the Shell property store, so
+    `$shell.CreateShortcut()` cannot write it — it needs `IPropertyStore`
+    (`scripts\aumid-interop.ps1`). Two traps inside that one: **`InitPropVariantFromString`
+    is not exported by name from `propsys.dll`** on this Windows build, so the
+    P/Invoke throws `EntryPointNotFoundException` and the `PROPVARIANT` has to be
+    built by hand (`vt = VT_LPWSTR` + `Marshal.StringToCoTaskMemUni`); and
+    `Get-StartApps` keeps reporting the *old* AppID (the exe path) for several
+    seconds after the property changes, so a probe that checks it immediately
+    reports a false failure (`verify-aumid.ps1` waits ~5 s for it). Removing the
+    property again is `SetValue(VT_EMPTY)`, not writing an empty string.
 
 ---
 

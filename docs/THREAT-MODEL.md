@@ -200,6 +200,14 @@ DB and `priv.log`. The card's action ids are resolved by the engine's own handle
 so a forged card cannot make the engine do anything the caller could not already
 ask the engine to do through the pipe.
 
+The AUMID is registered (`scripts/register-aumid.ps1`: `DisplayName "MI CS"` under
+`HKCU\Software\Classes\AppUserModelId\MICS`), so Windows now labels the source
+"MI CS" instead of the raw id. That makes a forged card *look* better than it did
+before, which strengthens the rule above rather than weakening it: the label is
+still a claim by whoever raised the card. What the registration does not change is
+who can raise one - any process in this user's session - and nothing in the
+product trusts the label.
+
 ## 5. Attack paths we considered
 
 | # | Attempt | Outcome | Evidence |

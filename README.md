@@ -308,7 +308,19 @@ python tool\make_icons.py
 
 # 3) create desktop + Start-Menu shortcuts with the right art
 powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1
+
+# 4) register the AUMID so Windows names the notification source "MI CS"
+powershell -ExecutionPolicy Bypass -File scripts\register-aumid.ps1
 ```
+
+`register-aumid.ps1` writes `HKCU\Software\Classes\AppUserModelId\MICS`
+(`DisplayName`, `IconUri`) and tags both shortcuts with
+`System.AppUserModel.ID = MICS`, which is what makes the Action Center and
+Settings → Notifications show **MI CS** instead of the raw id the engine raises
+cards under. It needs no elevation and no new file, and `-Remove` undoes both;
+`scripts\verify-aumid.ps1` reads the key, the shortcut property and the Shell's
+own `Get-StartApps` AppID back, and exits non-zero with the list of what did not
+hold.
 
 Every icon carries the ten sizes Windows actually asks for — **16, 20, 24, 32,
 40, 48, 64, 96, 128, 256** — so no surface has to upscale and look soft. Give
