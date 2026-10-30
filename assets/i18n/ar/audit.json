@@ -1,7 +1,7 @@
 {
   "audit.applyingFix": "بيطبّق الإصلاح… (ممكن تظهر نافذة UAC)",
   "audit.askingAnalyst": "بيسأل المحلّل…",
-  "audit.assistant": "مساعد MI CS",
+  "audit.assistant": "مساعد MIF",
   "audit.empty.action": "ابدأ الفحص الأول",
   "audit.empty.title": "لم يتم تشغيل فحص بعد",
   "audit.error": "فشل الفحص",

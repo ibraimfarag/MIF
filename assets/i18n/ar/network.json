@@ -1,4 +1,4 @@
-﻿{
+{
     "network.blockCountry":  "حجب دولة (محتاج قائمة محجوبات متزامنة)",
     "network.blockCountryHint":  "بيعمل قاعدة MICS-BLOCK-\u003cCC\u003e من rules/blocklists/\u003cCC\u003e.cidr",
     "network.connections":  "{count} اتصال",
@@ -7,7 +7,7 @@
     "network.defaultDenyOff":  "مقفول — الخروج مسموح (افتراضي ويندوز)",
     "network.defaultDenyOn":  "مفعّل — كل الخروج محجوب إلا اللي قاعدة بتسمح بيه (L1)",
     "network.firewall":  "جدار الحماية",
-    "network.rules":  "قواعد MI CS ({count})",
+    "network.rules":  "قواعد MIF ({count})",
     "network.suspicious":  "{count} مريب",
-    "network.noRules":  "مفيش قواعد MICS-* لسه. أي قاعدة تتcreate من MI CS هتظهر في wf.msc ببادئة MICS-."
+    "network.noRules":  "مفيش قواعد MICS-* لسه. أي قاعدة تتcreate من MIF هتظهر في wf.msc ببادئة MICS-."
 }

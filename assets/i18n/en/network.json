@@ -1,4 +1,4 @@
-﻿{
+{
     "network.blockCountry":  "Block a country (needs synced blocklist)",
     "network.blockCountryHint":  "Creates a MICS-BLOCK-\u003cCC\u003e rule from rules/blocklists/\u003cCC\u003e.cidr",
     "network.connections":  "{count} connections",
@@ -7,7 +7,7 @@
     "network.defaultDenyOff":  "OFF — outbound traffic allowed (Windows default)",
     "network.defaultDenyOn":  "ON — all outbound traffic blocked unless a rule allows it (L1)",
     "network.firewall":  "Firewall",
-    "network.rules":  "MI CS rules ({count})",
+    "network.rules":  "MIF rules ({count})",
     "network.suspicious":  "{count} suspicious",
-    "network.noRules":  "No MICS-* rules yet. Rules created from MI CS appear in wf.msc with the MICS- prefix."
+    "network.noRules":  "No MICS-* rules yet. Rules created from MIF appear in wf.msc with the MICS- prefix."
 }

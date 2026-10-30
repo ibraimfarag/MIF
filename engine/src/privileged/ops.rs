@@ -138,7 +138,7 @@ pub fn validate_hosts(content: &str) -> Result<()> {
         );
     }
     if !content.contains(HOSTS_MARKER) {
-        bail!("hosts document does not contain the MI CS marker");
+        bail!("hosts document does not contain the MIF marker");
     }
     for (index, line) in content.lines().enumerate() {
         // A hosts entry may carry a trailing comment (`127.0.0.1 host # note`).

@@ -41,7 +41,9 @@ Background** (the engine) — those names come from each executable's version
 resource, so the files are still `mics_app.exe` and `mics-engine.exe` (the names
 every script, the app's engine lookup and `MICS_ENGINE_PATH` use). Right-click →
 *Properties* → *Details* shows the same thing; the *Details* tab of Task Manager
-always shows the file name.
+always shows the file name. `MIF` is also the window title, the tray tooltip and
+the header of every notification card; the project itself is still *MI CS* in
+these docs, in the `MICS-*` firewall rule prefix and in the `MICS_*` test hooks.
 
 ## What MI CS does **not** do
 
@@ -320,7 +322,7 @@ a copy of the task icon.
 | "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV/EV certificate; see [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
-| No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder: move MI CS to a normal folder, or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine says so itself in `notify.test`'s error and in the log. |
+| No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder — including a web-root tree like `...\server\www\`, where the folder carries a Low Mandatory Level label: move MI CS to a normal folder (`%LOCALAPPDATA%\MI CS` is the tested one), or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine names the reason itself in `notify.test`'s error and in the log. |
 | Engine shows *Engine not found* | `mics-engine.exe` must sit next to `mics_app.exe` (or set `MICS_ENGINE_PATH`). |
 | A scan looks stuck | It is a durable job — watch the progress card. Closing the window does not stop it, and killing the engine is safe: it resumes at the next file. |
 | Offline | Only intel sync needs the network. The chip shows `Offline` and how old the synced intel is. |
@@ -358,6 +360,9 @@ a copy of the task icon.
 فالملفات لسه `mics_app.exe` و`mics-engine.exe` (الأسماء اللي كل السكريبتات والبحث
 بتاع الواجهة و`MICS_ENGINE_PATH` بيعتمدوا عليها). كليك يمين → *Properties* →
 *Details* بيوضّح نفس الاسم، وتاب *Details* في التاسك مانجر بيعرض اسم الملف دايمًا.
+و**MIF** كمان هو عنوان النافذة، ونص الأيقونة في التاسك بار، وهيدر كل كارت إشعار؛
+لكن المشروع نفسه لسه اسمه *MI CS* في المستندات دي، وفي بادئة قواعد الجدار
+`MICS-*`، وفي متغيرات الاختبار `MICS_*`.
 
 **اللي بيعمله فعلاً:** فحص نظام حقيقي (ديفندر، جدار الحماية، RDP، SMBv1، UAC،
 المدراء، بدء التشغيل، المهام المجدولة، ملف hosts) بدرجة من 100 وإصلاح بضغطة واحدة؛
@@ -429,6 +434,15 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 الـ DLLs **قبل** الهاش والـ zip، فويّندوز بيبقى عنده ناشر يسمّيه بدل ما يرفض
 التطبيق. التوقيع الذاتي ثقة **محلية** بس — بيشيل الرسالة على جهازك، لكنه مش
 سمعة عامة؛ النشر للناس محتاج شهادة حقيقية (P4).
+
+
+**ولو الكروت مش بتظهر:** اتأكد من **Settings -> Notifications -> Desktop notifications**
+ومن وضع عدم الإزعاج (بيسمح بالـ CRITICAL بس). وكمان ويندوز بيرفض الكروت لأي عملية
+**سلامتها منخفضة (low integrity)** — وده بيحصل لو شغّلت التطبيق من فولدر مقيّد أو من
+شجرة سيرفر ويب زي `...\server\www\`، لأن الفولدر ساعتها شايل Low Mandatory Level label:
+انقل MI CS لفولدر عادي (`%LOCALAPPDATA%\MI CS` هو المجرّب)، أو ارفع تصنيف الفولدر
+بأمر مدير: `icacls "<folder>" /setintegritylevel Medium /T`. والمحرك نفسه بيقول السبب
+في رسالة `notify.test` وفي اللوج.
 
 ولو الرسالة لسه ظاهرة: اختار **More info → Run anyway**، أو شغّل التطبيق من غير
 هوك الـ Explorer: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. وقبل ما

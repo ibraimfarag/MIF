@@ -143,25 +143,25 @@ pub fn guard_event(ev: &crate::guard::GuardEvent) {
 /// (Arabic, English) for every string the engine puts on a card, so the alert
 /// follows the language the user picked instead of always shouting in English.
 const COPY: &[(&str, &str, &str)] = &[
-    ("guard.suspicious.title", "🛡️ MI CS — نشاط مشبوه", "🛡️ MI CS — Suspicious activity"),
-    ("guard.canary.title", "🥚 MI CS — ملف الطُعم اتحرك!", "🥚 MI CS — Canary touched!"),
-    ("guard.action.open", "افتح MI CS", "Open MI CS"),
-    ("scan.threat.title", "🛡️ MI CS — لقينا تهديد", "🛡️ MI CS — Threat found"),
+    ("guard.suspicious.title", "🛡️ MIF — نشاط مشبوه", "🛡️ MIF — Suspicious activity"),
+    ("guard.canary.title", "🥚 MIF — ملف الطُعم اتحرك!", "🥚 MIF — Canary touched!"),
+    ("guard.action.open", "افتح MIF", "Open MIF"),
+    ("scan.threat.title", "🛡️ MIF — لقينا تهديد", "🛡️ MIF — Threat found"),
     ("scan.threat.action", "اعزل الملف", "Quarantine"),
     (
         "scan.summary.title",
-        "🛡️ MI CS — {n} ملفات مشبوهة",
-        "🛡️ MI CS — {n} suspicious files",
+        "🛡️ MIF — {n} ملفات مشبوهة",
+        "🛡️ MIF — {n} suspicious files",
     ),
     (
         "scan.summary.body",
-        "افتح MI CS عشان تشوف التفاصيل وتتعامل معاها.",
-        "Open MI CS to review them and act.",
+        "افتح MIF عشان تشوف التفاصيل وتتعامل معاها.",
+        "Open MIF to review them and act.",
     ),
     (
         "scan.quarantined.title",
-        "🔒 MI CS — اتعزل {n} ملف",
-        "🔒 MI CS — {n} files quarantined",
+        "🔒 MIF — اتعزل {n} ملف",
+        "🔒 MIF — {n} files quarantined",
     ),
     (
         "scan.quarantined.body",
@@ -170,13 +170,13 @@ const COPY: &[(&str, &str, &str)] = &[
     ),
     (
         "protect.blocked.title",
-        "🚫 MI CS — الحماية اتحركت",
-        "🚫 MI CS — Protection applied",
+        "🚫 MIF — الحماية اتحركت",
+        "🚫 MIF — Protection applied",
     ),
     (
         "test.title",
-        "🛡️ MI CS — إشعار تجريبي",
-        "🛡️ MI CS — test notification",
+        "🛡️ MIF — إشعار تجريبي",
+        "🛡️ MIF — test notification",
     ),
     (
         "test.body",
@@ -193,7 +193,7 @@ pub fn text(key: &str) -> &'static str {
     COPY.iter()
         .find(|(k, ..)| *k == key)
         .map(|(_, ar, en)| if lang == "ar" { *ar } else { *en })
-        .unwrap_or("MI CS")
+        .unwrap_or("MIF")
 }
 
 fn fill(template: &str, placeholder: &str, value: &str) -> String {

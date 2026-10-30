@@ -11,7 +11,7 @@
   "update.current": "إصدارك الحالي {version}",
   "update.download": "نزّل وثبّت",
   "update.failed": "التحديث فشل",
-  "update.installed": "التحديث جاهز — MI CS هيعيد التشغيل",
+  "update.installed": "التحديث جاهز — MIF هيعيد التشغيل",
   "update.notes": "ملاحظات الإصدار",
   "update.upToDate": "إنت على أحدث إصدار",
   "update.checking": "بيتأكد من التحديثات…"

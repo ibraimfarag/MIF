@@ -13,8 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// Adding a new allowed literal is a deliberate act: it means "this string must
 /// never be translated".
 const _allowed = <String>{
-  'MI CS',
-  'MI CS — Mourad Ibrahim Cyber Security',
+  'MIF',
+  'MIF — Mourad Ibrahim Cyber Security',
   'GPL-3.0-or-later · no telemetry · offline-first',
   r'C:\ProgramData\MICS\settings.json',
 };

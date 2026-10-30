@@ -141,6 +141,29 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **branding — the app is "MIF" everywhere a person can see it**
+  - Second naming step after `MiShild Background`: the window title, the tray
+    tooltip and the title-bar text, the in-app product string (en: `MIF`, ar:
+    `مركز MIF للدفاع السيبراني`), the audit assistant, the network-rules copy, the
+    update-restart message, the CLI banner and the notification card headers all
+    say **MIF** now, in both languages.
+  - One constant instead of three literals: `lib/core/window/app_identity.dart`
+    (`appDisplayName`). `window_corners.dart` finds the window with `FindWindowW`
+    by that exact title, so a rename that missed it would silently stop the
+    rounded corners from being applied — the constant makes that impossible.
+  - `test/i18n_lint_test.dart` keeps its allow-list of intentionally
+    untranslated brand strings; it now lists `MIF` instead of `MI CS` (the lint
+    caught the rename, which is why the allow-list exists).
+  - Verified end to end on this machine, all of it textual: window title `MIF`
+    (`Get-Process ... MainWindowTitle`), Task Manager names `MIF` +
+    `MiShild Background` (shell API and version resource), and a real card in
+    Windows' own toast history reading
+    `🛡️ MIF — test notification | Notifications are working...` from the signed
+    install in `%LOCALAPPDATA%\MI CS`.
+  - Kept as "MI CS" on purpose: the project/docs name, the `MICS-*` firewall rule
+    prefix, the `MICS` AUMID and the `MICS_*` test hooks — those are identifiers,
+    not labels.
+
 - **signing — a locally trusted certificate, one flag away**
   - Second SmartScreen report, now the hard block: *"Windows protected your PC —
     Microsoft Defender SmartScreen prevented an unrecognized app from starting"*.
@@ -1064,6 +1087,30 @@ settings and read environment variables only.
     mutable folder — `verify-release.ps1` checks those entries against the
     extracted copy, so a stale working folder can no longer fail the release
     verification (it did, with `listed b7361e67 / actual d092f559`).
+
+16. **The published folder can disappear without any of our code doing it.** On
+    2026-10-30 at 17:18:03 the whole of `dist\` (the folder, the zip and
+    `SHA256SUMS`) was gone between one command and the next. Ruled out by
+    measurement: no Defender detection or quarantine (the operational log's last
+    entry is hours older, `Get-MpThreatDetection` shows nothing for that path), no
+    script in the repo removes `dist\*` (only `$staging`, `$zip`, `$portable`
+    individually), `dist` is not a reparse point, and an ordinary delete of a
+    *child container* there should have been refused anyway — the tree carries
+    `Everyone:(CI)(DENY)(DC)` plus a Low Mandatory Level label, i.e. this is a
+    host-managed web root (`H:\FlyEnv\...\server\www\`) with ACLs we did not set.
+    So the agent is outside the repo and unproven. Two consequences, both now
+    standing rules: `dist\` is a *build output* and never the thing to run or
+    trust (re-create it with `scripts\make-release.ps1 -Sign`, which is
+    idempotent and re-hashes), and the runnable copy lives in
+    `%LOCALAPPDATA%\MI CS`, outside the managed tree.
+    - Related trap, same tree: a package sitting inside that low-integrity tree
+      **cannot raise notification cards at all**. The engine says so itself now —
+      `notify.test` from `dist\MICS-portable\mics-engine.exe` answers
+      `0x80073D54 ... MIF is running from a confined folder`. That is also why a
+      card read out of the toast history right after such a run was *stale* (it
+      came from an older session) and still said "MI CS" after the rename: always
+      clear the history before reading it back (`verify-toast.ps1` does), and prove
+      cards from `%LOCALAPPDATA%\MI CS`, not from `dist`.
 
 ---
 

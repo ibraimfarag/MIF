@@ -1,6 +1,6 @@
 //! Engine-side Windows Toast notifications — alerts fire even with the UI
 //! closed (AUMID "MICS"). Cards carry real actions:
-//!   click / "Open MI CS" -> launches the UI
+//!   click / "Open MIF" -> launches the UI
 //!   "Quarantine"         -> actually quarantines the referenced file
 //!
 //! This module is the transport only. **Whether** an alert may reach the
@@ -35,8 +35,8 @@ const SECURITY_MANDATORY_MEDIUM_RID: u32 = 0x2000;
 fn explain_toast_failure(code: i32, confined: bool) -> Option<&'static str> {
     if code == APPMODEL_ERROR_NO_PACKAGE && confined {
         return Some(
-            "Windows does not show notification cards for a low-integrity process: MI CS is \
-             running from a confined folder. Move MI CS to a normal folder, or raise the \
+            "Windows does not show notification cards for a low-integrity process: MIF is \
+             running from a confined folder. Move MIF to a normal folder, or raise the \
              folder's label as an administrator (`icacls \"<folder>\" /setintegritylevel \
              Medium /T`), then try again",
         );
@@ -256,9 +256,9 @@ mod tests {
     #[test]
     fn quoting_inside_the_launch_payload_is_escaped() {
         let xml = build_toast_xml(
-            "🛡️ MI CS — Threat found",
+            "🛡️ MIF — Threat found",
             r"C:\tmp\bad.exe — yara:EICAR",
-            &["Quarantine", "Open MI CS"],
+            &["Quarantine", "Open MIF"],
             r#"{"mics-action":"a1729"}"#,
         );
         // The raw JSON quotes must never appear inside the attribute.

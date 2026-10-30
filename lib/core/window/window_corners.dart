@@ -15,6 +15,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:mics_app/core/window/app_identity.dart';
 
 class WindowCorners {
   /// Logical radius; scaled by the window DPI before use.
@@ -35,7 +36,7 @@ class WindowCorners {
       final findWindow = user32.lookupFunction<
           IntPtr Function(Pointer<Utf16>, Pointer<Utf16>),
           int Function(Pointer<Utf16>, Pointer<Utf16>)>('FindWindowW');
-      final title = 'MI CS Command Center'.toNativeUtf16();
+      final title = appDisplayName.toNativeUtf16();
       final hwnd = findWindow(Pointer.fromAddress(0), title);
       malloc.free(title);
       if (hwnd == 0) return;

@@ -6,6 +6,7 @@ import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/core/window/app_identity.dart';
 import 'package:mics_app/core/window/window_corners.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -43,9 +44,9 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   /// Closing the window hides to tray — the engine (and alerts) keep running.
   Future<void> _setupTray() async {
     await trayManager.setIcon('assets/icons/mics.ico');
-    await trayManager.setToolTip('MI CS Command Center');
+    await trayManager.setToolTip(appDisplayName);
     await trayManager.setContextMenu(Menu(items: [
-      MenuItem(key: 'show', label: 'Open MI CS'),
+      MenuItem(key: 'show', label: 'Open $appDisplayName'),
       MenuItem.separator(),
       MenuItem(key: 'quit', label: 'Quit'),
     ]));
@@ -97,7 +98,7 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   Future<void> _init() async {
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(
-        title: 'MI CS Command Center',
+        title: appDisplayName,
         minimumSize: Size(1100, 700),
         size: Size(1440, 860),
         center: true,
@@ -194,7 +195,7 @@ class _MicsAppState extends ConsumerState<MicsApp>
     // pages) to rebuild — statics-based colors switch instantly.
     return MaterialApp.router(
       key: ValueKey('theme-${settings.value?.themeMode}-lang-$lang'),
-      title: 'MI CS Command Center',
+      title: appDisplayName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

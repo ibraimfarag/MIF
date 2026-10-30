@@ -324,7 +324,7 @@ pub fn ensure_data_dir() -> PathBuf {
     }
     if !crate::platform::windows::elevation::is_elevated() {
         tracing::warn!(
-            "data dir {} is not fully writable by this user — start MI CS once as \
+            "data dir {} is not fully writable by this user — start MIF once as \
              administrator to repair permissions",
             dir.display()
         );
