@@ -25,8 +25,14 @@ pub const MAX_HOSTS_BYTES: usize = 4 * 1024 * 1024;
 /// bug can never hand the helper an arbitrary file to overwrite.
 pub const HOSTS_MARKER: &str = "# BEGIN MICS-IDS";
 
+/// Pipe the helper listens on, without the `\\.\pipe\` prefix (the listen and
+/// connect sites add it). `MICS_HELPER_PIPE` is the test hook and accepts either
+/// a bare name or a full path — the same function decides for the engine's hook,
+/// so a full path here cannot silently become `\\.\pipe\\\.\pipe\...`.
 pub fn pipe_name() -> String {
-    std::env::var("MICS_HELPER_PIPE").unwrap_or_else(|_| DEFAULT_PIPE.to_string())
+    crate::platform::windows::pipe::bare_pipe_name(
+        &std::env::var("MICS_HELPER_PIPE").unwrap_or_else(|_| DEFAULT_PIPE.to_string()),
+    )
 }
 
 /// One privileged operation. `op` is the serde tag, so the wire format is

@@ -8,7 +8,9 @@ do — the code, the wire format, the validation and the audit trail.
 - Engine side: `engine/src/privileged/` (`ops.rs`, `server.rs`, `service.rs`, `mod.rs`)
 - Protocol: newline-delimited JSON over the named pipe `\\.\pipe\mics_helper`
 - Audit: `%PROGRAMDATA%\MICS\logs\priv.log` (override: `MICS_HELPER_LOG`)
-- Test hook: `MICS_HELPER_PIPE` renames the pipe; nothing else about the helper moves
+- Test hook: `MICS_HELPER_PIPE` renames the pipe (a bare name or a full
+  `\\.\pipe\...` path — the same function decides the name as for the engine's own
+  `MICS_PIPE_NAME`); nothing else about the helper moves
 
 ## The closed set
 

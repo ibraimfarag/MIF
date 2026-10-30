@@ -194,7 +194,7 @@ cargo build --release
 | `mics-engine.exe serve` | stdio JSON-RPC (CLI/tests only; **not** the UI transport) |
 | `mics-engine.exe scan --path X --json` | One-off scan; waits for the job and prints the report |
 | `mics-engine.exe jobs --json` / `job <id> --json` / `resume-job <id>` | Inspect/resume jobs |
-| `MICS_PIPE_NAME` | Serve a different pipe (isolated dev/test engine) |
+| `MICS_PIPE_NAME` | Serve a different pipe (isolated dev/test engine) — a bare name or a full `\\.\pipe\...` path, both mean the same pipe |
 | `MICS_NO_SINGLETON=1` | Allow an engine next to the real one (with `MICS_PIPE_NAME`) |
 | `MICS_NO_GUARD=1` | Do not arm the guard in service mode (tests: no canary files) |
 | `MICS_NO_AUTO_RESUME=1` | Do not resume interrupted jobs at startup |
@@ -259,6 +259,24 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **One answer to "what is this pipe name" for both test hooks**
+  - `MICS_PIPE_NAME` wanted a full `\\.\pipe\...` path and `MICS_HELPER_PIPE` a
+    bare name. The forms are not interchangeable by accident: Windows accepts
+    `\\.\pipe\\\.\pipe\x` as a name of its own (verified on this machine), so the
+    wrong form started a second, differently-named pipe **silently** — the helper
+    was up, `helper-status` agreed with itself, and any client asking for the plain
+    name found nothing.
+  - `platform/windows/pipe.rs` now owns `pipe_path()` and `bare_pipe_name()`, and
+    both hooks go through them: either form names the same pipe. A new test pins
+    the accepted forms, the whitespace, the mixed case, the idempotence and the
+    fact that only the real `\\.\pipe\` prefix is stripped
+    (`\\.\pipelines\x` untouched). `cargo test` 61/61 (1 new).
+  - Live acceptance on the reference machine: `MICS_HELPER_PIPE` set to a **full
+    path** (`\\.\pipe\mics_helper_fullpath_probe`) now yields
+    `"reachable": true` from `helper-status --json`, which is the configuration
+    that used to be unreachable by name.
+  - The hook table in §0 and the `docs/PRIVILEGED-OPS.md` note now say that both
+    forms are accepted, and the register row for the disagreement is gone.
 - **The canary copy now says what the detector sees (F-4 closed)**
   - The alert read `was accessed/modified — something opened your decoy` while
     `check_touches` compares mtime and size only. A read-only open changes neither,
@@ -1324,7 +1342,6 @@ signing certificate respectively), so this is the work that is always available.
 | MED | **Update provenance is SHA-256 from the manifest only**: the updater never calls `WinVerifyTrust`, and `update_manifest_url` / `ioc_feed_url` may be `http://` (localhost is the only justified case, for LM Studio) | `update.rs`, `settings.rs`, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | `AGENTS.md` rule 8 says "nothing leaves the machine except explicit VT/NVD/LM lookups", but the engine also fetches the intel sources and probes `dns.google`/`1.1.1.1` for connectivity (cached 30 s) — the rule should carry the honest list | `AGENTS.md`, `sync/mod.rs`, THREAT-MODEL B6/F-7 |
-| LOW | The two pipe test hooks disagree: `MICS_PIPE_NAME` takes a full `\\.\pipe\...` path while `MICS_HELPER_PIPE` takes a bare name (a full path silently serves `\\.\pipe\\\.\pipe\...`) | `platform/windows/pipe.rs`, `privileged/ops.rs` |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 

@@ -39,10 +39,42 @@ use crate::rpc::JsonRpcRequest;
 
 pub const PIPE_NAME: &str = r"\\.\pipe\mics_engine";
 
+/// Full path for a configured pipe: `mics_engine` and `\\.\pipe\mics_engine`
+/// name the same pipe, so both test hooks accept either form.
+///
+/// They used to disagree — `MICS_PIPE_NAME` wanted the full path and
+/// `MICS_HELPER_PIPE` the bare name — so passing the other form served a
+/// different pipe: Windows accepts `\\.\pipe\\\.\pipe\x` as a name of its own
+/// (measured), which is why the mistake was silent instead of an error, and why
+/// no client asking for the plain name could reach it. One function now answers
+/// "what is this name" for both hooks, so they cannot drift apart again.
+pub fn pipe_path(name: &str) -> String {
+    let name = name.trim();
+    if name.to_ascii_lowercase().starts_with(r"\\.\pipe\") {
+        name.to_string()
+    } else {
+        format!(r"\\.\pipe\{name}")
+    }
+}
+
+/// The same name without the `\\.\pipe\` prefix, for the callers that add it.
+pub fn bare_pipe_name(value: &str) -> String {
+    let value = value.trim();
+    match value
+        .to_ascii_lowercase()
+        .strip_prefix(r"\\.\pipe\")
+    {
+        Some(_) => value[r"\\.\pipe\".len()..].to_string(),
+        None => value.to_string(),
+    }
+}
+
 /// Pipe name actually served. `MICS_PIPE_NAME` isolates a test/dev engine from
 /// the real one (same code path, different pipe).
 pub fn resolved_pipe_name() -> String {
-    std::env::var("MICS_PIPE_NAME").unwrap_or_else(|_| PIPE_NAME.to_string())
+    std::env::var("MICS_PIPE_NAME")
+        .map(|name| pipe_path(&name))
+        .unwrap_or_else(|_| PIPE_NAME.to_string())
 }
 
 const BACKOFF: std::time::Duration = std::time::Duration::from_millis(300);
@@ -366,5 +398,27 @@ mod tests {
         let user = current_user_sid().expect("current user SID");
         assert!(user.starts_with("S-1-"), "not a SID: {user}");
         assert!(sddl.contains(&user), "{sddl}");
+    }
+
+    #[test]
+    fn both_pipe_hooks_accept_a_bare_name_or_a_full_path() {
+        // The form `MICS_HELPER_PIPE` used to require, and the form
+        // `MICS_PIPE_NAME` used to require, must name the same pipe.
+        assert_eq!(pipe_path("mics_test"), r"\\.\pipe\mics_test");
+        assert_eq!(pipe_path(r"\\.\pipe\mics_test"), r"\\.\pipe\mics_test");
+        assert_eq!(pipe_path(r"\\.\PIPE\mics_test"), r"\\.\PIPE\mics_test");
+        assert_eq!(pipe_path("  mics_test  "), r"\\.\pipe\mics_test");
+        // Idempotent: a caller may normalize twice without doubling the prefix.
+        assert_eq!(pipe_path(&pipe_path("mics_test")), r"\\.\pipe\mics_test");
+
+        assert_eq!(bare_pipe_name(r"\\.\pipe\mics_test"), "mics_test");
+        assert_eq!(bare_pipe_name("mics_test"), "mics_test");
+        assert_eq!(bare_pipe_name("  mics_test "), "mics_test");
+        // Only the real prefix is stripped, and the round trip is lossless for
+        // every accepted form.
+        assert_eq!(bare_pipe_name(r"\\.\pipelines\x"), r"\\.\pipelines\x");
+        for name in ["mics_test", r"\\.\pipe\mics_test"] {
+            assert_eq!(pipe_path(&bare_pipe_name(name)), r"\\.\pipe\mics_test");
+        }
     }
 }
