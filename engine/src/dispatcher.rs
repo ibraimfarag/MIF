@@ -3,7 +3,26 @@ use serde_json::json;
 use std::path::PathBuf;
 use tracing::{info, warn, error};
 use crate::platform::traits::PlatformCollectors;
+use crate::platform::windows::process::ToolCall;
 pub struct Dispatcher;
+
+/// How long one `reg.exe` call for the autostart entry may take. Writing an
+/// `HKCU\...\Run` value is instant; a registry filter driver can still stall it,
+/// and that used to hold `service.install` / `service.remove` open forever.
+const REG_ENTRY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// How long a Defender quick scan may take before the request gives up. The scan
+/// really does run for minutes, so the budget is generous — it only exists so an
+/// unanswered `-Wait` cannot pin this request for the rest of the session.
+const DEFENDER_SCAN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
+
+/// The autostart entry's registry call, with a deadline. `action` is `add` or
+/// `delete`; `what` names the operation in the timeout error.
+pub(crate) fn reg_entry(action: &'static str, args: &[&str], what: &'static str) -> ToolCall {
+    ToolCall::new(what, "reg", REG_ENTRY_TIMEOUT)
+        .arg(action)
+        .args(args)
+}
 
 fn error_response(req: JsonRpcRequest, message: &str) -> JsonRpcResponse {
     JsonRpcResponse {
@@ -417,14 +436,21 @@ impl Dispatcher {
                 command.creation_flags(
                     crate::platform::windows::elevation::CREATE_NO_WINDOW,
                 );
-                let out = command.output().await;
+                let out = tokio::time::timeout(DEFENDER_SCAN_TIMEOUT, command.output()).await;
                 match out {
-                    Ok(o) if o.status.success() => Some(json!({"status": "done"})),
-                    Ok(o) => {
+                    Ok(Ok(o)) if o.status.success() => Some(json!({"status": "done"})),
+                    Ok(Ok(o)) => {
                         error!("defender scan failed: {}", String::from_utf8_lossy(&o.stderr));
                         None
                     }
-                    Err(e) => { error!("defender scan: {e:#}"); None }
+                    Ok(Err(e)) => { error!("defender scan: {e:#}"); None }
+                    Err(_) => {
+                        error!(
+                            "defender scan did not finish within {}s",
+                            DEFENDER_SCAN_TIMEOUT.as_secs()
+                        );
+                        None
+                    }
                 }
             }
             "quarantine.add" => {
@@ -774,35 +800,40 @@ impl Dispatcher {
                 };
                 // Boot-with-windows: HKCU Run entry (no admin needed; the
                 // scheduled-task variant requires elevation and is documented).
-                let out = std::process::Command::new("reg")
-                    .args([
-                        "add",
+                let data = format!("\"{}\" --service", exe.display());
+                let out = reg_entry(
+                    "add",
+                    &[
                         r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
                         "/v", "MICS-Engine",
                         "/t", "REG_SZ",
-                        "/d", &format!("\"{}\" --service", exe.display()),
+                        "/d", data.as_str(),
                         "/f",
-                    ])
-                    .output();
+                    ],
+                    "reg add (service.install: autostart entry)",
+                )
+                .run();
                 match out {
-                    Ok(o) if o.status.success() => Some(json!({"status": "installed"})),
-                    Ok(o) => { error!("service.install: {}", String::from_utf8_lossy(&o.stderr)); None }
-                    Err(e) => { error!("service.install: {e:#}"); return detailed_error(req, "service.install", anyhow::Error::new(e)); }
+                    Ok(o) if o.success => Some(json!({"status": "installed"})),
+                    Ok(o) => { error!("service.install: {}", o.text.trim()); None }
+                    Err(e) => { error!("service.install: {e:#}"); return detailed_error(req, "service.install", e); }
                 }
             }
             "service.remove" => {
-                let out = std::process::Command::new("reg")
-                    .args([
-                        "delete",
+                let out = reg_entry(
+                    "delete",
+                    &[
                         r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
                         "/v", "MICS-Engine",
                         "/f",
-                    ])
-                    .output();
+                    ],
+                    "reg delete (service.remove: autostart entry)",
+                )
+                .run();
                 match out {
-                    Ok(o) if o.status.success() => Some(json!({"status": "removed"})),
-                    Ok(o) => { error!("service.remove: {}", String::from_utf8_lossy(&o.stderr)); None }
-                    Err(e) => { error!("service.remove: {e:#}"); return detailed_error(req, "service.remove", anyhow::Error::new(e)); }
+                    Ok(o) if o.success => Some(json!({"status": "removed"})),
+                    Ok(o) => { error!("service.remove: {}", o.text.trim()); None }
+                    Err(e) => { error!("service.remove: {e:#}"); return detailed_error(req, "service.remove", e); }
                 }
             }
             "settings.get" => Some(json!(crate::settings::current())),

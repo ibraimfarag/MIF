@@ -35,12 +35,13 @@ fn run_netsh_plain(args: &[&str]) -> Result<String> {
     full.extend_from_slice(args);
     // Deadline + background readers: `show rule verbose` prints far more than a
     // pipe buffer, so waiting without draining would time out a healthy netsh.
-    let out = crate::platform::windows::process::run_with_deadline(
-        "netsh",
-        &full,
+    let out = crate::platform::windows::process::ToolCall::new(
         "netsh (firewall)",
+        "netsh",
         NETSH_TIMEOUT,
-    )?;
+    )
+    .args(&full)
+    .run()?;
     let text = out.text;
     if !out.success && !text.contains("Ok.") && !text.contains("OK") {
         anyhow::bail!("netsh failed: {}", text.trim());

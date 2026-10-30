@@ -106,20 +106,32 @@ pub fn parse_query(text: &str) -> HelperState {
     }
 }
 
+/// How long one `sc.exe` call may take. The service control manager can be busy
+/// (another install in flight, a slow stop) and a request must not wait forever.
+const SC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The `sc.exe` call for the helper service, with a deadline: query, create,
+/// start, stop and delete all go through it, and installing the helper polls the
+/// pipe right afterwards.
+pub(crate) fn sc_call(args: Vec<String>) -> crate::platform::windows::process::ToolCall {
+    crate::platform::windows::process::ToolCall::new(
+        "sc (privileged helper service)",
+        "sc",
+        SC_TIMEOUT,
+    )
+    .args(args)
+}
+
 fn run_sc(args: &[String]) -> Result<String> {
-    let mut command = std::process::Command::new("sc");
-    command.args(args);
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let output = command.output().context("run sc.exe")?;
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if !output.status.success() {
-        bail!("sc {} failed: {}", args.first().map(String::as_str).unwrap_or(""), text.trim());
+    let out = sc_call(args.to_vec()).run().context("run sc.exe")?;
+    if !out.success {
+        bail!(
+            "sc {} failed: {}",
+            args.first().map(String::as_str).unwrap_or(""),
+            out.text.trim()
+        );
     }
-    Ok(text)
+    Ok(out.text)
 }
 
 /// Current service state. A missing service is a normal answer, not an error.

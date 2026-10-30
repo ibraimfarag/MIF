@@ -72,12 +72,13 @@ pub fn list_actions() -> Vec<HardeningAction> {
 /// (and the UI's busy spinner) forever. The shared runner kills the child at the
 /// deadline and says which step hung instead of returning a bare timeout.
 fn ps_run_with_timeout(args: &[&str], timeout: std::time::Duration) -> Result<(bool, String)> {
-    let out = crate::platform::windows::process::run_with_deadline(
-        "powershell",
-        args,
+    let out = crate::platform::windows::process::ToolCall::new(
         "the hardening step",
+        "powershell",
         timeout,
-    )?;
+    )
+    .args(args)
+    .run()?;
     Ok((out.success, out.text))
 }
 

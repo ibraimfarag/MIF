@@ -25,7 +25,9 @@
 > (Task Manager: `MI Cyber Security` + `MiShild Background`, one shared icon;
 > inside the product and on every card: `MI CS`; desktop shortcut `MICS`) and
 > **Authenticode signing works locally** (`make-release.ps1 -Sign`: every binary
-> `Valid`, `signtool verify /pa` passes) · **next: install the helper once (one
+> `Valid`, `signtool verify /pa` passes) and **every external tool call now has a
+> deadline** (one `ToolCall` choke point; a test fails on any other
+> `Command::new`) · **next: install the helper once (one
 > UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -71,26 +73,20 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **Deadlines for the last spawns (MED).** `platform/windows/process.rs` gives
-   `run_with_deadline`; `firewall` and `hardening` already use it. The remaining
-   plain `Command::output()` calls are in `platform/windows/collectors.rs`
-   (audit probes), `update.rs` and the two `reg query` reads in `dispatcher.rs` —
-   one stalled PowerShell can still hold an audit or an update request. Extend the
-   three existing deadline tests to cover each call site.
-2. **The UI should re-run one audit section, not the whole audit (LOW).**
+1. **The UI should re-run one audit section, not the whole audit (LOW).**
    `audit.run` accepts `params.sections` (7 ms for one section vs 1.7 s for all,
    unknown names refused); `lib/providers/providers.dart` still asks for
    everything after a fix. Change the caller, keep the full audit for first load.
-3. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
+2. **`docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md`** (P5, wording only).
    Assets, adversaries, trust boundaries, what a usermode product cannot do (no
    kernel driver), and per layer what is detected/blocked and what is not
    (hosts-based L2, polling canaries, `netsh` firewall, no ClamAV/CAPA).
-4. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
+3. **Guard CPU: 2.97 % against the < 1 % budget (MED)** — either lower it
    (polling intervals, cheaper process enumeration) or move the budget to a
    measured, justified number and say so in the README.
-5. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
+4. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
    before/after numbers.
-6. **AUMID registration (LOW, fold into the installer)** — register
+5. **AUMID registration (LOW, fold into the installer)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
    Cards work without it; nothing about toast delivery depends on it.
@@ -263,6 +259,50 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **spawns — no external tool can wedge a request any more, and a test now
+  enforces that instead of trusting the code**
+  - The last deadline-free spawns from the register row are gone. Every external
+    program the engine runs goes through one choke point,
+    `platform/windows/process.rs::ToolCall` (program + arguments + the operation's
+    name + a deadline): `net localgroup` (20 s) and Defender's
+    `Get-MpComputerStatus` (30 s) in the audit, `Expand-Archive` in the update
+    step (300 s), the two autostart `reg` calls (15 s), the one-time `icacls`
+    grant (120 s), the guard's `taskkill` (15 s) and the helper's `sc.exe` (30 s)
+    — plus the two callers that already had a deadline (`netsh` 20 s, the
+    hardening PowerShell steps 60 s) moved onto the same API. The Defender
+    quick-scan branch is asynchronous, so it got its own `tokio::time::timeout`
+    (30 min): a real scan runs for minutes by design, but an unanswered `-Wait`
+    can no longer pin the request for the session.
+  - A stopped tool names itself: `net localgroup (audit: local administrators)
+    did not finish within 20s — the tool was stopped so it could not block the
+    engine`. `net localgroup` also gained `CREATE_NO_WINDOW`, which it was the
+    last spawn to be missing (it could flash a console during an audit).
+  - **Found by trying to break it:** the first version of the enforcement test
+    allow-listed whole *files*, so a `Command::new` added anywhere in `update.rs`
+    passed. A canary proved it (the bare call was reported as fine), the
+    exemption is now the launch itself — the line must drop the handle
+    (`.spawn()`) — and the same canary now fails the test with
+    `src/update.rs:134 launches a process in an allow-listed file but does not
+    drop the handle`. The only two exceptions are the relaunch-the-UI spawn and
+    opening a link from a card; the async site must contain its own
+    `tokio::time::timeout`.
+  - Per-call-site proof: the shared `assert_deadline_is_enforced` helper aims
+    *each site's exact call* at a program that never returns and asserts the
+    deadline fires, promptly, with the site's own name. `cargo test` 54/54 (3
+    new: the enforcement scan, the seven-site deadline test, and the extracted
+    `net localgroup` parser), clippy clean, `flutter analyze` clean,
+    `flutter test` 31/31.
+  - Live on this machine (throwaway `serve` engine, isolated `MICS_DATA_DIR`,
+    both streams to files per trap 13): `audit.run {sections:["admins",
+    "defender"]}` answered in **2.2 s** with `2 account(s) with admin rights:
+    Administrator, <account>` (the real `net localgroup` output, parsed) and
+    `Real-time protection is enabled` (the real WMI query — no policy key exists
+    here, so this is the fallback path), `score: 100`, `partial: true`.
+    `service.install` → `{"status":"installed"}` and the machine's own registry
+    read back `MICS-Engine = "...\mics-target\release\mics-engine.exe" --service`;
+    `service.remove` → `{"status":"removed"}` and the value was gone —
+    `RESULT: PASS`, the key left exactly as found.
 
 - **naming, settled — two kinds of name on purpose, and one icon everywhere**
   - The previous step put `MIF` on every surface; that was one word too many. What
@@ -1037,6 +1077,10 @@ signing certificate respectively), so this is the work that is always available.
       stalled service must not wedge a request. Done as a shared runner
       (`platform/windows/process.rs`) for every spawn in `firewall` and
       `hardening`; `ids` spawns nothing itself (it goes through the helper).
+      Extended to **every** external tool: the audit probes, the update extract,
+      the autostart `reg` calls, `icacls`, `taskkill` and `sc.exe` all run through
+      `ToolCall`, the async Defender scan carries its own `tokio::time::timeout`,
+      and a test fails on any bare `Command::new` outside the runner.
 - [ ] Decide the VirusTotal client's fate: wire the sync queue that fills it, or
       delete the dead code and say so in the README (MED).
 - [x] Regenerate the portable ZIP + `SHA256SUMS` from the current
@@ -1125,7 +1169,6 @@ signing certificate respectively), so this is the work that is always available.
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| MED | `firewall` and `hardening` now run every external tool through a deadline; the remaining plain `Command::output()` calls (`collectors.rs` audit probes, `update.rs`, two `reg query` reads) have no deadline, so a stalled PowerShell could still hold one audit or update request | `collectors.rs`, `update.rs`, `dispatcher.rs` |
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |

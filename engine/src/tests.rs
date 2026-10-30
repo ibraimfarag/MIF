@@ -833,4 +833,57 @@ mod tests {
         // defender + firewall each contribute a CRITICAL (25 + 25).
         assert_eq!(report["score"], serde_json::json!(50));
     }
+
+    #[test]
+    fn the_local_admin_list_parser_reads_between_the_separators() {
+        use crate::platform::windows::collectors::parse_admin_list;
+        // The shape `net localgroup Administrators` prints, separators included.
+        let text = "Alias name     Administrators\nComment        Administrators have complete access\n\n\
+                    Members\n\
+                    -------------------------------------------------------------------\n\
+                    Administrator\n\
+                    DESKTOP\\ibrahim\n\
+                    -------------------------------------------------------------------\n\
+                    The command completed successfully.\n\n";
+        assert_eq!(
+            parse_admin_list(text),
+            vec!["Administrator".to_string(), "DESKTOP\\ibrahim".to_string()]
+        );
+        // A refused query prints no list: empty, never a phantom member.
+        assert!(parse_admin_list("The command completed successfully.\n").is_empty());
+        assert!(parse_admin_list("").is_empty());
+    }
+
+    /// Every spawn site that used to be a bare `Command::output()` now runs
+    /// through `process::ToolCall`, and this aims **each site's own call** at a
+    /// program that never returns: the deadline is proven per call site, not
+    /// assumed from the shape of the code. One failure names the site.
+    #[test]
+    fn every_spawn_site_enforces_its_deadline() {
+        use crate::platform::windows::process::{assert_deadline_is_enforced, ToolCall};
+
+        let sites: Vec<ToolCall> = vec![
+            // Audit: `net localgroup` and Defender's WMI status query.
+            crate::platform::windows::collectors::admin_probe(),
+            crate::platform::windows::collectors::defender_rtp_probe(),
+            // Update: `Expand-Archive` of the staged zip.
+            crate::update::extract_call("update.zip", "extracted"),
+            // Autostart entry: service.install / service.remove.
+            crate::dispatcher::reg_entry(
+                "add",
+                &["/f"],
+                "reg add (service.install: autostart entry)",
+            ),
+            // Startup: the one-time data-directory ACL grant.
+            crate::settings::data_dir_acl_call(std::path::Path::new(r"C:\x"), "user"),
+            // Guard: the tree-kill responder.
+            crate::guard::taskkill_call(4321),
+            // Privileged helper: every `sc.exe` call (query/create/start/stop/delete).
+            crate::privileged::service::sc_call(vec!["query".to_string()]),
+        ];
+        assert_eq!(sites.len(), 7, "a spawn site was added or removed — cover it here");
+        for call in sites {
+            assert_deadline_is_enforced(call);
+        }
+    }
 }

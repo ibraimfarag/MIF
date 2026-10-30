@@ -324,19 +324,31 @@ fn rule_matches(
     true
 }
 
-/// Optional tree-kill responder (usermode): taskkill /T /F.
+/// How long `taskkill` may take. It is local and fast; a stalled one must not
+/// hold the responder that is trying to stop a suspicious process.
+const TASKKILL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Optional tree-kill responder (usermode): taskkill /T /F, with a deadline.
 pub fn kill_tree(pid: u32) -> Result<()> {
-    let mut command = std::process::Command::new("taskkill");
-    command.args(["/PID", &pid.to_string(), "/T", "/F"]);
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let out = command.output().context("launch taskkill")?;
-    if !out.status.success() {
-        anyhow::bail!(
-            "taskkill failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
+    let out = taskkill_call(pid)
+        .run()
+        .context("launch taskkill")?;
+    if !out.success {
+        anyhow::bail!("taskkill failed: {}", out.text.trim());
     }
     Ok(())
+}
+
+/// The `taskkill` call for one process tree, with its deadline.
+pub(crate) fn taskkill_call(pid: u32) -> crate::platform::windows::process::ToolCall {
+    crate::platform::windows::process::ToolCall::new(
+        "taskkill (guard: kill process tree)",
+        "taskkill",
+        TASKKILL_TIMEOUT,
+    )
+    .arg("/PID")
+    .arg(pid.to_string())
+    .args(["/T", "/F"])
 }
 
 /// JSON status for the UI.

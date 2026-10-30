@@ -2,6 +2,7 @@ use crate::platform::traits::{
     AuditFinding, FindingStatus, NetworkConnection, PlatformCollectors, ScheduledTaskEntry,
     Severity, SoftwareEntry, StartupEntry,
 };
+use crate::platform::windows::process::ToolCall;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::net::Ipv4Addr;
@@ -453,36 +454,17 @@ impl PlatformCollectors for WindowsCollectors {
     }
 
     async fn audit_admins(&self) -> Result<Vec<AuditFinding>> {
-        // `net localgroup` requires no elevation and is locale-stable for the
-        // group name on en-US; fall back to well-known SID group name resolution.
-        let output = std::process::Command::new("net")
-            .args(["localgroup", "Administrators"])
-            .output();
-        let mut members: Vec<String> = Vec::new();
-        if let Ok(out) = output {
-            let text = String::from_utf8_lossy(&out.stdout);
-            // Lines between the dashed separator and the trailing summary line.
-            let mut in_list = false;
-            for line in text.lines() {
-                if line.starts_with("---") {
-                    if in_list {
-                        break;
-                    }
-                    in_list = true;
-                    continue;
-                }
-                if in_list {
-                    let name = line.trim();
-                    if !name.is_empty()
-                        && !name.starts_with("The command completed")
-                        && !name.contains("-----")
-                    {
-                        members.push(name.to_string());
-                    }
-                }
+        let members = match admin_probe().run() {
+            Ok(out) if out.success => parse_admin_list(&out.text),
+            Ok(out) => {
+                warn!("net localgroup failed: {}", out.text.trim());
+                Vec::new()
             }
-        }
-
+            Err(e) => {
+                warn!("{e:#}");
+                Vec::new()
+            }
+        };
         if members.is_empty() {
             return Ok(vec![finding(
                 "Local Admins",
@@ -843,24 +825,87 @@ pub fn pua_effective(policy: Option<u32>, live: Option<u32>) -> Option<u32> {
 const PUA_POLICY_KEY: &str = r"SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine";
 const PUA_LIVE_KEY: &str = r"SOFTWARE\Microsoft\Windows Defender";
 
+/// How long the audit's `net localgroup` probe may take. It is a local query, so
+/// the budget only has to outlast a busy machine — not a stuck `net.exe`, which
+/// used to hold the whole audit request open.
+const ADMIN_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// The local-administrators probe. `net localgroup` needs no elevation and the
+/// group name is locale-stable on en-US.
+///
+/// One named call per spawn site: the deadline and the operation's name belong
+/// to the call itself, and the test in `crate::tests` aims this exact call at a
+/// program that never returns to prove the deadline is wired.
+pub(crate) fn admin_probe() -> ToolCall {
+    ToolCall::new(
+        "net localgroup (audit: local administrators)",
+        "net",
+        ADMIN_PROBE_TIMEOUT,
+    )
+    .args(["localgroup", "Administrators"])
+}
+
+/// The member names between the dashed separators `net localgroup` prints.
+pub(crate) fn parse_admin_list(text: &str) -> Vec<String> {
+    let mut members = Vec::new();
+    let mut in_list = false;
+    for line in text.lines() {
+        if line.starts_with("---") {
+            if in_list {
+                break;
+            }
+            in_list = true;
+            continue;
+        }
+        if in_list {
+            let name = line.trim();
+            if !name.is_empty()
+                && !name.starts_with("The command completed")
+                && !name.contains("-----")
+            {
+                members.push(name.to_string());
+            }
+        }
+    }
+    members
+}
+
+/// How long Defender's `Get-MpComputerStatus` query may take. It is WMI behind
+/// Defender's service, which can be slow under load; a hung query must end the
+/// section as *unknown*, not freeze the audit.
+const DEFENDER_RTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Asks Defender for its real-time protection state; `Some` only when Defender
 /// actually answered with a boolean.
 pub(crate) fn defender_rtp_state() -> Option<bool> {
-    let mut command = std::process::Command::new("powershell");
-    command
-        .args([
-            "-NoProfile",
-            "-Command",
-            "(Get-MpComputerStatus).RealTimeProtectionEnabled",
-        ])
-        .stdin(std::process::Stdio::null());
-    // A console app started from a GUI process must not flash a console window.
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let out = command.output().ok()?;
-    if !out.status.success() {
-        return None;
+    match defender_rtp_probe().run() {
+        Ok(out) if out.success => parse_mp_bool(&out.text),
+        Ok(out) => {
+            warn!(
+                "Defender real-time protection query failed: {}",
+                out.text.trim()
+            );
+            None
+        }
+        Err(e) => {
+            warn!("Defender real-time protection query: {e:#}");
+            None
+        }
     }
-    parse_mp_bool(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// The `Get-MpComputerStatus` call, with its deadline (see `defender_rtp_state`).
+pub(crate) fn defender_rtp_probe() -> ToolCall {
+    ToolCall::new(
+        "powershell Get-MpComputerStatus (audit: real-time protection)",
+        "powershell",
+        DEFENDER_RTP_TIMEOUT,
+    )
+    .args([
+        "-NoProfile",
+        "-Command",
+        "(Get-MpComputerStatus).RealTimeProtectionEnabled",
+    ])
 }
 
 /// PowerShell prints booleans as `True`/`False`. Anything else — empty output

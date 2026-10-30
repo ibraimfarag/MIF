@@ -334,29 +334,38 @@ pub fn ensure_data_dir() -> PathBuf {
         return dir;
     }
     if let Ok(user) = std::env::var("USERNAME") {
-        let mut command = std::process::Command::new("icacls");
-        command
-            .arg(&dir)
-            // /T so existing files (database, logs, quarantine blobs) created
-            // by an earlier elevated run become writable too.
-            .arg(format!("{user}:(OI)(CI)M"))
-            .arg("/T")
-            .arg("/C")
-            .arg("/Q");
-        crate::platform::windows::elevation::hide_console(&mut command);
-        match command.output() {
-            Ok(out) if out.status.success() => {
+        match data_dir_acl_call(&dir, &user).run() {
+            Ok(out) if out.success => {
                 tracing::info!("granted {user} modify rights on {}", dir.display())
             }
-            Ok(out) => tracing::warn!(
-                "icacls failed: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            ),
-            Err(e) => tracing::warn!("icacls launch failed: {e}"),
+            Ok(out) => tracing::warn!("icacls failed: {}", out.text.trim()),
+            Err(e) => tracing::warn!("icacls: {e:#}"),
         }
         let _ = std::fs::write(&marker, b"1");
     }
     dir
+}
+
+/// How long the one-time ACL grant may take: `/T` walks the quarantine folder,
+/// which can hold thousands of blobs, but a stalled `icacls` must not hold the
+/// engine's startup open.
+const ICACLS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// The recursive `icacls` grant for the data directory, with a deadline.
+pub(crate) fn data_dir_acl_call(
+    dir: &std::path::Path,
+    user: &str,
+) -> crate::platform::windows::process::ToolCall {
+    crate::platform::windows::process::ToolCall::new(
+        "icacls (data dir permissions)",
+        "icacls",
+        ICACLS_TIMEOUT,
+    )
+    .arg(dir)
+    // /T so existing files (database, logs, quarantine blobs) created by an
+    // earlier elevated run become writable too.
+    .arg(format!("{user}:(OI)(CI)M"))
+    .args(["/T", "/C", "/Q"])
 }
 
 /// Writable check that also covers an existing *file* (not just the folder).

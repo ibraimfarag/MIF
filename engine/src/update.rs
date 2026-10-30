@@ -10,7 +10,28 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
+use crate::platform::windows::process::ToolCall;
 use crate::sync::SyncManager;
+
+/// How long the staged archive may take to unpack. A ~24 MB zip takes seconds; a
+/// PowerShell that never returns must not hold the update request open.
+const UPDATE_EXTRACT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// The `Expand-Archive` call, with its deadline. Zipping and unzipping through
+/// PowerShell is the engine's supported path because the alternative is a zip
+/// dependency in the shipped binary; the deadline is what makes shelling out
+/// safe.
+pub(crate) fn extract_call(zip_path: &str, out_dir: &str) -> ToolCall {
+    ToolCall::new(
+        "powershell Expand-Archive (update: extract)",
+        "powershell",
+        UPDATE_EXTRACT_TIMEOUT,
+    )
+    .args(["-NoProfile", "-Command"])
+    .arg(format!(
+        "Expand-Archive -Path '{zip_path}' -DestinationPath '{out_dir}' -Force"
+    ))
+}
 
 fn staging_dir() -> PathBuf {
     crate::settings::Settings::base_dir().join("update")
@@ -87,19 +108,11 @@ pub fn apply(staged_zip: &std::path::Path) -> Result<String> {
 
     let zip_path = staged_zip.to_string_lossy().replace('\\', "/");
     let out_dir = extract_dir.to_string_lossy().replace('\\', "/");
-    let status = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!("Expand-Archive -Path '{zip_path}' -DestinationPath '{out_dir}' -Force"),
-        ])
-        .output()
+    let extracted = extract_call(&zip_path, &out_dir)
+        .run()
         .context("extract update")?;
-    if !status.status.success() {
-        bail!(
-            "extract failed: {}",
-            String::from_utf8_lossy(&status.stderr).trim()
-        );
+    if !extracted.success {
+        bail!("extract failed: {}", extracted.text.trim());
     }
 
     // The zip root may be MICS-portable/ or flat — find mics-engine.exe.
