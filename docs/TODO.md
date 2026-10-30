@@ -33,8 +33,10 @@
 > refuses every caller but its owner, SYSTEM and administrators** (F-1 closed,
 > D-015) and **`docs/PROTECTION-MATRIX.md` says per layer what detects, what
 > blocks and what is missed** (with the starter-pack and no-scheduler limits
-> written down instead of implied) · **next: install the helper once (one
-> UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
+> written down instead of implied) and **the light-mode palette measured against
+> WCAG 2.2** (أ2: 36 pairs, **25 below their bar** — `docs/CONTRAST.md`) ·
+> **next: أ3, the palette fix (no elevation, no money), then install the helper
+> once (one UAC prompt), then the NSIS installer and the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
 >
@@ -49,9 +51,10 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 وابدأ من أ2
+> اقرأ docs/TODO.md §0 وابدأ من أ3
 
-That means: read this section, then do step **أ2** (the light-mode contrast audit) as
+That means: read this section, then do step **أ3** (fix the colours the light-mode
+contrast audit flagged, and turn its measured ratios into test assertions) as
 one small step, and stop for review. The rules that session must keep, all from
 `AGENTS.md`:
 
@@ -70,7 +73,7 @@ one small step, and stop for review. The rules that session must keep, all from
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-30, `main` @ `24079de`). The whole
+**Where the project stands** (2026-10-30, `main` @ `c8427a6`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
@@ -104,14 +107,18 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **أ2 — Light-mode contrast audit (LOW)** — text, borders and severity colours with
-   before/after numbers (WCAG: 4.5:1 for body text, 3:1 for large text and UI
-   boundaries). Measure the shipped colours first, then fix what fails and pin the
-   ratios with a Dart test so they cannot drift. This is the first step of the next
-   session (`§0.0`).
-2. **أ3 — fix the colours that fail أ2** and add the ratio test (`lib/ui/theme` or
-   wherever the palette lives; the register row is
-   `Light-mode palette has not been contrast-audited`).
+1. ~~**أ2 — Light-mode contrast audit**~~ — done: 36 pairs measured against WCAG 2.2
+   (4.5:1 body text, 3:1 large text and boundaries), **25 below their bar**. The
+   table, the cause behind each group of failures and the reproduce command are in
+   `docs/CONTRAST.md`; `test/light_contrast_audit_test.dart` prints it and fails if
+   a palette token or a severity colour stops being measured.
+2. **أ3 — fix the colours that fail أ2** and pin every measured ratio as a test
+   assertion (today the table prints; أ3 makes it enforce). Start with the worst,
+   which is not a shade but an invisible message: the success snackbar paints
+   white on white (**1.00:1**) because the screen overrides only the background.
+   Palette: `lib/core/theme/app_theme.dart`; the hardcoded severity literals:
+   `lib/models/audit_models.dart` + `vuln_scanner_screen.dart`. This is the first
+   step of the next session (`§0.0`).
 3. **أ4 — AUMID registration (LOW)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
@@ -140,15 +147,15 @@ both binaries `Valid`).
 
 ### 0.3 The plan, in order — what a new session works through
 
-Every row is one commit-sized step unless it says otherwise; **أ2 is the first**
+Every row is one commit-sized step unless it says otherwise; **أ3 is the first**
 (§0.0). "Needs you" is the list that cannot move without the user.
 
 **أ — close §0 (no elevation, no money)**
 
 | Step | What | Notes |
 |---|---|---|
-| **أ2** | Light-mode contrast audit: measure every text/border/severity colour against WCAG (4.5:1 text, 3:1 large text and boundaries) | first step of the next session |
-| **أ3** | Fix the colours that fail, add a Dart test pinning the ratios | depends on أ2 |
+| ~~**أ2**~~ | ~~Light-mode contrast audit~~ — **done**: 36 pairs measured against WCAG 2.2, 25 below their bar (`docs/CONTRAST.md`) | measured 2026-10-30 |
+| **أ3** | Fix the colours that fail أ2, turn each measured ratio into a test assertion | **first step of the next session**; the audit names every failing pair |
 | **أ4** | AUMID registration script + docs (`HKCU\Software\Classes\AppUserModelId\MICS`) | moves into the installer with ب3 |
 
 **ب — P4 release engineering (the largest remaining piece; the register's HIGH row
@@ -334,6 +341,40 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **the light palette is measured now, and 25 of its 36 pairs fail WCAG (أ2)**
+  - The register said the light palette had never been contrast-audited, so it is
+    measured rather than eyeballed: the WCAG 2.x formula
+    (`lib/core/theme/contrast.dart`) over every colour pair the UI actually paints,
+    printed as a table by `test/light_contrast_audit_test.dart` and written down in
+    `docs/CONTRAST.md`. **36 pairs, 25 below their bar** (4.5:1 for text, 3:1 for
+    large text, boundaries and icons).
+  - What the numbers corrected about the assumption behind the task: this is not "the
+    light theme is a little washed out". The worst pair is **1.00:1** — the success
+    snackbar in `intel_screen.dart` overrides only `backgroundColor`
+    (`AppColors.surface`) and leaves Material's default text colour, which is white
+    in this theme, so that message is invisible. The rest is systematic: card and
+    input borders at 1.19:1/1.28:1 (a boundary needs 3:1), the accent hues as the
+    10–13 px text the UI uses them for at 3.31–3.77:1, and the severity colours
+    `audit_models.dart` hardcodes at 1.78:1–1.92:1 on the page because they are the
+    *dark* tokens returned in both modes. What passes is on the record too: body text
+    16.61:1/17.85:1, secondary text 5.07:1/5.45:1, white on the error red 4.70:1,
+    red on a white card 4.70:1, and both rail icons over their 3:1 bar.
+  - The two rows that could have been paper claims are not. The snackbar row is
+    proven by rendering the real `SnackBar` with that screen's own background and
+    reading the painted colour back out of the render tree
+    (`RenderParagraph.text.style.color`) — that is what makes 1.00:1 a measurement
+    instead of a reading of the framework source. Tinted banners are composited
+    first (`blendOver`), so `red 8 %`, `red 15 %` and `green 15 %` are measured as
+    the colours they really are.
+  - Honest scope: this step measures, it does not repaint. The assertions that pin
+    each ratio arrive with the palette fix in step **أ3**, so this table is the
+    "before" that step has to beat — and the audit already enforces two things: every
+    palette token, and every colour `statusColor`/`severityColor`/`cvssColor` can
+    return, must appear in a measured pair, so a new colour cannot be added
+    unmeasured. Dark mode is **not** audited, and there are still no screenshots.
+  - Checks: `cargo test` 76/76, `cargo clippy --release -- -D warnings` clean,
+    `flutter analyze --no-pub` clean, `flutter test --no-pub` 42/42 (6 new).
 
 - **The plan for the next sessions is written down, and the stale P5 row fixed**
   - §0.0 tells a fresh session what to paste — `اقرأ docs/TODO.md §0 وابدأ من أ2` — and
@@ -1450,7 +1491,7 @@ click (P1.5) or a purchased certificate (P4).
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
-| 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; light contrast audit still pending | P2 |
+| 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; the light palette is now audited: 25 of 36 pairs fail WCAG (أ2, `docs/CONTRAST.md`), which is what step أ3 fixes | P2 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
@@ -1501,7 +1542,10 @@ UAC prompt (finishing P1.5) or money (P4 signing certificate).
   (D-002) — until then it shows the helper's unsigned identity.
 
 ### Leftovers from P2 (non-blocking)
-- [ ] Light-mode contrast audit (text/borders/severity colours) with screenshots.
+- [x] Light-mode contrast audit (text/borders/severity colours): 36 pairs measured
+      against WCAG 2.2, 25 below their bar — `docs/CONTRAST.md`, step أ2.
+- [ ] Screenshots of the light theme in the documentation — the audit itself is
+      numeric on purpose (the record is the ratio table, not a picture).
 - [ ] `docs/PROTECTION-MATRIX.md` (today the README carries the matrix).
 
 ### Cheap wins — no elevation, no money, no new subsystem
@@ -1624,7 +1668,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
-| LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |
+| LOW | Light-mode palette fails WCAG 2.2 in **25 of 36** measured pairs (`docs/CONTRAST.md`): card borders 1.19:1/1.28:1 (a boundary needs 3:1), the success snackbar's own text **1.00:1** (white on the white surface `intel_screen.dart` sets), and the severity literals `audit_models.dart` uses in both modes 1.78:1–1.92:1 on the page. The audit is a test now, so the numbers cannot drift unnoticed; the fix is step أ3 | `app_theme.dart`, `audit_models.dart`, `docs/CONTRAST.md` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
 ## Icon sizes required for the application
@@ -1652,7 +1696,9 @@ contain each of the following dimensions:
 - [ ] Verify `windows/runner/resources/app_icon.ico` includes all sizes.
 
 **Other remaining tasks**
-- [ ] Light‑mode contrast audit and add screenshots to documentation.
+- [x] Light‑mode contrast audit — 36 pairs measured against WCAG 2.2, 25 below their bar
+  (`docs/CONTRAST.md`, step أ2).
+- [ ] Screenshots of the light theme in the documentation.
 - [ ] Complete `docs/PROTECTION-MATRIX.md` as a standalone document (currently only in README).
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);
