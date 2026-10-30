@@ -165,7 +165,7 @@ engine. D-008 moves them into `settings.json`, which the engine reads directly.
 
 ## D-007 — Elevation: one prompt, through a privileged helper
 
-**Status:** pending implementation
+**Status:** implemented, one interactive prompt left to verify (2026-10-30)
 
 **Decision.** All admin operations go through a single privileged helper
 installed once (Windows service). The UI runs `asInvoker` and never triggers
@@ -178,6 +178,39 @@ UAC for individual actions.
 **Commits us to.** Publishing the exact privileged operation list in
 `docs/THREAT-MODEL.md`, auditing every call, and documenting that a
 publisher-named UAC prompt requires the trusted certificate from D-002.
+
+**Implementation addendum (2026-10-30).** The list now lives in
+`docs/PRIVILEGED-OPS.md` (the threat model will link to it, not duplicate it),
+and the helper is `MICSHelper`, a LocalSystem service that points back at the
+same `mics-engine.exe --helper-service`, so an upgrade rewrites the definition
+instead of leaving an old helper behind.
+
+1. **`Op` is a closed enum**, not a command line: eight named operations
+   (ping/version, three firewall ops, hosts rewrite, hardening run/rollback).
+   There is no variant that runs an arbitrary command, so a bug cannot turn the
+   pipe into "SYSTEM shell as a service".
+2. **Validate before executing.** Payload shape (rule direction/action, hosts
+   document marker + address/host pairs, rollback commands limited to shapes this
+   codebase generates) is checked *before* the op runs or is logged as started.
+   The hosts path therefore cannot overwrite an arbitrary file.
+3. **Audit first, payload never.** Every call writes `phase=start` and
+   `phase=done ok=… dur_ms=…` to `%PROGRAMDATA%\MICS\logs\priv.log`; documents are
+   represented by `bytes`/`lines`/`sha256[..16]`, never copied.
+4. **One prompt, then none.** `--install-helper` is the only elevated step and is
+   started by the engine (`ensure()`) on the first privileged action. It polls the
+   pipe for 20 s and only reports success when the helper answers — "sc said Ok"
+   is not evidence. `--uninstall-helper` treats a missing service as done.
+5. **Refuse, do not half-apply.** A helper started without an elevated token
+   answers the privileged ops with the reason; `--helper-console` exists to prove
+   exactly that unelevated (`scripts\verify-helper.ps1`, `docs/PRIVILEGED-OPS.md`).
+6. The old per-operation `Start-Process -Verb RunAs` paths are gone from
+   `firewall/`, `ids/` and `hardening/`: those modules now call
+   `privileged::run_op` when they are not already elevated.
+
+**Still unproven:** the elevated install itself (service creation, LocalSystem
+pipe ACL) needs one interactive UAC prompt that no automated run can answer. The
+Settings card reports `not_installed / not_running / unelevated / ready` from
+`socket + version + token` facts, so the first real install is observable.
 
 ---
 

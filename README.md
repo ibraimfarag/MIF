@@ -28,7 +28,8 @@ explains, and suggests the next action instead of dumping raw data.
 | **Intelligence** | One card per intel source (DNS blocklist, CISA KEV, file hashes, country lists, NVD) with its own state, count, next attempt and last error, plus what the machine actually holds. Sources that need a URL or key say so instead of silently staying empty. |
 | **Hardening center** | Five one-click fixes (Defender PUA protection, SMBv1 off, RDP off, UAC + secure desktop, Defender quick scan). Every change takes a snapshot first and can be rolled back. |
 | **Reports** | One-click Markdown security report (score, findings, startup entries, incident kill-chains) written to `Documents\MICS-Reports\`. |
-| **Notifications** | Windows toasts with real actions (quarantine / open MI CS) that fire **even when the window is closed**, in-house notification sounds with volume, mute and do-not-disturb, and an assistant that explains a finding — locally, offline, never in the cloud. |
+| **Notifications** | A desktop card above the taskbar for **every** security event: a file the scanner catches (with a working **Quarantine** button), a suspicious process, a canary touch, or a protection action (default-deny, country block, hosts blocklist update). Cards fire **even when the window is closed**, speak the app language (AR/EN), and follow one policy: CRITICAL/HIGH/MEDIUM become cards, LOW stays in the app, do-not-disturb keeps only CRITICAL, and a switch turns cards off entirely. In-house notification sounds with volume and mute are separate. |
+| **Privileged helper** | Admin work (firewall, hosts file, hardening) goes through one LocalSystem service installed with a **single** UAC prompt instead of one per action. The operation set is closed and documented (`docs/PRIVILEGED-OPS.md`), every call is audited before and after it runs, and an unelevated helper refuses instead of half-applying. |
 | **Languages** | Arabic and English, complete, with full RTL layout. Language packs are per-module files; adding a language is one folder plus one line. |
 
 **Architecture in one line:** a Flutter UI talks JSON-RPC 2.0 over the named pipe
@@ -51,9 +52,9 @@ Honesty is a feature. Today, MI CS does **not**:
   nothing queues a lookup);
 - **verify signatures** of downloaded update packages beyond SHA-256;
 - guarantee that "fix" buttons work without administrator rights: firewall,
-  hosts-file and hardening changes are privileged. The UI offers
-  **Settings → Engine → Relaunch as administrator** for exactly that reason
-  (a single-prompt privileged helper is the next milestone);
+  hosts-file and hardening changes are privileged. The app installs its
+  **privileged helper** with one Windows prompt the first time you use such a
+  fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
 - measure **idle CPU below the 1 % budget** on every machine — measured ~3 % on
@@ -66,7 +67,7 @@ Honesty is a feature. Today, MI CS does **not**:
 | **OS** | Windows 10 21H2+ or Windows 11 (x64). Windows 11 ARM64: planned. 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
 | **CPU / RAM** | 4 cores / 8 GB. The engine idles at ~11 MB RAM. |
 | **Disk** | ~150 MB for the app + engine, plus whatever the quarantine and intel cache grow to. |
-| **Privileges** | none to start: the app runs unelevated. Administrator rights are only needed when you choose to apply firewall/hosts/hardening fixes. |
+| **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |
 | **Network** | optional. Everything core works offline; the network is used only for intel sync, NVD lookups, VirusTotal (if you add a key) and a local LM Studio instance (if you run one). |
 
 ## Install and first run
@@ -79,11 +80,15 @@ Today MI CS ships as a **portable folder** (an installer is in progress):
    [What MI CS does not do](#what-mi-cs-does-not-do).
 3. The app starts the engine automatically, runs a first audit (~10 s) and shows
    your score with the single most valuable fix to make.
+4. The first privileged fix asks once to install the helper
+   (`Settings → Engine → Install helper` also does it explicitly); the card then
+   shows **ready** and no later action prompts again.
 
-**Uninstall:** quit MI CS from the tray, delete the app folder, then delete the
-data folder below. The only registry entry MI CS can create is an optional
-`HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed by the
-same screen.
+**Uninstall:** quit MI CS from the tray, remove the helper
+(`Settings → Engine → Remove helper`, one prompt), delete the app folder, then
+delete the data folder below. The only registry entry MI CS can create is an
+optional `HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed
+by the same screen.
 
 ## Where your data lives
 
@@ -125,14 +130,14 @@ One screen, eight sections; every field is validated and persisted by the engine
 - **Appearance / language** — dark, light, follow system (live), AR/EN.
 - **Protection** — guard autostart, resume interrupted scans, default
   auto-quarantine, canary paths.
-- **Notifications & sounds** — do-not-disturb, sounds on/off, volume, test toast,
-  test sound.
+- **Notifications & sounds** — desktop cards on/off, do-not-disturb, sounds
+  on/off, volume, test toast, test sound.
 - **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
   feed URL and Auth-Key, sync now, live connectivity and freshness.
 - **Integrations** — VirusTotal key, LM Studio URL and model.
 - **Updates** — manifest URL, stable/beta channel, check, download and install.
-- **Engine** — executable path, connection state, start with Windows, relaunch as
-  administrator.
+- **Engine** — executable path, connection state, start with Windows, and the
+  **privileged helper** card (state, version, install/repair/remove).
 - **About** — version, license, tagline.
 
 ## Building from source
@@ -176,22 +181,29 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ```powershell
 cd engine
-cargo test                                # 12 tests
+cargo test                                # 44 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
-flutter test --no-pub                     # 18 tests
+flutter test --no-pub                     # 31 tests
 
 # End-to-end transport check (needs an engine on an isolated pipe)
 $env:MICS_PIPE_NAME   = '\\.\pipe\mics_engine_test'
 $env:MICS_NO_SINGLETON = '1'; $env:MICS_NO_GUARD = '1'
 dart run tool\pipe_smoke.dart             # production pipe client: ping/status/job.list
 dart run tool\pipe_probe.dart <folder>     # raw protocol + progress/job_finished push
+
+# A real notification card reached the desktop (reads Windows' own history)
+powershell -ExecutionPolicy Bypass -File scripts\verify-toast.ps1
+
+# The privileged helper's protocol, refusals and audit trail - no UAC needed
+powershell -ExecutionPolicy Bypass -File scripts\verify-helper.ps1
 ```
 
 Test hooks exist so an isolated engine can be run without touching production
 code: `MICS_DATA_DIR`, `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`,
-`MICS_NO_AUTO_RESUME`, `MICS_ENGINE_PATH`.
+`MICS_NO_AUTO_RESUME`, `MICS_ENGINE_PATH`, `MICS_HELPER_PIPE`,
+`MICS_HELPER_LOG`.
 
 ## Icons
 
@@ -236,8 +248,8 @@ a copy of the task icon.
 | `assets/i18n/<lang>/<module>.json` | Translation packs — one file per module, one folder per language. |
 | `assets/sounds/` | In-house notification cues. |
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
-| `scripts/` | User-facing helpers: code signing, shortcut creation. |
-| `docs/` | `TODO.md` (live status), `DECISIONS.md` (why things are the way they are). |
+| `scripts/` | User-facing helpers and acceptance probes: code signing, shortcuts, `verify-toast.ps1`, `verify-helper.ps1`. |
+| `docs/` | `TODO.md` (live status), `DECISIONS.md` (why things are the way they are), `PRIVILEGED-OPS.md` (the helper's complete operation list). |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
@@ -245,11 +257,12 @@ a copy of the task icon.
 | Symptom | Meaning / what to do |
 |---|---|
 | "Unknown publisher" warning | Expected for unsigned builds; a trusted code-signing certificate is planned. |
-| A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Relaunch as administrator**, then retry. |
+| A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
+| No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder: move MI CS to a normal folder, or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine says so itself in `notify.test`'s error and in the log. |
 | Engine shows *Engine not found* | `mics-engine.exe` must sit next to `mics_app.exe` (or set `MICS_ENGINE_PATH`). |
 | A scan looks stuck | It is a durable job — watch the progress card. Closing the window does not stop it, and killing the engine is safe: it resumes at the next file. |
 | Offline | Only intel sync needs the network. The chip shows `Offline` and how old the synced intel is. |
-| Need the engine log | `logs\engine.log` inside the state folder (see *Where your data lives*). |
+| Need the engine log | `logs\engine.log` inside the state folder (see *Where your data lives*); privileged calls are in `logs\priv.log`. |
 
 ## Contributing, security, license
 
@@ -284,20 +297,25 @@ a copy of the task icon.
 المحرك اتقفل في النص؛ حجر مشفّر AES-256-GCM بمفتاح محمي بـ DPAPI؛ حارس عمليات
 بقواعد قابلة للتحديث + فخاخ (ملفات طُعم) + قتل شجرة العملية + ربط الحوادث في خط
 زمني واحد؛ مراقبة اتصالات وتحكّم في جدار الحماية؛ حجب دومينات عبر hosts؛ مطابقة
-البرامج المثبّتة بقاعدة NVD؛ تقارير Markdown؛ إشعارات ويندوز بأزرار شغالة حتى لو
-النافذة مقفولة، وأصوات داخلية بمستوى صوت وكتم؛ واجهة عربي/إنجليزي كاملة مع RTL.
+البرامج المثبّتة بقاعدة NVD؛ تقارير Markdown؛ **كارت إشعار على سطح المكتب لكل
+حدث أمني** — ملف الفاحص لقاه (وزرار حجر شغال)، عملية مشبوهة، فخ اتلمس، أو إجراء
+حماية اتنفّذ — بيظهر حتى لو النافذة مقفولة، وبلغتك، وبزرار واحد في الإعدادات
+يقفله؛ وأصوات داخلية بمستوى صوت وكتم؛ واجهة عربي/إنجليزي كاملة مع RTL. وكل شغل
+المدير (فايروول / hosts / تقوية) بيمر على **خدمة مساعدة واحدة** بتتثبّت بضغطة UAC
+واحدة بدل ضغطة لكل عملية، وكل عملية بتتسجّل قبلها وبعدها في `logs\priv.log`.
 
 **اللي مابيعملهوش (بصراحة):** مفيش درايفر kernel ولا فلترة ترافيك داخلية؛ مفيش
 ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling — يعني قراءة الملف
 للقراءة فقط مش بتتسجّل؛ عميل VirusTotal موجود بس لسه مش مربوط بمسار الفحص؛
 التحديثات بتتحقق بـ SHA-256 بس (من غير توقيع رقمي)؛ ملفات التنفيذ **غير موقّعة**
-فوندوز بيقول «ناشر غير معروف»؛ والإصلاحات الإدارية (فايروول / hosts / تقوية)
-محتاجة ضغطة «أعد التشغيل كمسؤول» لحد ما تخلص خدمة المساعدة الواحدة.
+فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة اللي بتثبّت خدمة المساعدة لسه
+محتاجة تتجرّب بإيدك (الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم).
 
 **المتطلبات:** ويندوز 10 (21H2+) أو 11، 64-bit. معالج 4 أنوية و8 جيجا رام
 (المحرك بيستهلك ~11 ميجا في الخمول) وحوالي 150 ميجا مساحة. التطبيق بيفتح
-**من غير صلاحيات مدير**، والنت مش مطلوبة غير للتحديثات — الفحص والحماية والحجر
-والتقوية كلهم شغالين أوفلاين.
+**من غير صلاحيات مدير**، وأول إصلاح إداري بيطلب ضغطة UAC **مرة واحدة** لتثبيت
+خدمة المساعدة وبعدها مفيش أي طلب تاني، والنت مش مطلوبة غير للتحديثات — الفحص
+والحماية والحجر والتقوية كلهم شغالين أوفلاين.
 
 **الخصوصية:** مفيش أي تتبّع ولا حسابات. كل حاجة محلية في SQLite، ومفيش حاجة بتطلع
 من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات، NVD، VirusTotal بمفتاحك،
@@ -314,11 +332,14 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (12) و `cargo clippy` نضيف، و`flutter analyze`
-بدون ملاحظات و`flutter test` (18). وفيه أدوات تحقق في `tool/` بتختبر نقل
-البيانات الحقيقي بين الواجهة والمحرك.
+**الاختبارات:** `cargo test` (44) و `cargo clippy` نضيف، و`flutter analyze`
+بدون ملاحظات و`flutter test` (31). وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
+`tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
+كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
+خدمة المساعدة ورفضها الآمن من غير أي UAC.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
-بيسجّل النتائج، وبيكمّل أي فحص اتقطع. اللي فاضل: خدمة رفع واحدة (UAC واحد)،
+بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي
+فاضل: **ضغطة UAC واحدة** بتثبّت خدمة المساعدة (كل اللي تحتها متأكَّد منه)،
 شهادة توقيع، مثبّت رسمي، ودعم ARM64 — كلها متتبَّعة في
 [`docs/TODO.md`](docs/TODO.md).

@@ -1,0 +1,13 @@
+{
+  "helper.hint": "One Windows prompt installs the helper. After that, firewall, hosts and hardening changes need no further prompts, and every call is written to %PROGRAMDATA%\\MICS\\logs\\priv.log.",
+  "helper.install": "Install helper (one prompt)",
+  "helper.installDone": "Privileged helper installed",
+  "helper.remove": "Remove",
+  "helper.removeDone": "Privileged helper removed",
+  "helper.repair": "Repair (one prompt)",
+  "helper.state.missing": "not installed",
+  "helper.state.not_running": "installed, not running",
+  "helper.state.ready": "ready",
+  "helper.state.unelevated": "running without privileges",
+  "helper.title": "Privileged helper"
+}

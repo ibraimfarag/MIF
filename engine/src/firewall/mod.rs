@@ -23,16 +23,7 @@ pub struct FirewallRule {
 }
 
 fn run_netsh(args: &[&str]) -> Result<String> {
-    match run_netsh_plain(args) {
-        Ok(t) => Ok(t),
-        Err(e) if format!("{e:#}").contains("elevation") => {
-            // Architecture rule 3: the engine self-elevates on demand
-            // (ShellExecuteW runas equivalent) for admin-required ops.
-            info!("netsh needs elevation — relaunching with runas");
-            run_netsh_elevated(args)
-        }
-        Err(e) => Err(e),
-    }
+    run_netsh_plain(args)
 }
 
 fn run_netsh_plain(args: &[&str]) -> Result<String> {
@@ -54,33 +45,68 @@ fn run_netsh_plain(args: &[&str]) -> Result<String> {
     Ok(text)
 }
 
-fn run_netsh_elevated(args: &[&str]) -> Result<String> {
-    // netsh args used here contain no spaces, so a bare PowerShell array
-    // avoids nested-quote pitfalls entirely.
-    let arg_line = std::iter::once("advfirewall")
-        .chain(args.iter().copied())
-        .map(|a| format!("'{a}'"))
-        .collect::<Vec<_>>()
-        .join(",");
-    let ps_arg = format!(
-        "Start-Process -FilePath netsh -ArgumentList {arg_line} -Verb RunAs -Wait -WindowStyle Hidden"
-    );
-    let mut command = std::process::Command::new("powershell");
-    command.args(["-NoProfile", "-Command", &ps_arg]);
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let out = command
-        .output()
-        .context("failed to launch elevated netsh")?;
-    if !out.status.success() {
-        anyhow::bail!(
-            "elevated netsh failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
+/// True when the current process can run `netsh` writes itself.
+///
+/// When it cannot, the operation goes to the privileged helper (D-007) instead
+/// of asking Windows for a fresh UAC prompt per call.
+fn elevated() -> bool {
+    crate::platform::windows::elevation::is_elevated()
+}
+
+/// Default-Deny Outbound per profile (1 = Block, 0 = Allow). Elevation is the
+/// caller's business — this is the body the helper runs.
+pub fn set_default_deny_now(enabled: bool) -> Result<()> {
+    let policy = if enabled { "blockoutbound" } else { "allowoutbound" };
+    info!("Setting default outbound policy -> {policy}");
+    for profile in ["domainprofile", "privateprofile", "publicprofile"] {
+        run_netsh(&["set", profile, "firewallpolicy", policy, "allowinbound"])?;
     }
-    // Re-read state through a plain (non-admin) query to confirm.
-    run_netsh_plain(&["show", "domainprofile", "state"])
-        .map(|_| String::new())
-        .map_err(|e| anyhow::anyhow!("elevated op did not apply: {e:#}"))
+    Ok(())
+}
+
+/// Creates one `MICS-`-prefixed rule. Shared by the engine and the helper.
+pub fn add_rule_now(req: &AddRuleRequest) -> Result<String> {
+    let name = format!("{}{}", RULE_PREFIX, req.name);
+    let mut args = vec![
+        "firewall".to_string(),
+        "add".to_string(),
+        "rule".to_string(),
+        format!("name={name}"),
+        format!("dir={}", req.direction),
+        format!("action={}", req.action),
+        "enable=yes".to_string(),
+    ];
+    if let Some(p) = &req.program {
+        args.push(format!("program={p}"));
+    }
+    if let Some(p) = &req.local_port {
+        args.push(format!("localport={p}"));
+    }
+    if let Some(p) = &req.remote_port {
+        args.push(format!("remoteport={p}"));
+    }
+    if let Some(p) = &req.remote_ip {
+        args.push(format!("remoteip={p}"));
+    }
+    if let Some(p) = &req.protocol {
+        args.push(format!("protocol={p}"));
+    }
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_netsh(&arg_refs)?;
+    info!("Created firewall rule {name}");
+    Ok(name)
+}
+
+/// Removes one `MICS-` rule (the prefix is optional in the argument).
+pub fn remove_rule_now(name: &str) -> Result<()> {
+    let name = name
+        .strip_prefix(RULE_PREFIX)
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| name.to_string());
+    let full = format!("{}{}", RULE_PREFIX, name);
+    let _ = run_netsh(&["firewall", "delete", "rule", &format!("name={full}")])?;
+    info!("Removed firewall rule {full}");
+    Ok(())
 }
 
 pub struct FirewallManager;
@@ -88,12 +114,11 @@ pub struct FirewallManager;
 impl FirewallManager {
     /// Default-Deny Outbound per profile (1 = Block, 0 = Allow).
     pub async fn set_default_deny_outbound(enabled: bool) -> Result<()> {
-        let policy = if enabled { "blockoutbound" } else { "allowoutbound" };
-        info!("Setting default outbound policy -> {policy}");
-        for profile in ["domainprofile", "privateprofile", "publicprofile"] {
-            run_netsh(&["set", profile, "firewallpolicy", policy, "allowinbound"])?;
+        if elevated() {
+            return set_default_deny_now(enabled);
         }
-        Ok(())
+        crate::privileged::run_op(&crate::privileged::Op::FirewallDefaultDeny { enabled })
+            .map(|_| ())
     }
 
     pub async fn is_default_deny_enabled() -> Result<bool> {
@@ -148,43 +173,27 @@ impl FirewallManager {
     }
 
     pub async fn add_rule(req: &AddRuleRequest) -> Result<String> {
-        let name = format!("{}{}", RULE_PREFIX, req.name);
-        let mut args = vec![
-            "firewall".to_string(),
-            "add".to_string(),
-            "rule".to_string(),
-            format!("name={name}"),
-            format!("dir={}", req.direction),
-            format!("action={}", req.action),
-            "enable=yes".to_string(),
-        ];
-        if let Some(p) = &req.program {
-            args.push(format!("program={p}"));
+        if elevated() {
+            return add_rule_now(req);
         }
-        if let Some(p) = &req.local_port {
-            args.push(format!("localport={p}"));
-        }
-        if let Some(p) = &req.remote_port {
-            args.push(format!("remoteport={p}"));
-        }
-        if let Some(p) = &req.remote_ip {
-            args.push(format!("remoteip={p}"));
-        }
-        if let Some(p) = &req.protocol {
-            args.push(format!("protocol={p}"));
-        }
-        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-        run_netsh(&arg_refs)?;
-        info!("Created firewall rule {name}");
-        Ok(name)
+        let value = crate::privileged::run_op(&crate::privileged::Op::FirewallAddRule {
+            rule: req.clone(),
+        })?;
+        value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .ok_or_else(|| anyhow::anyhow!("the privileged helper did not name the new rule"))
     }
 
     pub async fn remove_rule(name: &str) -> Result<()> {
-        let name = name.strip_prefix(RULE_PREFIX).map(|s| s.to_string()).unwrap_or_else(|| name.to_string());
-        let full = format!("{}{}", RULE_PREFIX, name);
-        let _ = run_netsh(&["firewall", "delete", "rule", &format!("name={full}")])?;
-        info!("Removed firewall rule {full}");
-        Ok(())
+        if elevated() {
+            return remove_rule_now(name);
+        }
+        crate::privileged::run_op(&crate::privileged::Op::FirewallRemoveRule {
+            name: name.to_string(),
+        })
+        .map(|_| ())
     }
 
     /// Country block: builds one MICS-BLOCK-<CC> rule from the bundled CIDR
@@ -225,7 +234,7 @@ impl FirewallManager {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AddRuleRequest {
     pub name: String,
     pub direction: String, // in | out

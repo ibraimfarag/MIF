@@ -121,48 +121,10 @@ fn ps_run(command: &str) -> Result<String> {
     Ok(text)
 }
 
-fn ps_run_elevated(command: &str) -> Result<()> {
-    let escaped = command.replace('\'', "''");
-    let ps_arg = format!(
-        "Start-Process -FilePath powershell -ArgumentList @('-NoProfile','-Command','{}') -Verb RunAs -Wait -WindowStyle Hidden",
-        escaped
-    );
-    // Elevation needs room for the user to read and answer the prompt.
-    let (ok, text) = ps_run_with_timeout(
-        &["-NoProfile", "-Command", &ps_arg],
-        std::time::Duration::from_secs(120),
-    )?;
-    if !ok {
-        anyhow::bail!("elevated powershell failed: {}", text.trim());
-    }
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn snapshot_dir() -> PathBuf {
-    std::env::var("PROGRAMDATA")
-        .map(|p| PathBuf::from(p).join("MICS").join("hardening"))
-        .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS\hardening"))
-}
-
-/// Applies one hardening fix. Snapshots the touched state first; rollback
-/// restores exactly what was snapshotted (never guesses).
-pub async fn apply(action_id: &str) -> Result<String> {
-    // The snapshot runs unelevated on purpose — recording a value must never
-    // raise a UAC prompt — but a few of these reads are admin-only, so a
-    // permission failure there gets the same actionable wording as the apply
-    // path instead of a raw CMDlet dump.
-    let snap = snapshot_current(action_id).map_err(|e| {
-        anyhow::anyhow!(
-            "{e}\nIf the message above mentions permissions, reading this setting needs \
-             administrator rights: use \"Relaunch as administrator\" in Settings (or start \
-             MI CS as administrator), then retry."
-        )
-    })?;
-    let storage = Storage::open()?;
-    storage.save_hardening_snapshot(action_id, &snap)?;
-
-    let (cmd, needs_admin) = match action_id {
+/// The command one hardening fix runs, and whether it needs an elevated token.
+/// Pure: the helper uses it too, so the command table has exactly one home.
+pub fn command_for(action_id: &str) -> Result<(String, bool)> {
+    let command = match action_id {
         "pua_protection" => (
             "Set-MpPreference -PUAProtection Enabled".to_string(),
             // Defender's own settings API requires an elevated token.
@@ -192,19 +154,66 @@ pub async fn apply(action_id: &str) -> Result<String> {
         ),
         _ => anyhow::bail!("unknown hardening action {action_id}"),
     };
+    Ok(command)
+}
 
-    // If the engine already has an elevated token (the normal case: the UI
-    // manifest requests administrator), run the command directly — a second
-    // self-elevation would only add a pointless UAC prompt attributed to
-    // PowerShell. Only unelevated engines need the RunAs path.
+/// Rejects an action id that is not in the table (used by the helper before it
+/// logs or runs anything).
+pub fn validate_action(action_id: &str) -> Result<()> {
+    command_for(action_id).map(|_| ())
+}
+
+/// Runs one fix's command in *this* process. The caller is responsible for
+/// having an elevated token when the action needs one.
+pub fn run_now(action_id: &str) -> Result<()> {
+    let (command, _) = command_for(action_id)?;
+    ps_run(&command).map(|_| ())
+}
+
+/// Re-applies a snapshot's old state in *this* process (helper side).
+pub fn run_rollback_now(snapshot: &str) -> Result<()> {
+    if snapshot.trim().is_empty() {
+        anyhow::bail!("snapshot is empty — nothing to roll back");
+    }
+    ps_run(snapshot).map(|_| ())
+}
+
+#[allow(dead_code)]
+fn snapshot_dir() -> PathBuf {
+    std::env::var("PROGRAMDATA")
+        .map(|p| PathBuf::from(p).join("MICS").join("hardening"))
+        .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\MICS\hardening"))
+}
+
+/// Applies one hardening fix. Snapshots the touched state first; rollback
+/// restores exactly what was snapshotted (never guesses).
+pub async fn apply(action_id: &str) -> Result<String> {
+    // The snapshot runs unelevated on purpose — recording a value must never
+    // raise a UAC prompt — but a few of these reads are admin-only, so a
+    // permission failure there gets the same actionable wording as the apply
+    // path instead of a raw CMDlet dump.
+    let snap = snapshot_current(action_id).map_err(|e| {
+        anyhow::anyhow!(
+            "{e}\nIf the message above mentions permissions, reading this setting needs \
+             administrator rights: install the privileged helper in Settings → Engine (one \
+             Windows prompt) or start MI CS as administrator, then retry."
+        )
+    })?;
+    let storage = Storage::open()?;
+    storage.save_hardening_snapshot(action_id, &snap)?;
+
+    let (cmd, needs_admin) = command_for(action_id)?;
+
+    // Admin-required fixes go to the privileged helper (D-007): one UAC prompt
+    // when the helper is installed, none afterwards. An already-elevated engine
+    // (started from an elevated shell) runs the command directly instead of
+    // paying for a pipe round-trip.
     let result = if needs_admin && !crate::platform::windows::elevation::is_elevated() {
-        ps_run_elevated(&cmd).map_err(|e| {
-            anyhow::anyhow!(
-                "{e}\nThis fix changes a system-wide setting. Start MI CS from its normal \
-                 shortcut (Windows asks for permission once at launch) or run it as \
-                 administrator, then retry."
-            )
+        crate::privileged::run_op(&crate::privileged::Op::HardeningRun {
+            action: action_id.to_string(),
         })
+        .map(|_| ())
+        .map_err(|e| anyhow::anyhow!("{e}\n{}", permission_hint(action_id)))
     } else {
         ps_run(&cmd)
             .map(|_| ())
@@ -247,12 +256,13 @@ pub async fn apply(action_id: &str) -> Result<String> {
 /// the time.
 fn permission_hint(action_id: &str) -> &'static str {
     if action_id == "pua_protection" {
-        "If the message above mentions permissions, MI CS is running without administrator \
-         rights, or Defender's tamper protection refused the change. The same switch lives in \
+        "If the message above mentions permissions, MI CS is running without the privileged \
+         helper, or Defender's tamper protection refused the change. The same switch lives in \
          Windows Security → Virus & threat protection → Manage settings (\"Potentially unwanted \
          app blocking\"); turn tamper protection off temporarily to let MI CS apply it."
     } else {
-        "If the message above mentions permissions, MI CS is running without administrator rights."
+        "If the message above mentions permissions, install the privileged helper in \
+         Settings → Engine (one Windows prompt) and retry."
     }
 }
 
@@ -317,7 +327,7 @@ fn snapshot_current(action_id: &str) -> Result<String> {
     }
     let script = match action_id {
         "smbv1_off" => {
-            "$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10' -ErrorAction SilentlyContinue).Start; \"Set-SmbServerConfiguration -EnableSMB1Protocol `$s -Force; reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\\\" /v Start /t REG_DWORD /d $m /f\""
+            "$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10' -ErrorAction SilentlyContinue).Start; \"Set-SmbServerConfiguration -EnableSMB1Protocol $s -Force; reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\\\" /v Start /t REG_DWORD /d $m /f\""
         }
         "rdp_off" => {
             "$v=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server').fDenyTSConnections; \"reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\\" /v fDenyTSConnections /t REG_DWORD /d $v /f\""
@@ -345,7 +355,13 @@ pub async fn rollback(action_id: &str) -> Result<()> {
     if snap.trim().is_empty() {
         anyhow::bail!("snapshot is empty — nothing to roll back");
     }
-    ps_run_elevated(&snap)?;
+    if crate::platform::windows::elevation::is_elevated() {
+        run_rollback_now(&snap)?;
+    } else {
+        crate::privileged::run_op(&crate::privileged::Op::HardeningRollback {
+            snapshot: snap.clone(),
+        })?;
+    }
     storage.mark_hardening_applied(action_id, false)?;
     Ok(())
 }

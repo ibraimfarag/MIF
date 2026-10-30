@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/helper_status.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
@@ -361,25 +362,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ]),
               const SizedBox(height: 10),
-              Text(
-                context.tr('settings.relaunchHint'),
-                style: TextStyle(color: AppColors.muted, fontSize: 10.5),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final done = context.tr('settings.relaunchDone');
-                  try {
-                    await ipc.request('app.relaunch_elevated');
-                    _snack(messenger, done);
-                  } catch (e) {
-                    _snack(messenger, '$e', error: true);
-                  }
-                },
-                icon: const Icon(Icons.admin_panel_settings_outlined, size: 16),
-                label: Text(context.tr('settings.relaunchElevated')),
-              ),
+              _HelperCard(ipc: ipc),
               const SizedBox(height: 10),
               Wrap(spacing: 8, children: [
                 FilledButton.icon(
@@ -453,6 +436,109 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 // ---------------- building blocks ----------------
+
+/// The privileged helper (D-007): one install press, then every admin operation
+/// — firewall, hosts, hardening — runs without a UAC prompt.
+class _HelperCard extends ConsumerStatefulWidget {
+  const _HelperCard({required this.ipc});
+
+  final EngineIpc ipc;
+
+  @override
+  ConsumerState<_HelperCard> createState() => _HelperCardState();
+}
+
+class _HelperCardState extends ConsumerState<_HelperCard> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final status =
+        ref.watch(helperStatusProvider).value ?? HelperStatus.empty;
+    final color = status.usable
+        ? AppColors.green
+        : status.installed
+            ? AppColors.orange
+            : AppColors.muted;
+    final state = context.tr('helper.state.${_stateKey(status)}');
+    final version = status.version == null ? '' : ' · v${status.version}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(
+            status.usable ? Icons.verified_user : Icons.shield_outlined,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${context.tr('helper.title')}: $state$version',
+              style: TextStyle(color: color, fontSize: 12),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          context.tr('helper.hint'),
+          style: TextStyle(color: AppColors.muted, fontSize: 10.5),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          FilledButton.icon(
+            onPressed: _busy ? null : () => _run(install: true),
+            icon: _busy
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.admin_panel_settings_outlined, size: 16),
+            label: Text(context.tr(
+                status.installed ? 'helper.repair' : 'helper.install')),
+          ),
+          if (status.installed)
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _run(install: false),
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: Text(context.tr('helper.remove')),
+            ),
+        ]),
+      ],
+    );
+  }
+
+  /// Maps the engine's service state onto a translation key.
+  String _stateKey(HelperStatus status) {
+    if (status.usable) return 'ready';
+    if (status.reachable) return 'unelevated';
+    if (status.installed) return 'not_running';
+    return 'missing';
+  }
+
+  Future<void> _run({required bool install}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(helperStatusProvider.notifier);
+    final done = context.tr(install ? 'helper.installDone' : 'helper.removeDone');
+    setState(() => _busy = true);
+    try {
+      if (install) {
+        await notifier.install();
+      } else {
+        await notifier.remove();
+      }
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('$e', maxLines: 3, overflow: TextOverflow.ellipsis),
+        backgroundColor: AppColors.red.withValues(alpha: 0.85),
+      ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
 
 /// Live connectivity + intel freshness, next to the manual sync button.
 class _SyncLive extends ConsumerWidget {

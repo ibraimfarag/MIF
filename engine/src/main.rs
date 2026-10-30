@@ -15,6 +15,7 @@ mod hardening;
 mod jobs;
 mod llm;
 mod notify;
+mod privileged;
 mod reports;
 mod settings;
 mod smart;
@@ -88,6 +89,20 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+    /// Install (or repair) the privileged helper service — this is the one step
+    /// that needs a UAC prompt (run elevated once by the engine, not by hand).
+    InstallHelper,
+    /// Stop and delete the privileged helper service (needs elevation).
+    UninstallHelper,
+    /// Service entry point used by the SCM for the privileged helper.
+    HelperService,
+    /// Run the privileged helper in the foreground (diagnostics/tests).
+    HelperConsole,
+    /// Print the privileged helper's state and audit log location.
+    HelperStatus {
+        #[arg(short, long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
@@ -124,6 +139,11 @@ async fn main() -> Result<()> {
         Some(Commands::Jobs { .. }) => "jobs",
         Some(Commands::ResumeJob { .. }) => "resume-job",
         Some(Commands::Job { .. }) => "job",
+        Some(Commands::InstallHelper) => "install-helper",
+        Some(Commands::UninstallHelper) => "uninstall-helper",
+        Some(Commands::HelperService) => "helper-service",
+        Some(Commands::HelperConsole) => "helper-console",
+        Some(Commands::HelperStatus { .. }) => "helper-status",
         None => "idle",
     };
     tracing::info!(
@@ -278,6 +298,26 @@ async fn main() -> Result<()> {
                     .collect::<Vec<_>>(),
             });
             emit(&payload, json)?;
+        }
+        Some(Commands::InstallHelper) => {
+            let exe = privileged::service::current_exe()?;
+            let state = privileged::service::install(&exe)?;
+            println!("{}", serde_json::to_string_pretty(&state)?);
+        }
+        Some(Commands::UninstallHelper) => {
+            let state = privileged::service::uninstall()?;
+            println!("{}", serde_json::to_string_pretty(&state)?);
+        }
+        Some(Commands::HelperService) => {
+            // Blocking by design: the SCM calls service_main on the main thread
+            // and this returns only when the service is stopped.
+            privileged::service::run_service()?;
+        }
+        Some(Commands::HelperConsole) => {
+            privileged::server::run_console()?;
+        }
+        Some(Commands::HelperStatus { json }) => {
+            emit(&serde_json::to_value(privileged::status())?, json)?;
         }
         None => {
             println!("MI CS Engine v0.1.0");

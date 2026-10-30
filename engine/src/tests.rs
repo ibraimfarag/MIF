@@ -365,7 +365,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
-    #[test]
     /// A cancelled vuln scan must not sit through the 6.5 s NVD pause: that is
     /// the difference between "cancel" and "cancel after the next step".
     #[test]
@@ -436,5 +435,226 @@ mod tests {
         assert_eq!(vulns[0].kev_due.as_deref(), Some("2026-10-21"));
         assert!(!vulns[1].known_exploited, "an uncatalogued CVE is not");
         assert!(vulns[1].kev_due.is_none());
+    }
+
+    // ---- privileged helper (P1.5, D-007) ----
+
+    #[test]
+    fn privileged_op_set_is_closed() {
+        use crate::privileged::Op;
+        // Only the documented operations exist: a request for anything else is
+        // a malformed frame, not something the helper tries to interpret.
+        assert!(serde_json::from_str::<Op>(r#"{"op":"shell.run","command":"whoami"}"#).is_err());
+        assert!(serde_json::from_str::<Op>(r#"{"op":"FirewallDefaultDeny","enabled":true}"#).is_err());
+        assert!(matches!(
+            serde_json::from_str::<Op>(r#"{"op":"ping"}"#).unwrap(),
+            Op::Ping
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Op>(r#"{"op":"firewall.default_deny","enabled":true}"#).unwrap(),
+            Op::FirewallDefaultDeny { enabled: true }
+        ));
+    }
+
+    #[test]
+    fn privileged_payloads_are_validated_before_anything_runs() {
+        use crate::firewall::AddRuleRequest;
+        use crate::privileged::Op;
+
+        let rule = |direction: &str, action: &str, name: &str| AddRuleRequest {
+            name: name.into(),
+            direction: direction.into(),
+            action: action.into(),
+            protocol: None,
+            remote_ip: None,
+            local_port: None,
+            remote_port: None,
+            program: None,
+        };
+        assert!(Op::FirewallAddRule {
+            rule: rule("out", "block", "X")
+        }
+        .validate()
+        .is_ok());
+        assert!(
+            Op::FirewallAddRule {
+                rule: rule("both", "block", "X")
+            }
+            .validate()
+            .is_err(),
+            "a direction netsh does not accept must never reach netsh"
+        );
+        assert!(
+            Op::FirewallAddRule {
+                rule: rule("out", "drop", "X")
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            Op::FirewallAddRule {
+                rule: rule("out", "block", "  ")
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(Op::FirewallRemoveRule { name: String::new() }.validate().is_err());
+        assert!(
+            Op::HardeningRun {
+                action: "delete_everything".into()
+            }
+            .validate()
+            .is_err(),
+            "the hardening table is a whitelist, not a lookup that guesses"
+        );
+        assert!(
+            Op::HardeningRun {
+                action: "smbv1_off".into()
+            }
+            .validate()
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn hosts_documents_are_shape_checked() {
+        use crate::privileged::validate_hosts;
+        let good = "# Copyright\n127.0.0.1 localhost\n::1 localhost\n\
+                    \n# BEGIN MICS-IDS (managed — do not edit)\n\
+                    0.0.0.0 ads.example.com\t# inline comment\n# END MICS-IDS\n";
+        assert!(validate_hosts(good).is_ok());
+
+        // A document without our marker is not something the IDS path produced.
+        assert!(validate_hosts("127.0.0.1 localhost\n").is_err());
+        // Neither is one that smuggles a second file's worth of commands in.
+        assert!(validate_hosts("# BEGIN MICS-IDS\ncmd /c whoami\n").is_err());
+        assert!(validate_hosts("# BEGIN MICS-IDS\n0.0.0.0 bad host/path\n").is_err());
+        assert!(validate_hosts(&format!("# BEGIN MICS-IDS\n{}\n", "0.0.0.0 a.b\n".repeat(400_000))).is_err());
+    }
+
+    #[test]
+    fn rollback_scripts_are_allow_listed() {
+        use crate::hardening::pua_rollback;
+        use crate::privileged::validate_rollback;
+
+        // Exactly the shapes `hardening::snapshot_current` generates.
+        for generated in [
+            pua_rollback(Some(1)),
+            pua_rollback(None),
+            "reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f".to_string(),
+            "Set-SmbServerConfiguration -EnableSMB1Protocol True -Force; reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\" /v Start /t REG_DWORD /d 2 /f".to_string(),
+            "Set-MpPreference -PUAProtection Disabled".to_string(),
+        ] {
+            assert!(
+                validate_rollback(&generated).is_ok(),
+                "the helper must accept a script we generated: {generated}"
+            );
+        }
+
+        for hostile in [
+            "cmd /c del C:\\Windows\\System32\\config\\SAM",
+            "powershell -NoProfile -EncodedCommand ZQBjAGgAbwA=",
+            "reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\evil\" /v Start /t REG_SZ /d x /f",
+            "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v x /t REG_DWORD /d 1 /f",
+            "reg add \"HKLM\\SYSTEM\\..\\..\\evil\" /v Start /t REG_DWORD /d 1 /f",
+            "Set-MpPreference -PUAProtection Enabled; cmd /c calc",
+            "reg add \"HKLM\\SYSTEM\\x\" /v Start /t REG_DWORD /d 4 /f > C:\\Windows\\Temp\\out.txt",
+            "`whoami`",
+        ] {
+            assert!(
+                validate_rollback(hostile).is_err(),
+                "the helper must refuse this: {hostile}"
+            );
+        }
+        assert!(validate_rollback("").is_err());
+        assert!(validate_rollback(&"reg add \"HKLM\\x\" /v a /t REG_DWORD /d 1 /f\n".repeat(9)).is_err());
+    }
+
+    #[test]
+    fn service_definition_quotes_the_install_path() {
+        use crate::privileged::service::{bin_path, parse_query};
+        let path = Path::new(r"C:\Program Files\MI CS\mics-engine.exe");
+        assert_eq!(
+            bin_path(path),
+            "\"C:\\Program Files\\MI CS\\mics-engine.exe\" --helper-service"
+        );
+        let args = crate::privileged::service::sc_create_args(path);
+        assert!(args.contains(&"obj=".to_string()) && args.contains(&"LocalSystem".to_string()));
+        // `sc` parses its own argv, so `key=` and the value travel as separate
+        // argv entries; only the value carries the quotes the path needs.
+        let bin = args
+            .iter()
+            .position(|a| a == "binPath=")
+            .expect("binPath is passed to sc");
+        assert_eq!(args[bin + 1], bin_path(path));
+        assert!(args[bin + 1].contains('"'));
+
+        let running = parse_query("SERVICE_NAME: MICSHelper\n        TYPE               : 10  WIN32_OWN_PROCESS\n        STATE              : 4  RUNNING\n");
+        assert!(running.installed && running.running);
+        assert_eq!(running.state, "running");
+        let stopped = parse_query("        STATE              : 1  STOPPED\n");
+        assert!(stopped.installed && !stopped.running);
+        // `sc query` on a service that was never installed says nothing useful,
+        // which is a normal answer rather than an error.
+        assert_eq!(
+            parse_query("The specified service does not exist as an installed service."),
+            crate::privileged::service::HelperState::missing()
+        );
+    }
+
+    #[test]
+    fn privileged_requests_are_audited_and_refused_when_malformed() {
+        use crate::privileged::Op;
+        use crate::privileged::server;
+        // One test owns both env hooks (parallel tests must not race on them).
+        let dir = std::env::temp_dir().join(format!("mics-helper-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("priv.log");
+        unsafe {
+            std::env::set_var("MICS_HELPER_LOG", &log);
+            std::env::set_var("MICS_HELPER_PIPE", format!("mics_helper_test_{}", std::process::id()));
+        }
+
+        // A document that is not ours is refused *before* anything is logged as
+        // started, and the answer is the envelope the client expects.
+        let refused = server::respond(&Op::HostsWrite {
+            content: "no marker here\n".into(),
+        });
+        assert!(refused.contains("\"ok\":false"), "{refused}");
+        assert!(refused.contains("marker"), "{refused}");
+
+        // The real protocol, over a real pipe, in this process.
+        server::spawn_console().expect("helper pipe binds");
+        let pong = crate::privileged::call(&Op::Ping).expect("ping answers");
+        assert_eq!(pong["pong"], serde_json::json!(true));
+        let version = crate::privileged::call(&Op::Version).expect("version answers");
+        assert_eq!(
+            version["version"].as_str(),
+            Some(env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(
+            version["elevated"].as_bool(),
+            Some(crate::platform::windows::elevation::is_elevated()),
+            "the helper reports its own token state instead of assuming it is elevated"
+        );
+
+        // A well-shaped request in an unelevated test process must be refused
+        // with the reason, not silently half-applied.
+        let unelevated = server::respond(&Op::HardeningRun {
+            action: "smbv1_off".into(),
+        });
+        if !crate::platform::windows::elevation::is_elevated() {
+            assert!(unelevated.contains("\"ok\":false"), "{unelevated}");
+            assert!(unelevated.contains("elevated token"), "{unelevated}");
+        }
+
+        let text = std::fs::read_to_string(&log).expect("audit log written");
+        assert!(text.contains("phase=start hosts.write"), "{text}");
+        assert!(text.contains("phase=done ok=false"), "{text}");
+        assert!(text.contains("phase=done ok=true dur_ms="), "{text}");
+        // The audit line proves *what* was sent without copying the document.
+        assert!(text.contains("sha256="), "{text}");
+        assert!(!text.contains("no marker here"), "the log must not carry payloads: {text}");
     }
 }

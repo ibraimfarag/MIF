@@ -14,11 +14,13 @@
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
 > badge) and **P7 (desktop alert cards: one alert gate, full coverage, ar/en
-> copy, AUMID-free toast proven by Windows' own notification history)** done,
-> plus the state-reporting fix those live probes found · **next: P1.5
-> (single-elevation helper — needs one UAC prompt from you)**; the cheap wins
-> below need neither elevation nor money, then P4 packaging, P5
-> documentation/hardening, P6 QA harness. README is written; the app runs
+> copy, AUMID-free toast proven by Windows' own notification history)** and
+> **P1.5 (the privileged helper: closed op set, validate-before-run, audit-first,
+> one-prompt install, `verify-helper.ps1` — only the elevated install itself is
+> left, and that needs one click from you)** done,
+> plus the state-reporting fix those live probes found · **next: install the
+> helper once (one UAC prompt), then packaging/QA**; the cheap wins below need
+> neither elevation nor money, then P4, P5, P6. README is written; the app runs
 > unelevated and was verified end-to-end on a real machine.
 
 ---
@@ -90,6 +92,9 @@ not implemented yet, see D-008).
 | `dart run tool/pipe_probe.dart <dir>` | Raw protocol: request/response + `progress` + `job_finished` push |
 | `mics-engine.exe benchmark` | RAM/CPU against the §15 budgets |
 | `scripts\verify-toast.ps1` | A real notification card reached the desktop: clears the AUMID's history, triggers a card, reads the history back (text + actions). `-HistoryOnly` reads cards an already-running engine produced |
+| `scripts\verify-helper.ps1` | The privileged helper's protocol **unelevated**: ping/version answer, a privileged op is refused without an elevated token, an unmarked hosts document and a malformed firewall rule are refused, an op outside the closed set is refused, the audit log keeps intent/outcome but never the payload, `helper-status` sees it |
+| `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
+| `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
@@ -119,7 +124,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P3d** | Second real-run bug sweep: Defender PUA false positive, read-only snapshot, verified apply | **done** |
 | **P3e** | Third real-run bug sweep: concurrent pipe dispatch, heartbeat only when idle, vuln-scan deadline | **done** |
 | **P3c1** | Intel source registry: per-source state, backoff/next-due, DNS-blocklist domains, CISA KEV catalog | **done** |
-| **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
+| **P1.5** | Single-elevation privileged helper (D-007): closed op set, validation, audit-first, install/uninstall, Settings card, `verify-helper.ps1` | **code complete + unelevated acceptance passed — one interactive UAC prompt left (enabling the service itself)** |
 | **P3c2** | Vulnerability scan as a cancellable job with live progress | **done** |
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — this commit** |
@@ -128,6 +133,50 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **P1.5 — the privileged helper: one prompt instead of one per action**
+  - What shipped: `MICSHelper`, a LocalSystem service that points back at the
+    same `mics-engine.exe --helper-service`, plus the engine's client
+    (`engine/src/privileged/`): a **closed** op set (ping/version, three firewall
+    ops, hosts rewrite, hardening run/rollback), shape validation *before*
+    anything runs, `phase=start`/`phase=done` audit lines that carry a payload
+    hash instead of the payload, one-time install/uninstall that poll the pipe
+    and only report success when the helper actually answers, and a Settings card
+    that renders `missing / not_running / unelevated / ready` from
+    `state` + `version` + token facts. `firewall/`, `ids/` and `hardening/` no
+    longer spawn `-Verb RunAs`: they run in-process when already elevated and
+    route through the helper otherwise. The operation list, the wire format, the
+    validation rules and the audit format are written down in
+    `docs/PRIVILEGED-OPS.md` — the file the code had been citing without it
+    existing.
+  - **Bug found and fixed by running it, not by reading it:** `helper-console`
+    panicked on every start — `Cannot start a runtime from within a runtime`,
+    because the CLI already runs inside tokio and the console path built a second
+    runtime and blocked the same thread. The pipe was therefore never served, and
+    every probe against it timed out. The loop now gets its own thread and runtime
+    (the same shape the SCM service thread and the integration test use); the
+    duplicate runtime code in the test helper collapsed into that one function.
+  - Unelevated acceptance (real requests over a real pipe, `scripts\verify-helper.ps1`,
+    `RESULT: PASS`): `ping` → `pong:true`; `version` → `0.1.0, elevated:false`;
+    `hardening.run smbv1_off` → refused ("running without an elevated token");
+    `hosts.write` without the marker → refused; malformed firewall rule →
+    refused with the rule it broke; `{"op":"shell.exec"}` → refused and the
+    answer lists the eight allowed ops (the closed set, proven by the platform's
+    own deserializer). Audit log: `phase=start`/`phase=done ok=… dur_ms=…`,
+    `sha256=dab82ccbcffeb900` for the document, and assertably **no payload**.
+    `helper-status --json` goes from `not_installed/reachable:false` to
+    `reachable:true, version:0.1.0, elevated:false` once the console helper is up.
+  - **Not verified, on purpose:** the elevated install itself (`sc create`, the
+    LocalSystem pipe ACL). It needs one interactive UAC prompt, which no
+    automated run can answer, so the docs and the commit say "code complete,
+    install pending" rather than claiming the phase is done. Acceptance for that
+    step: Settings → Engine → Install helper (one prompt), then Default-Deny off
+    and on again with **zero** additional prompts.
+  - Checks: `cargo test` 44/44, `cargo clippy --release -- -D warnings` clean,
+    `flutter analyze --no-pub` clean, `flutter test --no-pub` 31/31.
+  - Drive-by: `parse_query` now answers `not_installed` for a never-installed
+    service instead of `unknown` (its own test already expected that), which is
+    what makes the Settings card say "not installed" instead of "cannot tell".
 
 - **P7 — "anything that happens" never reached the desktop as a card**
   - Symptom (the user's own words): a caught virus or any protection action
@@ -528,7 +577,7 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | 1 | Rounded window corners | **done** (needs visual check on Win10 + HiDPI) | `lib/core/window/window_corners.dart` |
 | 2 | Translation as separate files with keys | **done** — 16 module files × 2 languages, 169 keys, parity + no-hardcoded-copy tests | D-009 |
 | 3 | Code signing | **partial** — self-signed script works; trusted cert deferred | D-002, `scripts/sign.ps1` |
-| 4 | Permissions asked once, publisher name | **todo P1.5** — today every admin op spawns its own UAC prompt | D-007 |
+| 4 | Permissions asked once, publisher name | **partial P1.5** — the helper, its closed op set, audit trail and Settings card are shipped and proven unelevated; one interactive UAC prompt still installs the service, and publisher naming still needs D-002's certificate | D-007, `docs/PRIVILEGED-OPS.md` |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
@@ -549,27 +598,32 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 
 ---
 
-## 5. Next up — P1.5 (single elevation)
+## 5. Next up — one prompt, then packaging
 
 Everything else in P2/P3 that could be verified without administrator rights is
 done (settings, i18n, sounds, theme, offline badge, update flow, transport,
-resumable jobs). What remains needs either one interactive UAC prompt (P1.5) or
-money (P4 signing certificate).
+resumable jobs, desktop cards). What remains needs either one interactive UAC
+prompt (finishing P1.5) or money (P4 signing certificate).
 
 ### P1.5 — one UAC prompt, publisher-attributed (D-007)
-- [ ] `docs/PRIVILEGED-OPS.md`: enumerate every admin operation (firewall
-      add/remove/default-deny, hosts rewrite, hardening apply/rollback, Defender
-      orchestration, startup entry).
-- [ ] Windows service `MICSHelper` installed once (`sc create`) via a one-shot
-      elevated helper; UI stays `asInvoker`.
-- [ ] Helper protocol over its own named pipe with an ACL limited to the
-      interactive user; every call logged to the state folder's `logs\priv.log`.
-- [ ] Engine routes the privileged operations through the helper; remove the
-      per-operation `Start-Process -Verb RunAs` calls in `firewall/mod.rs`,
-      `ids/mod.rs`, `hardening/mod.rs`, and the "Relaunch as administrator" stop
-      gap in the Settings screen.
-- [ ] Acceptance: enabling Default-Deny, SMBv1 off and a hosts import in one
-      session produces **one** UAC prompt during install and **zero** after.
+- [x] `docs/PRIVILEGED-OPS.md`: every admin operation enumerated (firewall
+      add/remove/default-deny, hosts rewrite, hardening apply/rollback) with its
+      payload, validation, audit record and reversibility.
+- [x] Windows service `MICSHelper` installed once (`sc create`) via a one-shot
+      elevated helper; UI stays `asInvoker`, Settings card shows the state.
+- [x] Helper protocol over its own named pipe with an ACL limited to LocalSystem,
+      administrators and interactive users; every call logged to the state
+      folder's `logs\priv.log` before and after it runs.
+- [x] Engine routes the privileged operations through the helper; the
+      per-operation `Start-Process -Verb RunAs` calls are gone from
+      `firewall/mod.rs`, `ids/mod.rs`, `hardening/mod.rs`, and with them the
+      "Relaunch as administrator" stop gap in the Settings screen.
+- [ ] **Acceptance (needs you):** install the helper once from
+      **Settings → Engine → Install helper** (one prompt), then enable Default-Deny,
+      turn SMBv1 off and import a hosts list in one session: **zero** further
+      prompts, and `logs\priv.log` carries one `phase=start`/`phase=done` pair per
+      operation. Everything below that step is already proven unelevated by
+      `scripts\verify-helper.ps1`.
 - Note: the prompt shows "MI CS" as publisher only with a trusted certificate
   (D-002) — until then it shows the helper's unsigned identity.
 
@@ -760,6 +814,13 @@ settings and read environment variables only.
     medium-integrity process cannot do it (no `SeRelabelPrivilege`): `icacls`
     answers "Access is denied". The engine detects this case itself and says so
     instead of echoing the HRESULT (`notify/test`, engine log).
+13. **Windows PowerShell 5.1 can deadlock when a native command's stderr is
+    redirected into a PowerShell stream** (`& .\mics-engine.exe helper-status
+    2>$null | Out-String` hung forever while the engine was already gone). The
+    engine logs to stderr on purpose, so this bites every probe. Redirect both
+    streams to files instead
+    (`Start-Process -Wait -RedirectStandardOutput x.json -RedirectStandardError y.txt`)
+    and read the files — that is what `scripts\verify-helper.ps1` does.
 
 ---
 

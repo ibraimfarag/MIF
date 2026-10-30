@@ -732,49 +732,22 @@ impl Dispatcher {
                 }
                 Some(json!({"nl": result}))
             }
-            "app.relaunch_elevated" => {
-                // One-shot elevation of the UI, requested explicitly by the user
-                // from Settings. The engine stays unelevated; only the new UI
-                // process (and the engine it starts) gets an elevated token.
-                let engine = std::env::current_exe().unwrap_or_default();
-                let app = engine
-                    .parent()
-                    .map(|d| d.join("mics_app.exe"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("mics_app.exe"));
-                if !app.exists() {
-                    return detailed_error(
-                        req,
-                        "app.relaunch_elevated",
-                        anyhow::anyhow!("mics_app.exe not found next to the engine"),
-                    );
+            "helper.status" => Some(json!(crate::privileged::status())),
+            "helper.install" => {
+                // The user has to answer one UAC prompt inside this call, so it
+                // runs off the runtime: a blocked worker would stop answering
+                // the UI's heartbeat while the prompt is on screen.
+                match tokio::task::spawn_blocking(crate::privileged::install).await {
+                    Ok(Ok(status)) => Some(json!(status)),
+                    Ok(Err(e)) => return detailed_error(req, "helper.install", e),
+                    Err(e) => return detailed_error(req, "helper.install", anyhow::Error::new(e)),
                 }
-                let ps_arg = format!(
-                    "Start-Process -FilePath '{}' -Verb RunAs",
-                    app.display()
-                );
-                let mut command = std::process::Command::new("powershell");
-                command.args(["-NoProfile", "-Command", &ps_arg]);
-                crate::platform::windows::elevation::hide_console(&mut command);
-                match command.output() {
-                    Ok(o) if o.status.success() => Some(json!({"status": "launched"})),
-                    Ok(o) => {
-                        let text = String::from_utf8_lossy(&o.stderr).trim().to_string();
-                        return detailed_error(
-                            req,
-                            "app.relaunch_elevated",
-                            anyhow::anyhow!(
-                                "elevation was refused or cancelled{}",
-                                if text.is_empty() { String::new() } else { format!(": {text}") }
-                            ),
-                        );
-                    }
-                    Err(e) => {
-                        return detailed_error(
-                            req,
-                            "app.relaunch_elevated",
-                            anyhow::Error::new(e),
-                        );
-                    }
+            }
+            "helper.uninstall" => {
+                match tokio::task::spawn_blocking(crate::privileged::uninstall).await {
+                    Ok(Ok(status)) => Some(json!(status)),
+                    Ok(Err(e)) => return detailed_error(req, "helper.uninstall", e),
+                    Err(e) => return detailed_error(req, "helper.uninstall", anyhow::Error::new(e)),
                 }
             }
             "service.install" => {

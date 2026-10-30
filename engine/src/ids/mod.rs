@@ -15,7 +15,33 @@ const MARK_BEGIN: &str = "# BEGIN MICS-IDS (managed — do not edit)";
 const MARK_END: &str = "# END MICS-IDS";
 
 fn hosts_path() -> PathBuf {
-    PathBuf::from(r"C:\Windows\System32\drivers\etc\hosts")
+    // Test hook: the hosts file is machine-owned, so the writer is exercised on
+    // a scratch file instead of the real one.
+    std::env::var("MICS_HOSTS_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(r"C:\Windows\System32\drivers\etc\hosts"))
+}
+
+/// Replaces the hosts file with `content` (already validated by the caller).
+///
+/// Written through a sibling temp file plus a `.mics-bak` copy of the previous
+/// document, so a crash mid-write cannot leave the machine without a hosts file
+/// and an operator can always see what the previous document was.
+pub fn write_hosts_now(content: &str) -> Result<()> {
+    let path = hosts_path();
+    let directory = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("hosts path has no directory"))?;
+    std::fs::create_dir_all(directory).ok();
+    let temp = directory.join("hosts.mics-new");
+    std::fs::write(&temp, content)
+        .with_context(|| format!("write {}", temp.display()))?;
+    if path.exists() {
+        let backup = directory.join("hosts.mics-bak");
+        let _ = std::fs::copy(&path, &backup);
+    }
+    std::fs::rename(&temp, &path).with_context(|| format!("replace {}", path.display()))?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +80,10 @@ fn rewrite_hosts(_content: &str, new_section: &str) -> Result<()> {
     let storage = Storage::open()?;
     storage.save_hardening_snapshot("ids_hosts", &existing)?;
 
+    // Keep everything the user (or another product) put in the file, replace
+    // only our marked section, and always leave the markers in place: an empty
+    // section means "nothing blocked yet", and the privileged helper refuses a
+    // hosts document that does not carry them.
     let mut out = String::new();
     match existing.find(MARK_BEGIN) {
         Some(start) => {
@@ -63,54 +93,34 @@ fn rewrite_hosts(_content: &str, new_section: &str) -> Result<()> {
                 .find(MARK_END)
                 .map(|i| tail[i + MARK_END.len()..].to_string())
                 .unwrap_or_default();
-            if !new_section.trim().is_empty() {
-                out.push_str(MARK_BEGIN);
-                out.push('\n');
-                out.push_str(new_section);
-                if !new_section.ends_with('\n') {
-                    out.push('\n');
-                }
-                out.push_str(MARK_END);
-            }
+            out.push_str(&marked_section(new_section));
             out.push_str(&after_end);
         }
         None => {
             out.push_str(existing.trim_end());
             out.push_str("\n\n");
-            if !new_section.trim().is_empty() {
-                out.push_str(MARK_BEGIN);
-                out.push('\n');
-                out.push_str(new_section);
-                if !new_section.ends_with('\n') {
-                    out.push('\n');
-                }
-                out.push_str(MARK_END);
-                out.push('\n');
-            }
+            out.push_str(&marked_section(new_section));
+            out.push('\n');
         }
     }
 
-    // hosts is admin-owned; write via elevated PowerShell.
-    let tmp = std::env::temp_dir().join("mics_hosts_new");
-    std::fs::write(&tmp, &out).context("write temp hosts")?;
-    let ps_arg = format!(
-        "Start-Process -FilePath cmd -ArgumentList @('/c','copy /Y \\'{}\\' \\'{}\\'') -Verb RunAs -Wait -WindowStyle Hidden",
-        tmp.display(),
-        path.display()
-    );
-    let mut command = std::process::Command::new("powershell");
-    command.args(["-NoProfile", "-Command", &ps_arg]);
-    crate::platform::windows::elevation::hide_console(&mut command);
-    let out2 = command
-        .output()
-        .context("elevated hosts copy")?;
-    if !out2.status.success() {
-        anyhow::bail!(
-            "hosts update failed: {}",
-            String::from_utf8_lossy(&out2.stderr).trim()
-        );
+    // hosts is machine-owned: write it ourselves when this process is already
+    // elevated, otherwise let the privileged helper do it (D-007) — one UAC
+    // prompt at install time instead of one per blocklist update.
+    if crate::platform::windows::elevation::is_elevated() {
+        return write_hosts_now(&out);
     }
-    Ok(())
+    crate::privileged::run_op(&crate::privileged::Op::HostsWrite { content: out }).map(|_| ())
+}
+
+/// The managed section, markers included, for any (possibly empty) body.
+fn marked_section(body: &str) -> String {
+    let body = body.trim_end();
+    if body.is_empty() {
+        format!("{MARK_BEGIN}\n{MARK_END}\n")
+    } else {
+        format!("{MARK_BEGIN}\n{body}\n{MARK_END}\n")
+    }
 }
 
 /// Adds domains to the DNS blocklist (idempotent).

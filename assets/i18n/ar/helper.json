@@ -1,0 +1,13 @@
+{
+  "helper.hint": "نافذة ويندوز واحدة بتثبّت الخدمة. بعد كده كل تعديلات الجدار الناري وملف hosts والتحصين مش هتطلب أي موافقة تانية، وكل نداء بيتسجّل في %PROGRAMDATA%\\MICS\\logs\\priv.log.",
+  "helper.install": "تثبيت الخدمة (موافقة واحدة)",
+  "helper.installDone": "تم تثبيت الخدمة ذات الصلاحيات",
+  "helper.remove": "إزالة",
+  "helper.removeDone": "تمت إزالة الخدمة ذات الصلاحيات",
+  "helper.repair": "إصلاح (موافقة واحدة)",
+  "helper.state.missing": "غير مثبتة",
+  "helper.state.not_running": "مثبتة لكن متوقفة",
+  "helper.state.ready": "جاهزة",
+  "helper.state.unelevated": "تعمل بدون صلاحيات",
+  "helper.title": "الخدمة ذات الصلاحيات"
+}
