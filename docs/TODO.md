@@ -259,6 +259,35 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The helper checks who is calling before it runs anything (F-2a)**
+  - The pipe still grants `INTERACTIVE` (D-007), so the helper now asks. On every
+    accepted connection it reads the client pid with `GetNamedPipeClientProcessId`,
+    opens that process and reads its image path with `QueryFullProcessImageNameW`,
+    and keeps the handle open while the path is read so the pid cannot be recycled
+    underneath the check (`platform/windows/caller.rs`).
+  - Authorised: an image named `mics-engine.exe` (case-insensitive), or a path equal
+    to `MICS_ENGINE_PATH` — the hook the installer records and the one the
+    verification scripts use to name themselves. Anything else gets
+    `{"ok":false,"error":"this pipe only serves the MI CS engine"}` after its request
+    line arrives, a `WARN` naming the refused image, and **no** audit entry: it never
+    reaches validation.
+  - Measured live on this machine: a PowerShell client was refused
+    (`privileged helper refused C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`),
+    the in-band JSON came back, and `scripts\verify-helper.ps1` still prints
+    `RESULT: PASS` once it names itself through `MICS_ENGINE_PATH` (the recipe in
+    `docs/PRIVILEGED-OPS.md` shows both sides).
+  - 70/70 `cargo test` (5 new: name matching, the configured path, the refusal of
+    pid 0, and the existing in-process protocol test now names itself). The
+    unauthorised path is deliberately *not* given the full 300 s request deadline —
+    it waits 5 s for the line and closes, so a refused client cannot hold the single
+    request slot.
+  - Honest limit, in D-017 and the register: this is the image **name**, so a copy of
+    the engine still passes, and the caller's **token SID** is not compared with the
+    installer's account. That is F-2b.
+  - Note while running it: `scripts\verify-helper.ps1` defaults to
+    `dist\MICS-portable\mics-engine.exe`, which predates these changes and fails the
+    audit-log checks; pass `-EnginePath` a fresh `cargo build --release` binary (or
+    rebuild the release) to measure the current source.
 - **The update signer must be MI CS, not just someone Windows trusts (F-3c)**
   - F-3b asked "is this signed by anyone Windows trusts?" — a real improvement over
     a bare hash, but a stolen or purchased certificate from any CA would also pass.
@@ -1407,7 +1436,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
-| MED | **The helper pipe grants `INTERACTIVE` full access** (measured `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`): a standard local user with no admin rights can ask the LocalSystem helper for the closed op set (open an inbound firewall rule, replace the managed hosts section, run a hardening action) with no prompt. Fix without reintroducing prompts: verify the caller (`GetNamedPipeClientProcessId` → image path + token SID) | `privileged/server.rs`, D-007, THREAT-MODEL F-2 |
+| MED | **The helper still trusts any caller whose *image name* is `mics-engine.exe`**: the caller's pid and image path are checked (F-2a, D-017), but a standard user can copy the engine and call the helper with it, and the caller's token SID is never compared with the account MI CS was installed for. The ops stay inside the closed set, but they run as SYSTEM with no prompt | `privileged/server.rs`, `platform/windows/caller.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |

@@ -611,9 +611,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("priv.log");
+        // The helper only answers the engine image (F-2). A test binary is
+        // `mics-engine-<hash>.exe`, so the test names itself through the same hook
+        // the installer uses instead of loosening the check for everyone.
+        let own_exe = std::env::current_exe().expect("the test binary has a path");
         unsafe {
             std::env::set_var("MICS_HELPER_LOG", &log);
             std::env::set_var("MICS_HELPER_PIPE", format!("mics_helper_test_{}", std::process::id()));
+            std::env::set_var("MICS_ENGINE_PATH", &own_exe);
         }
 
         // A document that is not ours is refused *before* anything is logged as

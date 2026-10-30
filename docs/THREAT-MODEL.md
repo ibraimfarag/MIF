@@ -221,7 +221,7 @@ ask the engine to do through the pipe.
 
 | # | Risk | Why it is accepted today | Mitigation if we want it |
 |---|---|---|---|
-| F-2 | Helper pipe grants `INTERACTIVE` full access: a standard user can make SYSTEM open a firewall rule, rewrite the managed hosts section, or run a hardening action, with no prompt | D-007 exists to remove per-action prompts | Verify the caller before executing: `GetNamedPipeClientProcessId` → image path + token SID must be the running engine's, or restrict the ACL to `BA`+`SY` and accept a prompt |
+| F-2 | Helper pipe grants `INTERACTIVE`, so a standard user can still ask for a firewall rule, a hosts rewrite or a hardening action with no prompt. **The caller's image is now checked** (F-2a): `GetNamedPipeClientProcessId` → `QueryFullProcessImageNameW` must name `mics-engine.exe` (or the configured `MICS_ENGINE_PATH`); anything else is refused, logged, and audited nowhere because it never reaches validation | D-007 exists to remove per-action prompts, and the people who can reach the pipe are the ones who could also copy the engine | Compare the caller's **token SID** with the account MI CS was installed for (F-2b), or restrict the ACL to `BA`+`SY` and accept a prompt |
 | F-3 | The update signer is pinned by **subject name** (`CN=MI CS Code Signing`), not by thumbprint — a certificate with that same CN issued by a CA that failed identity validation would still pass | A thumbprint pin would break on every locally re-issued certificate, making the next release refuse its own payload | Pin the thumbprint once a release certificate with a stable lifetime exists, or carry the expected thumbprint inside a separately signed manifest |
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
@@ -237,8 +237,12 @@ tests read the DACL back from the live pipe object
 and `::the_pipe_acl_is_protected_and_names_a_real_user_sid`), and
 `scripts/verify-pipe-acl.ps1` re-measures both pipes end to end — protected DACL,
 three ACEs, no `WD`/`AN`/`IU`, and a same-user JSON-RPC `status` call still
-answered over the hardened pipe. The helper pipe's `IU` scope (F-2) is untouched
-and still open. **F-4 (the copy)**: the canary alert now says the decoy was
+answered over the hardened pipe. **F-2a**: the helper now reads the caller's pid
+from the connected pipe and its image path from a handle, and answers the engine
+`mics-engine.exe` (plus one path the installer can name) and nothing else —
+measured live: a PowerShell client got `this pipe only serves the MI CS engine` and
+the log named `powershell.exe`. The SID half (F-2b) is what the table above still
+holds. **F-4 (the copy)**: the canary alert now says the decoy was
 *modified* — in the event detail, the card title (ar/en) and the incident title —
 because mtime/size is all the detector compares. The detection gap itself is not
 closed: a pure read is still invisible, and that part stays in the table above.

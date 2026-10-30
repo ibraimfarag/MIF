@@ -124,6 +124,36 @@ LocalSystem, Administrators and **Interactive Users** — the people who could
 answer a UAC prompt themselves. Not `Everyone`, not services, not network
 identities: a non-interactive process cannot ask the helper for anything.
 
+## Who may call
+
+The ACL above says "any interactive user", which is why the helper also asks *who*
+is on the other end before it does anything (F-2, D-017):
+
+1. `GetNamedPipeClientProcessId` reads the client's pid from the connected pipe.
+2. `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageNameW`
+   turn that pid into a full image path. Holding the process handle while the path
+   is read means the pid cannot be recycled in between.
+3. The path is accepted when the image is `mics-engine.exe` (by name), or when it
+   matches `MICS_ENGINE_PATH` exactly — the hook the installer records, and the one
+   the verification scripts use to name themselves.
+
+A client that is none of those gets
+
+```json
+{"ok":false,"error":"this pipe only serves the MI CS engine"}
+```
+
+after its request line arrives (so it can read the reason), a `WARN` in the helper
+log naming the refused image, and **no** audit entry — an unauthorised caller never
+reaches validation. Measured on this machine: a PowerShell client answered exactly
+that, and the log said
+`privileged helper refused C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`.
+
+What this does **not** do yet: the check is on the image name, so a copy of the
+engine still passes, and it does not look at the caller's token SID. F-2b — compare
+the caller's user SID with the account MI CS was installed for — is what keeps a
+*different* user out, and it is still open.
+
 ## Verifying it without a UAC prompt
 
 The service install is the only step that needs elevation. Everything else can be
@@ -137,6 +167,8 @@ proven on an unelevated shell, which is what the repository does in
 # 2) serve on the real protocol, unelevated, in the foreground
 $env:MICS_HELPER_PIPE = 'mics_helper_probe'
 $env:MICS_HELPER_LOG  = "$env:TEMP\mics-helper-audit.log"
+# The client below is PowerShell, not the engine, so it has to be named first.
+$env:MICS_ENGINE_PATH = (Get-Process -Id $PID).Path
 Start-Process .\mics-engine.exe -ArgumentList helper-console
 
 # 3) speak the protocol (one connection per request)
@@ -144,6 +176,10 @@ $p = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'mics_helper_probe', 'InO
 $p.Connect(3000); $w = [System.IO.StreamWriter]::new($p); $w.AutoFlush = $true
 $r = [System.IO.StreamReader]::new($p); $w.WriteLine('{"op":"hardening.run","action":"smbv1_off"}'); $r.ReadLine()
 ```
+
+Without the `MICS_ENGINE_PATH` line, step 3 answers
+`{"ok":false,"error":"this pipe only serves the MI CS engine"}` — that is the F-2a
+check doing its job, not a broken recipe.
 
 Observed on this machine (unelevated, 2026-10-30):
 

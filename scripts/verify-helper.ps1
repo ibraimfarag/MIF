@@ -86,6 +86,10 @@ $env:MICS_HELPER_PIPE = $PipeName
 $env:MICS_HELPER_LOG = $log
 $env:MICS_NO_SINGLETON = "1"
 $env:MICS_NO_GUARD = "1"
+# The helper only answers the engine image it serves (F-2). This script speaks the
+# protocol itself, so it names the client it is about to use through the same hook
+# the installer records the engine in - no bypass, just the documented path pin.
+$env:MICS_ENGINE_PATH = (Get-Process -Id $PID).Path
 
 $helper = Start-Process -FilePath $engine -ArgumentList "helper-console" `
   -PassThru -NoNewWindow -RedirectStandardError $err

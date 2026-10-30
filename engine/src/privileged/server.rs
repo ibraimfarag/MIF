@@ -83,16 +83,59 @@ pub fn wake() -> bool {
 }
 
 async fn handle_client(server: NamedPipeServer) -> Result<()> {
+    // Who is asking? The pipe grants INTERACTIVE (D-007), so the helper answers
+    // the engine and nothing else. Read from the connected handle before it is
+    // split into halves, because the check needs the pipe, not the stream.
+    let caller = {
+        use std::os::windows::io::AsRawHandle;
+        let handle = windows::Win32::Foundation::HANDLE(server.as_raw_handle());
+        crate::platform::windows::caller::client_image_path(handle)
+    };
+    let allowed = crate::platform::windows::caller::configured_engine_path();
+    let refused = match caller {
+        Ok(path) if crate::platform::windows::caller::is_authorised(&path, allowed.as_deref()) => {
+            None
+        }
+        Ok(path) => {
+            warn!(
+                "privileged helper refused {}: not the engine it serves",
+                path.display()
+            );
+            Some(refusal("this pipe only serves the MI CS engine"))
+        }
+        Err(e) => {
+            // No pid means the client is already gone, or the query was refused.
+            // Either way there is no one to answer, and guessing is not an option.
+            warn!("privileged helper could not identify its client: {e:#}");
+            Some(refusal("the helper could not identify the calling process"))
+        }
+    };
+
     let (read_half, mut write_half) = tokio::io::split(server);
     let mut reader = BufReader::new(read_half);
+    // A client that was already turned away is not allowed to hold the single
+    // request slot for the full deadline: wait briefly for its line so it can read
+    // the reason, then close.
+    let deadline = if refused.is_some() {
+        Duration::from_secs(5)
+    } else {
+        REQUEST_TIMEOUT
+    };
     let mut line = String::new();
-    let response = match tokio::time::timeout(REQUEST_TIMEOUT, reader.read_line(&mut line)).await {
-        Ok(Ok(0)) | Ok(Err(_)) => return Ok(()),
-        Ok(Ok(_)) => match serde_json::from_str::<Op>(line.trim()) {
-            Ok(op) => respond(&op),
-            Err(e) => refusal(&format!("unknown or malformed request: {e}")),
+    let response = match refused {
+        Some(explanation) => match tokio::time::timeout(deadline, reader.read_line(&mut line)).await {
+            Ok(Ok(0)) | Ok(Err(_)) => return Ok(()),
+            Ok(Ok(_)) => explanation,
+            Err(_) => return Ok(()),
         },
-        Err(_) => refusal("the request timed out"),
+        None => match tokio::time::timeout(deadline, reader.read_line(&mut line)).await {
+            Ok(Ok(0)) | Ok(Err(_)) => return Ok(()),
+            Ok(Ok(_)) => match serde_json::from_str::<Op>(line.trim()) {
+                Ok(op) => respond(&op),
+                Err(e) => refusal(&format!("unknown or malformed request: {e}")),
+            },
+            Err(_) => refusal("the request timed out"),
+        },
     };
     write_half.write_all(response.as_bytes()).await?;
     write_half.flush().await?;

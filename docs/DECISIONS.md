@@ -584,3 +584,56 @@ different CN is refused while ours is accepted) and the signed artifact that mak
 the positive cases real; keeping the CN in `make-release.ps1` and in
 `EXPECTED_SIGNER_CN` in step; and recording the thumbprint gap rather than treating
 this as "updates are fully verified".
+
+## D-017 — The helper asks who is calling, and only answers the engine
+
+**Context.** D-007 gives the LocalSystem helper one pipe, and D-015 recorded the
+engine pipe's ACL. The helper's pipe is different on purpose: it grants
+`INTERACTIVE` full access, because the engine runs as the logged-on user and the
+alternative was a UAC prompt for every privileged action. Measured, the DACL is
+
+```
+D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)
+```
+
+so on a machine with more than one account, a standard user can ask `SYSTEM` to open
+an inbound firewall rule, replace the managed hosts section, or run a hardening
+action — no prompt, inside the closed op set but still `SYSTEM`. That is F-2, and
+`docs/THREAT-MODEL.md` has carried it as a real, bounded risk.
+
+**Decision.** Every accepted connection is identified before anything is read:
+
+1. `GetNamedPipeClientProcessId` names the client process from the connected pipe.
+2. `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `QueryFullProcessImageNameW`
+   give its image path. The process handle is held until the path is read, so the pid
+   cannot be recycled between the two calls — a check on a recycled pid would be
+   worse than no check.
+3. The caller is authorised when the image is `mics-engine.exe` (file name,
+   case-insensitive) **or** the path equals `MICS_ENGINE_PATH` exactly. The second
+   form is the hook the installer records and the one the verification scripts use to
+   name themselves; it adds one trusted client rather than replacing the name rule.
+4. A refusal is answered in-band (`this pipe only serves the MI CS engine`) after the
+   request line arrives, so a client can read why; it is `WARN`-logged with the
+   refused image; it produces **no** audit entry, because nothing was started; and it
+   gets a 5 s deadline instead of the 300 s request deadline, so a refused client
+   cannot occupy the single request slot.
+5. If the pid cannot be read at all, nothing is answered and nothing runs. "Cannot
+   tell who you are" is a refusal, not a pass.
+
+**Why.** The helper is the only component that acts with `SYSTEM`, and "any
+interactive user" was the widest statement in the whole design. Checking the caller
+costs two API calls on a path that already opens a pipe, and it is measurable: the
+live refusal and the log line are in `docs/PRIVILEGED-OPS.md`, and the four unit
+tests are in `platform/windows/caller.rs`.
+
+**What this is not.** It is the image *name*, so a copy of the engine still passes;
+and the caller's **token SID** is not compared with the account MI CS was installed
+for. Both are stated in the threat model (F-2) and the register instead of being
+papered over. The SID comparison — F-2b — is the next half, and it is what actually
+keeps a *different* user out.
+
+**Commits us to.** Keeping the caller check on the connect path rather than inside
+`respond`, so an unauthorised client never reaches validation or the audit trail;
+keeping `MICS_ENGINE_PATH` documented (AGENTS rule 5) as "the one extra client the
+helper will answer", and keeping `scripts/verify-helper.ps1` naming itself through
+it instead of loosening the rule; and updating F-2's row whenever the check moves.
