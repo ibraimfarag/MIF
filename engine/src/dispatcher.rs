@@ -77,6 +77,10 @@ impl Dispatcher {
                     error!("Firewall error: {:?}", e);
                     None
                 } else {
+                    crate::notify::alert::protection(
+                        "default outbound deny",
+                        "outbound traffic is blocked except allowed rules",
+                    );
                     Some(json!({"status": "success", "message": "Outbound traffic blocked"}))
                 }
             }
@@ -213,7 +217,13 @@ impl Dispatcher {
                     return error_response(req, "missing country code");
                 };
                 match crate::firewall::FirewallManager::block_country(&cc).await {
-                    Ok(name) => Some(json!({"status": "blocked", "rule": name})),
+                    Ok(name) => {
+                        crate::notify::alert::protection(
+                            &format!("country {cc} blocked"),
+                            &name,
+                        );
+                        Some(json!({"status": "blocked", "rule": name}))
+                    }
                     Err(e) => {
                         error!("fw.country.block failed: {e:#}");
                         None
@@ -558,7 +568,13 @@ impl Dispatcher {
                     return error_response(req, "missing domains");
                 };
                 match crate::ids::add_domains(&domains) {
-                    Ok(n) => Some(json!({"added": n})),
+                    Ok(n) => {
+                        crate::notify::alert::protection(
+                            &format!("{n} domain(s) added to the DNS blocklist"),
+                            "hosts file updated",
+                        );
+                        Some(json!({"added": n}))
+                    }
                     Err(e) => { error!("ids.block.add: {e:#}"); return detailed_error(req, "ids.block.add", e); }
                 }
             }
@@ -588,7 +604,13 @@ impl Dispatcher {
                     return error_response(req, "missing path");
                 };
                 match crate::ids::import_blocklist(&p) {
-                    Ok(n) => Some(json!({"imported": n})),
+                    Ok(n) => {
+                        crate::notify::alert::protection(
+                            &format!("{n} domain(s) imported into the DNS blocklist"),
+                            "hosts file updated",
+                        );
+                        Some(json!({"imported": n}))
+                    }
                     Err(e) => { error!("ids.blocklist.import: {e:#}"); return detailed_error(req, "ids.blocklist.import", e); }
                 }
             }
@@ -628,15 +650,23 @@ impl Dispatcher {
                 }
             }
             "notify.test" => {
-                // Settings screen: proves toasts (and DND) actually work.
+                // Settings screen: proves desktop cards (and DND) actually work
+                // — the answer has to be the truth, so a disabled setting or a
+                // card Windows refused is reported instead of "sent".
+                if !crate::notify::alert::enabled() {
+                    return error_response(
+                        req,
+                        "desktop notifications are turned off in Settings",
+                    );
+                }
                 match crate::notify::toast::show_toast(
-                    "🛡️ MI CS — test notification",
-                    "Notifications are working. This is what a HIGH alert looks like.",
+                    crate::notify::alert::text("test.title"),
+                    crate::notify::alert::text("test.body"),
                 ) {
                     Ok(()) => Some(json!({"status": "sent"})),
                     Err(e) => {
                         error!("notify.test: {e:#}");
-                        None
+                        return detailed_error(req, "notify.test", e);
                     }
                 }
             }

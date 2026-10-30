@@ -46,12 +46,11 @@
     "settings.theme.system":  "حسب النظام",
     "settings.title":  "الإعدادات",
     "settings.toastSent":  "تم إرسال الإشعار التجريبي",
+    "settings.toasts":  "إشعارات سطح المكتب",
+    "settings.toastsHint":  "كارت فوق شريط المهام لكل حدث أمني: فيروس اتلقى، هجوم، أو حماية اتحركت. وضع عدم الإزعاج بيسكّت كل حاجة أقل من «حرج».",
     "settings.updates":  "التحديثات",
     "settings.volume":  "مستوى الصوت",
     "settings.vtKey":  "مفتاح VirusTotal (اختياري)",
     "settings.testSound":  "جرّب الصوت",
-    "settings.manifestHint":  "مفيش رابط تحديث متظبّط — التحديثات متوقفة. الصق رابط ملف الإصدار فوق.",
-    "settings.relaunchElevated":  "أعد التشغيل كمسؤول",
-    "settings.relaunchDone":  "MI CS هيعيد التشغيل بصلاحيات المدير",
-    "settings.relaunchHint":  "محتاجها بس لتغييرات الفايروول وملف hosts والتقوية. التطبيق نفسه دايمًا بيشتغل من غير صلاحيات مدير."
+    "settings.manifestHint":  "مفيش رابط تحديث متظبّط — التحديثات متوقفة. الصق رابط ملف الإصدار فوق."
 }

@@ -53,6 +53,10 @@ const MAX_FILES: usize = 50_000;
 const BATCH: usize = 64;
 /// Enumerate at most this many entries before writing the queue transaction.
 const ENUM_CHUNK: usize = 2048;
+/// How many individual files may get their own desktop card per scan; the rest
+/// are folded into one summary card so a folder of samples cannot bury the
+/// desktop in notifications.
+const LIVE_ALERTS: usize = 3;
 
 pub fn starter_rules_source() -> String {
     // Prefer rules/ next to the exe (packaged layout), then the dev repo.
@@ -169,6 +173,9 @@ fn run_job(
     let mut skipped = job.skipped;
     let mut findings = job.findings_count;
     let mut state = "done";
+    // Paths already announced on the desktop during this run, so a finding is
+    // never carded twice (once live, once in the summary).
+    let mut alerted: Vec<String> = Vec::new();
 
     crate::jobs::progress(
         job_id, "running", pct(processed, job.total), "scanning", scanned, skipped,
@@ -226,6 +233,14 @@ fn run_job(
                     if let Some(f) = hit {
                         findings += 1;
                         storage.add_job_finding(job_id, seq, &serde_json::to_string(&f)?)?;
+                        // Tell the user as it happens, not minutes later when
+                        // the whole tree has been walked. Auto-quarantine runs
+                        // silently: the card would only name a file the user
+                        // then cannot find.
+                        if !quarantine && alerted.len() < LIVE_ALERTS {
+                            crate::notify::alert::threat(&f.severity, &f.path, &f.reason);
+                            alerted.push(f.path.clone());
+                        }
                     }
                 }
                 Err(_) => skipped += 1,
@@ -261,20 +276,36 @@ fn run_job(
 
     if state == "done" {
         if quarantine {
+            let mut stored = 0usize;
             if let Ok(qm) = QuarantineManager::new() {
                 for f in &found {
-                    let _ = rt.block_on(qm.quarantine_file(Path::new(&f.path), &f.reason));
+                    if rt
+                        .block_on(qm.quarantine_file(Path::new(&f.path), &f.reason))
+                        .is_ok()
+                    {
+                        stored += 1;
+                    }
                 }
             }
+            if stored > 0 {
+                crate::notify::alert::quarantined(stored);
+            }
         } else {
-            // One-tap quarantine for the worst findings, even with the UI closed.
-            for f in found.iter().filter(|f| f.severity == "critical").take(3) {
-                let _ = crate::notify::toast::show_toast_for_file(
-                    "🛡️ MI CS — Threat found",
-                    &format!("{} — {}", f.path, f.reason),
-                    &["Quarantine", "Open MI CS"],
-                    Some(f.path.clone()),
-                );
+            // Findings that appeared after the live-alert budget (or that were
+            // not worth their own card) still deserve one summary.
+            let remaining: Vec<(String, String, String)> = found
+                .iter()
+                .filter(|f| f.severity == "critical" || f.severity == "high")
+                .filter(|f| !alerted.iter().any(|p| p == &f.path))
+                .take(LIVE_ALERTS)
+                .map(|f| (f.severity.clone(), f.path.clone(), f.reason.clone()))
+                .collect();
+            for (severity, path, reason) in remaining {
+                crate::notify::alert::threat(&severity, &path, &reason);
+                alerted.push(path);
+            }
+            if found.len() > alerted.len() {
+                crate::notify::alert::threats_summary(found.len());
             }
         }
     }

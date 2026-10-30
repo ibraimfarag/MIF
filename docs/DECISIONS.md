@@ -360,3 +360,55 @@ per-source rows (`source`, `state`, `items`, `detail`, `last_error`, `failures`,
 instead of inventing its own summary. Exploit status is data, not decoration:
 `Vulnerability` carries `known_exploited`/`kev_due` and the UI shows a KEV badge,
 because a CVSS score alone cannot say which of two 8.8s is being exploited today.
+
+---
+
+## D-013 — Desktop alert cards: one policy gate, engine-side, verified by Windows' own record
+
+**Status:** accepted (2026-10-30)
+
+**Decision.** Every security event that can reach the desktop goes through one
+gate, `engine/src/notify/alert.rs`, and the engine (not the UI) shows the card:
+
+1. **One policy.** `alert::decide(severity, toast_enabled, dnd)` is a pure
+   function: `toast_enabled = false` silences everything; do-not-disturb lets
+   only CRITICAL through; CRITICAL/HIGH/MEDIUM become cards and LOW stays in the
+   app. Producers (guard events, scan findings, firewall/IDS actions) call
+   `alert::*` and never `toast::*`, so a new event cannot invent its own rules.
+2. **`toast_enabled` is a real setting** in the D-008 document (default `true`,
+   Settings → Notifications, `settings.set`), not an env var.
+3. **Coverage is "anything that happens", not "anything critical".** The guard
+   loop now hands *every* event to the gate, the scanner cards a file the moment
+   it is found (first three individually, the rest as one summary), and every
+   protection action the product performs (default-deny, country block, hosts
+   blocklist) confirms itself on the desktop.
+4. **Copy follows `settings.lang`.** The engine writes the card, but the reader
+   is the user: titles/actions exist in `ar` and `en` in the engine's copy table
+   (`alert::text`), while paths, rule names and reasons stay data.
+5. **A card is proven by Windows, not by a return value.**
+   `scripts/verify-toast.ps1` clears the AUMID's notification history, triggers a
+   card and reads the history back (text included), optionally with the live
+   notification window from UI Automation. `Show()` returning `Ok` is not
+   evidence, and neither is a failure: the first live probe blamed a stale
+   binary, and the real cause was that the app was started from a folder whose
+   files carry a Low integrity label — a low-integrity process cannot toast at
+   all, and Windows reports it as "no package identity" (`0x80073D54`) whatever
+   the AUMID is. The engine now recognises that combination and names it, because
+   the raw HRESULT sends the reader chasing a registration problem that does not
+   exist.
+
+**Why.** The request that started this phase was "anything that happens — a
+caught virus, an attack — should put a card above the taskbar". The engine
+already had a toast transport, but only CRITICAL/HIGH guard events used it, the
+text was English-only, there was no off switch for cards alone, and the one card
+that names a malicious file could never appear: its `launch` payload
+(`{"mics-action":"…"}`) was interpolated into an XML *attribute* without escaping
+`"`, so `LoadXml` rejected every such toast. A notification layer that fails
+silently is worse than none, which is why the policy is pure and testable and the
+acceptance test reads Windows' record.
+
+**Commits us to.** New event types call `alert::*`; adding a copy string means
+adding it in both languages (the alert tests pin every key the producers use);
+`cargo test`, `cargo clippy --release -- -D warnings`, `flutter analyze` and
+`flutter test` stay green; and a release is only "alerting" once
+`scripts/verify-toast.ps1` reports PASS against the **deployed** binary.

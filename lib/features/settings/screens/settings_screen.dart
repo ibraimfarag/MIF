@@ -130,6 +130,12 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: notifier.setDnd,
               ),
               _Switch(
+                title: context.tr('settings.toasts'),
+                subtitle: context.tr('settings.toastsHint'),
+                value: s.toastEnabled,
+                onChanged: notifier.setToastEnabled,
+              ),
+              _Switch(
                 title: context.tr('settings.sounds'),
                 subtitle: context.tr('settings.soundsHint'),
                 value: s.soundEnabled,

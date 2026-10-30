@@ -12,10 +12,12 @@
 > Last updated: 2026-10-30 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
-> scan as a cancellable job) and P3c3 (Intel screen, configurable hash feed, KEV
-> badge) done, plus the state-reporting fix those live probes found · **next:
-> P1.5 (single-elevation helper — needs one UAC prompt from you)**; the cheap
-> wins below need neither elevation nor money, then P4 packaging, P5
+> scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
+> badge) and **P7 (desktop alert cards: one alert gate, full coverage, ar/en
+> copy, AUMID-free toast proven by Windows' own notification history)** done,
+> plus the state-reporting fix those live probes found · **next: P1.5
+> (single-elevation helper — needs one UAC prompt from you)**; the cheap wins
+> below need neither elevation nor money, then P4 packaging, P5
 > documentation/hardening, P6 QA harness. README is written; the app runs
 > unelevated and was verified end-to-end on a real machine.
 
@@ -87,6 +89,8 @@ not implemented yet, see D-008).
 | `dart run tool/pipe_smoke.dart` | The **production** `PipeConnection` talks to the engine (ping/status/job.list) |
 | `dart run tool/pipe_probe.dart <dir>` | Raw protocol: request/response + `progress` + `job_finished` push |
 | `mics-engine.exe benchmark` | RAM/CPU against the §15 budgets |
+| `scripts\verify-toast.ps1` | A real notification card reached the desktop: clears the AUMID's history, triggers a card, reads the history back (text + actions). `-HistoryOnly` reads cards an already-running engine produced |
+| `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -118,11 +122,69 @@ remaining work needs a UAC prompt you can click (P1.5) or a purchased certificat
 | **P1.5** | Single-elevation privileged helper (D-007) | **next — needs one interactive UAC prompt** |
 | **P3c2** | Vulnerability scan as a cancellable job with live progress | **done** |
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
+| **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned |
 
 ### Done log (append only)
+
+- **P7 — "anything that happens" never reached the desktop as a card**
+  - Symptom (the user's own words): a caught virus or any protection action
+    should pop a card above the taskbar. None did. Two independent causes turned
+    up, one in the code and one in the machine:
+    1. **The one card that names a malicious file could never parse.** Its
+       `launch` payload (`{"mics-action":"…"}`) was interpolated into an XML
+       *attribute* with an escaper that handled `& < >` but not `"`, so
+       `LoadXml` rejected every actionable toast — the "Threat found →
+       Quarantine" card, i.e. exactly the virus case.
+    2. **Nothing started from this workspace could toast at all.** Every alert
+       failed with `The process has no package identity. (0x80073D54)`. The
+       binary was not at fault and neither was a missing registration: the
+       workspace tree carries a `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`
+       label (the DSH sandbox's confinement of the folder), every file under it
+       inherits it, and a process whose image is labelled Low runs at Low
+       integrity — where Windows refuses desktop cards. Proof: a copy of
+       `powershell.exe` inside the repo reports `Mandatory Label\Low Mandatory
+       Level (S-1-16-4096)` and the same file on `C:\` reports Medium; the engine
+       fails from `H:\…\MIF\…` and shows a real card from `%TEMP%` and from
+       `H:\mics-loc-test`, same bytes, same second. The earlier "the deployed
+       binary is stale" reading was wrong — the deployed run was simply the one
+       started from the labelled tree (see trap 8.11).
+  - Also missing: coverage (only CRITICAL/HIGH guard events + scan *criticals at
+    the end of a run*), an off switch for cards alone, and any card for
+    protection actions (firewall/IDS) or for Arabic users (titles were English).
+  - Fix (D-013): one gate, `engine/src/notify/alert.rs` — `decide(severity,
+    toast_enabled, dnd)` as a pure function, `toast_enabled` as a real setting
+    (engine + Settings switch + `ar`/`en` copy), guard events of every severity
+    routed through it, scan findings carded **as they are found with their own
+    severity** (first three individually, the rest as one summary), quarantine
+    confirmations, and firewall/IDS actions confirming themselves. `toast.rs`
+    builds the payload in one tested function that escapes quotes, and a refused
+    card now explains itself: when the platform answers `NO_PACKAGE` and the
+    process is below medium integrity, `notify.test` and the engine log say the
+    app is running from a confined folder and how to fix it, instead of echoing
+    an HRESULT that reads like a registration problem.
+  - Acceptance (live, this machine): a CLI scan of a benign text file that the
+    bundled YARA pack flags (`yara:Ransom_Note_Names`, `severity: high`) logged
+    `alert shown (high): 🛡️ MI CS — Threat found` and Windows' own notification
+    history returns the card:
+    `🛡️ MI CS — Threat found | …\ransom-note.txt — yara:Ransom_Note_Names` with
+    `<action content="Quarantine" …/>` and an escaped
+    `launch="{&quot;mics-action&quot;:&quot;a1793359091380827&quot;}"`.
+    `scripts/verify-toast.ps1` is the repeatable version (history + UI
+    Automation, `-HistoryOnly` for cards an already-running engine produced),
+    plus `cargo run --example toast_probe` to name the failing WinRT step.
+  - Checks: `cargo test` 44/44, `cargo clippy --release -- -D warnings` clean,
+    `flutter analyze --no-pub` clean, `flutter test --no-pub` 31/31.
+  - Drive-by fixes for the in-flight P1.5 work (it was not green):
+    `parse_query` reported a never-installed helper as `unknown` instead of
+    `not_installed` (its own test documented the right answer), an unused
+    re-export and a dead `HelperStatus::usable` tripped `-D warnings`.
+  - **Still open for the user:** a card can only appear once MI CS is launched
+    from a medium-integrity location. Running the app straight out of this repo
+    keeps failing until the folder's label is raised (one elevated command, trap
+    8.11); the portable copy under `%LOCALAPPDATA%` works with no prompt.
 
 - **fix — a source that failed after being configured still read "Not configured"**
   - Found by live-probing the new feed settings rather than by a test: point
@@ -596,6 +658,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | `status` returns hardcoded `version: 0.1.0` / `platform: windows` | `dispatcher.rs` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
+| LOW | Alerts are attributed by AUMID `MICS` without registering an AppUserModelID (no Start-Menu shortcut property, no `HKCU\Software\Classes\AppUserModelId\MICS`), so Windows' own notification settings/Action Center label the source as `MICS` rather than "MI CS". Registration is not required for the card to appear (proven with cards in the history), and adding it changes a shortcut outside the app folder — fold it into the P4 installer | `notify/toast.rs`, `scripts/create-shortcuts.ps1` |
 | MED | `audit.run` ignores `params.sections` | `dispatcher.rs` |
 | MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
@@ -681,6 +744,22 @@ settings and read environment variables only.
     `mics_app`'s `MainWindowHandle` works; prefer that over clicking. Blind
     mouse clicks can hit destructive buttons (a stray click started a hardening
     action during this session).
+12. **The workspace is a low-integrity tree, and Windows refuses toasts to
+    low-integrity processes.** The DSH sandbox labels the workspace root
+    `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`; every file created under
+    it inherits that label, and a process whose image is Low runs at Low
+    integrity. Symptom: `CreateToastNotifierWithId` fails with
+    `0x80073D54 The process has no package identity` (which reads like a missing
+    registration) for **every** alert, while the identical binary copied to
+    `%TEMP%` or `H:\mics-loc-test` shows the card. Diagnose with
+    `icacls <path>` (look for the `Mandatory Label` line) or by copying
+    `powershell.exe` into the folder and running `whoami /groups` from it.
+    Fixes: run the app from a normal folder (a portable copy under
+    `%LOCALAPPDATA%` needs no prompt), or raise the label once as an
+    administrator — `icacls "<folder>" /setintegritylevel Medium /T /C`. A
+    medium-integrity process cannot do it (no `SeRelabelPrivilege`): `icacls`
+    answers "Access is denied". The engine detects this case itself and says so
+    instead of echoing the HRESULT (`notify/test`, engine log).
 
 ---
 

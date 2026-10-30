@@ -16,6 +16,7 @@ void main() {
     expect(s.updateChannel, 'stable');
     expect(s.soundEnabled, isTrue);
     expect(s.soundVolume, 70);
+    expect(s.toastEnabled, isTrue, reason: 'desktop cards are on by default (D-013)');
     expect(s.scanQuarantineDefault, isTrue);
     expect(s.canaryPaths, isEmpty);
   });
@@ -50,6 +51,7 @@ void main() {
       'nl_bar_enabled',
       'sound_enabled',
       'sound_volume',
+      'toast_enabled',
       'scan_quarantine_default',
     ]) {
       expect(json.containsKey(key), isTrue, reason: 'missing $key');
@@ -75,6 +77,7 @@ void main() {
       nlBarEnabled: false,
       soundEnabled: false,
       soundVolume: 15,
+      toastEnabled: false,
       scanQuarantineDefault: false,
       canaryPaths: [r'C:\one', r'D:\two'],
     );
@@ -96,6 +99,7 @@ void main() {
     expect(back.nlBarEnabled, isFalse);
     expect(back.soundEnabled, isFalse);
     expect(back.soundVolume, 15);
+    expect(back.toastEnabled, isFalse);
     expect(back.scanQuarantineDefault, isFalse);
     expect(back.canaryPaths, hasLength(2));
   });

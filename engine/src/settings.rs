@@ -58,6 +58,8 @@ pub struct Settings {
     pub sound_enabled: bool,
     /// 0..100.
     pub sound_volume: u8,
+    /// Desktop notification cards (Windows toasts) for protection events.
+    pub toast_enabled: bool,
     /// Auto-quarantine detections by default on the scan screen.
     pub scan_quarantine_default: bool,
     /// Extra canary paths; empty = engine defaults.
@@ -84,6 +86,7 @@ impl Default for Settings {
             nl_bar_enabled: true,
             sound_enabled: true,
             sound_volume: 70,
+            toast_enabled: true,
             scan_quarantine_default: true,
             canary_paths: Vec::new(),
         }
@@ -175,6 +178,7 @@ impl Settings {
                 "scan_quarantine_default" => {
                     self.scan_quarantine_default = boolean(value, key)?
                 }
+                "toast_enabled" => self.toast_enabled = boolean(value, key)?,
                 "canary_paths" => {
                     let arr = value
                         .as_array()
@@ -509,6 +513,7 @@ mod tests {
         assert!(!s.dnd);
         assert_eq!(s.update_channel, "stable");
         assert_eq!(s.sound_volume, 70);
+        assert!(s.toast_enabled, "desktop cards are on unless the user says no");
     }
 
     #[test]
@@ -533,6 +538,7 @@ mod tests {
         assert!(s.apply_patch(&json!({"sound_volume": 101})).is_err());
         assert!(s.apply_patch(&json!({"unknown_key": 1})).is_err());
         assert!(s.apply_patch(&json!({"dnd": "yes"})).is_err());
+        assert!(s.apply_patch(&json!({"toast_enabled": "no"})).is_err());
     }
 
     #[test]
@@ -546,7 +552,8 @@ mod tests {
             "vt_api_key": "abc",
             "lm_url": "http://localhost:1234",
             "canary_paths": ["C:\\a", "C:\\b"],
-            "sound_volume": 10
+            "sound_volume": 10,
+            "toast_enabled": false
         }))
         .unwrap();
         let text = serde_json::to_string(&s).unwrap();
@@ -557,5 +564,6 @@ mod tests {
         assert_eq!(back.vt_api_key, "abc");
         assert_eq!(back.canary_paths.len(), 2);
         assert_eq!(back.sound_volume, 10);
+        assert!(!back.toast_enabled);
     }
 }

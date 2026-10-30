@@ -152,12 +152,11 @@ async fn main() -> Result<()> {
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
                 while let Ok(ev) = events.recv().await {
-                    // CRITICAL/HIGH events toast (and sound) even with the UI
-                    // closed; the sound respects settings.sound_enabled + DND.
-                    if ev.severity == "critical" || ev.severity == "high" {
-                        notify::toast::route_event(&ev);
-                        notify::sound::play_for_severity(&ev.severity);
-                    }
+                    // Every event goes through the alert gate: it decides which
+                    // severities reach the desktop (and honours toast_enabled +
+                    // DND), so a new severity cannot bypass the policy here.
+                    notify::alert::guard_event(&ev);
+                    notify::sound::play_for_severity(&ev.severity);
                     let note = serde_json::json!({
                         "jsonrpc": "2.0",
                         "method": "event",
@@ -204,14 +203,13 @@ async fn main() -> Result<()> {
             if std::env::var("MICS_NO_GUARD").is_err() && settings.guard_autostart {
                 guard::start_guard();
             }
-            // Guard events go to every pipe client (and toast when critical).
+            // Guard events go to every pipe client; the alert gate decides
+            // which of them also become desktop cards (and sounds).
             let mut events = guard::subscribe_events();
             tokio::spawn(async move {
                 while let Ok(ev) = events.recv().await {
-                    if ev.severity == "critical" || ev.severity == "high" {
-                        notify::toast::route_event(&ev);
-                        notify::sound::play_for_severity(&ev.severity);
-                    }
+                    notify::alert::guard_event(&ev);
+                    notify::sound::play_for_severity(&ev.severity);
                     platform::windows::pipe::notify(
                         "event",
                         serde_json::json!({

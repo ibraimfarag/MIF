@@ -39,6 +39,7 @@ const i18nModules = <String>[
   'incidents',
   'reports',
   'settings',
+  'helper',
   'sync',
   'about',
 ];
@@ -101,6 +102,8 @@ class AppSettings {
   final bool nlBarEnabled;
   final bool soundEnabled;
   final int soundVolume;
+  /// Desktop notification cards (Windows toasts) for protection events.
+  final bool toastEnabled;
   final bool scanQuarantineDefault;
   final List<String> canaryPaths;
 
@@ -122,6 +125,7 @@ class AppSettings {
     this.nlBarEnabled = true,
     this.soundEnabled = true,
     this.soundVolume = 70,
+    this.toastEnabled = true,
     this.scanQuarantineDefault = true,
     this.canaryPaths = const [],
   });
@@ -156,6 +160,7 @@ class AppSettings {
         nlBarEnabled: j['nl_bar_enabled'] as bool? ?? true,
         soundEnabled: j['sound_enabled'] as bool? ?? true,
         soundVolume: (j['sound_volume'] as num?)?.toInt() ?? 70,
+        toastEnabled: j['toast_enabled'] as bool? ?? true,
         scanQuarantineDefault: j['scan_quarantine_default'] as bool? ?? true,
         canaryPaths: (j['canary_paths'] as List? ?? const [])
             .map((e) => e.toString())
@@ -181,6 +186,7 @@ class AppSettings {
         'nl_bar_enabled': nlBarEnabled,
         'sound_enabled': soundEnabled,
         'sound_volume': soundVolume,
+        'toast_enabled': toastEnabled,
         'scan_quarantine_default': scanQuarantineDefault,
         'canary_paths': canaryPaths,
       };
@@ -306,6 +312,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setSoundVolume(int volume) =>
       patch({'sound_volume': volume.clamp(0, 100)});
+
+  Future<void> setToastEnabled(bool enabled) =>
+      patch({'toast_enabled': enabled});
 
   Future<void> setNlBarEnabled(bool enabled) =>
       patch({'nl_bar_enabled': enabled});
