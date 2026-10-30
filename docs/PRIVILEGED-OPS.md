@@ -136,23 +136,31 @@ is on the other end before it does anything (F-2, D-017):
 3. The path is accepted when the image is `mics-engine.exe` (by name), or when it
    matches `MICS_ENGINE_PATH` exactly — the hook the installer records, and the one
    the verification scripts use to name themselves.
+4. The caller's **token user SID** must be the account MI CS was installed for, read
+   as the *owner of* `%PROGRAMDATA%\MICS` — a directory only the elevated installer
+   creates. A different local user who copies the engine is refused here even though
+   the image name matches.
 
-A client that is none of those gets
+A client that fails step 3 or 4 gets
 
 ```json
 {"ok":false,"error":"this pipe only serves the MI CS engine"}
 ```
 
-after its request line arrives (so it can read the reason), a `WARN` in the helper
-log naming the refused image, and **no** audit entry — an unauthorised caller never
-reaches validation. Measured on this machine: a PowerShell client answered exactly
-that, and the log said
-`privileged helper refused C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`.
+(or `this pipe only serves the account MI CS was installed for`) after its request
+line arrives, a `WARN` in the helper log naming the refused pid, image and SID, and
+**no** audit entry — an unauthorised caller never reaches validation. Measured on this
+machine: a PowerShell client answered the first message and the log said
+`privileged helper refused pid 12345 (...\powershell.exe): not the engine it serves`;
+`scripts\verify-helper.ps1` still passes end to end, because the script and the
+helper's recorded installer account are the same user.
 
-What this does **not** do yet: the check is on the image name, so a copy of the
-engine still passes, and it does not look at the caller's token SID. F-2b — compare
-the caller's user SID with the account MI CS was installed for — is what keeps a
-*different* user out, and it is still open.
+When `%PROGRAMDATA%\MICS` does not exist (portable run, console helper in a fresh
+checkout) there is no recorded account: the helper logs
+`no installer account recorded (no %PROGRAMDATA%\MICS) - the caller image is the only
+check` and falls back to step 3 alone. A console helper already runs with the
+caller's own token, so that fallback costs nothing; an installed service always has
+the directory.
 
 ## Verifying it without a UAC prompt
 

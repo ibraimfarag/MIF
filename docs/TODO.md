@@ -259,6 +259,30 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The helper answers only the installer's account, not merely the engine's name (F-2b)**
+  - F-2a proved *which program* is calling; it could not tell *which user*, so a
+    standard user could copy `mics-engine.exe` and drive SYSTEM. The caller's token
+    user SID is now read (`OpenProcessToken` + `GetTokenInformation(TokenUser)`) from
+    the same process handle as the image path, and compared with the owner SID of
+    `%PROGRAMDATA%\MICS` — the account the elevated installer created it as.
+  - `judge()` is the decision table and is unit-tested without any Windows call: image
+    + SID match → allowed; image match + other SID → `NotTheInstaller(sid)`; wrong
+    image → `NotTheEngine` whatever the SID says; no recorded account → image check
+    alone; unreadable SID → not treated as a different user. The helper logs the
+    refused pid, image and SID, and answers `this pipe only serves the account MI CS
+    was installed for` in-band.
+  - Real measurement, not a claim: `the_owner_of_a_directory_is_the_sid_of_this_process`
+    creates a temp directory, reads its owner SID with `GetNamedSecurityInfoW`, reads
+    this process's token SID, and asserts they are the same `S-1-5-...` string. The
+    multi-user negative is unit-tested only — this machine has a single interactive
+    account, so there is no second user to log in as.
+  - `cargo test` 73/73 (7 caller tests). Live: `scripts\verify-helper.ps1` still
+    `RESULT: PASS` (script user == installer account), and an unnamed PowerShell client
+    is still refused.
+  - Residuals recorded instead of hidden: a process running *as the installing user*
+    can drive the helper (D-007's accepted trade — that user can answer UAC himself),
+    and a portable run with no `%PROGRAMDATA%\MICS` has no account to compare, so it
+    falls back to the image check with a warning (LOW in the register).
 - **The helper checks who is calling before it runs anything (F-2a)**
   - The pipe still grants `INTERACTIVE` (D-007), so the helper now asks. On every
     accepted connection it reads the client pid with `GetNamedPipeClientProcessId`,
@@ -1436,7 +1460,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Benchmark CPU 2.97 % vs the < 1 % budget (`budget_ok:false`) | `benchmark.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
-| MED | **The helper still trusts any caller whose *image name* is `mics-engine.exe`**: the caller's pid and image path are checked (F-2a, D-017), but a standard user can copy the engine and call the helper with it, and the caller's token SID is never compared with the account MI CS was installed for. The ops stay inside the closed set, but they run as SYSTEM with no prompt | `privileged/server.rs`, `platform/windows/caller.rs`, D-017, THREAT-MODEL F-2 |
+| LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | Light-mode palette has not been contrast-audited (no WCAG numbers for text, borders or severity colours yet) | `app_theme.dart` |

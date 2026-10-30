@@ -612,28 +612,42 @@ action — no prompt, inside the closed op set but still `SYSTEM`. That is F-2, 
    case-insensitive) **or** the path equals `MICS_ENGINE_PATH` exactly. The second
    form is the hook the installer records and the one the verification scripts use to
    name themselves; it adds one trusted client rather than replacing the name rule.
-4. A refusal is answered in-band (`this pipe only serves the MI CS engine`) after the
-   request line arrives, so a client can read why; it is `WARN`-logged with the
-   refused image; it produces **no** audit entry, because nothing was started; and it
-   gets a 5 s deadline instead of the 300 s request deadline, so a refused client
-   cannot occupy the single request slot.
-5. If the pid cannot be read at all, nothing is answered and nothing runs. "Cannot
+4. The caller's **token user SID** (`OpenProcessToken` +
+   `GetTokenInformation(TokenUser)`) must equal the owner SID of
+   `%PROGRAMDATA%\MICS`, the account that created it — the elevated installer. That
+   is what stops a *different* local user from copying the engine and driving the
+   helper: the image check passes, the SID does not. When the directory does not
+   exist (portable run, console helper in a fresh checkout) there is no recorded
+   account, so the helper logs that once and lets the image check stand alone; a
+   console helper already runs with the caller's own token, so refusing there would
+   cost the development flows and buy nothing.
+5. A refusal is answered in-band (`this pipe only serves the MI CS engine`, or
+   `...the account MI CS was installed for`) after the request line arrives, so a
+   client can read why; it is `WARN`-logged with the refused pid, image and SID; it
+   produces **no** audit entry, because nothing was started; and it gets a 5 s
+   deadline instead of the 300 s request deadline, so a refused client cannot occupy
+   the single request slot.
+6. If the pid cannot be read at all, nothing is answered and nothing runs. "Cannot
    tell who you are" is a refusal, not a pass.
 
 **Why.** The helper is the only component that acts with `SYSTEM`, and "any
 interactive user" was the widest statement in the whole design. Checking the caller
-costs two API calls on a path that already opens a pipe, and it is measurable: the
-live refusal and the log line are in `docs/PRIVILEGED-OPS.md`, and the four unit
-tests are in `platform/windows/caller.rs`.
+costs three API calls on a path that already opens a pipe, and it is measurable: the
+live refusals and log lines are in `docs/PRIVILEGED-OPS.md`, the owner-vs-token test
+reads both SIDs back on this machine, and the decision table is unit-tested in
+`platform/windows/caller.rs`.
 
-**What this is not.** It is the image *name*, so a copy of the engine still passes;
-and the caller's **token SID** is not compared with the account MI CS was installed
-for. Both are stated in the threat model (F-2) and the register instead of being
-papered over. The SID comparison — F-2b — is the next half, and it is what actually
-keeps a *different* user out.
+**What this is not.** A process running *as the installing user* can still drive the
+helper. That is D-007's accepted trade — that user can answer a UAC prompt himself,
+so the helper is not an escalation for him — and it is the residual recorded in the
+threat model instead of being papered over. The portable fallback (no
+`%PROGRAMDATA%\MICS`, image check only) is the other residual, filed LOW in the
+register.
 
 **Commits us to.** Keeping the caller check on the connect path rather than inside
 `respond`, so an unauthorised client never reaches validation or the audit trail;
 keeping `MICS_ENGINE_PATH` documented (AGENTS rule 5) as "the one extra client the
 helper will answer", and keeping `scripts/verify-helper.ps1` naming itself through
-it instead of loosening the rule; and updating F-2's row whenever the check moves.
+it instead of loosening the rule; keeping `%PROGRAMDATA%\MICS` created by the
+elevated side only, because it now doubles as the install-time account record; and
+updating F-2's row whenever the check moves.

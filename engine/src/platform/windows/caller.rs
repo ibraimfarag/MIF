@@ -2,28 +2,63 @@
 //!
 //! The helper serves `%PROGRAMDATA%\MICS` and the firewall with a LocalSystem
 //! token, and its pipe grants `INTERACTIVE` (D-007). That means every interactive
-//! user can reach it, so the helper has to ask who is calling before it does
-//! anything: `GetNamedPipeClientProcessId` names the client process, and the image
-//! path of that process is read back from a handle the helper holds — a handle keeps
-//! the process object alive, so the pid cannot be recycled between the two calls
-//! (`docs/THREAT-MODEL.md` F-2).
+//! user can reach it, so the helper identifies the caller before it does anything
+//! (`docs/THREAT-MODEL.md` F-2, D-017):
 //!
-//! The check is deliberately about the image *name* here: `mics-engine.exe`. A copy
-//! of the engine still passes, which is why this is the first half — the second half
-//! compares the caller's token SID against the account MI CS was installed for, and
-//! that is what keeps a *different* user out.
+//! 1. `GetNamedPipeClientProcessId` names the client process. A handle to that
+//!    process is opened and kept until both answers below are read, so the pid
+//!    cannot be recycled between the calls.
+//! 2. The image path must be the engine — `mics-engine.exe` by name, or exactly the
+//!    path in `MICS_ENGINE_PATH`, the hook the installer records.
+//! 3. The caller's token user SID must be the account MI CS was installed for. That
+//!    is read as the owner of `%PROGRAMDATA%\MICS`, a directory only the elevated
+//!    installer creates, so a *different* local user cannot drive the helper even by
+//!    copying the engine binary.
+//!
+//! When no data directory exists yet (portable run, a console helper in a fresh
+//! checkout), step 3 has nothing to compare against: [`judge`] then lets the image
+//! check stand alone, because refusing would break the documented development flows
+//! for no security gain — a console helper already runs with the caller's own token.
 
 use anyhow::{bail, Context, Result};
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use windows::core::PWSTR;
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, HLOCAL, LocalFree, HANDLE};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
+};
+use windows::Win32::Security::{
+    GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_QUERY,
+    TOKEN_USER, TokenUser,
+};
 use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    OpenProcess, OpenProcessToken, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 
-/// The only image the helper answers.
+/// The only image name the helper answers without `MICS_ENGINE_PATH` being set.
 const ENGINE_IMAGE: &str = "mics-engine.exe";
+
+/// Everything the helper needs to decide about one connection.
+#[derive(Debug, Clone)]
+pub struct Caller {
+    pub pid: u32,
+    pub image: PathBuf,
+    /// The token user SID, when it could be read. `None` means the query failed,
+    /// which is not the same thing as "a different user".
+    pub sid: Option<String>,
+}
+
+/// Why a caller was refused, or that it was not.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Verdict {
+    Allowed,
+    NotTheEngine,
+    /// The SID that was found, for the log line.
+    NotTheInstaller(String),
+}
 
 /// True when `path` names the engine, comparing only the file name.
 pub fn is_engine_image(path: &Path) -> bool {
@@ -53,23 +88,31 @@ pub fn configured_engine_path() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn same_path(left: &Path, right: &Path) -> bool {
-    left.to_string_lossy()
-        .eq_ignore_ascii_case(&right.to_string_lossy())
+/// Decides one connection. `installer_sid` is the account recorded at install time;
+/// `None` means this machine has no record yet and the image check stands alone.
+pub fn judge(caller: &Caller, allowed: Option<&Path>, installer_sid: Option<&str>) -> Verdict {
+    if !is_authorised(&caller.image, allowed) {
+        return Verdict::NotTheEngine;
+    }
+    match (installer_sid, caller.sid.as_deref()) {
+        (Some(expected), Some(found)) if !expected.eq_ignore_ascii_case(found) => {
+            Verdict::NotTheInstaller(found.to_string())
+        }
+        _ => Verdict::Allowed,
+    }
 }
 
-/// The image path of the process on the client end of `pipe`.
-pub fn client_image_path(pipe: HANDLE) -> Result<PathBuf> {
+/// Identifies the process on the client end of `pipe`.
+pub fn identify(pipe: HANDLE) -> Result<Caller> {
     let mut pid = 0u32;
     // SAFETY: `pid` is a valid out-pointer and `pipe` is the connected server end.
     unsafe { GetNamedPipeClientProcessId(pipe, &mut pid) }
         .context("read the caller's process id from the pipe")?;
-    image_path(pid).with_context(|| format!("caller pid {pid}"))
+    describe(pid)
 }
 
-/// The full image path of `pid`, read through a handle the caller keeps open while
-/// the answer is built.
-pub fn image_path(pid: u32) -> Result<PathBuf> {
+/// The image path and token SID of `pid`, read through one process handle.
+pub fn describe(pid: u32) -> Result<Caller> {
     if pid == 0 {
         bail!("the pipe has no client process id");
     }
@@ -77,22 +120,34 @@ pub fn image_path(pid: u32) -> Result<PathBuf> {
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }
         .with_context(|| format!("open process {pid}"))?;
 
+    let image = image_path(process);
+    // The SID is best effort here: an unreadable SID is reported by `judge` as "no
+    // SID", not as "a different user".
+    let sid = token_user_sid(process).ok();
+    // SAFETY: `process` came from `OpenProcess` above and is closed exactly once.
+    let _ = unsafe { CloseHandle(process) };
+
+    Ok(Caller {
+        pid,
+        image: image.with_context(|| format!("caller pid {pid}"))?,
+        sid,
+    })
+}
+
+fn image_path(process: HANDLE) -> Result<PathBuf> {
     let mut buffer = [0u16; 1024];
     let mut len = buffer.len() as u32;
     // SAFETY: the buffer is `len` elements long and the call writes at most that
     // many UTF-16 units, updating `len` to the count written.
-    let queried = unsafe {
+    unsafe {
         QueryFullProcessImageNameW(
             process,
             PROCESS_NAME_WIN32,
             PWSTR(buffer.as_mut_ptr()),
             &mut len,
         )
-    };
-    // SAFETY: `process` came from `OpenProcess` above and is closed exactly once.
-    let _ = unsafe { CloseHandle(process) };
-
-    queried.context("query the caller's image path")?;
+    }
+    .context("query the caller's image path")?;
     let len = (len as usize).min(buffer.len());
     if len == 0 {
         bail!("the caller's image path came back empty");
@@ -100,13 +155,127 @@ pub fn image_path(pid: u32) -> Result<PathBuf> {
     Ok(PathBuf::from(String::from_utf16_lossy(&buffer[..len])))
 }
 
+/// The token user SID of an open process, as `S-1-5-...`.
+pub fn token_user_sid(process: HANDLE) -> Result<String> {
+    let mut token = HANDLE::default();
+    // SAFETY: `token` is a valid out-handle and `process` is an open process handle.
+    unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) }
+        .context("open the caller's token")?;
+    let result = token_sid(token);
+    // SAFETY: `token` came from `OpenProcessToken` and is closed exactly once.
+    let _ = unsafe { CloseHandle(token) };
+    result
+}
+
+fn token_sid(token: HANDLE) -> Result<String> {
+    // Two calls: the first for the size, the second for the data. `TOKEN_USER`
+    // begins with a `SID_AND_ATTRIBUTES`, so the buffer is read as that struct.
+    let mut needed = 0u32;
+    // SAFETY: a null buffer with length 0 asks only for the required size; the
+    // returned error is expected and only the size matters.
+    let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut needed) };
+    if needed == 0 {
+        bail!("the token has no readable user");
+    }
+    let mut buffer = vec![0u8; needed as usize];
+    // SAFETY: `buffer` is `needed` bytes long and the call writes at most that much.
+    unsafe {
+        GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+            needed,
+            &mut needed,
+        )
+    }
+    .context("read the caller's token user")?;
+    // SAFETY: the buffer holds a `TOKEN_USER` (guaranteed by the API contract) whose
+    // first field is the user's `SID_AND_ATTRIBUTES`.
+    let user: &TOKEN_USER = unsafe { &*(buffer.as_ptr() as *const TOKEN_USER) };
+    sid_to_string(user.User.Sid)
+}
+
+/// The owner of `path` as `S-1-5-...`, e.g. the account that created the data
+/// directory.
+pub fn owner_sid(path: &Path) -> Result<String> {
+    let wide: Vec<u16> = std::ffi::OsStr::new(path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut owner = PSID::default();
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: `wide` is NUL-terminated, the out-pointers are valid, and the returned
+    // descriptor is owned by this call and freed below.
+    let status = unsafe {
+        GetNamedSecurityInfoW(
+            windows::core::PCWSTR(wide.as_ptr()),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            Some(&mut owner),
+            None,
+            None,
+            None,
+            &mut descriptor,
+        )
+    };
+    if status.is_err() {
+        bail!("read the owner of {}: {status:?}", path.display());
+    }
+    let sid = sid_to_string(owner);
+    // SAFETY: the descriptor came from `GetNamedSecurityInfoW` above.
+    unsafe { LocalFree(Some(HLOCAL(descriptor.0))) };
+    sid
+}
+
+/// The account MI CS was installed for: the owner of `%PROGRAMDATA%\MICS`.
+///
+/// `None` when that directory does not exist (a portable run) — `judge` then has no
+/// record to compare against and says so in the threat model.
+pub fn installer_account() -> Option<String> {
+    let program_data = std::env::var_os("PROGRAMDATA")?;
+    let directory = PathBuf::from(program_data).join("MICS");
+    if !directory.exists() {
+        return None;
+    }
+    owner_sid(&directory).ok()
+}
+
+fn sid_to_string(sid: PSID) -> Result<String> {
+    let mut raw = PWSTR::null();
+    // SAFETY: `sid` came from a token or a security descriptor and is only read.
+    unsafe { ConvertSidToStringSidW(sid, &mut raw) }.context("convert the SID to text")?;
+    // SAFETY: `raw` points at a NUL-terminated string owned by this call.
+    let text = unsafe { raw.to_string() }.unwrap_or_default();
+    // SAFETY: `raw` was allocated by `ConvertSidToStringSidW`.
+    unsafe { LocalFree(Some(HLOCAL(raw.0 as *mut core::ffi::c_void))) };
+    if text.is_empty() {
+        bail!("the SID came back empty");
+    }
+    Ok(text)
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn caller(image: &str, sid: Option<&str>) -> Caller {
+        Caller {
+            pid: 4242,
+            image: PathBuf::from(image),
+            sid: sid.map(str::to_string),
+        }
+    }
+
     #[test]
     fn the_engine_image_is_recognised_by_name() {
-        assert!(is_engine_image(Path::new(r"C:\Users\x\AppData\Local\MI CS\mics-engine.exe")));
+        assert!(is_engine_image(Path::new(
+            r"C:\Users\x\AppData\Local\MI CS\mics-engine.exe"
+        )));
         assert!(is_engine_image(Path::new(r"mics-engine.exe")));
         // Windows paths are case-insensitive, so the comparison is too.
         assert!(is_engine_image(Path::new(r"C:\MI CS\MICS-ENGINE.EXE")));
@@ -152,9 +321,84 @@ mod tests {
     }
 
     #[test]
+    fn the_installer_account_is_what_decides_a_copied_engine() {
+        let engine = r"C:\Users\x\AppData\Local\MI CS\mics-engine.exe";
+        let installer = "S-1-5-21-1-2-3-1001";
+
+        // The installing user: the engine image and the installer SID.
+        assert_eq!(
+            judge(&caller(engine, Some(installer)), None, Some(installer)),
+            Verdict::Allowed
+        );
+        // A *different* user who copied the engine: the image passes, the SID does
+        // not — exactly the case the image check alone could not stop.
+        assert_eq!(
+            judge(
+                &caller(engine, Some("S-1-5-21-9-9-9-1002")),
+                None,
+                Some(installer)
+            ),
+            Verdict::NotTheInstaller("S-1-5-21-9-9-9-1002".into())
+        );
+        // SID strings are compared without case, like Windows does.
+        assert_eq!(
+            judge(
+                &caller(engine, Some("s-1-5-21-1-2-3-1001")),
+                None,
+                Some(installer)
+            ),
+            Verdict::Allowed
+        );
+        // Not the engine is reported as that, whatever the SID says.
+        assert_eq!(
+            judge(
+                &caller(r"C:\Tools\evil.exe", Some(installer)),
+                None,
+                Some(installer)
+            ),
+            Verdict::NotTheEngine
+        );
+        // No record yet (portable / console helper): the image check stands alone.
+        assert_eq!(
+            judge(&caller(engine, Some("S-1-5-21-9-9-9-1002")), None, None),
+            Verdict::Allowed
+        );
+        // An unreadable SID is not treated as a different user.
+        assert_eq!(
+            judge(&caller(engine, None), None, Some(installer)),
+            Verdict::Allowed
+        );
+    }
+
+    #[test]
     fn a_process_id_with_no_process_is_an_error() {
         // 0 is never a valid client, and the call must say so instead of returning
         // a path that belongs to somebody else.
-        assert!(image_path(0).is_err());
+        assert!(describe(0).is_err());
+    }
+
+    #[test]
+    fn the_owner_of_a_directory_is_the_sid_of_this_process() {
+        let dir = std::env::temp_dir().join(format!("mics-sid-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create the temp directory");
+        let owner = owner_sid(&dir);
+        let me = describe(std::process::id())
+            .expect("describe this process")
+            .sid;
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let owner = owner.expect("read the directory owner");
+        let me = me.expect("read this process's token SID");
+        assert_eq!(
+            owner, me,
+            "a directory this process created is owned by this process's user"
+        );
+        assert!(owner.starts_with("S-1-5-"), "not a SID: {owner}");
+    }
+
+    #[test]
+    fn the_owner_of_a_missing_path_is_an_error() {
+        let missing = std::env::temp_dir().join("mics-definitely-not-here-12345");
+        assert!(owner_sid(&missing).is_err());
     }
 }

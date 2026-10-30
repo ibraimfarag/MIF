@@ -83,25 +83,49 @@ pub fn wake() -> bool {
 }
 
 async fn handle_client(server: NamedPipeServer) -> Result<()> {
-    // Who is asking? The pipe grants INTERACTIVE (D-007), so the helper answers
-    // the engine and nothing else. Read from the connected handle before it is
-    // split into halves, because the check needs the pipe, not the stream.
+    // Who is asking? The pipe grants INTERACTIVE (D-007), so the helper answers the
+    // engine running as the account MI CS was installed for, and nothing else. Read
+    // from the connected handle before it is split into halves, because the check
+    // needs the pipe, not the stream.
     let caller = {
         use std::os::windows::io::AsRawHandle;
         let handle = windows::Win32::Foundation::HANDLE(server.as_raw_handle());
-        crate::platform::windows::caller::client_image_path(handle)
+        crate::platform::windows::caller::identify(handle)
     };
-    let allowed = crate::platform::windows::caller::configured_engine_path();
     let refused = match caller {
-        Ok(path) if crate::platform::windows::caller::is_authorised(&path, allowed.as_deref()) => {
-            None
-        }
-        Ok(path) => {
-            warn!(
-                "privileged helper refused {}: not the engine it serves",
-                path.display()
-            );
-            Some(refusal("this pipe only serves the MI CS engine"))
+        Ok(caller) => {
+            let allowed = crate::platform::windows::caller::configured_engine_path();
+            let installer = crate::platform::windows::caller::installer_account();
+            if installer.is_none() {
+                warn!(
+                    "no installer account recorded (no %PROGRAMDATA%\\MICS) - the caller image is the only check"
+                );
+            }
+            match crate::platform::windows::caller::judge(
+                &caller,
+                allowed.as_deref(),
+                installer.as_deref(),
+            ) {
+                crate::platform::windows::caller::Verdict::Allowed => None,
+                crate::platform::windows::caller::Verdict::NotTheEngine => {
+                    warn!(
+                        "privileged helper refused pid {} ({}): not the engine it serves",
+                        caller.pid,
+                        caller.image.display()
+                    );
+                    Some(refusal("this pipe only serves the MI CS engine"))
+                }
+                crate::platform::windows::caller::Verdict::NotTheInstaller(found) => {
+                    warn!(
+                        "privileged helper refused pid {} ({}): signed in as {found}, not the account MI CS was installed for",
+                        caller.pid,
+                        caller.image.display()
+                    );
+                    Some(refusal(
+                        "this pipe only serves the account MI CS was installed for",
+                    ))
+                }
+            }
         }
         Err(e) => {
             // No pid means the client is already gone, or the query was refused.
