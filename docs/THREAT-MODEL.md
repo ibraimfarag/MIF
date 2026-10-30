@@ -6,10 +6,11 @@ honestly does **not** defend against. Companion files: [`DECISIONS.md`](DECISION
 privileged operation set), and `PROTECTION-MATRIX.md` (per-layer: detects /
 blocks / misses).
 
-Every claim below is either **measured** (a probe whose command is in this file or
-in `docs/TODO.md`), **proven by a test or a `scripts/verify-*.ps1` run**, or
-explicitly labelled **assumed**. A threat model that mixes the three is a
-marketing document.
+Every claim below is either **measured** (a probe whose command is in this file,
+in `docs/TODO.md`, or in a `scripts/verify-*.ps1` runbook — both pipe ACLs are
+measured by `scripts/verify-pipe-acl.ps1`), **proven by a test or a
+`scripts/verify-*.ps1` run**, or explicitly labelled **assumed**. A threat model
+that mixes the three is a marketing document.
 
 Scope: the shipped Windows 10/11 x64 product — `mics_app.exe` (UI, manifested
 `asInvoker`), `mics-engine.exe` (the engine, stdio or the pipe
@@ -70,7 +71,7 @@ OS only through the engine (`AGENTS.md` rule 4, whitelisted JSON-RPC methods).
 
 The engine's pipe server passes **no** security attributes
 An **explicit** SDDL (`platform/windows/pipe.rs`), measured on the reference
-machine with an isolated `service` engine:
+machine with an isolated `service` engine (`scripts/verify-pipe-acl.ps1`):
 
 ```
 D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user-SID>)
@@ -98,7 +99,8 @@ D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user-SID>)
 ### B3 — `\\.\pipe\mics_helper` (engine ↔ LocalSystem helper)
 
 Set explicitly as `PIPE_SDDL = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)"`
-(`privileged/server.rs`) and measured on the reference machine:
+(`privileged/server.rs`) and measured on the reference machine
+(`scripts/verify-pipe-acl.ps1`):
 
 ```
 D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)
@@ -231,10 +233,11 @@ ask the engine to do through the pipe.
 explicit, protected ACL naming the engine's user, `SYSTEM` and administrators. Two
 tests read the DACL back from the live pipe object
 (`pipe::tests::the_engine_pipe_grants_only_the_owner_system_and_administrators`
-and `::the_pipe_acl_is_protected_and_names_a_real_user_sid`), and the acceptance
-run confirmed all nine properties at once — protected DACL, three ACEs, no
-`WD`/`AN`/`IU`, and a same-user JSON-RPC `status` call still answered over the
-hardened pipe. The helper pipe's `IU` scope (F-2) is untouched and still open.
+and `::the_pipe_acl_is_protected_and_names_a_real_user_sid`), and
+`scripts/verify-pipe-acl.ps1` re-measures both pipes end to end — protected DACL,
+three ACEs, no `WD`/`AN`/`IU`, and a same-user JSON-RPC `status` call still
+answered over the hardened pipe. The helper pipe's `IU` scope (F-2) is untouched
+and still open.
 
 ## 7. What is proven, and how
 
@@ -246,7 +249,7 @@ hardened pipe. The helper pipe's `IU` scope (F-2) is untouched and still open.
 | The engine pipe refuses everyone but its owner, SYSTEM and administrators | the two `pipe::tests` above (the DACL is read back with `GetSecurityInfo`) |
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release is complete and signed | `scripts/verify-release.ps1` + `scripts/sign.ps1` |
-| The two pipe ACLs are what this file says | the SDDL probe (isolated pipe names, real engine `service` and `helper-console` processes) |
+| The two pipe ACLs are what this file says | `scripts/verify-pipe-acl.ps1` — both pipes, real `service` and `helper-console` processes on private names, 18 checks, `RESULT: PASS` |
 | The guard's cost | `mics-engine benchmark` (currently 2.97 % against a < 1 % budget — §0.1, not yet met) |
 
 ## 8. Open questions

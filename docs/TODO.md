@@ -217,6 +217,7 @@ not implemented yet, see D-008).
 | `mics-engine.exe benchmark` | RAM/CPU against the §15 budgets |
 | `scripts\verify-toast.ps1` | A real notification card reached the desktop: clears the AUMID's history, triggers a card, reads the history back (text + actions). `-HistoryOnly` reads cards an already-running engine produced |
 | `scripts\verify-helper.ps1` | The privileged helper's protocol **unelevated**: ping/version answer, a privileged op is refused without an elevated token, an unmarked hosts document and a malformed firewall rule are refused, an op outside the closed set is refused, the audit log keeps intent/outcome but never the payload, `helper-status` sees it |
+| `scripts\verify-pipe-acl.ps1` | Both pipe ACLs are what `docs/THREAT-MODEL.md` says: reads each live DACL back with `GetSecurityInfo` (agent pipe protected to the owner/SYSTEM/Administrators, helper pipe `INTERACTIVE`), and drives a real JSON-RPC `status` call over the hardened engine pipe so the ACL cannot pass by locking the UI's own user out. Isolated pipe names + data dir, so a running MI CS is untouched |
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
 | `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
 | `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder |
@@ -261,6 +262,24 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **`scripts\verify-pipe-acl.ps1` — the pipe boundaries are now re-measurable
+  instead of quoted**
+  - `docs/THREAT-MODEL.md` states two security descriptors. Both are now checked
+    by a committed probe rather than by a paragraph: it starts a real `service`
+    engine and a real `helper-console` on private pipe names with a private data
+    directory, reads each DACL back with `GetSecurityInfo` + an SDDL conversion,
+    and drives a real JSON-RPC `status` call over the hardened engine pipe — so a
+    passing ACL cannot be one that merely locked the UI's own user out.
+  - Engine pipe: `D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)` — protected, three
+    ACEs, no `WD`/`AN`/`IU`. Helper pipe: `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;IU)`
+    — the documented `INTERACTIVE` grant, printed with a note that this is open
+    risk F-2 and that the probe reports it rather than blessing it.
+  - Honest limit written into the script and the threat model: the DACL is the
+    evidence that another account is refused; proving it with a second account
+    would need a second account's credentials, which a probe must not ask for.
+  - `RESULT: PASS` on the reference machine, 18 checks, exit code 0 on success and
+    1 when a pipe measures differently, like the other `verify-*.ps1` runbooks
+    (ASCII only, both engine streams to files — traps 8.9 and 13).
 - **Threat model F-1 closed — the engine pipe now names its callers**
   - `\\.\pipe\mics_engine` used to be created with no security attributes, so it
     carried Windows' default pipe DACL: `(A;;FR;;;WD)(A;;FR;;;AN)` let any local
