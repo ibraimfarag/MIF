@@ -45,7 +45,32 @@
 
 ## 0. Resume here — a new session starts with this section
 
-**Where the project stands** (2026-10-30, `main` @ `7f963b9`). The whole
+### 0.0 How to start the next session
+
+Open a fresh session and paste exactly this:
+
+> اقرأ docs/TODO.md §0 وابدأ من أ2
+
+That means: read this section, then do step **أ2** (the light-mode contrast audit) as
+one small step, and stop for review. The rules that session must keep, all from
+`AGENTS.md`:
+
+- **one small step per turn** — the user asked for work split until a single reply is
+  cheap in time and tokens; do not bundle steps;
+- **one step = one conventional commit**, with `docs/TODO.md` updated in the same
+  commit (move the finished item into the Done log, not just tick it);
+- the **four checks must be green before every commit**: `cargo test`,
+  `cargo clippy --release -- -D warnings`, `flutter analyze --no-pub`,
+  `flutter test --no-pub`. Run cargo from `engine\` with
+  `$env:YRX_REGENERATE_MODULES_RS="false"` and `CARGO_TARGET_DIR` set (see §8);
+- **reply in Egyptian Arabic**; code, comments, docs, identifiers and commit messages
+  in English;
+- no live probe without the isolation env vars (`MICS_NO_SINGLETON`, an isolated
+  `MICS_PIPE_NAME`/`MICS_DATA_DIR`, `MICS_NO_GUARD` when the guard is not the subject)
+  — a real MI CS runs on this machine;
+- when a step is finished, say what was measured or verified, not just what changed.
+
+**Where the project stands** (2026-10-30, `main` @ `24079de`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
@@ -79,13 +104,20 @@ both binaries `Valid`).
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
-1. **Light-mode contrast audit (LOW)** — text, borders and severity colours with
-   before/after numbers.
-2. **AUMID registration (LOW, fold into the installer)** — register
+1. **أ2 — Light-mode contrast audit (LOW)** — text, borders and severity colours with
+   before/after numbers (WCAG: 4.5:1 for body text, 3:1 for large text and UI
+   boundaries). Measure the shipped colours first, then fix what fails and pin the
+   ratios with a Dart test so they cannot drift. This is the first step of the next
+   session (`§0.0`).
+2. **أ3 — fix the colours that fail أ2** and add the ratio test (`lib/ui/theme` or
+   wherever the palette lives; the register row is
+   `Light-mode palette has not been contrast-audited`).
+3. **أ4 — AUMID registration (LOW)** — register
    `HKCU\Software\Classes\AppUserModelId\MICS` (and the shortcut property) so
    Windows' own notification settings label the source "MI CS" instead of `MICS`.
-   Cards work without it; nothing about toast delivery depends on it.
-3. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
+   Cards work without it; nothing about toast delivery depends on it. Do the script
+   first, then move it into the NSIS installer when **ب3** lands.
+4. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
    core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
    either definition of it.
 
@@ -106,22 +138,66 @@ both binaries `Valid`).
    is supposed to fill it, or delete it and say so in the README (MED); and whether
    the Start-Menu shortcut should also be named `MICS` (today it is `MI CS`).
 
-### 0.3 The big phases that remain
+### 0.3 The plan, in order — what a new session works through
 
-- **P4 release engineering:** NSIS installer (bundled engine + rules + offline
-  intel, one UAC prompt, shortcut + AUMID registration), the signing certificate,
-  SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md`, ARM64 leg
-  (Flutter + `aarch64-pc-windows-msvc` engine).
-- **P5 trust & truth:** signed SHA256 manifest of shipped files + startup
-  self-check and an "unofficial build" banner, build hardening (Dart
-  `--obfuscate --split-debug-info`, Rust LTO/strip/`panic=abort`, PE mitigations),
-  and the deliberate README rewrite ("what it does / does not do").
-- **P6 QA:** `qa/` harness that drives every JSON-RPC method (happy path, invalid
-  params, permission failure, schema) plus per-screen widget tests and an E2E run
-  on the built artifact, emitting `qa/report.html`/`.md`; CI fails when a feature
-  is not registered.
-- **P3:** a default update manifest URL compiled in and a signature check on the
-  manifest before applying (today both are user-supplied).
+Every row is one commit-sized step unless it says otherwise; **أ2 is the first**
+(§0.0). "Needs you" is the list that cannot move without the user.
+
+**أ — close §0 (no elevation, no money)**
+
+| Step | What | Notes |
+|---|---|---|
+| **أ2** | Light-mode contrast audit: measure every text/border/severity colour against WCAG (4.5:1 text, 3:1 large text and boundaries) | first step of the next session |
+| **أ3** | Fix the colours that fail, add a Dart test pinning the ratios | depends on أ2 |
+| **أ4** | AUMID registration script + docs (`HKCU\Software\Classes\AppUserModelId\MICS`) | moves into the installer with ب3 |
+
+**ب — P4 release engineering (the largest remaining piece; the register's HIGH row
+"no installer")**
+
+| Step | What | Needs you |
+|---|---|---|
+| **ب1** | SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md` | no |
+| **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
+| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt | no |
+| **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
+| **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
+| **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
+
+**ج — P5 trust and integrity**
+
+| Step | What | Needs you |
+|---|---|---|
+| **ج1** | Build hardening: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info` | no |
+| **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner | no |
+| **ج3** | Deliberate README rewrite ("what it does / does not do") once the above is real | no |
+
+**د — P6 QA**
+
+| Step | What |
+|---|---|
+| **د1** | `qa/` harness driving every JSON-RPC method: happy path, invalid params, permission failure, schema |
+| **د2** | Per-screen widget tests |
+| **د3** | E2E run against the built artifact (the installer from ب3) |
+| **د4** | `qa/report.html` + `.md`, and CI fails when a feature is not registered |
+
+**هـ — the P3 remainder**
+
+| Step | What |
+|---|---|
+| **هـ1** | A default update-manifest URL compiled in, and a signature check on the manifest before applying (today both are user-supplied) |
+
+**و — the register (parallel, not a phase)**
+
+`docs/TODO.md` §7 carries 21 open rows (2 HIGH, 6 MED, the rest LOW). The MED ones
+worth pulling forward once the phases above allow it: **no scheduled scan and no
+real-time file watching**, the dead VirusTotal client (see §0.2), the canary checker
+being poll-based, and the firewall going through `netsh` instead of FirewallAPI COM.
+The HIGH ones are the installer and the incomplete package when `rules\` is dropped by
+hand — both are ب's job.
+
+**Blocked on the user (listed in §0.2, do not plan around them):** one UAC prompt for
+the helper (ب4 removes the need for it), a real signing certificate (ب5), and two
+small decisions (VirusTotal client, Start-Menu shortcut name).
 
 ### 0.4 Environment must-knows (the short version of §8)
 
@@ -253,12 +329,31 @@ click (P1.5) or a purchased certificate (P4).
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
-| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned |
-| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | planned |
-| P6 | Full QA harness + HTML report, malware lab (later) | planned |
+| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned — steps **ب1–ب6** in §0.3 |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner, build hardening, README rewrite (**ج1–ج3**) |
+| P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
 
+- **The plan for the next sessions is written down, and the stale P5 row fixed**
+  - §0.0 tells a fresh session what to paste — `اقرأ docs/TODO.md §0 وابدأ من أ2` — and
+    repeats the working rules it must keep: one small step per turn, one conventional
+    commit per step with this file updated in the same commit, the four checks green
+    before every commit, Egyptian Arabic to the user and English in the artifacts, and
+    isolated env vars for any live probe.
+  - §0.3 replaces the loose "big phases" bullets with the ordered roadmap: **أ** close
+    §0 (contrast audit → fix → AUMID), **ب** P4 (SBOM/notices/cost, ARM64 leg, NSIS
+    installer, helper folded into it, certificate, public release), **ج** P5 (build
+    hardening, signed SHA-256 manifest + self-check banner, README rewrite), **د** P6
+    (QA harness → widget tests → E2E → report), **هـ** the P3 remainder (default update
+    manifest + signature check) and **و** the 21-row register, each row marked with
+    whether it needs the user. §0.1 now carries the same step names (أ2 first).
+  - The phase table said P5 was "planned" while `docs/THREAT-MODEL.md` and
+    `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed on measured evidence;
+    the row now says partly done and lists what is left (ج1–ج3). The resume header
+    points at the real HEAD (`24079de`) instead of a commit from several phases ago.
+  - Documentation only, no code: the four checks were run anyway and stayed green
+    (`cargo test` 76/76, clippy clean, `flutter analyze` clean, `flutter test` 36/36).
 - **The guard's pid diff is one `EnumProcesses` call now, and the cost is 0.156 % of a core**
   - `platform/windows/pids.rs` lists the pids in a single kernel call (with the
     buffer-too-small retry the API asks for), and the guard uses it instead of
@@ -1373,6 +1468,9 @@ click (P1.5) or a purchased certificate (P4).
 ---
 
 ## 5. Next up — one prompt, then the installer
+
+**The ordered plan lives in §0.3 (steps أ → و); this section is the detail behind
+P1.5 and the installer.**
 
 Everything else in P2/P3 that could be verified without administrator rights is
 done (settings, i18n, sounds, theme, offline badge, update flow, transport,
