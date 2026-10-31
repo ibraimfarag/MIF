@@ -39,10 +39,15 @@
 > registered** (`scripts\register-aumid.ps1`: `DisplayName "MI CS"` under
 > `HKCU\Software\Classes\AppUserModelId\MICS`, plus `System.AppUserModel.ID` on both
 > shortcuts, so the Shell files the app under `MICS` instead of under the exe path;
-> `scripts\verify-aumid.ps1` reads all of it back, and `-Remove` reverses it) ·
-> **next: ب1, the SBOM + `THIRD-PARTY-NOTICES` + `docs/COST.md` (no elevation, no
-> money), then install the helper once (one UAC prompt), then the NSIS installer —
-> which folds the AUMID in — and the P6 QA harness**; the cheap wins
+> `scripts\verify-aumid.ps1` reads all of it back, and `-Remove` reverses it) and
+> **what is inside the package is now written down**: `tool\sbom.dart` generates a
+> CycloneDX 1.6 `sbom.cdx.json` + `THIRD-PARTY-NOTICES` from the lockfiles (579
+> components, 8 licenses, 0 copyleft, 0 unclassified, every text present), the pair
+> is committed, shipped in the ZIP and freshness-checked before every release
+> (ب1a, D-018) ·
+> **next: ب1b, `docs/COST.md` (no elevation, no money), then install the helper
+> once (one UAC prompt), then the NSIS installer — which folds the AUMID in — and
+> the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
 >
@@ -57,11 +62,13 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 وابدأ من ب1
+> اقرأ docs/TODO.md §0 وابدأ من ب1b
 
-That means: read this section, then do step **ب1** (the CycloneDX SBOM, the
-`THIRD-PARTY-NOTICES` file and `docs/COST.md`) as one small step, and stop for
-review. The rules that session must keep, all from `AGENTS.md`:
+That means: read this section, then do step **ب1b** — `docs/COST.md`, the one
+remaining half of ب1 — as one small step, and stop for review. (**ب1a**, the
+CycloneDX SBOM and `THIRD-PARTY-NOTICES` plus their tests and the release wiring,
+is done; it was split out so each half stayed one small step.) The rules that
+session must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
   cheap in time and tokens; do not bundle steps;
@@ -78,7 +85,7 @@ review. The rules that session must keep, all from `AGENTS.md`:
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-31, `main` @ `f1e6fd7`). The whole
+**Where the project stands** (2026-10-31, `main` @ `8273086`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
@@ -139,7 +146,7 @@ both binaries `Valid`).
    either definition of it.
 
 **This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **ب1** in §0.3.
+is done. The next ordered step is **ب1b** in §0.3.
 
 ### 0.2 Blocked on the user
 
@@ -160,7 +167,7 @@ is done. The next ordered step is **ب1** in §0.3.
 
 ### 0.3 The plan, in order — what a new session works through
 
-Every row is one commit-sized step unless it says otherwise; **ب1 is the first**
+Every row is one commit-sized step unless it says otherwise; **ب1b is the first**
 (§0.0). "Needs you" is the list that cannot move without the user.
 
 **أ — close §0 (no elevation, no money)**
@@ -176,7 +183,8 @@ Every row is one commit-sized step unless it says otherwise; **ب1 is the first*
 
 | Step | What | Needs you |
 |---|---|---|
-| **ب1** | SBOM (CycloneDX) + `THIRD-PARTY-NOTICES` + `docs/COST.md` | no — **first step of the next session** |
+| ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
+| **ب1b** | `docs\COST.md`: the real costs (signing certificate) and what stays free | no — **first step of the next session** |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt | no |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
@@ -315,8 +323,9 @@ not implemented yet, see D-008).
 | `scripts\verify-pipe-acl.ps1` | Both pipe ACLs are what `docs/THREAT-MODEL.md` says: reads each live DACL back with `GetSecurityInfo` (engine pipe protected to the owner/SYSTEM/Administrators, helper pipe `INTERACTIVE`), and drives a real JSON-RPC `status` call over the hardened engine pipe so the ACL cannot pass by locking the UI's own user out. Isolated pipe names + data dir, so a running MI CS is untouched |
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
 | `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
-| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder |
-| `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), and the **extracted** copy answers the helper protocol, puts a real card on the desktop, and loads its own `rules\guard` + `rules\yara` rather than the built-in fallback |
+| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app + `sbom.cdx.json` + `THIRD-PARTY-NOTICES`), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder, and refuses to start when the committed inventory no longer describes the lockfiles |
+| `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, and the **extracted** copy answers the helper protocol, puts a real card on the desktop, and loads its own `rules\guard` + `rules\yara` rather than the built-in fallback |
+| `dart run tool\sbom.dart` | What is inside the package, generated from what is pinned: `sbom.cdx.json` (CycloneDX 1.6) + `THIRD-PARTY-NOTICES` from `cargo metadata`/`Cargo.lock`, `pubspec.lock`/`dart pub deps --json`, the Flutter SDK's `LICENSE` and the two shipped fonts. `--check` exits 1 and prints `RESULT: FAIL` instead of writing when the committed pair is stale (`--verbose` lists what is excluded, and which components ship no text of their own); `make-release.ps1` runs it before it builds and `test\sbom_test.dart` re-derives the same inventory from the lockfiles |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
@@ -351,12 +360,63 @@ click (P1.5) or a purchased certificate (P4).
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
-| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | planned — steps **ب1–ب6** in §0.3 |
+| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) — left = `docs\COST.md` and steps **ب1b–ب6** in §0.3 |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner, build hardening, README rewrite (**ج1–ج3**) |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
 
+- **What is inside the package is written down, generated and checked (ب1a)**
+  - The register had a HIGH row for "no SBOM and no third-party notices", so
+    `tool\sbom.dart` now builds both from what is already pinned: `sbom.cdx.json`
+    (CycloneDX 1.6) and `THIRD-PARTY-NOTICES` (Markdown). Its inputs are
+    `cargo metadata --locked --offline` (each crate's *declared* SPDX expression,
+    checksum and source directory), `pubspec.lock` plus `dart pub deps --json` (each
+    Dart package, its sha256, and whether it is in the runtime closure), the Flutter
+    SDK's own `LICENSE`, the two shipped fonts, and four entries no lockfile
+    mentions: Cairo, JetBrains Mono, `flutter_windows.dll`, and the Visual C++
+    runtime the app needs but does not ship (`scope: excluded`, named rather than
+    given an invented SPDX id).
+  - **Measured on this machine (2026-10-31): 579 components** — 483 Rust crates, 87
+    Dart packages, 6 Flutter SDK packages, 2 fonts, 1 not-shipped runtime — of which
+    **541 ship** and 38 are dev- or build-only. **8 licenses** are relied on
+    (MIT 444, BSD-3-Clause 73, Apache-2.0 35, Unicode-3.0 18, Zlib 3, ISC 2,
+    OFL-1.1 2, CDLA-Permissive-2.0 1) with **0 copyleft, 0 unclassified and 0
+    missing texts**. The only copyleft-flavoured expression in the tree is
+    `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later`: `OR` offers a named
+    permissive option, and the notices say that is the one we take.
+  - A deliberate choice is what gets reported, not what a human felt like: an SPDX
+    evaluator handles `OR`/`AND`/`WITH`/parentheses and the legacy `MIT/Apache-2.0`
+    spelling, and picks the option from a fixed preference list (MIT first) so
+    `MIT OR Apache-2.0` and `Apache-2.0 OR MIT` conclude the same id. An id that is
+    neither permissive nor copyleft fails the audit, so a dependency with an
+    unfamiliar license stops the release (D-018).
+  - The two files are committed, are copied into the package by
+    `make-release.ps1` (which now
+    refuses to start when `dart run tool\sbom.dart --check` says they no longer
+    describe the lockfiles) and are read back **out of the zip** by
+    `verify-release.ps1`, which also checks that every component names a license
+    and that the notices report a clean audit. `test\sbom_test.dart` (22 tests)
+    re-derives the component set from `Cargo.lock` + `pubspec.lock` and fails when
+    the committed pair drifts, so a dependency bump and its notices travel in one
+    commit.
+  - `assets\fonts\OFL-1.1.txt` filled a real compliance gap: the two fonts are OFL
+    1.1 and shipped no license text at all, and no font binary carries one. Their
+    copyright lines were read out of the `.ttf` `name` tables, not guessed.
+  - The output carries no timestamp and its BOM serial number is derived from the
+    sorted coordinates, so two runs over the same lockfiles are byte-identical: a
+    diff in the committed file means a dependency changed and nothing else.
+  - Proved end to end, not just in the generator: `make-release.ps1` was run with a
+    deliberately corrupted `sbom.cdx.json` and **stopped before building** (exit 1,
+    `dist` untouched), then regenerated and run for real — the package came out with
+    **71 files** (69 + the two inventory files), and `verify-release.ps1` passed all
+    13 of its checks, including reading the inventory back **out of the zip** and
+    confirming CycloneDX 1.6, 579 components, a license on each, and a clean audit.
+  - One real bug came out of that: `Future<int> main()` does **not** set a Dart
+    process's exit code (`dart:io`'s `exitCode` does), so the first version of the
+    release gate passed while the tool was reporting a stale file. The tool now sets
+    `exitCode`, prints `RESULT: PASS/FAIL`, and `make-release.ps1` reads the line as
+    well as the code (trap 18).
 - **Windows names the notification source "MI CS" now, and a probe reads it back (أ4)**
   - The engine has always raised cards under AUMID `MICS`; what Windows *calls* that
     source comes from a registration nobody was doing, so the Action Center and
@@ -1596,7 +1656,7 @@ click (P1.5) or a purchased certificate (P4).
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
 | 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
-| 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; no SBOM/NOTICES/cost sheet | P4 |
+| 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); `docs\COST.md` is ب1b | P4 |
 | 19 | Professional README | **done** — see row 10 | `README.md` |
 | 20 | L5 wording vs reality (LLM) | **decided** — optional local LLM + templates; wording fix in P5 | D-005 |
 | 21 | Living TODO/handoff file | **done** — this file | — |
@@ -1711,8 +1771,10 @@ signing certificate respectively), so this is the work that is always available.
       optional x86 **CLI** build only (D-003).
 - [ ] NSIS installer (bundled engine + rules + offline intel) next to the portable
       ZIP; regenerate ZIP + `SHA256SUMS` from the current build.
-- [ ] SBOM (CycloneDX), `THIRD-PARTY-NOTICES`, dependency-license audit,
-      `docs/COST.md` (the only real cost is the signing certificate).
+- [x] ~~SBOM (CycloneDX), `THIRD-PARTY-NOTICES`, dependency-license audit~~ — done
+      (ب1a, D-018): `tool\sbom.dart` generates both from the lockfiles, the pair is
+      committed, shipped in the package and freshness-checked before a release.
+- [ ] `docs/COST.md` — the only real cost is the signing certificate (ب1b).
 
 ### P5 — trust & truth
 - [x] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
@@ -1921,6 +1983,14 @@ settings and read environment variables only.
     seconds after the property changes, so a probe that checks it immediately
     reports a false failure (`verify-aumid.ps1` waits ~5 s for it). Removing the
     property again is `SetValue(VT_EMPTY)`, not writing an empty string.
+18. **A Dart script's exit code comes from `dart:io`'s `exitCode`, not from what
+    `main` returns.** `Future<int> main()` compiles, runs and prints everything
+    correctly, and `dart run tool\sbom.dart --check` still hands the shell **0** —
+    so a release gate written as `if ($LASTEXITCODE -ne 0) { fail }` passes while
+    the tool is reporting a stale file (found while wiring ب1a; the tool now sets
+    `exitCode` and prints a `RESULT: PASS/FAIL` line, like the PowerShell probes).
+    Check a new Dart tool with `& dart run tool\x.dart; "exit=$LASTEXITCODE"` after
+    making it fail on purpose, never by reading its output alone.
 
 ---
 

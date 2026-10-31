@@ -197,15 +197,18 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
 ```
 
 `MICS_ENGINE_PATH` overrides the engine location if you keep it elsewhere.
-`make-release.ps1` assembles into a staging folder, copies `engine\rules` next to
-the binaries (the guard and YARA packs are hot-reloaded from there — a package
-without them silently falls back to the compiled-in pack), refuses to continue if
-anything required is missing, writes `VERSION`, and produces
-`dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. The staging build
-is then swapped into `dist\MICS-portable` — unless MI CS is running from that
-folder, in which case it is left untouched and only the zip is refreshed. Add
-`-SkipBuild` to repackage without rebuilding the app, or `-EnginePath <exe>` when
-cargo builds somewhere else.
+`make-release.ps1` first checks that the committed third-party inventory
+(`sbom.cdx.json` and `THIRD-PARTY-NOTICES`) still describes the lockfiles, and
+ships both in the package; regenerate them with `dart run tool\sbom.dart` after
+any dependency change. It then assembles into a staging folder, copies
+`engine\rules` next to the binaries (the guard and YARA packs are hot-reloaded
+from there — a package without them silently falls back to the compiled-in pack),
+refuses to continue if anything required is missing, writes `VERSION`, and
+produces `dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. The
+staging build is then swapped into `dist\MICS-portable` — unless MI CS is running
+from that folder, in which case it is left untouched and only the zip is
+refreshed. Add `-SkipBuild` to repackage without rebuilding the app, or
+`-EnginePath <exe>` when cargo builds somewhere else.
 
 Check what you just produced — hashes, completeness, and that the extracted copy
 serves the privileged helper protocol, puts a real card on the desktop, and loads
@@ -363,6 +366,17 @@ a copy of the task icon.
 - [`AGENTS.md`](AGENTS.md) — rules for automated contributors.
 - **License: GPL-3.0-or-later.** Every dependency must be GPL-compatible; no
   telemetry, no paid tiers, optional donation link only.
+- **Every dependency is accounted for.** [`sbom.cdx.json`](sbom.cdx.json)
+  (CycloneDX 1.6) lists all 579 components behind the two lockfiles — 483 Rust
+  crates, 87 Dart packages, 6 Flutter SDK packages, the Cairo and JetBrains Mono
+  fonts, and the Visual C++ runtime the app needs but does not ship — each with the
+  license it declares and the SHA-256 the lockfile pins.
+  [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES) names the option MI CS relies on
+  wherever a crate offers a choice ("MIT OR Apache-2.0") and reproduces the full
+  text of every one of those licenses. Both files are generated from the lockfiles
+  by `dart run tool\sbom.dart`, are regenerated into the package by
+  `make-release.ps1`, and `dart run tool\sbom.dart --check` fails when they no
+  longer describe the tree.
 - **Third-party intel feeds.** Two public data sets are fetched by the scheduled
   sync and keep their own licenses: [StevenBlack/hosts](https://github.com/StevenBlack/hosts)
   (MIT) is used as the DNS blocklist, and the
@@ -445,7 +459,10 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 النسخة المنشورة مطابقة للـ SHA256SUMS وكاملة وإن نسختها المستخرجة بتشتغل فعلًا
 وبتحمّل قواعدها من جوه الحزمة نفسها.
 
-**النسخة الجاهزة:** `scripts\make-release.ps1` بيجهّز النسخة في فولدر مؤقت
+**النسخة الجاهزة:** `scripts\make-release.ps1` بيتأكد الأول إن ملفات الإفصاح عن
+مكونات الطرف التالت (`sbom.cdx.json` بصيغة CycloneDX 1.6 و`THIRD-PARTY-NOTICES`)
+لسه مطابقة لملفات الـ lock، وبيشحنهم جوه النسخة — ولو غيّرت أي مكتبة، جدّدهم بـ
+`dart run tool\sbom.dart`؛ بعد كده بيجهّز النسخة في فولدر مؤقت
 (المحرك + مجلد `rules` + الواجهة) وبيطلّع
 `dist\MICS-portable-<version>-x64.zip` مع `dist\SHA256SUMS`، وبيرفض يكمّل لو أي
 ملف أساسي ناقص. الفولدر المؤقت بيتنقل مكان `dist\MICS-portable` بعد كده — إلا لو

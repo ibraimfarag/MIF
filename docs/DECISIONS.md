@@ -651,3 +651,71 @@ helper will answer", and keeping `scripts/verify-helper.ps1` naming itself throu
 it instead of loosening the rule; keeping `%PROGRAMDATA%\MICS` created by the
 elevated side only, because it now doubles as the install-time account record; and
 updating F-2's row whenever the check moves.
+
+---
+
+## D-018 — The third-party inventory is generated from the lockfiles, committed beside them, and checked
+
+1. `tool\sbom.dart` builds two files from what is already pinned: `sbom.cdx.json`
+   (CycloneDX 1.6) and `THIRD-PARTY-NOTICES` (Markdown). Its inputs are
+   `cargo metadata --locked --offline` for every crate's *declared* SPDX expression,
+   checksum and source directory; `pubspec.lock` plus `dart pub deps --json` for
+   every Dart package and its sha256; the Flutter SDK's own `LICENSE`; the two
+   shipped fonts; and a four-entry list of what no lockfile mentions (Cairo,
+   JetBrains Mono, `flutter_windows.dll`, the Visual C++ runtime the app needs but
+   does not ship).
+2. The output is deterministic: no timestamp, and the BOM serial number is the
+   SHA-256 of the sorted component coordinates laid out as a UUID. Two runs over
+   the same lockfiles are byte-identical, so a diff in the committed file means a
+   real dependency change and nothing else.
+3. Both files are committed at the repo root and copied into the portable package.
+   `dart run tool\sbom.dart --check` exits 1 when they no longer describe the tree;
+   `scripts\make-release.ps1` refuses to build in that case, before it starts
+   building; and `scripts\verify-release.ps1` reads them back out of the zip and
+   checks the document parses, every component names a license and the notices
+   report a clean audit.
+4. Which license MI CS relies on is computed, not chosen by hand: an SPDX evaluator
+   treats `OR` as "either side is enough", `AND` as "every side", `WITH` as
+   narrowing the id it sits on, and picks the permissive option from a fixed
+   preference list (MIT first) so `MIT OR Apache-2.0` and `Apache-2.0 OR MIT`
+   conclude the same id. An id that is neither in the permissive set nor in the
+   copyleft set is reported as unclassified and fails the audit, so a new
+   dependency with an unfamiliar license stops the release instead of shipping.
+5. `scope` separates what ships from what does not: a crate is `required` when it
+   is reachable from a workspace member through normal dependencies, a Dart package
+   when it is reachable from the root's non-dev dependencies. Only `required`
+   components are audited; a dev- or build-only component is still listed, with its
+   license, because a scanner should be able to see it.
+6. Where a component ships no license text of its own - the fonts keep theirs in
+   the TrueType `name` table, and `typenum` ships a LICENSE that is just the
+   expression - the text is quoted once under the id from the first component that
+   did supply one, and the fonts' copyright lines are read out of the `.ttf`
+   binaries rather than guessed. `assets\fonts\OFL-1.1.txt` is the committed OFL 1.1
+   text for the two fonts: no font file carries it.
+
+**Why.** D-004 promises the third-party assets in `THIRD-PARTY-NOTICES`, and the
+register carries a HIGH row for "no SBOM/notices". A generated file that nothing
+checks rots silently, and generating it only inside a release build would mean a
+license change is invisible to whoever reviews the commit that caused it. Measured
+on this machine (2026-10-31): **579 components** - 483 Rust crates, 87 Dart
+packages, 6 Flutter SDK packages, 2 fonts, 1 not-shipped runtime - of which **541
+ship**; **8 licenses** relied on (MIT 444, BSD-3-Clause 73, Apache-2.0 35,
+Unicode-3.0 18, Zlib 3, ISC 2, OFL-1.1 2, CDLA-Permissive-2.0 1); **0 copyleft, 0
+unclassified, 0 missing texts**; the only copyleft-flavoured expression in the tree
+is `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later`, where a named permissive
+option exists and the notices say it is the one we take.
+
+**What this is not.** Not a vulnerability scan: there is no CVE data here, that is
+the scanner's job. Not a per-file copyright harvest: the copyright column names the
+holder of the text that was quoted, so a crate that ships no text contributes no
+line (29 of 541 shipped components, mostly macOS- and wasm-only crates whose sources
+were never extracted into the cargo cache). Not signed: the SBOM describes what is
+inside, and ج2's manifest is where integrity checking starts.
+
+**Commits us to.** Regenerating both files in the same commit as any dependency
+change, because the freshness test derives the component set from `Cargo.lock` and
+`pubspec.lock` and fails when they disagree; keeping the evaluator fail-closed
+instead of adding per-package exceptions when a new license looks odd; keeping
+`--check` in the release path so a package cannot ship an inventory that does not
+describe it; and keeping the four manual entries honest - the Visual C++ runtime
+stays `scope: excluded` with a name instead of an invented SPDX id.

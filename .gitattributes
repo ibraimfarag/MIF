@@ -1,0 +1,9 @@
+# Generated artifacts are compared byte for byte by `dart run tool\sbom.dart
+# --check`, so they must not depend on how this machine checks files out.
+# `core.autocrlf=true` is the norm on Windows; pinning these to LF keeps the
+# committed bytes, a fresh clone and a regenerated copy identical.
+sbom.cdx.json text eol=lf
+THIRD-PARTY-NOTICES text eol=lf
+# The OFL text is embedded verbatim in THIRD-PARTY-NOTICES (no font file carries
+# it), so its line endings reach the generated file too.
+assets/fonts/OFL-1.1.txt text eol=lf

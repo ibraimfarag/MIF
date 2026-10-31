@@ -9,7 +9,8 @@
 
     1. every SHA256SUMS line matches the file it names;
     2. the zip extracts to a clean folder with the required files, including both
-       rule packs;
+       rule packs and the third-party inventory, which is then read back and
+       checked;
     3. the extracted engine serves the privileged helper protocol
        (`verify-helper.ps1`);
     4. the extracted engine puts a real card on the desktop (`verify-toast.ps1`);
@@ -102,11 +103,39 @@ try {
   $required = @(
     "mics_app.exe", "mics-engine.exe", "flutter_windows.dll", "VERSION",
     "data\app.so", "data\icudtl.dat",
-    "rules\yara\starter.yar", "rules\guard\starter.json"
+    "rules\yara\starter.yar", "rules\guard\starter.json",
+    "sbom.cdx.json", "THIRD-PARTY-NOTICES"
   )
   $missing = @($required | Where-Object { -not (Test-Path (Join-Path $work $_)) })
   if ($missing.Count -eq 0) { Pass "every required file is in the zip" }
   else { Fail ("missing from the zip: " + ($missing -join ", ")) }
+
+  # The inventory a user can read without us: it has to parse, describe every
+  # component it lists, and carry the audit verdict the generator produced.
+  $bomPath = Join-Path $work "sbom.cdx.json"
+  if (Test-Path $bomPath) {
+    $bom = Get-Content $bomPath -Raw | ConvertFrom-Json
+    if ($bom.bomFormat -eq "CycloneDX" -and $bom.specVersion -eq "1.6") {
+      Pass "inventory: CycloneDX $($bom.specVersion), $($bom.components.Count) component(s)"
+    } else {
+      Fail "the inventory is not a CycloneDX 1.6 document ($($bom.bomFormat) $($bom.specVersion))"
+    }
+    $unlicensed = @($bom.components | Where-Object { -not $_.licenses })
+    if ($unlicensed.Count -eq 0) { Pass "inventory: every component names a license" }
+    else { Fail "inventory: $($unlicensed.Count) component(s) name no license, first: $($unlicensed[0].name)" }
+    if ($bom.metadata.component.name -ne "MI CS") {
+      Fail "the inventory is about '$($bom.metadata.component.name)', not MI CS"
+    }
+  }
+  $noticesPath = Join-Path $work "THIRD-PARTY-NOTICES"
+  if (Test-Path $noticesPath) {
+    $notices = Get-Content $noticesPath -Raw
+    if ($notices -match "License texts missing: 0" -and $notices -match "Copyleft: 0") {
+      Pass "notices: no copyleft and every license text present"
+    } else {
+      Fail "the notices do not report a clean license audit"
+    }
+  }
   # A nested `rules\rules` is what a second packaging run used to produce when the
   # destination already existed, so check the layout, not just the file names.
   $ruleFiles = @(Get-ChildItem (Join-Path $work "rules") -Recurse -File -ErrorAction SilentlyContinue)

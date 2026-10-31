@@ -6,16 +6,19 @@
   `dist\MICS-portable` is what users copy and run, so it has to be built from the
   current binaries in one step instead of being patched by hand. This script:
 
-    1. copies the Flutter release output (`build\windows\x64\runner\Release`) into
+    1. checks that the committed third-party inventory (`sbom.cdx.json` and
+       `THIRD-PARTY-NOTICES`) still describes the lockfiles, and ships both;
+    2. copies the Flutter release output (`build\windows\x64\runner\Release`) into
        `dist\MICS-portable`;
-    2. copies `engine\rules` next to the binaries - the guard and YARA packs are
+    3. copies `engine\rules` next to the binaries - the guard and YARA packs are
        hot-reloaded from there, and a package without them silently falls back to
        the compiled-in starter pack;
-    3. refuses to continue if any required file is missing, so a half-built folder
+    4. refuses to continue if any required file is missing, so a half-built folder
        is never published;
-    4. writes `VERSION` (version, build time, engine hash, rule count);
-    5. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
-    6. writes `dist\SHA256SUMS` for the zip, the engine, the app and the rules.
+    5. writes `VERSION` (version, build time, engine hash, rule count);
+    6. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
+    7. writes `dist\SHA256SUMS` for the zip, the engine, the app, the rules and the
+       inventory.
 
   Nothing here needs elevation.
 
@@ -50,6 +53,33 @@ if (-not $Version) {
   $cargo = Get-Content (Join-Path $root "engine\Cargo.toml") -Raw
   if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { $Version = $Matches[1] }
   else { throw "cannot read the version from engine\Cargo.toml - pass -Version" }
+}
+
+# The third-party inventory (sbom.cdx.json, THIRD-PARTY-NOTICES) is generated from
+# the lockfiles and committed with them, so the package can never describe a
+# dependency set that is no longer the one in the tree. Checked before building: a
+# stale inventory should not cost a full build to discover. The tool's own
+# `RESULT:` line is read as well as its exit code, because a `dart run` wrapper can
+# swallow the code (`main` returning a number does not set it - the tool sets
+# `exitCode` explicitly, and this check does not depend on that alone).
+Write-Host "checking the third-party inventory..."
+$sbomOut = Join-Path $env:TEMP "mics-sbom-check.out"
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+Push-Location $root
+try {
+  & dart run tool\sbom.dart --check > $sbomOut 2>&1
+  $sbomExit = $LASTEXITCODE
+} finally {
+  Pop-Location
+  $ErrorActionPreference = $stopPreference
+}
+Get-Content $sbomOut | Where-Object { $_ -match "RESULT|sbom:|stale" } | ForEach-Object { "  $_" }
+$sbomPassed = ($sbomExit -eq 0) -and ((Get-Content $sbomOut -Raw) -match "RESULT: PASS")
+Remove-Item $sbomOut -ErrorAction SilentlyContinue
+if (-not $sbomPassed) {
+  Write-Output "RESULT: FAIL - sbom.cdx.json or THIRD-PARTY-NOTICES is stale; run 'dart run tool\sbom.dart' and commit both"
+  exit 1
 }
 
 # The engine is built by cargo, not by Flutter, and it may live outside the repo
@@ -112,7 +142,8 @@ if (-not $SkipBuild) {
 if (-not (Test-Path $buildDir)) { throw "no build output at $buildDir - build first or drop -SkipBuild" }
 
 # Required in the package: the app, the engine, Flutter's runtime, the asset
-# bundle, and both rule packs (missing rules = silently fewer detections).
+# bundle, both rule packs (missing rules = silently fewer detections) and the
+# third-party inventory the SBOM/notices pair makes up.
 $required = @(
   "mics_app.exe",
   "mics-engine.exe",
@@ -121,7 +152,9 @@ $required = @(
   "data\icudtl.dat",
   "data\flutter_assets\AssetManifest.bin",
   "rules\yara\starter.yar",
-  "rules\guard\starter.json"
+  "rules\guard\starter.json",
+  "sbom.cdx.json",
+  "THIRD-PARTY-NOTICES"
 )
 
 # Assemble into a staging folder first. The live `dist\MICS-portable` may be the
@@ -137,6 +170,10 @@ Copy-Item $rulesSrc (Join-Path $staging "rules") -Recurse -Force
 # The one file that comes from cargo rather than from the Flutter build.
 Copy-Item $EnginePath (Join-Path $staging "mics-engine.exe") -Force
 Copy-Item $EnginePath (Join-Path $buildDir "mics-engine.exe") -Force
+# What is inside the package, in machine-readable and human-readable form. These
+# are the committed copies, which --check above just proved describe this tree.
+Copy-Item (Join-Path $root "sbom.cdx.json") $staging -Force
+Copy-Item (Join-Path $root "THIRD-PARTY-NOTICES") $staging -Force
 Write-Host ("engine   : {0}" -f $EnginePath)
 
 $missing = @()
@@ -212,6 +249,8 @@ $lines += "$($engineHash.ToLower())  MICS-portable/mics-engine.exe"
 $lines += "$($appHash.ToLower())  MICS-portable/mics_app.exe"
 $lines += "$((Get-FileHash (Join-Path $staging "rules\yara\starter.yar") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/yara/starter.yar"
 $lines += "$((Get-FileHash (Join-Path $staging "rules\guard\starter.json") -Algorithm SHA256).Hash.ToLower())  MICS-portable/rules/guard/starter.json"
+$lines += "$((Get-FileHash (Join-Path $staging "sbom.cdx.json") -Algorithm SHA256).Hash.ToLower())  MICS-portable/sbom.cdx.json"
+$lines += "$((Get-FileHash (Join-Path $staging "THIRD-PARTY-NOTICES") -Algorithm SHA256).Hash.ToLower())  MICS-portable/THIRD-PARTY-NOTICES"
 $lines | Set-Content -Path $sums -Encoding ASCII
 
 # Swap the staging build into place - unless someone is running MI CS from that
