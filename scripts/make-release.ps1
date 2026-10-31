@@ -106,6 +106,27 @@ if (-not $SkipBuild) {
   $stopPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
 
+  # The Windows build needs nuget.exe: Flutter's plugins fetch NuGet packages at
+  # configure time (audioplayers_windows needs Microsoft.Windows.ImplementationLibrary)
+  # and CMake looks for the tool on PATH. A machine without it - or a tree that was
+  # cleaned, so the plugin has to configure again - fails there with "Failed to
+  # install nuget package", so make one available before asking for the build.
+  if (-not (Get-Command nuget.exe -ErrorAction SilentlyContinue)) {
+    $toolDir = Join-Path $env:TEMP "mics-tools"
+    $nugetPath = Join-Path $toolDir "nuget.exe"
+    if (-not (Test-Path $nugetPath)) {
+      New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
+      Write-Host "fetching nuget.exe (the Windows build needs it)..."
+      try {
+        Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
+          -OutFile $nugetPath -UseBasicParsing -TimeoutSec 120
+      } catch {
+        throw "nuget.exe is needed for the Windows build and could not be fetched: $($_.Exception.Message)"
+      }
+    }
+    $env:PATH = "$toolDir;$env:PATH"
+  }
+
   Write-Host "building the app ($Configuration)..."
   Push-Location $root
   try {

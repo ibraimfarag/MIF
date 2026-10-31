@@ -413,6 +413,41 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **A from-scratch Windows build works again (found by asking for a clean copy)**
+  - Asking for "a complete clean copy" meant `flutter clean` for the first time in
+    this tree, and it failed **twice** on things no previous build could show —
+    every build so far had reused a configure from before:
+  - **The install prefix was unwritable.** CMake's default is
+    `C:/Program Files/<project>`, and `windows\CMakeLists.txt` trusted Flutter's
+    template guard `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT` to replace it with
+    the bundle next to the exe. **CMake 4 no longer sets that variable** (the
+    toolchain here is `cmake version 4.2.3-msvc3`), so on a fresh configure the
+    prefix stayed the default and the install step died with
+    `MSB3073 ... VCEnd exited with code 1`, whose real text is
+    `file cannot create directory: C:/Program Files/mics_app. Maybe need
+    administrative privileges`. The guard now compares against the value it wants
+    to replace, which works on CMake 3 and 4 and still lets an operator-supplied
+    prefix win.
+  - **`nuget.exe` was missing from PATH.** Nothing in this repo needs it, but
+    `audioplayers_windows` fetches `Microsoft.Windows.ImplementationLibrary` at
+    configure time, and CMake's `find_program(nuget)` found nothing, so the
+    configure failed with `Failed to install nuget package
+    Microsoft.Windows.ImplementationLibrary.1.0.260126.7`. A stale
+    `%TEMP%\NuGetScratch\lock` left by an earlier crashed NuGet made the first
+    attempt look like a permissions problem. `make-release.ps1` now fetches
+    `nuget.exe` into `%TEMP%\mics-tools` and prepends it to PATH when the build
+    needs it (nothing is added to the repo, and the package is not shipped).
+  - Proof: with a cleaned Flutter tree the release rebuilt end to end — 69 files
+    (the old 71 included two leftovers from the unclean build directory, not
+    anything missing: `sbom.cdx.json` and `THIRD-PARTY-NOTICES` are both in the
+    package at 292,280 and 76,317 bytes), engine `C9FEFDD5...`, every binary
+    `Valid`, and `verify-release.ps1` passed **13/13** including reading the
+    inventory back out of the zip, the helper protocol from the package, and a real
+    desktop card.
+  - Why this matters beyond this machine: **a fresh clone could not build**. These
+    two files are the difference between "works on my machine" and "works after
+    `git clone`".
+
 - **The service's own `binPath` had the same bug — and a test was guarding it (P1.5, second fix)**
   - With the install button fixed, the elevated step got further and **created**
     the service, which then refused to start: `sc start failed: [SC] StartService
@@ -2150,6 +2185,20 @@ settings and read environment variables only.
     `%PROGRAMDATA%` alone — `resolve_base_dir` picks the per-user dir when the
     machine-wide one is not writable, and records the choice in
     `%LOCALAPPDATA%\MICS\.data-dir`).
+20. **`flutter clean` is the only way to find out whether the Windows build works
+    from scratch — and it needs two things this tree never had.** After
+    `flutter clean`, the configure step fails twice: (a) `nuget.exe` is not on PATH,
+    so the `audioplayers_windows` plugin cannot fetch
+    `Microsoft.Windows.ImplementationLibrary` and CMake reports `Failed to install
+    nuget package`; a stale `%TEMP%\NuGetScratch\lock` from a crashed NuGet makes it
+    look like a permission error — delete the scratch dir; (b) CMake 4 no longer
+    sets `CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT`, so Flutter's prefix guard
+    silently goes false and the install step tries `C:/Program Files/mics_app`
+    (`MSB3073 ... VCEnd exited with code 1`, real text: `file cannot create
+    directory`). `make-release.ps1` now supplies `nuget.exe`, and
+    `windows\CMakeLists.txt` decides the prefix by comparing values. Before
+    trusting any "it builds" claim, run `flutter clean` once — an incremental build
+    hides both.
 
 ---
 

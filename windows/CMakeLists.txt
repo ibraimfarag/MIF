@@ -65,8 +65,19 @@ include(flutter/generated_plugins.cmake)
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 # Make the "install" step default, as it's required to run.
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
+# Default the install prefix to the bundle next to the executable. CMake's own
+# default is "C:/Program Files/<project>", which an unelevated install cannot
+# write ("file cannot create directory: C:/Program Files/mics_app"), and
+# $<TARGET_FILE_DIR> only means something once the target exists - so the prefix
+# is the one thing that has to be decided here.
+#
+# Flutter's template guards this with CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT,
+# which CMake 4 no longer sets; a from-scratch configure (a new clone, or after
+# `flutter clean`) therefore kept the unwritable default and the install step
+# failed. Compare against the value we want to replace instead: that works on
+# CMake 3 and 4, and an operator-supplied prefix still wins.
+if(NOT CMAKE_INSTALL_PREFIX OR CMAKE_INSTALL_PREFIX STREQUAL "C:/Program Files/${PROJECT_NAME}")
+  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "Bundle directory for MI CS" FORCE)
 endif()
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
