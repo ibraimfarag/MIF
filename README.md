@@ -160,6 +160,11 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 | **L4 File Engines** | Triage scanner: SHA-256 vs local IOC cache, then YARA rules | Known-bad files by hash and by pattern | No ClamAV signatures, no CAPA, no unpacking |
 | **L5 Mind** | Incident correlation (kill-chain timeline) + assistant: built-in AR/EN templates, optionally a **local** LLM (LM Studio) | Alert fatigue — related events become one incident with a story | The command bar is rule-based (regex intents), not an LLM planner |
 
+The same layers, with what each one actually **sees, detects, blocks and misses** —
+layer by layer, with the code file behind every claim and how that claim is
+checked — are in [`docs/PROTECTION-MATRIX.md`](docs/PROTECTION-MATRIX.md); the
+table above is the short version, and the `L1`–`L5` numbers are the same in both.
+
 ## Settings
 
 One screen, eight sections; every field is validated and persisted by the engine:

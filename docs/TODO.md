@@ -282,7 +282,7 @@ what "next" means.
 | 4 | ~~Dark-mode contrast audit → fix, mirroring أ2/أ3~~ | **done** — 7 of 29 dark pairs failed, all fixed; both modes now assert 29 of 29 (`docs/CONTRAST.md`, `test/dark_contrast_audit_test.dart`) |
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
 | 6 | ~~Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required"~~ | **done** (verified in small step 6) — the test pins the ten sizes on all three `.ico` files and 6 assertions pass |
-| 7 | `docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read | P5 half-step |
+| 7 | ~~`docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read~~ | **done** (verified in small step 7) — 10 sections, per-layer sees/detects/blocks, evidence table; README links it |
 | 8 | Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file | read §7 first |
 
 **Medium — a subsystem or a build leg**
@@ -421,6 +421,24 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 7 — `PROTECTION-MATRIX.md` verified, linked from the README, and its layer numbers reconciled**
+  - The sheet already existed (243 lines, 10 sections); what this step added is the
+    check that a stranger can read it, and the two things that were wrong with it.
+  - **The layer numbers did not match the product's own naming.** The matrix called
+    the scanner `L1` and the firewall `L2`, while the README and the brief call
+    network `L1` (Network Gate) and the file engines `L4`. A reader going from one
+    document to the other had two numbering schemes for one product. Fixed in the
+    matrix: the scanner is **L4**, the firewall **L1**, hosts/name resolution **L2**
+    (they already were), guard/canaries/correlation **L3** — and the intro now spells
+    the mapping out and says why §2/§3/§4 keep their numbers (other documents,
+    including the register, cite them).
+  - **Nothing linked to it.** README's five-layers table is the short version; it now
+    ends by pointing at the matrix and saying the numbers are the same in both.
+  - Re-read for staleness: the only sentence that had drifted was the VirusTotal one,
+    already fixed in step 2 (D-019). The rest matches the code — starter pack size
+    (6 guard + 10 YARA), no scheduled scan, polling canaries, `netsh` firewall, no
+    ClamAV/CAPA, and §10's evidence table names a real probe for each claim.
 
 - **Small step 6 — the icon pass was already there; it is now verified and recorded**
   - The step asked for `test/icon_test.dart` plus the `app_icon.ico` size set. Both
@@ -1977,7 +1995,7 @@ click (P1.5) or a purchased certificate (P4).
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
-| 12 | Protection types | **todo P5** — one matrix doc: layer → protects against / does not | `docs/PROTECTION-MATRIX.md` |
+| 12 | Protection types | **done** — `docs/PROTECTION-MATRIX.md`: layer → sees / detects / blocks / misses, plus the evidence table (verified in small step 7) | `docs/PROTECTION-MATRIX.md` |
 | 13 | Full test walk-through with a report | **todo P6** — two smoke tools exist; no feature-wide harness/report | P6 |
 | 14 | Malware corpus for testing | **deferred** — EICAR only, and only inside a VM lab | P6 (later) |
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
@@ -2028,7 +2046,9 @@ UAC prompt (finishing P1.5) or money (P4 signing certificate).
       against WCAG 2.2, 25 below their bar — `docs/CONTRAST.md`, step أ2.
 - [ ] Screenshots of the light theme in the documentation — the audit itself is
       numeric on purpose (the record is the ratio table, not a picture).
-- [ ] `docs/PROTECTION-MATRIX.md` (today the README carries the matrix).
+- [x] `docs/PROTECTION-MATRIX.md` — verified 2026-10-31 (small step 7): the sheet
+      exists as a standalone document (10 sections), and README now links it from the
+      five-layers section instead of implying the README is the only matrix.
 
 ### Cheap wins — no elevation, no money, no new subsystem
 These can be done in any order and each is one small commit. They are listed
@@ -2065,8 +2085,10 @@ signing certificate respectively), so this is the work that is always available.
 - [x] Guard CPU: 3.52 % → 1.56 % → **0.156 % of one core** (0.0028 % of a 56-thread
       machine), budget met under either definition, and the measuring tool fixed
       (`benchmark` was reporting its own probe) — §0.1, log entries below.
-- [ ] `docs/PROTECTION-MATRIX.md` + `docs/THREAT-MODEL.md` (P5 wording work, no
-      code involved).
+- [x] `docs/PROTECTION-MATRIX.md` + `docs/THREAT-MODEL.md` — both exist and were
+      re-read in small step 7 (the protection sheet has 10 sections and a "how these
+      claims are checked" table; the threat model carries the assets, adversaries,
+      boundaries and F-1...F-10).
 
 ---
 
@@ -2114,8 +2136,9 @@ signing certificate respectively), so this is the work that is always available.
 - [x] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
       usermode product cannot do: no kernel driver) — the two pipe ACLs measured
       live rather than assumed; residual risks F-1…F-10 in the register below.
-- [ ] `docs/PROTECTION-MATRIX.md`: per layer, what is detected/blocked and what is
-      not (hosts-based L2, polling canaries, netsh firewall, no ClamAV/CAPA).
+- [x] `docs/PROTECTION-MATRIX.md`: per layer, what is detected/blocked and what is
+      not (hosts-based L2, polling canaries, netsh firewall, no ClamAV/CAPA) — done
+      and re-verified in small step 7; only its VT sentence needed touching (D-019).
 - [ ] Integrity: signed SHA256 manifest of shipped files, self-check at startup,
       "unofficial build" banner on mismatch.
 - [ ] Build hardening: Dart `--obfuscate --split-debug-info`, Rust LTO/strip/
@@ -2201,7 +2224,9 @@ contain each of the following dimensions:
   id (step أ4): `scripts\register-aumid.ps1` writes the key + the shortcut property,
   `scripts\verify-aumid.ps1` reads 5 of 5 back and `-Remove` reverses both.
 - [ ] Screenshots of the light theme in the documentation.
-- [ ] Complete `docs/PROTECTION-MATRIX.md` as a standalone document (currently only in README).
+- [x] Complete `docs/PROTECTION-MATRIX.md` as a standalone document — done (small
+  step 7 verified it: 10 sections, layers at a glance, per-layer sees/detects/blocks,
+  and the evidence table; README links it now).
 Resolved during P1/P2a (keep for context): pipe closed after the first client;
 blocking read + write on one handle deadlocked (fixed with `PeekNamedPipe`);
 `scan.start` blocked the UI for the whole scan; engine had no log file; settings

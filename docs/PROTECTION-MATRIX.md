@@ -17,13 +17,22 @@ Three words are used precisely throughout:
 | **Detects** | raises a finding or an event about it |
 | **Blocks** | prevents or undoes it (a detection with no block is still useful — it is the difference between "we told you" and "we stopped it") |
 
+**Layer names.** The `L1`–`L5` numbers are the product's own, the same ones the
+README's "five layers" table uses: **L1 Network Gate** (firewall), **L2 Attack
+Radar** (name-resolution blocklists), **L3 Response** (guard, canaries,
+correlation), **L4 File Engines** (scanner), **L5 Mind** (incident correlation and
+the optional local-LLM assistant). The vulnerability, posture, Defender and
+delivery rows below are cross-cutting work that does not sit inside a single layer,
+so they keep their own names. This sheet's section numbers (§2 scanner, §3 network,
+§4 guard) are stable on purpose — other documents cite them.
+
 ## 1. The layers at a glance
 
 | Layer | Kind | Runs in | Elevation | Detects | Blocks |
 |---|---|---|---|---|---|
-| L1 scanner | on-demand static analysis of files | engine job | no | known hashes (IOC feed) + YARA rules, over the tree you point it at | only through quarantine (the file is moved); never pre-execution |
+| L4 scanner | on-demand static analysis of files | engine job | no | known hashes (IOC feed) + YARA rules, over the tree you point it at | only through quarantine (the file is moved); never pre-execution |
 | L2 IDS | DNS-name sinkhole in the hosts file | helper applies, every app consumes | yes (helper) | nothing — it is a pure block | listed domains resolve to `0.0.0.0` |
-| L2 firewall | `netsh advfirewall` rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
+| L1 firewall | `netsh advfirewall` rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
 | L3 guard | process-start rules (ETW, or a 2 s poll unelevated) | engine | ETW yes, poll no | process starts matching JSON rules (image, parent, command line) | kills the process tree for rules marked `kill` — after the start |
 | L3 canaries | decoy files | engine poll | no | decoys whose mtime/size changed | nothing |
 | L3 correlator + noise learner | analysis over guard events | engine | no | kill-chain grouping; mute suggestions for events you keep dismissing | nothing |
@@ -32,7 +41,7 @@ Three words are used precisely throughout:
 | Defender orchestration | Windows' own AV engine | engine/helper | to change preferences | reads Defender's real-time and PUA state | turns PUA protection on; runs a Defender quick scan (`MpCmdRun.exe`) |
 | Delivery | cards, Markdown reports, `priv.log`, SQLite | engine | no | nothing | nothing |
 
-## 2. L1 — static file analysis (on demand)
+## 2. L4 — static file analysis (on demand)
 
 **Sees.** The tree you hand to `scan.start` (one root path, `C:\` if you omit it),
 file by file, up to **50 000 files** and **200 MB per file** (`scanner/mod.rs`).
@@ -70,7 +79,7 @@ restored or deleted. A scan never stops a process or a file from loading.
   engine is the product; the packs are a demonstration until real content is
   curated, and `verify-release.ps1` checks that they *load*, not what they catch.
 
-## 3. L2 — network and name resolution
+## 3. L1/L2 — network and name resolution
 
 ### 3.1 Hosts-file IDS (`ids/mod.rs`)
 
@@ -221,7 +230,7 @@ administrator can delete it (F-10).
 | Kernel driver / minifilter | No pre-execution file blocking, no read-level canary, no tamper protection for our own files (F-8, F-9) |
 | AMSI / script-content inspection | Script and in-memory payloads pass (section 2) |
 | ETW-TI (threat-intelligence provider) | No kernel-level event telemetry beyond process creation |
-| Memory scanning, unpacking, emulation | Packed/obfuscated malware is invisible to L1 |
+| Memory scanning, unpacking, emulation | Packed/obfuscated malware is invisible to L4 |
 | Network packet inspection (no Suricata/ET-Open) | No protocol-level detection, no beaconing heuristics |
 | Resolver-level DNS filtering | The hosts sinkhole is bypassed by DoH and by IP-only traffic |
 | Patch management | Vulnerabilities are reported, never fixed |
