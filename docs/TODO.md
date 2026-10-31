@@ -1133,9 +1133,9 @@ click (P1.5) or a purchased certificate (P4).
   - It states the thing the product's own copy should not have to be read twice to
     learn: **MI CS leans on Windows Defender for real-time protection.** It is a
     posture, triage and response tool — nothing in it blocks code before it runs.
-  - Per layer: L1 on-demand file scanning (hash + YARA, 50 000 files / 200 MB per
+  - Per layer: L4 on-demand file scanning (hash + YARA, 50 000 files / 200 MB per
     file, archives ranked but never expanded), L2 name resolution (hosts sinkhole)
-    and firewall (`netsh`: default-deny outbound, `MICS-` rules, IPv4-only country
+    and L1 firewall (`netsh`: default-deny outbound, `MICS-` rules, IPv4-only country
     lists that must already be on disk), L3 process guard (ETW when elevated, a
     2 s poll otherwise; `kill` is `taskkill /T /F` **after** the start), canaries
     (mtime/size only — a pure read is invisible, F-4), the correlator, the
