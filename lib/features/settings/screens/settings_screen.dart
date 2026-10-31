@@ -721,21 +721,29 @@ class _Section extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(icon, size: 16, color: AppColors.cyan),
-            const SizedBox(width: 8),
-            Text(title,
-                style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700)),
-          ]),
-          const SizedBox(height: 12),
-          ...children,
-        ],
+      // The switches below are ListTiles, and a ListTile paints its ink splash
+      // on the nearest Material ancestor. Without this transparent Material the
+      // decorated Container above is that nearest surface, so every switch lost
+      // its splash — and Flutter asserts about it on every Settings render
+      // ("ListTile background color or ink splashes may be invisible").
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, size: 16, color: AppColors.cyan),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
       ),
     );
   }
