@@ -46,10 +46,10 @@ thing; the *Details* tab of Task Manager always shows the file name.
 
 **Inside the product** the name is **MI CS**: the window title, the title bar, the
 tray tooltip and the header of every notification card. The desktop shortcut is
-**MICS** and takes its icon from `mics_app.exe`, so the desktop, the taskbar,
-Alt-Tab, Explorer and the engine's Task Manager row all show one icon. The
-`MICS-*` firewall rule prefix and the `MICS_*` test hooks are identifiers and keep
-their spelling.
+**MICS** and the Start-Menu shortcut is **MI CS** (both settled — D-020); they take
+their icon from `mics_app.exe`, so the desktop, the taskbar, Alt-Tab, Explorer and
+the engine's Task Manager row all show one icon. The `MICS-*` firewall rule prefix
+and the `MICS_*` test hooks are identifiers and keep their spelling.
 
 ## What MI CS does **not** do
 
@@ -298,11 +298,12 @@ Two designs, three icon files, one pipeline:
 | `assets/icons/Desktop.svg` | bundled alternative art, shipped but not used by any shortcut today | `assets/icons/desktop.ico` |
 
 One product, one icon: `scripts/create-shortcuts.ps1` writes a desktop shortcut
-named **MICS** (plus **MI CS** in the Start Menu), and both take their icon from
-`mics_app.exe` — so the desktop, the taskbar, Alt-Tab, Explorer and the engine's
-row in Task Manager show the same art. `engine/build.rs` embeds the very same
-`.ico` into `mics-engine.exe`; without that the engine would show Windows' generic
-icon.
+named **MICS** (plus **MI CS** in the Start Menu — deliberately, because that is
+the name the product and Windows' notification source use; D-020), and both take
+their icon from `mics_app.exe` — so the desktop, the taskbar, Alt-Tab, Explorer
+and the engine's row in Task Manager show the same art. `engine/build.rs` embeds
+the very same `.ico` into `mics-engine.exe`; without that the engine would show
+Windows' generic icon.
 
 ```powershell
 # 1) render the SVGs to 1024 px transparent masters (Chrome/Edge headless)

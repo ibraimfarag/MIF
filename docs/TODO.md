@@ -109,7 +109,10 @@ The names and icons are settled and a probe now fails the release if they drift:
 | Start Menu shortcut | `MI CS` |
 
 Both executables carry the **same icon**; the engine embeds
-`windows/runner/resources/app_icon.ico` at build time.
+`windows/runner/resources/app_icon.ico` at build time. The table is the decision,
+not a description: **D-020** freezes it, and `verify-aumid.ps1` (the registered
+source label) plus `verify-release.ps1` (both `FileDescription` values) fail when
+one of them drifts.
 
 **Artifacts on this machine.** `dist\MICS-portable\` + the signed
 `dist\MICS-portable-0.1.0-x64.zip` + `dist\SHA256SUMS` (all gitignored — the
@@ -153,8 +156,8 @@ both binaries `Valid`).
    either definition of it.
 
 **This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **small step 3 of §0.5** (close the Start-Menu
-shortcut name note in D-008's file).
+is done. The next ordered step is **small step 4 of §0.5** (the dark-mode contrast
+audit and its fix).
 
 ### 0.2 Blocked on the user
 
@@ -171,7 +174,7 @@ shortcut name note in D-008's file).
    path already timestamps), and only then does SmartScreen stop warning strangers.
 3. ~~**Two decisions**~~ — both answered on 2026-10-31: the VirusTotal client is
    **deleted** (D-019, small step 2), and the Start-Menu shortcut keeps the name
-   `MI CS` (small step 3 writes that into D-008's file; no code change).
+   `MI CS` (D-020, small step 3 — no code change).
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -262,8 +265,9 @@ prompt was answered on 2026-10-31 (the service is installed, running and reachab
 On 2026-10-31 the user set the sequence for what is left: finish whatever is
 waiting on a human **first**, then the small tasks, then the medium ones, then the
 large ones. Two of the three human items are settled (the VirusTotal client is
-deleted — D-019, small step 2; the shortcut name stays «MI CS» — small step 3, no
-code change) and the helper's install prompt was answered the same day, so what
+deleted — D-019, small step 2; the shortcut name stays «MI CS» — D-020, small
+step 3, no code change) and the helper's install prompt was answered the same
+day, so what
 remains human is a certificate (§0.2/ب5) and the three-operation helper acceptance.
 The steps below are the same work as §0.3, split by size so a session always knows
 what "next" means.
@@ -274,7 +278,7 @@ what "next" means.
 |---|---|---|
 | 1 | ~~`docs\COST.md` (ب1b)~~ | **done** — this commit |
 | 2 | ~~Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone~~ | **done** — D-019; the register MED row closed with it |
-| 3 | Close the Start-Menu shortcut name decision in D-008's file (keep «MI CS») | documentation only — the name already matches |
+| 3 | ~~Close the Start-Menu shortcut name decision (keep «MI CS»)~~ | **done** — recorded as D-020; the name already matched |
 | 4 | Dark-mode contrast audit → fix, mirroring أ2/أ3 (`docs/CONTRAST.md` gets a dark table, `test/dark_contrast_audit_test.dart` the same asserts) | the open LOW row (1.36:1 border) closes here |
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
 | 6 | Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required" | no new subsystem |
@@ -417,6 +421,31 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 3 — the Start-Menu name question is closed (D-020)**
+  - The open question was whether the Start-Menu shortcut should be renamed `MICS`
+    to match the desktop one. Answer: **no** — it stays `MI CS`, because that is
+    both the name the product uses about itself and the source label Windows'
+    notification settings show (`scripts\register-aumid.ps1` writes
+    `DisplayName "MI CS"`); renaming the shortcut would file the same app under two
+    labels in the two places a user looks for it.
+  - Written down as **D-020**, which also records the rule behind the split
+    (`MI CS` = the product, `MICS` = the search-and-folder token), that nothing in
+    `settings.json` names the product, and that the names are held in place by two
+    probes rather than by convention: `verify-aumid.ps1` reads the registered label
+    back and `verify-release.ps1` fails when either binary's `FileDescription`
+    drifts.
+  - Documentation only — no code, no build, no new file. `README.md` now says why
+    the two shortcuts differ on purpose (both in the naming section and in the icon
+    section), and the §0.0 naming table points at D-020.
+  - Checked before writing, measured rather than assumed: the real desktop is the
+    OneDrive one (`C:\Users\<account>\OneDrive\Desktop`) and holds `MICS.lnk`
+    → `%LOCALAPPDATA%\MI CS\mics_app.exe`; the Start Menu holds `MI CS.lnk`; and
+    `HKCU\Software\Classes\AppUserModelId\MICS` reads `DisplayName = MI CS` with
+    `IconUri` = the same exe. All three already matched the frozen table, so
+    nothing was corrected — only recorded. (A leftover `MI CS test.lnk` still
+    points at the `%LOCALAPPDATA%\MI CS test` copy used for A/B runs; it is not
+    part of the product's naming.)
 
 - **Small step 2 — the dead VirusTotal client is gone, and the product says so (D-019)**
   - What the code lost: `engine\src\scanner\vt.rs` (124 lines), the `vt_api_key`

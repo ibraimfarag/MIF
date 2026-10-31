@@ -762,3 +762,35 @@ that SQLite ignores.
 ever returns, it ships in one commit with its §B6 destination row, its key's
 masking story (F-5, DPAPI) and the UI field that names it — and the register row
 that records its absence today is closed by that commit, not by a comment.
+
+---
+
+## D-020 — The Start-Menu shortcut stays «MI CS»; the names are frozen by probes
+
+**Status:** decided (2026-10-31); every name in the table was already implemented.
+
+**Decision.** The user-facing names do not change. In Task Manager and file
+Properties the app is `MI Cyber Security` and the engine is `MiShild Background`;
+inside the product it is `MI CS` (window title, title bar, tray tooltip, card
+headers, Windows' notification source label); the **desktop** shortcut is `MICS`
+and the **Start-Menu** shortcut is `MI CS`. The last one was the open question —
+renaming it to `MICS` was on the table — and the answer is to leave it alone.
+
+**Why.** Two names for one product only confuse when no rule explains them. This
+split has one: `MI CS` is the product, `MICS` is the search-and-folder token
+(`%LOCALAPPDATA%\MI CS` is the historical exception). Renaming the Start-Menu entry
+would put the Windows surface at odds with the notification source label the
+AUMID script writes (`DisplayName "MI CS"`), so the same app would be filed under
+two labels in the two places a user goes looking for it.
+
+**Not a setting.** Nothing in `settings.json` names the product and no code
+branches on these strings: they are constants in the `windows\runner` resources,
+`scripts\create-shortcuts.ps1` and `scripts\register-aumid.ps1`.
+`scripts\verify-aumid.ps1` reads the registered label back, and
+`scripts\verify-release.ps1` fails when either binary's `FileDescription` drifts —
+which is what keeps the table in `docs\TODO.md` §0.0 honest.
+
+**Commits us to.** If a name ever changes it changes in all of: both PE version
+resources, the icon/shortcut scripts, the AUMID script, the §0.0 naming table and
+the README's naming section — in one commit, because a half-renamed product is
+exactly what those probes exist to catch.
