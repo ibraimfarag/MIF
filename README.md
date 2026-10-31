@@ -91,6 +91,30 @@ Honesty is a feature. Today, MI CS does **not**:
   own probe (`mics-engine benchmark` now reports its own `GetProcessTimes`, with
   `cpu_percent` and `cpu_percent_of_machine`). RAM is ~12 MB, inside budget.
 
+## Screenshots
+
+The light theme, in Arabic (the app's default language), rendered from the app's
+own widgets with **canned engine data**:
+
+| Dashboard | Audit |
+|---|---|
+| ![Dashboard, light theme](docs/images/light-dashboard.png) | ![Audit report, light theme](docs/images/light-audit.png) |
+
+| Intelligence | Settings |
+|---|---|
+| ![Intelligence screen, light theme](docs/images/light-intel.png) | ![Settings screen, light theme](docs/images/light-settings.png) |
+
+These are **renders, not a capture of a real machine**: the score (78), the nine
+findings and the three synced sources are sample data, and the images exist to show
+the interface, not to prove it works. What proves it is the text around them — the
+tests, the receipts in `docs/`, and `scripts\verify-*.ps1`. Regenerate any time
+(the harness fails if a screen renders empty, if a font is missing, or if an image
+comes out dark):
+
+```powershell
+flutter test --no-pub tool\write_screenshots_test.dart
+```
+
 ## Requirements
 
 | | |
@@ -478,6 +502,15 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 بدون ملاحظات و`flutter test` (72). والتباين اللوني **متقاس مش بالتقدير**: وضعين
 فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
 والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
+
+**صور الواجهة:** الصور الأربعة فوق (لوحة المعلومات، الفحص، الاستخبارات، الإعدادات)
+**مرسومة** من كود الواجهة نفسه ببيانات تجريبية — مش لقطات من جهاز حقيقي — وشغّال
+الرسم `tool\write_screenshots_test.dart` بيتفشّل لو شاشة طلعت فاضية أو خط ناقص أو
+الصورة طلعت غامقة، فتجدّدها في أي وقت بـ
+`flutter test --no-pub tool\write_screenshots_test.dart`.
+
+![لوحة المعلومات في الوضع الفاتح](docs/images/light-dashboard.png)
+
 وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
 `tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول

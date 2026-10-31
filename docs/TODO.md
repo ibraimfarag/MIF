@@ -155,9 +155,10 @@ both binaries `Valid`).
    core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
    either definition of it.
 
-**This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **small step 5 of §0.5** (light-theme screenshots
-for the README).
+**This section is empty now**, and so is the rest of §0.5: **all eight small steps are
+done** (the register keeps only rows that need elevation, money, a signing certificate
+or a decision from you). What is left in the project is in §7: the P1.5 helper
+acceptance (three operations, needs you), P4 signing, and the P5/P6 work.
 
 ### 0.2 Blocked on the user
 
@@ -280,7 +281,7 @@ what "next" means.
 | 2 | ~~Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone~~ | **done** — D-019; the register MED row closed with it |
 | 3 | ~~Close the Start-Menu shortcut name decision (keep «MI CS»)~~ | **done** — recorded as D-020; the name already matched |
 | 4 | ~~Dark-mode contrast audit → fix, mirroring أ2/أ3~~ | **done** — 7 of 29 dark pairs failed, all fixed; both modes now assert 29 of 29 (`docs/CONTRAST.md`, `test/dark_contrast_audit_test.dart`) |
-| 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
+| 5 | ~~Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves)~~ | **done** (small step 5) — four 1600×1000 light-theme renders of the real UI, Arabic RTL, from `tool/write_screenshots_test.dart`; each one is asserted non-empty and the fonts are proved loaded |
 | 6 | ~~Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required"~~ | **done** (verified in small step 6) — the test pins the ten sizes on all three `.ico` files and 6 assertions pass |
 | 7 | ~~`docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read~~ | **done** (verified in small step 7) — 10 sections, per-layer sees/detects/blocks, evidence table; README links it |
 | 8 | ~~Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file~~ | **done** (small step 8) — the two notes are written into `THREAT-MODEL.md` (F-11 new, F-2 extended) and the README; the register rows now point at them |
@@ -421,6 +422,38 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 5 — four light-theme renders of the real UI, and a real Settings bug found by rendering it**
+  - `tool/write_screenshots_test.dart` (new, dev-only) pumps the app's own widgets with
+    `engineIpcProvider` replaced by a canned engine, loads the **real fonts** (Cairo,
+    JetBrainsMono) through `FontLoader`, pins the light palette and the Arabic RTL
+    layout through the app's own `settings.get` path, and writes four 1600×1000 PNGs
+    into `docs/images/`: `light-dashboard.png`, `light-audit.png`,
+    `light-intel.png`, `light-settings.png`. Regenerate with
+    `flutter test --no-pub tool\write_screenshots_test.dart`. It lives in `tool/`, so
+    the normal suite never collects it and the count stays 72.
+  - **The images are self-proving, because I cannot see them and neither can a reviewer
+    of a diff.** Every screen asserts a known string before its PNG is written (the
+    dashboard's settled score `78` and the `L1` card, the audit's `SMBv1 Protocol` and
+    `3 local accounts`, intel's `76737`/`1766`, the settings screen's
+    `SegmentedButton<ThemeMode>` and ≥4 `SwitchListTile`), `takeException()` must be
+    null after each navigation, and each image must carry either >2000 distinct colours
+    or >2 % non-background pixels **and** a mean luminance above 0.6 (so a dark capture
+    fails). A font test measures a known string and requires the width to differ from
+    both the Ahem signature (`glyphs × px`) and the default family: Cairo 177.0 px
+    versus 400.0, JetBrainsMono 374.4 versus 624.0. The receipt (size, colours,
+    luminance, SHA-256) is printed on every run, and the dashboard PNG is byte-identical
+    across two independent runs.
+  - **Rendering Settings found a real bug, fixed in its own commit**: `_Section`'s
+    decorated `Container` was the nearest Material ancestor for every `SwitchListTile`,
+    so each switch lost its ink splash and Flutter threw six
+    "ListTile ... ink splashes may be invisible" exceptions per render. Wrapping the
+    column in `Material(type: MaterialType.transparency)` fixes it with no visual
+    change; the screenshots then render with zero exceptions. No test had ever rendered
+    Settings with data, which is why it survived.
+  - README gained a **Screenshots** section (the four images side by side, one in the
+    Arabic section) that says plainly they are renders with sample data — score 78,
+    nine findings, three synced sources — and that the text is what proves the product.
 
 - **Small step 8 — the two cheap LOW rows became prose a reader can find**
   - Both gaps were true and already recorded, but only in the register — the one place
@@ -2064,8 +2097,9 @@ UAC prompt (finishing P1.5) or money (P4 signing certificate).
 ### Leftovers from P2 (non-blocking)
 - [x] Light-mode contrast audit (text/borders/severity colours): 36 pairs measured
       against WCAG 2.2, 25 below their bar — `docs/CONTRAST.md`, step أ2.
-- [ ] Screenshots of the light theme in the documentation — the audit itself is
-      numeric on purpose (the record is the ratio table, not a picture).
+- [x] Screenshots of the light theme in the documentation — done in small step 5, and
+      the audit stays numeric on purpose (the record is the ratio table, not a
+      picture): the four renders are illustrations, the ratios are the proof.
 - [x] `docs/PROTECTION-MATRIX.md` — verified 2026-10-31 (small step 7): the sheet
       exists as a standalone document (10 sections), and README now links it from the
       five-layers section instead of implying the README is the only matrix.
@@ -2243,7 +2277,8 @@ contain each of the following dimensions:
   registered, so Windows' own notification settings labelled the source with the raw
   id (step أ4): `scripts\register-aumid.ps1` writes the key + the shortcut property,
   `scripts\verify-aumid.ps1` reads 5 of 5 back and `-Remove` reverses both.
-- [ ] Screenshots of the light theme in the documentation.
+- [x] Screenshots of the light theme in the documentation — four renders, Arabic UI,
+      regenerate with `flutter test --no-pub tool\write_screenshots_test.dart`.
 - [x] Complete `docs/PROTECTION-MATRIX.md` as a standalone document — done (small
   step 7 verified it: 10 sections, layers at a glance, per-layer sees/detects/blocks,
   and the evidence table; README links it now).
