@@ -92,8 +92,10 @@ work — so a crash mid-op still leaves the intent on disk (`security` rule 6 in
 
 ## Install, upgrade, remove
 
-`--install-helper` (elevated, started by the engine with one UAC prompt on the
-first privileged operation):
+`install-helper` (elevated, started by the engine with one UAC prompt on the
+first privileged operation) — a CLI **subcommand**, and the engine passes exactly
+this spelling: as `--install-helper` clap refuses the argument and exits 2 before
+the child can log anything, which is what the first shipped build did:
 
 1. `sc stop` + `sc delete` any previous definition, so an upgraded exe path and
    the current description replace the old service instead of leaving a stale
@@ -106,7 +108,7 @@ first privileged operation):
    the helper actually answers: "sc said Ok" is not the same as "the engine can
    use it".
 
-`--uninstall-helper` stops and deletes the service, treating `1060` (service does
+`uninstall-helper` stops and deletes the service, treating `1060` (service does
 not exist) as already done.
 
 The service body is `StartServiceCtrlDispatcherW` → `service_main`:

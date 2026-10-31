@@ -196,10 +196,15 @@ instead of leaving an old helper behind.
 3. **Audit first, payload never.** Every call writes `phase=start` and
    `phase=done ok=… dur_ms=…` to `%PROGRAMDATA%\MICS\logs\priv.log`; documents are
    represented by `bytes`/`lines`/`sha256[..16]`, never copied.
-4. **One prompt, then none.** `--install-helper` is the only elevated step and is
+4. **One prompt, then none.** `install-helper` is the only elevated step and is
    started by the engine (`ensure()`) on the first privileged action. It polls the
    pipe for 20 s and only reports success when the helper answers — "sc said Ok"
-   is not evidence. `--uninstall-helper` treats a missing service as done.
+   is not evidence. `uninstall-helper` treats a missing service as done. Both are
+   CLI subcommands, so the engine must not spell them as flags: `Cli` refuses
+   `--install-helper` with a usage error (exit 2) before the child logs anything,
+   which is exactly how the first shipped build failed silently. The two names
+   live in `privileged::INSTALL_COMMAND`/`UNINSTALL_COMMAND` and a test parses
+   them with the real CLI.
 5. **Refuse, do not half-apply.** A helper started without an elevated token
    answers the privileged ops with the reason; `--helper-console` exists to prove
    exactly that unelevated (`scripts\verify-helper.ps1`, `docs/PRIVILEGED-OPS.md`).

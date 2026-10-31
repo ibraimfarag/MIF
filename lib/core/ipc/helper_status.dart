@@ -84,8 +84,15 @@ class HelperStatusNotifier extends AsyncNotifier<HelperStatus> {
 
   /// Installs the helper: this is the one Windows prompt in the product. The
   /// engine launches the elevated step and waits for the pipe to answer.
+  ///
+  /// The call gets a longer deadline than the 120 s default on purpose: the
+  /// engine allows the elevated child 180 s (the user has to read and answer one
+  /// prompt), and a client that gave up first would report "timed out" while the
+  /// install was still running.
   Future<HelperStatus> install() async {
-    final res = await ref.read(engineIpcProvider).request('helper.install');
+    final res = await ref
+        .read(engineIpcProvider)
+        .request('helper.install', null, _privilegedTimeout);
     final status = HelperStatus.fromJson((res as Map).cast<String, dynamic>());
     if (ref.mounted) state = AsyncValue.data(status);
     return status;
@@ -93,9 +100,14 @@ class HelperStatusNotifier extends AsyncNotifier<HelperStatus> {
 
   /// Stops and deletes the service (needs one prompt as well).
   Future<HelperStatus> remove() async {
-    final res = await ref.read(engineIpcProvider).request('helper.uninstall');
+    final res = await ref
+        .read(engineIpcProvider)
+        .request('helper.uninstall', null, _privilegedTimeout);
     final status = HelperStatus.fromJson((res as Map).cast<String, dynamic>());
     if (ref.mounted) state = AsyncValue.data(status);
     return status;
   }
+
+  /// Longer than the engine's own 180 s install deadline, deliberately.
+  static const _privilegedTimeout = Duration(seconds: 240);
 }

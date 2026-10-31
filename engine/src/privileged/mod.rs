@@ -1,7 +1,7 @@
 //! The engine's side of D-007: talk to the privileged helper instead of asking
 //! Windows for a second UAC prompt.
 //!
-//! `MICSHelper` is installed once (`--install-helper`, one UAC prompt, launched
+//! `MICSHelper` is installed once (`install-helper`, one UAC prompt, launched
 //! from the UI or automatically the first time an admin operation is needed) and
 //! from then on the unelevated engine and UI can firewall, rewrite hosts and
 //! harden the machine with no prompt at all.
@@ -16,6 +16,18 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 
 pub use ops::{Op, SERVICE_NAME};
+
+/// The elevated step, as the CLI spells it: the **name of a subcommand**, not a
+/// flag. Calling it `--install-helper` (the obvious guess from the constant's
+/// own documentation) made clap refuse the argument and exit 2 before the child
+/// logged anything, so the UI could only say "the elevated step failed (exit
+/// code 2)" — and every privileged operation went through that same call.
+///
+/// `the_elevated_step_is_a_subcommand_the_cli_accepts` in `src/tests.rs` parses
+/// these two strings with the real CLI, so the spelling cannot drift again.
+pub const INSTALL_COMMAND: &str = "install-helper";
+pub const UNINSTALL_COMMAND: &str = "uninstall-helper";
+
 // Only the tests call the validators through this module path; production code
 // validates inside `ops` itself.
 #[cfg(test)]
@@ -124,14 +136,14 @@ pub fn install() -> Result<HelperStatus> {
     {
         return Ok(status());
     }
-    run_elevated_once("--install-helper")?;
+    run_elevated_once(INSTALL_COMMAND)?;
     wait_until_reachable()
 }
 
 /// Removes the service (one UAC prompt; the helper is the only thing that is
 /// ever asked to run elevated, so this is rare).
 pub fn uninstall() -> Result<HelperStatus> {
-    run_elevated_once("--uninstall-helper")?;
+    run_elevated_once(UNINSTALL_COMMAND)?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while Instant::now() < deadline {
         if server::probe().is_none() {

@@ -2,7 +2,7 @@
 //!
 //! The service definition is a one-line `sc create` pointing back at this same
 //! executable with `--helper-service`, so there is nothing extra to ship and an
-//! upgrade cannot leave an old helper behind: `--install-helper` rewrites the
+//! upgrade cannot leave an old helper behind: `install-helper` rewrites the
 //! definition with the current path.
 
 use anyhow::{bail, Context, Result};
@@ -143,7 +143,7 @@ pub fn query() -> HelperState {
 }
 
 /// Creates (or re-creates) the service and starts it. Must run elevated — it is
-/// the body of `--install-helper`, which the engine launches once with a UAC
+/// the body of `install-helper`, which the engine launches once with a UAC
 /// prompt on behalf of the user.
 pub fn install(exe: &Path) -> Result<HelperState> {
     if !crate::platform::windows::elevation::is_elevated() {
@@ -176,7 +176,7 @@ pub fn install(exe: &Path) -> Result<HelperState> {
     bail!("the helper service was created but never answered on its pipe");
 }
 
-/// Stops and deletes the service (elevated; body of `--uninstall-helper`).
+/// Stops and deletes the service (elevated; body of `uninstall-helper`).
 pub fn uninstall() -> Result<HelperState> {
     if !crate::platform::windows::elevation::is_elevated() {
         bail!("removing the privileged helper needs an elevated process");

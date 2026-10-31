@@ -106,7 +106,24 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
+    // Whatever the command decides is logged **and** returned: the engine runs
+    // detached with no console, so a message that only reached stderr was lost
+    // (that is how `install-helper` exited 2 with nothing in the log file, and
+    // why the UI could only report an exit code).
+    let code = match run().await {
+        Ok(()) => 0,
+        Err(e) => {
+            tracing::error!("{e:#}");
+            eprintln!("Error: {e:#}");
+            1
+        }
+    };
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    std::process::exit(code);
+}
+
+async fn run() -> Result<()> {
     // Logs go to stderr (so stdout stays clean for JSON consumers) and to a
     // rotating file: a detached service engine has no console, and support
     // needs to know what happened overnight.
@@ -123,7 +140,15 @@ async fn main() -> Result<()> {
     // before any subsystem reads them.
     let settings = settings::init();
 
-    let cli = Cli::parse();
+    // Parsed by hand so a refused command line is written to the log file too:
+    // `Cli::parse()` prints to a stderr this process may not have, and then the
+    // only trace of the failure is a bare exit code at the caller.
+    let cli = Cli::try_parse().unwrap_or_else(|e| {
+        if e.use_stderr() {
+            tracing::error!("command line refused: {e}");
+        }
+        e.exit()
+    });
 
     // One line per process start: the service engine is detached, so this is
     // how support tells "did it even start?" apart from "did it crash later?".

@@ -366,6 +366,38 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The elevated install called a flag the CLI does not have (P1.5, first fix)**
+  - Pressing **Settings → Engine → Install helper** only produced an error. The
+    engine's `privileged::install()` launched `run_elevated(&exe, ["--install-helper"])`,
+    but the CLI defines `install-helper` as a **subcommand**: clap answered
+    `error: unexpected argument '--install-helper' found` and exited **2** before the
+    child reached its first log line. Reproduced against the shipped exe:
+    `--install-helper` → exit 2; `install-helper` → starts, logs
+    `mode=install-helper`, and refuses cleanly when unelevated. The same call is the
+    one every privileged operation goes through (`privileged::ensure()`), so
+    firewall, hosts and hardening were all dead in D-007's build — while
+    `scripts\verify-helper.ps1` stayed green, because it exercises the helper
+    *console* path and never this argument. **This is the "still unproven" line in
+    D-007's own entry.**
+  - Fixed by naming the two commands once (`privileged::INSTALL_COMMAND` /
+    `UNINSTALL_COMMAND`, no dashes) and by two tests that parse exactly those strings
+    with the real CLI: one requires them to be accepted, the other requires the flag
+    spelling to be refused as an unknown argument, so the two cannot drift apart
+    again.
+  - Second hole, same bug: the elevated child's stderr goes to a console the engine
+    hides (`SW_HIDE`), so **nothing at all** was written to
+    `%LOCALAPPDATA%\MICS\logs\engine.log` and the UI could only show "the elevated
+    step failed (exit code 2)". `main()` now logs whatever a command decided, and a
+    refused command line goes through `Cli::try_parse()` and is logged before clap
+    exits; exit codes are unchanged.
+  - Third: the UI asked for the install with the client's 120 s default while the
+    engine allows the child 180 s to let the user read one prompt; the two helper
+    calls now pass 240 s explicitly.
+  - Evidence in this commit: `cargo test` 78/78 (76 + the two new), the four checks
+    green, and the release rebuilt and signed. The end-to-end install with a real
+    UAC click is what §0.2 item 1 still asks for; its result gets recorded here when
+    it runs.
+
 - **What is inside the package is written down, generated and checked (ب1a)**
   - The register had a HIGH row for "no SBOM and no third-party notices", so
     `tool\sbom.dart` now builds both from what is already pinned: `sbom.cdx.json`
@@ -1991,6 +2023,19 @@ settings and read environment variables only.
     `exitCode` and prints a `RESULT: PASS/FAIL` line, like the PowerShell probes).
     Check a new Dart tool with `& dart run tool\x.dart; "exit=$LASTEXITCODE"` after
     making it fail on purpose, never by reading its output alone.
+19. **A CLI subcommand is not a flag, and a hidden child's error goes nowhere.**
+    `mics-engine install-helper` works; `mics-engine --install-helper` is a clap
+    usage error that exits **2** *before* the process writes its startup line — and
+    since the engine launches it with `SW_HIDE`, stderr reaches no file and the only
+    symptom at the caller is "the elevated step failed (exit code 2)". That was
+    P1.5's install button, dead for a day while `verify-helper.ps1` stayed green (it
+    tests the helper console path, not the argument). Two rules came out of it: keep
+    the elevated step's name in one constant and have a test parse it with the real
+    CLI, and log the reason for a non-zero exit (`main()` now does) instead of
+    trusting stderr. Diagnosing any "the engine did nothing" case: read
+    `%LOCALAPPDATA%\MICS\logs\engine.log` (**not** `%PROGRAMDATA%` — `resolve_base_dir`
+    picks the per-user dir when the machine-wide one is not writable, and records the
+    choice in `%LOCALAPPDATA%\MICS\.data-dir`).
 
 ---
 

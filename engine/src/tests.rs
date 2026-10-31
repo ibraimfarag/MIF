@@ -6,6 +6,45 @@ mod tests {
     use crate::scanner::triage_score;
     use std::path::Path;
 
+    /// The one elevated step is launched as a CLI **subcommand**; the flag
+    /// spelling (`--install-helper`) is a clap usage error that exits 2 before
+    /// the child can log anything, so the UI could only report an exit code and
+    /// every privileged operation failed on it. Parsing the same strings with
+    /// the real CLI is what keeps the two from drifting apart again.
+    #[test]
+    fn the_elevated_step_is_a_subcommand_the_cli_accepts() {
+        use clap::Parser;
+        for command in [
+            crate::privileged::INSTALL_COMMAND,
+            crate::privileged::UNINSTALL_COMMAND,
+        ] {
+            crate::Cli::try_parse_from(["mics-engine", command]).unwrap_or_else(|e| {
+                panic!("{command} is not a command the CLI accepts: {e}")
+            });
+        }
+    }
+
+    /// A refused command line must not be silent: the spelling above was wrong
+    /// for a day and the only trace was `exit code 2` at the caller.
+    #[test]
+    fn the_flag_spelling_of_the_elevated_step_is_refused() {
+        use clap::Parser;
+        for flag in [
+            format!("--{}", crate::privileged::INSTALL_COMMAND),
+            format!("--{}", crate::privileged::UNINSTALL_COMMAND),
+        ] {
+            let err = match crate::Cli::try_parse_from(["mics-engine", flag.as_str()]) {
+                Ok(_) => panic!("{flag} was accepted — the CLI spells it without dashes"),
+                Err(e) => e,
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{flag}: expected a usage error, got {err}"
+            );
+        }
+    }
+
     #[test]
     fn formats_ipv4_and_port() {
         // Windows stores the address bytes in network order, which the
