@@ -794,3 +794,60 @@ which is what keeps the table in `docs\TODO.md` §0.0 honest.
 resources, the icon/shortcut scripts, the AUMID script, the §0.0 naming table and
 the README's naming section — in one commit, because a half-renamed product is
 exactly what those probes exist to catch.
+
+---
+
+## D-021 — The shipped binaries are hardened, and the PE is what proves it
+
+**Status:** decided (2026-10-31); implemented in the release build.
+
+**Decision.** One release recipe, four parts, every one of them read back out of
+the artifact rather than taken from the flags:
+
+1. **The engine is built for shipping, not for debugging.** `[profile.release]`
+   in `engine\Cargo.toml` sets `lto = "fat"`, `codegen-units = 1`,
+   `panic = "abort"` and `strip = "symbols"`.
+2. **Control Flow Guard is on in both binaries.** The engine asks rustc for it
+   (`-C control-flow-guard=yes` in `engine\.cargo\config.toml`, which passes
+   `/guard:cf` to the compiler *and* the linker); the app asks for it in
+   `windows\runner\CMakeLists.txt`. Setting it at link time only produces an
+   empty function table, which is why both sides do it.
+3. **The Dart release is obfuscated** (`--obfuscate --split-debug-info`), and the
+   symbol table is written to `dist\symbols\<version>` — outside the package and
+   outside git.
+4. **Neither claim is trusted.** `scripts\verify-hardening.ps1` parses the PE
+   (`DllCharacteristics`, the load-config `GuardFlags`, the debug directory) and
+   `make-release.ps1` refuses to package anything that fails it, so "we set
+   `/guard:cf`" can never quietly stop being "the file has a guard table".
+
+**Why.** These are the mitigations that cost nothing at runtime for a program
+that already does its own bounds checking, and they decide whether a memory-safety
+bug in a dependency is a crash or a control-flow hijack. `DllCharacteristics`
+already carried `ASLR`/`DEP`/`HIGH_ENTROPY_VA` before this decision (measured, not
+assumed), but **Control Flow Guard was not actually on**: the shipped
+`mics_app.exe` and `mics-engine.exe` reported `GUARD_CF` absent and
+`CF_FUNCTION_TABLE_PRESENT` absent, so indirect calls were unguarded. Stripping
+also removes the PDB path and the source layout from the artifact, and LTO with
+one codegen unit removes the split-object seams a patch would aim at. Obfuscation
+is a speed bump, not a secret: it raises the cost of reading the Dart logic
+without hiding it from the auditors this project invites (F-11 in
+`docs\THREAT-MODEL.md` says the same thing about the whole surface).
+
+**What is deliberately not claimed.**
+* **`/guard:ehcont`** — `link.exe` refuses it (`LNK2047`) unless every object
+  carries EH continuation metadata, and `libstd` is not built with it;
+  `/force:guardehcont` would ship an incomplete table, so no EH-continuation
+  guarantee is made on x64.
+* **`/CETCOMPAT`** — the shadow-stack marker cannot be verified on this machine
+  (running a process under a shadow stack needs elevation and CET hardware that
+  is not available here), and a mitigation nobody measured is what this project
+  does not ship. It can arrive when a machine can prove it.
+* **`/DYNAMICBASE`, `/NXCOMPAT`, `/HIGHENTROPYVA`** — already the default of both
+  toolchains; they are *checked*, not added.
+
+**Commits us to.** Any binary that ships must pass `verify-hardening.ps1`, and a
+Dart symbol table never enters the ZIP, a commit or the README. The crash-forensics
+cost is accepted and named: the engine has no unwinder (a panicking task now ends
+the process), and a stack trace needs the `dist\symbols\<version>` file that only
+the build machine has. A future "crash report" feature would have to ship a
+symbol upload, which would be a new decision, not a quiet un-stripping.

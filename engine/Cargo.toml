@@ -9,6 +9,20 @@ edition = "2024"
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
+# Release hardening (ج1, D-021). The shipped engine is one binary, so this trades
+# build time and crash forensics for the attacker's cost:
+#   * LTO + one codegen unit removes the split-object seams and the cross-crate
+#     boundaries a patch or a gadget chain would be aimed at, and shrinks the file;
+#   * strip means the artifact carries no symbols and no PDB path (no source tree
+#     layout, no function names);
+#   * panic = "abort" removes the unwinder and every landing pad with it.
+# The honest cost: a panicking task now ends the process instead of that one task.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

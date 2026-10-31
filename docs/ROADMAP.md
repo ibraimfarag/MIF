@@ -13,15 +13,15 @@ stated where it is real.
 
 ## Where we are
 
-`main`, 2026-10-31. The last commit that touched code is `512b2a6` (only
-documentation came after it, so its measurements still describe the tree).
-Everything that needed neither elevation nor money is
+`main`, 2026-10-31. Everything that needed neither elevation nor money is
 implemented **and** measured: the eight small steps of §0.5 are closed (dead
 VirusTotal client deleted, names frozen, both contrast modes audited at 29 of 29
 pairs, four light-theme renders, icon set verified, `PROTECTION-MATRIX.md` given
-the product's layer numbers, the two cheap register rows written up). The four
-checks were green on that commit: `cargo test` 82, `clippy -D warnings` clean,
-`flutter analyze` no issues, `flutter test` 72.
+the product's layer numbers, the two cheap register rows written up), and **the
+release is hardened** (ج1, D-021): Control Flow Guard on both binaries — which was
+*not* on before, measured from the PE — the engine LTO'd and stripped
+(35.7 → 24.0 MB), the Dart snapshot obfuscated, and `scripts\verify-hardening.ps1`
+gating the release on what the file says rather than on the build flags.
 
 What is left is **release engineering, integrity, QA, and the two things that need
 a human** (one UAC-acceptance session and a signing certificate).
@@ -31,7 +31,7 @@ a human** (one UAC-acceptance session and a signing certificate).
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
 | **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + local signing work | 🔴 **HIGH** (the register's only HIGH row: "no installer") | 8–16 h | certificate + release hosting: **you**; the rest: nothing |
-| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — threat model and protection matrix exist | 🟠 MED | 6–10 h | nothing |
+| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — build hardening landed (ج1, D-021); threat model and protection matrix exist | 🟠 MED | 4–7 h | nothing |
 | **د — P6 QA** | `qa/` harness over every JSON-RPC method, per-screen widget tests, E2E on the built artifact, report + CI gate | **not started** — `tool/` has two smoke probes, no harness | 🟠 MED (largest block of work) | 13–21 h | E2E after ب3; the rest: nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **19 open rows** (2 HIGH, 5 MED, 12 LOW) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
@@ -43,7 +43,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 
 | ID | Task | Priority | Est. | Notes / first commit |
 |---|---|--:|--:|---|
-| **ج1** | **Build hardening**: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info` | 🟠 | 2–3 h | Do **before** ب3 so the installer packs hardened binaries. One commit. |
+| ~~**ج1**~~ | ~~**Build hardening**: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info`~~ — **done** (D-021): CFG on both binaries (measured from the PE, and it was absent before), engine 35.7 → 24.0 MB, obfuscated Dart with symbols kept out of the package, and `verify-hardening.ps1` gating the release | ✅ | 2–3 h | Landed 2026-10-31; the installer now packs hardened binaries. |
 | **ب3** | **NSIS installer**: engine + `rules` + offline intel, shortcuts, AUMID, one UAC, uninstaller, upgrade path, `scripts\verify-installer.ps1` | 🔴 | 5–8 h | The highest-value step left. Plan 3 commits: script → uninstaller/upgrade → verifier. |
 | **ب4** | Fold the privileged-helper install into the installer (removes the separate UAC step) | 🟠 | 1–2 h | After ب3. |
 | **ج2** | **Signed SHA-256 manifest** of shipped files + startup self-check + "unofficial build" banner | 🟠 | 3–5 h | Closes F-11; reuses the local self-signed certificate. 2 commits. |
@@ -62,9 +62,10 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 
 ## 3. The order to work in
 
-1. **ج1 build hardening** — everything after it packages a binary, so make the binary
-   hardened first.
-2. **ب3 installer** (3 commits) — turns the project from a ZIP into a product.
+1. ~~**ج1 build hardening**~~ — **done** (D-021): the binaries are hardened before
+   anything packages them.
+2. **ب3 installer** (3 commits) — turns the project from a ZIP into a product and now
+   packs hardened binaries.
 3. **ب4 helper fold-in** — removes the extra UAC step.
 4. **ج2 signed manifest + self-check** — completes the integrity story on top of ب3's
    file list.

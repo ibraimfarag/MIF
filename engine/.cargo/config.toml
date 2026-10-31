@@ -1,0 +1,18 @@
+# Build flags that apply to the engine on Windows x64 (ج1, D-021).
+#
+# Control Flow Guard is a linker feature, but it only produces a function table
+# when the objects are instrumented too, so it is requested from the compiler:
+# rustc passes /guard:cf to both cl.exe and link.exe. `verify-hardening.ps1`
+# reads the result back out of the PE (DllCharacteristics GUARD_CF and the
+# load-config GuardFlags), because "we set the flag" and "the binary has the
+# table" are different claims.
+#
+# Deliberately not here:
+#   * /guard:ehcont - link.exe refuses it (LNK2047) unless every object carries
+#     EH continuation metadata, and libstd is not built with it; /force:guardehcont
+#     would ship an incomplete table, which is worse than not claiming one.
+#   * /CETCOMPAT - the shadow-stack marker cannot be verified on this machine
+#     (no way to run the process under a shadow stack without elevation), and a
+#     promise nobody measured is exactly what this project does not ship.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "control-flow-guard=yes"]

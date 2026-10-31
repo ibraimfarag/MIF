@@ -240,7 +240,7 @@ product trusts the label.
 | F-8 | No self-defense: same-token code can kill the engine, replace binaries, edit `rules\`, or point the engine at another data dir through its environment | Stopping a same-token attacker requires kernel callbacks or a second service — A-9 territory | Run the engine under a watchdog service and verify the package's signature before loading rules |
 | F-9 | No memory scanning, no unpacking/emulation, no AMSI, no pre-execution blocking (no minifilter) | Usermode-only and driver-free is a product decision (no driver install, no BSOD risk) | Documented in `PROTECTION-MATRIX.md`; the guard's behaviour rules are the compensating control |
 | F-10 | A local admin can turn everything off and delete the evidence | Unavoidable without kernel enforcement | Ship the audit trail to a location the admin cannot reach (a real solution is an external log sink — out of scope) |
-| F-11 | **The binaries are neither obfuscated nor covered by an integrity manifest**: strings, symbols and the Dart/Rust structure are readable, and a repackaged `mics_app.exe`/`mics-engine.exe` cannot be distinguished from the published one *by the app itself* | Obfuscation would not stop a determined reverse engineer and would hide the code from exactly the auditors this project wants looking at it. What matters is protected independently of the binaries: the pipe ACL (F-1) and the update payload's embedded signature (F-3, D-016). A copy the user runs themselves is a copy they chose to trust | P5 (ج1–ج3): ship a **signed integrity manifest** plus a start-up self-check banner that says out loud when the files do not match it, and a reproducible-build note so a third party can rebuild and compare |
+| F-11 | **A repackaged `mics_app.exe`/`mics-engine.exe` cannot be told apart from the published one *by the app itself***. The symbol gap this row used to describe is closed (ج1, D-021): both binaries are Control-Flow-Guard instrumented, LTO'd with one codegen unit, stripped of symbols and PDB paths, and the Dart release is obfuscated — so the shipped artifact no longer names its own classes and functions. What remains is that nothing on the user's disk says "these bytes are the ones that were published" | Obfuscation does not stop a determined reverse engineer and would hide the code from exactly the auditors this project wants looking at it — which is why it is a speed bump here and not a security claim. Repackaging is answered independently of the binaries: the pipe ACL (F-1), the update payload's embedded signature (F-3, D-016), and the fact that a copy the user runs is a copy they chose to trust | P5 **ج2** (still open): ship a **signed integrity manifest** plus a start-up self-check banner that says out loud when the files do not match it, and a reproducible-build note so a third party can rebuild and compare |
 
 **Closed since this document was written.** F-1: the engine pipe now carries an
 explicit, protected ACL naming the engine's user, `SYSTEM` and administrators. Two
@@ -265,6 +265,12 @@ extracted payload must carry an embedded signature Windows trusts before a singl
 byte is copied over the running install (D-016), and the signer's name must be
 `MI CS Code Signing` — a valid signature from another certificate is refused. What
 F-3 still carries is the pin's *precision*: subject name, not thumbprint.
+**F-11's symbol half**: the shipped binaries are Control-Flow-Guard instrumented
+(measured from the PE — `GUARD_CF` plus a real guard function table, which was
+absent before ج1), the engine is LTO'd, `panic=abort` and stripped, and the Dart
+snapshot is obfuscated with its symbol table kept out of the package (D-021).
+What F-11 still carries is repackaging: nothing on disk tells the app its own
+bytes are the published ones.
 
 ## 7. What is proven, and how
 

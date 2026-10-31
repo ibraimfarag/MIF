@@ -20,6 +20,17 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# Control Flow Guard for the app's own code (ج1, D-021): the compiler instruments
+# every indirect call, the linker emits the guard function table and sets the
+# GUARD_CF bit Windows reads. Release and Profile only - a Debug build is never
+# shipped, and CFG only makes it slower to step through.
+#
+# The engine gets the same treatment from `engine\.cargo\config.toml`; neither
+# build system is trusted to have done it, which is why
+# `scripts\verify-hardening.ps1` parses both PEs back out at release time.
+target_compile_options(${BINARY_NAME} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:/guard:cf>")
+target_link_options(${BINARY_NAME} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:/guard:cf>")
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")

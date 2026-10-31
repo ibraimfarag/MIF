@@ -16,7 +16,10 @@
     4. the extracted engine puts a real card on the desktop (`verify-toast.ps1`);
     5. the extracted engine loads its rules **from the package**, not from the
        compiled-in fallback - the engine logs which file it used, and a package
-       that falls back is an incomplete package.
+       that falls back is an incomplete package;
+    6. both binaries are hardened the way the release claims (`verify-hardening.ps1`:
+       CFG, ASLR/DEP, stripped) and the Dart snapshot is really obfuscated, with
+       no symbol table inside the package.
 
   Everything runs from a temp folder, so this also exercises the release copy from
   a normal-integrity location. No elevation anywhere.
@@ -244,6 +247,30 @@ try {
   $versionFile = Join-Path $work "VERSION"
   if (Test-Path $versionFile) { Pass "VERSION: $((Get-Content $versionFile -TotalCount 1))" }
   else { Fail "the zip has no VERSION file" }
+
+  Write-Output "6) hardening of the packaged binaries"
+  $hardOut = Join-Path $env:TEMP "rel-hardening.out"
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $work > $hardOut 2>&1
+  $hardExit = $LASTEXITCODE
+  Get-Content $hardOut | Where-Object { $_ -match "RESULT|^  - " } | ForEach-Object { "  $_" }
+  Remove-Item $hardOut -ErrorAction SilentlyContinue
+  if ($hardExit -eq 0) { Pass "both MI CS binaries are CFG-instrumented, ASLR/DEP-marked and stripped" }
+  else { Fail "verify-hardening.ps1 failed on the packaged binaries (exit $hardExit)" }
+
+  # Obfuscation is proved by the artifact, not by the command line that made it:
+  # the AOT snapshot must no longer carry the Dart class names the sources use.
+  $appSo = Join-Path $work "data\app.so"
+  if (Test-Path $appSo) {
+    $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($appSo))
+    $leaked = @("SettingsNotifier", "AuditFinding", "GuardScreen") | Where-Object { $text.Contains($_) }
+    if ($leaked.Count -eq 0) { Pass "data\app.so carries none of the Dart class names (obfuscated)" }
+    else { Fail "data\app.so still carries $($leaked -join ', ') - the app was not obfuscated" }
+  } else {
+    Fail "the package has no data\app.so"
+  }
+  $symbolFiles = @(Get-ChildItem $work -Recurse -Filter "*.symbols" -ErrorAction SilentlyContinue)
+  if ($symbolFiles.Count -eq 0) { Pass "no Dart symbol table in the package" }
+  else { Fail "the package ships a symbol table: $($symbolFiles[0].FullName.Substring($work.Length + 1))" }
 } finally {
   Get-Process mics-engine -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -like "$work*" } | Stop-Process -Force -ErrorAction SilentlyContinue

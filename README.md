@@ -78,13 +78,14 @@ Honesty is a feature. Today, MI CS does **not**:
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
-- pretend the shipped build is **obfuscated or self-verifying**: it is neither. The
-  code is not obfuscated on purpose (symbols, strings and the Dart/Rust structure stay
-  readable, because the project asks to be auditable), and there is no
-  **integrity manifest**, so a repackaged copy cannot be told from ours *by the app
-  itself* — only updates are verified, by the embedded signature above. A signed
-  manifest plus a start-up self-check banner is planned (P5, `docs/THREAT-MODEL.md`
-  F-11);
+- pretend the shipped build is **self-verifying**. It *is* hardened now: both
+  binaries carry **Control Flow Guard**, ASLR/DEP/high-entropy VA and no symbols
+  or PDB paths, and the Dart snapshot ships obfuscated (D-021) — all of it read
+  back out of the PE by `scripts\verify-hardening.ps1`, which the release refuses
+  to skip. But there is still no **integrity manifest**, so a repackaged copy
+  cannot be told from ours *by the app itself* — only updates are verified, by the
+  embedded signature above. A signed manifest plus a start-up self-check banner is
+  planned (P5, `docs/THREAT-MODEL.md` F-11);
 - claim **idle CPU below the 1 % budget**: the guard loop costs **0.156 % of one
   core = 0.0028 % of a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on
   versus `MICS_NO_GUARD=1`), so the budget holds whether it is read per core or per
@@ -318,6 +319,9 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-helper.ps1
 
 # The published archive: hashes, completeness, and the extracted copy running
 powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1
+
+# The binaries really are hardened (reads the PE: CFG, ASLR/DEP, stripped)
+powershell -ExecutionPolicy Bypass -File scripts\verify-hardening.ps1 -Path dist\MICS-portable
 ```
 
 Test hooks exist so an isolated engine can be run without touching production
@@ -479,6 +483,10 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 التحديثات بتتحقق بـ SHA-256 بس (من غير توقيع رقمي)؛ ملفات التنفيذ **غير موقّعة**
 فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة اللي بتثبّت خدمة المساعدة لسه
 محتاجة تتجرّب بإيدك (الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم).
+والنسخة **مش بتتحقق من نفسها**: مفيش بيان سلامة موقّع (integrity manifest)، فأي حد
+يعيد تغليف البرنامج مش هيتكشف من جوه التطبيق — اللي اتعمل إن الملفين بقى عليهم
+Control Flow Guard وASLR/DEP وبدون symbols، وكود Dart متعمّى (obfuscated)، و
+`scripts\verify-hardening.ps1` بيقيس ده من الـ PE وبيوقف النشر لو ناقص.
 
 **المتطلبات:** ويندوز 10 (21H2+) أو 11، 64-bit. معالج 4 أنوية و8 جيجا رام
 (المحرك بيستهلك ~11 ميجا في الخمول) وحوالي 150 ميجا مساحة. التطبيق بيفتح

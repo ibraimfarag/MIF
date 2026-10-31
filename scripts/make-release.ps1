@@ -14,11 +14,19 @@
        hot-reloaded from there, and a package without them silently falls back to
        the compiled-in starter pack;
     4. refuses to continue if any required file is missing, so a half-built folder
-       is never published;
-    5. writes `VERSION` (version, build time, engine hash, rule count);
+       is never published - and refuses an app that was not built obfuscated or
+       binaries whose PE is not hardened (`verify-hardening.ps1`, g1/D-021);
+    5. writes `VERSION` (version, build time, engine hash, rule count, what was
+       hardened);
     6. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
     7. writes `dist\SHA256SUMS` for the zip, the engine, the app, the rules and the
        inventory.
+
+  The Dart symbol table produced by `--obfuscate` goes to
+  `dist\symbols\<version>\` and is never part of the package: it maps `app.so`
+  back to the source. `dist\MICS-portable` is swapped in after the zip is written,
+  by renaming the old folder aside rather than deleting it in place, so a copy
+  someone is running is left whole instead of half-deleted.
 
   Nothing here needs elevation.
 
@@ -54,6 +62,10 @@ if (-not $Version) {
   if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { $Version = $Matches[1] }
   else { throw "cannot read the version from engine\Cargo.toml - pass -Version" }
 }
+
+# Where the Dart symbol table for this version lives - outside the package, see
+# the obfuscation note where the app is built.
+$symbolsDir = Join-Path $root "dist\symbols\$Version"
 
 # The third-party inventory (sbom.cdx.json, THIRD-PARTY-NOTICES) is generated from
 # the lockfiles and committed with them, so the package can never describe a
@@ -128,9 +140,15 @@ if (-not $SkipBuild) {
   }
 
   Write-Host "building the app ($Configuration)..."
+  # Dart obfuscation (g1, D-021): the Release AOT snapshot ships with its symbol
+  # names replaced, and the symbol table that makes a stack trace readable is
+  # written *outside* the package (`dist\symbols\<version>`), because it maps the
+  # binary back to the source and is the one artifact that must never be
+  # published. The engine is Rust and is stripped by its own release profile.
+  New-Item -ItemType Directory -Force -Path $symbolsDir | Out-Null
   Push-Location $root
   try {
-    & flutter build windows --release
+    & flutter build windows --release --obfuscate "--split-debug-info=$symbolsDir"
     if ($LASTEXITCODE -ne 0) { throw "flutter build windows failed ($LASTEXITCODE)" }
   } finally { Pop-Location }
 
@@ -208,6 +226,35 @@ if ($missing.Count -gt 0) {
   exit 1
 }
 
+# The app has to be obfuscated, and Flutter writes that symbol table only for the
+# build it just made. A `-SkipBuild` run with no symbols for this version is a
+# package assembled from some other build, and shipping it would mean publishing a
+# readable app.so as a release.
+$symbols = @(Get-ChildItem $symbolsDir -Filter "*.symbols" -ErrorAction SilentlyContinue)
+if ($symbols.Count -eq 0) {
+  Write-Output "RESULT: FAIL - no Dart symbol table under $symbolsDir"
+  Write-Output "  the app was not built with --obfuscate; run this script without -SkipBuild"
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  exit 1
+}
+
+# The build flags are a claim; the PE is the fact. An unhardened binary is not
+# packaged at all, the same way an incomplete one is not.
+Write-Host "checking the staged binaries are hardened..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $staging
+  $hardeningExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($hardeningExit -ne 0) {
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output "RESULT: FAIL - the staged binaries are not hardened; nothing was published"
+  exit 1
+}
+
 if ($Sign -or $PfxPath) {
   Write-Host "signing the staged binaries..."
   $signArgs = @()
@@ -253,7 +300,8 @@ $versionFile = Join-Path $staging "VERSION"
   "built   $built",
   "engine  $engineHash",
   "app     $appHash",
-  "rules   $ruleCount file(s) hot-reloaded from rules\"
+  "rules   $ruleCount file(s) hot-reloaded from rules\",
+  "hardened CFG + ASLR/DEP, engine LTO and stripped, app obfuscated (symbols not shipped)"
 ) | Set-Content -Path $versionFile -Encoding ASCII
 
 $zip = Join-Path $root ("dist\MICS-portable-$Version-x64.zip")
@@ -274,22 +322,44 @@ $lines += "$((Get-FileHash (Join-Path $staging "sbom.cdx.json") -Algorithm SHA25
 $lines += "$((Get-FileHash (Join-Path $staging "THIRD-PARTY-NOTICES") -Algorithm SHA256).Hash.ToLower())  MICS-portable/THIRD-PARTY-NOTICES"
 $lines | Set-Content -Path $sums -Encoding ASCII
 
-# Swap the staging build into place - unless someone is running MI CS from that
-# folder right now, in which case leave their copy exactly as it is. The zip is
-# already complete either way.
+# Swap the staging build into place. Never delete the live folder in place: a DLL
+# that a running MI CS has mapped makes Remove-Item fail *halfway* - it deletes
+# what is not loaded and refuses what is - which is how a release once left a
+# gutted folder behind. Move the old folder aside first, put the new one in place,
+# and only then try to delete the leftover, so a locked folder is left whole.
 $prefix = $portable.TrimEnd('\') + '\'
 $users = @(Get-Process -ErrorAction SilentlyContinue |
   Where-Object { $_.Path -and $_.Path.StartsWith($prefix, 'OrdinalIgnoreCase') } |
   ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
-if ($users.Count -eq 0) {
-  if (Test-Path $portable) { Remove-Item $portable -Recurse -Force }
+$aside = $null
+$asideProblem = $null
+$swapped = $true
+if (Test-Path $portable) {
+  $aside = Join-Path $root ("dist\MICS-portable.old-" + (Get-Date).ToString("yyyyMMdd-HHmmss"))
+  try {
+    Rename-Item $portable $aside -ErrorAction Stop
+  } catch {
+    $swapped = $false
+    $aside = $null
+    $asideProblem = $_.Exception.Message
+  }
+}
+if ($swapped) {
   Rename-Item $staging $portable
   $sizeMb = (Get-ChildItem $portable -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
   $fileCount = (Get-ChildItem $portable -Recurse -File).Count
   Write-Output ("  folder : {0}  (refreshed, {1:N1} MB, {2} file(s))" -f $portable, $sizeMb, $fileCount)
+  if ($aside -and (Test-Path $aside)) {
+    try { Remove-Item $aside -Recurse -Force -ErrorAction Stop }
+    catch {
+      Write-Output ("           whatever is left of the previous copy stays at {0}" -f $aside)
+    }
+  }
 } else {
-  Write-Output ("  folder : left as it is - {0} is running from it" -f ($users -join ", "))
-  Write-Output "           close MI CS and run this again to refresh the unpacked folder"
+  Write-Output ("  folder : left as it is - the previous copy could not be moved aside: {0}" -f $asideProblem)
+  if ($users.Count -gt 0) { Write-Output ("           running from it: {0}" -f ($users -join ", ")) }
+  Write-Output "           close MI CS (and anything else using that folder) and run this again"
+  Write-Output "           the zip above is complete either way and is what gets published"
   Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -298,6 +368,8 @@ Write-Output ("  zip    : {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1
 Write-Output ("  sums   : {0}" -f $sums)
 Write-Output ("  engine : {0}" -f $engineHash)
 Write-Output "  rules  : $ruleCount file(s)"
+Write-Output "  hardened: CFG + ASLR/DEP + stripped (checked from the PE, not the flags)"
+Write-Output ("  symbols: {0}  (kept out of the package on purpose)" -f $symbolsDir)
 Write-Output "  engine name: $engineName"
 if ($signature -eq "Valid") {
   Write-Output "  signed : $signature - $signer"

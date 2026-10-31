@@ -44,14 +44,16 @@
 > CycloneDX 1.6 `sbom.cdx.json` + `THIRD-PARTY-NOTICES` from the lockfiles (579
 > components, 8 licenses, 0 copyleft, 0 unclassified, every text present), the pair
 > is committed, shipped in the ZIP and freshness-checked before every release
-> (ب1a, D-018) ·
-> **next: the small steps in §0.5 — `docs\COST.md` (ب1b) is done and the helper's
-> install bug is fixed in `dab81d5` — then install the helper
-> once (one UAC prompt) whenever a human is at the machine, then the medium steps,
-> then the NSIS installer — which folds the AUMID in — and
-> the P6 QA harness**; the cheap wins
-> below need neither elevation nor money, then P4, P5, P6. README is written;
-> the app runs unelevated and was verified end-to-end on a real machine.
+> (ب1a, D-018) and **the release binaries are hardened with the PE to prove it**
+> (ج1, D-021: Control Flow Guard on both binaries, LTO + `panic=abort` + stripped
+> engine, obfuscated Dart snapshot whose symbols never enter the package, and
+> `scripts\verify-hardening.ps1` gates the release on what the file says rather than
+> on the flags) ·
+> **next: the NSIS installer (ب3), which is the register's only HIGH row**; the
+> helper acceptance in §0.2 item 1 (one UAC prompt) and a signing certificate are
+> the two things that still need you, and the P6 QA harness follows the installer.
+> README is written; the app runs unelevated and was verified end-to-end on a real
+> machine.
 >
 > **New session? Read §0 "Resume here" first** — current state, the next
 > ordered steps, what is blocked on a human, and the environment must-knows.
@@ -103,7 +105,11 @@ UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
 also refuses to serve from a Low-integrity folder and names the cause (trap 21).
 Both themes are **measured** now (29 of 29 contrast pairs each, asserted in
 `test/{light,dark}_contrast_audit_test.dart`), and the README carries four
-light-theme renders that regenerate from the UI itself. The names and icons are
+light-theme renders that regenerate from the UI itself. The release is **hardened
+and the PE proves it**: Control Flow Guard on both binaries (it was absent before
+ج1), the engine LTO'd and stripped (35.7 → 24.0 MB), the Dart snapshot obfuscated
+with its symbol table kept out of the package, and `make-release.ps1` refuses an
+unhardened or unobfuscated build (D-021). The names and icons are
 settled and a probe now fails the release if they drift:
 
 | Surface | Name |
@@ -227,7 +233,7 @@ order the user picked (small → medium → large), and it is finished**
 
 | Step | What | Needs you |
 |---|---|---|
-| **ج1** | Build hardening: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info` | no |
+| ~~**ج1**~~ | ~~Build hardening~~ — **done**: Control Flow Guard on both binaries (read back from the PE: `GUARD_CF` + a real guard function table), the engine built with `lto="fat"`/`codegen-units=1`/`panic=abort`/`strip=symbols` (**35.7 → 24.0 MB**), the Dart release obfuscated with its symbol table kept out of the package, and a release gate that refuses an unhardened or unobfuscated build (D-021) | measured 2026-10-31 |
 | **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner | no |
 | **ج3** | Deliberate README rewrite ("what it does / does not do") once the above is real | no |
 
@@ -272,6 +278,12 @@ prompt was answered on 2026-10-31 (the service is installed, running and reachab
 - **Proof is textual, never visual**: engine logs, Windows' own toast history
   (`scripts\verify-toast.ps1 -HistoryOnly`), `Get-AuthenticodeSignature`,
   `VersionInfo.FileDescription`, the Shell API, `verify-*.ps1` `RESULT:` lines.
+- **The release is hardened and the script enforces it** (ج1, D-021): the first
+  `make-release.ps1` after a clean target dir spends **~12 minutes** in the engine's
+  fat-LTO codegen (cached afterwards), and it refuses to package an app that was not
+  built with `--obfuscate` or a binary that fails `scripts\verify-hardening.ps1`.
+  The Dart symbol table lands in `dist\symbols\<version>\` — gitignored, never in
+  the ZIP, and the only thing that can symbolicate a crash.
 - **PowerShell 5.1 traps** (§8): native stderr + `$ErrorActionPreference = "Stop"`
   turns progress output into a terminating error; `Copy-Item -Recurse` nests;
   never delete the live package folder; UTF-8 must be written with
@@ -309,8 +321,8 @@ what "next" means.
 **Medium — a subsystem or a build leg**
 
 - **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
-- **ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
-  `--obfuscate --split-debug-info`)
+- ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
+  `--obfuscate --split-debug-info`)~~ — **done** (D-021), with the numbers in §0.3
 - **ج2** signed manifest + startup self-check + "unofficial build" banner
 - **ب4** the helper install folded into the installer (removes the UAC step)
 - **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
@@ -400,8 +412,9 @@ not implemented yet, see D-008).
 | `scripts\verify-pipe-acl.ps1` | Both pipe ACLs are what `docs/THREAT-MODEL.md` says: reads each live DACL back with `GetSecurityInfo` (engine pipe protected to the owner/SYSTEM/Administrators, helper pipe `INTERACTIVE`), and drives a real JSON-RPC `status` call over the hardened engine pipe so the ACL cannot pass by locking the UI's own user out. Isolated pipe names + data dir, so a running MI CS is untouched |
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
 | `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
-| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app + `sbom.cdx.json` + `THIRD-PARTY-NOTICES`), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder, and refuses to start when the committed inventory no longer describes the lockfiles |
-| `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, and the **extracted** copy answers the helper protocol, puts a real card on the desktop, and loads its own `rules\guard` + `rules\yara` rather than the built-in fallback |
+| `scripts\verify-hardening.ps1` | The binaries are hardened as claimed, read out of the **PE** rather than from the build flags: `DllCharacteristics` (`GUARD_CF`, `DYNAMICBASE`, `NXCOMPAT`, `HIGH_ENTROPY_VA`), the load-config `GuardFlags` (`CF_INSTRUMENTED`, `CF_FUNCTION_TABLE_PRESENT`, `CF_LONGJUMP_TABLE_PRESENT`), the CET marker when present, and a debug directory with no PDB. Pass a folder (judges `mics_app.exe` + `mics-engine.exe`, reports `flutter_windows.dll` but never fails on it) or a single file; `make-release.ps1` refuses to package what it fails |
+| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app + `sbom.cdx.json` + `THIRD-PARTY-NOTICES`), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder, refuses to start when the committed inventory no longer describes the lockfiles, refuses an un-obfuscated app or an unhardened binary, and swaps the folder by renaming the old one aside instead of deleting it |
+| `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, the **extracted** copy answers the helper protocol, puts a real card on the desktop, loads its own `rules\guard` + `rules\yara` rather than the built-in fallback, and its binaries pass `verify-hardening.ps1` while `data\app.so` carries no Dart class names and no symbol table ships in the zip |
 | `dart run tool\sbom.dart` | What is inside the package, generated from what is pinned: `sbom.cdx.json` (CycloneDX 1.6) + `THIRD-PARTY-NOTICES` from `cargo metadata`/`Cargo.lock`, `pubspec.lock`/`dart pub deps --json`, the Flutter SDK's `LICENSE` and the two shipped fonts. `--check` exits 1 and prints `RESULT: FAIL` instead of writing when the committed pair is stale (`--verbose` lists what is excluded, and which components ship no text of their own); `make-release.ps1` runs it before it builds and `test\sbom_test.dart` re-derives the same inventory from the lockfiles |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 
@@ -438,10 +451,54 @@ click (P1.5) or a purchased certificate (P4).
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) and the cost question is answered (ب1b, `docs\COST.md`) — left = steps **ب2–ب6** in §0.3 |
-| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner, build hardening, README rewrite (**ج1–ج3**) |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner (**ج2**) and the README rewrite (**ج3**); build hardening (**ج1**) landed with the PE measured |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ج1 — the release binaries are hardened, and the PE is what proves it (D-021)**
+  - The ROADMAP put build hardening before the installer for one reason: everything
+    after it packages a binary. So the first measurement was of the binaries that
+    were being shipped — and it said the mitigation everybody assumed was **off**.
+    `scripts\verify-hardening.ps1` (new) parses the PE: both `mics_app.exe` and
+    `mics-engine.exe` had `DYNAMICBASE|NXCOMPAT|HIGH_ENTROPY_VA` but **no
+    `GUARD_CF`** and **no guard function table** in the load config, i.e. indirect
+    calls were not checked at all. The same probe reports `CF_INSTRUMENTED` for
+    `kernel32.dll`/`ntdll.dll` (plus their function tables and CET marker), which is
+    how the reader itself was validated before it was trusted.
+  - **What changed.** Engine: `[profile.release]` gains `lto = "fat"`,
+    `codegen-units = 1`, `panic = "abort"`, `strip = "symbols"`, and
+    `engine\.cargo\config.toml` asks rustc for `-C control-flow-guard=yes` (the
+    compiler flag matters: `/guard:cf` at link time alone produces the bit and an
+    empty table). App: `windows\runner\CMakeLists.txt` adds `/guard:cf` to both
+    compile and link for Release/Profile. Dart: `make-release.ps1` now builds with
+    `--obfuscate --split-debug-info=dist\symbols\<version>`, and the symbol table is
+    a build artifact that is never in the ZIP (it maps `app.so` back to the source).
+  - **Measured after the change** (same probe, on the built files): engine
+    `DllCharacteristics 0xC160`, `GuardFlags 0x00017500`
+    (`CF_INSTRUMENTED|CF_FUNCTION_TABLE_PRESENT|CF_LONGJUMP_TABLE_PRESENT`), no
+    CodeView entry; app `0xC160` / `0x00017500` / stripped; engine size
+    **35,731,512 → 24,024,064 bytes (−32.8 %)**; `data\app.so`
+    **7,209,864 → 5,751,688 bytes** and the five class names that a readable
+    snapshot carries (`SettingsNotifier`, `AuditFinding`, `GuardScreen`,
+    `AppSettings`, `_LayerTile`) are **gone** from it.
+  - **The gate, not the flags.** `make-release.ps1` refuses to package when the
+    staged binaries fail `verify-hardening.ps1` or when no Dart symbol table exists
+    for the version (`-SkipBuild` from an un-obfuscated build folder is exactly that
+    case), and `VERSION` inside the package now says what was hardened.
+    `verify-release.ps1` gained step 6: the extracted copy passes the same probe and
+    its `data\app.so` carries none of those names, with **no** `*.symbols` file
+    anywhere in the ZIP.
+  - **Deliberately not claimed** (D-021): `/guard:ehcont` is refused by `link.exe`
+    (LNK2047 — `libstd` has no EH continuation metadata, and
+    `/force:guardehcont` would ship an incomplete table), and `/CETCOMPAT` is not
+    set because this machine cannot run a process under a shadow stack to prove it.
+    Both are written down where the next person will look instead of being silently
+    implied by "hardened".
+  - Checks: `cargo test` **82 passed**, `cargo clippy --release -- -D warnings`
+    clean, `flutter analyze --no-pub` no issues, `flutter test --no-pub` **72
+    passed**; the release was rebuilt through the new gates and
+    `verify-release.ps1` re-read the hardened package.
 
 - **Small step 5 — four light-theme renders of the real UI, and a real Settings bug found by rendering it**
   - `tool/write_screenshots_test.dart` (new, dev-only) pumps the app's own widgets with
@@ -2065,7 +2122,7 @@ click (P1.5) or a purchased certificate (P4).
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
 | 8 | ~~Dark/light mode~~ | **done** — palette, System mode follows live OS switches; **both** palettes are audited and fixed (**29 of 29** pairs clear WCAG 2.2 each, pinned by a test — `docs/CONTRAST.md`; dark closed in small step 4) | P2, أ2–أ3 |
-| 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
+| 9 | Not hackable / not reverse-engineerable | **partial** — hardening landed (ج1, D-021): CFG on both binaries, LTO/stripped engine, obfuscated Dart snapshot, and `verify-hardening.ps1` gates the release on the PE. Still missing: a signed integrity manifest + start-up self-check (ج2) | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
 | 12 | Protection types | **done** — `docs/PROTECTION-MATRIX.md`: layer → sees / detects / blocks / misses, plus the evidence table (verified in small step 7) | `docs/PROTECTION-MATRIX.md` |
@@ -2215,8 +2272,10 @@ signing certificate respectively), so this is the work that is always available.
       and re-verified in small step 7; only its VT sentence needed touching (D-019).
 - [ ] Integrity: signed SHA256 manifest of shipped files, self-check at startup,
       "unofficial build" banner on mismatch.
-- [ ] Build hardening: Dart `--obfuscate --split-debug-info`, Rust LTO/strip/
-      `panic=abort`, PE mitigations.
+- [x] ~~Build hardening: Dart `--obfuscate --split-debug-info`, Rust LTO/strip/
+      `panic=abort`, PE mitigations~~ — done (ج1, D-021): CFG on both binaries,
+      LTO/stripped engine, obfuscated Dart, and `scripts\verify-hardening.ps1`
+      gates the release on what the PE says.
 - [ ] README rewrite: what it does / **does not do**, requirements (Win10 21H2+/
       Win11, x64 or ARM64, 4 cores, 8 GB, ~500 MB, one UAC at install), privacy,
       data locations, uninstall, screenshots, build instructions, GPL notice.
@@ -2256,7 +2315,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
-| LOW | UI is not yet obfuscated and ships without an integrity manifest — **now written down where a stranger reads it** (small step 8): `THREAT-MODEL.md` F-11 states it as an accepted residual risk with the reasoning (obfuscation hides the code from the auditors; the pipe ACL and the update signature are what actually protect), and README's "does not" list says it plainly. The work itself is P5 (ج1–ج3) | P5, THREAT-MODEL F-11 |
+| LOW | **No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself* (the obfuscation half of this row closed in ج1/D-021: both binaries are CFG-instrumented and stripped, the Dart snapshot is obfuscated, and `verify-hardening.ps1` fails the release when that stops being true). `THREAT-MODEL.md` F-11 says what carries the security instead; the manifest + self-check banner is ج2 | P5, THREAT-MODEL F-11 |
 
 ## Icon sizes required for the application
 
@@ -2387,6 +2446,15 @@ settings and read environment variables only.
     mutable folder — `verify-release.ps1` checks those entries against the
     extracted copy, so a stale working folder can no longer fail the release
     verification (it did, with `listed b7361e67 / actual d092f559`).
+    - **The "is anyone running from it" test was itself wrong (2026-10-31).** It
+      reads `$_.Path`, which is **empty for an elevated process**, so the check
+      passed while an elevated MI CS had the folder's DLLs mapped; the delete then
+      removed the four unlocked files and died on the rest — the gutted folder this
+      trap is about, one layer down. The swap is now a **single rename of the whole
+      folder aside** before anything is deleted, so a mapped file makes it fail
+      *whole* (`The process cannot access the file because it is being used by
+      another process`) and leaves the previous copy intact; the old folder is only
+      removed after the new one is in place.
 
 16. **The published folder can disappear without any of our code doing it.** On
     2026-10-30 at 17:18:03 the whole of `dist\` (the folder, the zip and
