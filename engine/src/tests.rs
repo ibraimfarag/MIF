@@ -1171,4 +1171,70 @@ mod tests {
             "a non-boolean merge must be refused, never guessed"
         );
     }
+
+    /// `attempt to write a readonly database` is an access refusal, but the
+    /// sentence reads like a damaged file — a user spent a session looking at
+    /// the database while the folder's label was the problem
+    /// (`docs/TODO.md` trap 21). The RPC error must carry the directory and the
+    /// repair, not just SQLite's words.
+    #[test]
+    fn a_readonly_database_failure_names_the_directory_and_the_fix() {
+        let err = anyhow::anyhow!(
+            "sync.now failed: attempt to write a readonly database: Error code 8: \
+             Attempt to write a readonly database"
+        );
+        let hint = crate::dispatcher::readonly_hint(&err).expect("this is a readonly failure");
+        let dir = crate::settings::Settings::base_dir();
+        assert!(
+            hint.contains(&dir.display().to_string()),
+            "the hint must name {dir:?}: {hint}"
+        );
+        assert!(
+            hint.contains("not writable") && hint.contains("administrator"),
+            "the hint must say what is wrong and what to do: {hint}"
+        );
+        assert!(
+            hint.contains("integrity"),
+            "the hint must mention the integrity level it measured: {hint}"
+        );
+
+        // Everything else keeps its own message: no SQLite hint on a timeout.
+        assert!(
+            crate::dispatcher::readonly_hint(&anyhow::anyhow!("the operation timed out")).is_none()
+        );
+    }
+
+    /// The integrity guard is about serving state, not about being able to
+    /// inspect the helper: `helper-status`/`helper-console` must keep working at
+    /// Low (they are how a Low run is diagnosed), every other command must not.
+    #[test]
+    fn only_the_helper_inspection_commands_run_below_medium() {
+        let low_safe = [
+            Some(crate::Commands::HelperStatus { json: true }),
+            Some(crate::Commands::HelperConsole),
+            Some(crate::Commands::HelperService),
+        ];
+        for command in low_safe {
+            assert!(
+                !crate::needs_normal_integrity(&command),
+                "{command:?} must stay usable for diagnosis"
+            );
+        }
+        let stateful = [
+            Some(crate::Commands::Serve),
+            Some(crate::Commands::Service),
+            Some(crate::Commands::Scan {
+                path: "C:\\".into(),
+                quarantine: false,
+                json: false,
+            }),
+            Some(crate::Commands::InstallHelper),
+        ];
+        for command in stateful {
+            assert!(
+                crate::needs_normal_integrity(&command),
+                "{command:?} must not serve state below Medium"
+            );
+        }
+    }
 }

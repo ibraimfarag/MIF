@@ -8,6 +8,29 @@ pub struct Storage {
     conn: Mutex<Connection>,
 }
 
+/// The sentence appended to every "readonly database" failure.
+///
+/// SQLite reports `attempt to write a readonly database` when the *operating
+/// system* refused the write, not when the database is damaged: the data
+/// directory (or the database, its `-wal` or `-shm` file) is not writable by
+/// this process. That happens when MI CS ran elevated once and left files only
+/// administrators can write, when the engine runs as another account, and when
+/// the process is below Medium integrity. The raw text sent a user looking for a
+/// broken database (`docs/TODO.md` trap 21); this names the directory and the
+/// repair.
+pub fn readonly_hint() -> String {
+    let dir = crate::settings::Settings::base_dir();
+    let integrity = crate::platform::windows::integrity::current()
+        .map(crate::platform::windows::integrity::name)
+        .unwrap_or("unknown");
+    format!(
+        "the files in {} are readable but not writable by this process (integrity {integrity}); \
+         run MI CS once as administrator to repair the folder's permissions, and start the \
+         installed copy rather than a build launched from a Low-integrity or elevated session",
+        dir.display()
+    )
+}
+
 #[allow(dead_code)]
 impl Storage {
     pub fn open() -> Result<Self> {

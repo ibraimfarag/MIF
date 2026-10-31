@@ -42,7 +42,7 @@ If cargo complains about `.cargo-build-lock` access, set
    `lib/core/ipc/`. Whitelisted methods only.
 5. Test hooks exist for a reason — use them instead of hacking production code:
    `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `MICS_NO_AUTO_RESUME`,
-   `PROGRAMDATA`, `MICS_ENGINE_PATH`.
+   `PROGRAMDATA`, `MICS_ENGINE_PATH`, `MICS_ALLOW_LOW_INTEGRITY`.
 6. Anything privileged (firewall, hosts, registry) must stay auditable and
    reversible; hardening snapshots before changes.
 7. Never disable or bypass `docs/DECISIONS.md` decisions without recording a new

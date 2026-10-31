@@ -73,6 +73,10 @@ foreach ($mode in @("on", "off")) {
   $env:MICS_HELPER_PIPE = "mics_guard_cpu_helper_$mode"
   $env:MICS_DATA_DIR = (Join-Path $modeDir "data")
   $env:MICS_RULES_DIR = $scratch
+  # The engine is started from wherever the build landed; on a Low-labelled
+  # checkout that would trip the engine's Low-integrity refusal (docs/TODO.md
+  # trap 21). The guard is about the installed app, not about this measurement.
+  $env:MICS_ALLOW_LOW_INTEGRITY = "1"
   if ($mode -eq "off") { $env:MICS_NO_GUARD = "1" } else { Remove-Item Env:\MICS_NO_GUARD -ErrorAction SilentlyContinue }
 
   $proc = Start-Process -FilePath $engine -ArgumentList "service" -PassThru -NoNewWindow -WorkingDirectory $modeDir `

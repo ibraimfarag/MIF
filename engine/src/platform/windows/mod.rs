@@ -6,4 +6,5 @@ pub mod signature;
 pub mod single_instance;
 pub mod timing;
 pub mod elevation;
+pub mod integrity;
 pub mod collectors;

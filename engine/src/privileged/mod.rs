@@ -179,10 +179,21 @@ fn wait_until_reachable() -> Result<HelperStatus> {
         std::thread::sleep(Duration::from_millis(300));
     }
     let state = status();
+    // The pipe is owned by LocalSystem, so a client below Medium integrity is
+    // refused at the access check and this probe fails for a helper that is
+    // running perfectly. Naming the level turns "not answering" into something a
+    // user can act on (`docs/TODO.md` trap 21).
+    let integrity = crate::platform::windows::integrity::current()
+        .map(crate::platform::windows::integrity::name)
+        .unwrap_or("unknown");
     bail!(
-        "the privileged helper is installed but not answering (state={}, reachable={})",
+        "the privileged helper is installed but not answering (state={}, reachable={}, this process \
+         runs at {} integrity). The helper is LocalSystem and only clients at Medium or above may \
+         open its pipe: start MI CS from its installed folder (%LOCALAPPDATA%\\MI CS) — a build \
+         started out of a Low-integrity folder (a web root, a sandbox output dir) cannot reach it",
         state.state,
-        state.reachable
+        state.reachable,
+        integrity
     )
 }
 

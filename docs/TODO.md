@@ -413,6 +413,46 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **`readonly database` and "helper not answering" were one bug: a Low-integrity build**
+  - The report: clicking **Settings → Engine → Install/Repair** answered
+    `helper.install failed: the privileged helper is installed but not answering
+    (state-running, reachable-false)`, and the intelligence button answered
+    `sync.now failed: attempt to write a readonly database: Error code 8`. On the
+    same machine, from the same shell: `mics.db` accepted `BEGIN IMMEDIATE` and
+    `sc query MICSHelper` said `RUNNING`.
+  - Cause, measured: the engine the UI was attached to was
+    `dist\MICS-portable\mics-engine.exe` (integrity `0x1000`), while the app was
+    `0x3000`. The workspace root `MIF` carries
+    `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`, every folder created under
+    it inherits that label, and Windows starts a process at the label of its image
+    — so anything launched from `dist\` or `build\windows\...\Release\` runs
+    **Low**. A Low process may not write a Medium object: SQLite reports
+    `SQLITE_READONLY` ("attempt to write a readonly database") for the state
+    directory, and LocalSystem's helper pipe refuses the Low client at its access
+    check, which the engine reports as `reachable: false`. Same binary, one second
+    apart: `mics-engine.exe helper-status --json` from `dist\` →
+    `reachable: false`; from `%LOCALAPPDATA%\MI CS\` → `reachable: true`,
+    version `0.1.0`, `elevated: true`.
+  - The app made it stick: it attaches to whichever engine owns
+    `\\.\pipe\mics_engine`, so one leftover Low engine served every later UI
+    session (an elevated app showing a readonly database was the tell). Stopping
+    that engine made the app start a healthy one from its own folder, and
+    `sync.now` then succeeded (76,737 blocked names, 1,766 KEV CVEs) and
+    `helper.status` returned `reachable: true`.
+  - Fixed in code, three parts: `platform::windows::integrity` reads the process
+    label; the engine **refuses to serve** below Medium and names the folder it
+    was started from (`MICS_ALLOW_LOW_INTEGRITY=1` and the helper-inspection
+    commands stay usable — that is what `verify-pipe-acl`, `verify-toast` and
+    `measure-guard-cpu` need); and the two misleading messages now carry the
+    measurement: a `SQLITE_READONLY` RPC error appends the data directory and the
+    repair (`storage::sqlite::readonly_hint`, wired into `detailed_error`), and
+    `wait_until_reachable` names the integrity level. `cargo test` covers the
+    guard's command allow-list and the readonly hint.
+  - Why the wording was the real damage: "readonly database" sends the user to the
+    database and "not answering" to the service — neither was broken, and the one
+    actionable instruction ("run the installed copy, not the folder under
+    `www\`") was in the docs only.
+
 - **A from-scratch Windows build works again (found by asking for a clean copy)**
   - Asking for "a complete clean copy" meant `flutter clean` for the first time in
     this tree, and it failed **twice** on things no previous build could show —
@@ -2199,6 +2239,35 @@ settings and read environment variables only.
     `windows\CMakeLists.txt` decides the prefix by comparing values. Before
     trusting any "it builds" claim, run `flutter clean` once — an incremental build
     hides both.
+
+21. **A Low-integrity *folder* makes the engine unable to write anything, and both
+    symptoms point at the wrong component.** Trap 12 covers notification cards; the
+    same label also breaks the state database and the privileged helper, and the
+    user sees two unrelated errors for one cause. The workspace root `MIF` carries
+    `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`, so everything created under
+    it — `dist\`, `build\windows\...\Release\`, a probe folder — inherits the label,
+    and Windows starts a process at the label of its image. A Low process cannot
+    write the Medium state directory (SQLite says `attempt to write a readonly
+    database`, i.e. `SQLITE_READONLY`, which is a permission refusal and not a
+    corrupt file) and cannot open LocalSystem's helper pipe for writing (the probe's
+    access check fails, so `helper.status` reports `reachable: false` and
+    `helper.install` says "installed but not answering" while the service is
+    running). Measured 2026-10-31: the same `helper-status --json` printed
+    `reachable: false` from `dist\MICS-portable\mics-engine.exe` (integrity
+    `0x1000`) and `reachable: true` from `%LOCALAPPDATA%\MI CS\mics-engine.exe`
+    (`0x2000`), one second apart.
+    - Worse than the two messages: the app attaches to **whatever** engine owns
+      `\\.\pipe\mics_engine`, so one leftover Low engine (started by an earlier
+      probe from `dist\`) served every later UI session — an *elevated* app showing
+      "readonly database" is the tell. Kill the stray `mics-engine.exe` in Task
+      Manager; a normal shell cannot even show an elevated process's path.
+    - Standing rules: the engine refuses to serve state below Medium and names the
+      folder (`MICS_ALLOW_LOW_INTEGRITY=1` opts out for the diagnostic probes); a
+      `SQLITE_READONLY` RPC failure appends the data directory and the repair
+      (`storage::sqlite::readonly_hint`); "not answering" names the integrity level
+      it measured. Diagnose with `icacls <folder>` (the `Mandatory Label` line) and
+      never run MI CS from this tree — the runnable copy lives in
+      `%LOCALAPPDATA%\MI CS`.
 
 ---
 

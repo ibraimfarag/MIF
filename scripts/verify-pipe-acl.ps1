@@ -163,6 +163,11 @@ $env:MICS_NO_AUTO_RESUME = "1"
 $env:MICS_PIPE_NAME = "\\.\pipe\$PipeName"
 $env:MICS_HELPER_PIPE = $HelperPipeName
 $env:MICS_HELPER_LOG = $helperLog
+# These probes run the engine from wherever the build landed. On a checkout whose
+# folder carries a Low integrity label the whole process is Low, and the engine
+# refuses to serve state below Medium (docs/TODO.md trap 21) - right for the
+# product, meaningless for a probe that tests the pipe ACL instead.
+$env:MICS_ALLOW_LOW_INTEGRITY = "1"
 
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $engineProc = $null

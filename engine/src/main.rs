@@ -36,7 +36,7 @@ struct Cli {
     command: Option<Commands>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum Commands {
     /// Start the engine in serve mode (stdio JSON-RPC)
     Serve,
@@ -177,6 +177,29 @@ async fn run() -> Result<()> {
         std::process::id(),
         settings::Settings::base_dir().display()
     );
+
+    // Windows gives a process the integrity label of the folder its image sits
+    // in, and a Low process cannot write Medium state. Serving anyway produces
+    // two errors that read like unrelated bugs — SQLite saying "attempt to write
+    // a readonly database" and the helper saying "installed but not answering" —
+    // for a machine where both are fine. Say the real reason once and stop.
+    if needs_normal_integrity(&cli.command)
+        && platform::windows::integrity::below_medium()
+        && std::env::var_os("MICS_ALLOW_LOW_INTEGRITY").is_none()
+    {
+        let exe = std::env::current_exe()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|_| "mics-engine.exe".to_string());
+        anyhow::bail!(
+            "MI CS was started from a Low-integrity location ({exe}). Windows gives a process the \
+             label of the folder its image is in, and this one is below Medium, so the engine \
+             cannot write its state database (\"attempt to write a readonly database\") or reach \
+             the privileged helper (\"installed but not answering\") — both are healthy. The \
+             folder carries the label, not the program: run the installed copy in \
+             %LOCALAPPDATA%\\MI CS, or extract the release ZIP outside a web root or sandbox \
+             folder. MICS_ALLOW_LOW_INTEGRITY=1 runs anyway, for a diagnostic probe."
+        );
+    }
 
     match cli.command {
         Some(Commands::Serve) => {
@@ -351,6 +374,21 @@ async fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Commands that work below Medium integrity.
+///
+/// The helper-inspection commands only *read* state and are exactly what a
+/// Low run needs for diagnosis, so they stay usable. Everything else writes the
+/// state database or owns a pipe the UI attaches to, which a Low process cannot
+/// do usefully (see `platform::windows::integrity`).
+fn needs_normal_integrity(command: &Option<Commands>) -> bool {
+    !matches!(
+        command,
+        Some(Commands::HelperConsole)
+            | Some(Commands::HelperService)
+            | Some(Commands::HelperStatus { .. })
+    )
 }
 
 /// Log sink: stderr **and** `%PROGRAMDATA%\MICS\logs\engine.log`.

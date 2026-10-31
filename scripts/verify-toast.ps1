@@ -136,6 +136,11 @@ $stdin = Join-Path $dataDir "in.jsonl"
 $env:MICS_DATA_DIR = $dataDir
 $env:MICS_NO_SINGLETON = "1"
 $env:MICS_NO_GUARD = "1"
+# This probe runs the engine from wherever the build landed. On a checkout whose
+# folder carries a Low integrity label the whole process is Low, and the engine
+# refuses to serve state below Medium (docs/TODO.md trap 21) - right for the
+# product, meaningless for a probe that tests something else.
+$env:MICS_ALLOW_LOW_INTEGRITY = "1"
 $stdout = Join-Path $dataDir "out.json"
 $stderr = Join-Path $dataDir "err.txt"
 $proc = Start-Process -FilePath $engine -ArgumentList "serve" `

@@ -330,6 +330,20 @@ pub fn ensure_data_dir() -> PathBuf {
     if can_write(&dir) && files_ok {
         return dir;
     }
+    if crate::platform::windows::integrity::below_medium() {
+        // Not a permissions bug in the folder: Windows runs a process from a
+        // Low-labelled folder at Low, and a Low process cannot write a Medium
+        // directory no matter what the ACL says. Saying "start as administrator"
+        // here sent the user to a prompt that does not help.
+        tracing::warn!(
+            "data dir {} is not writable by this Low-integrity process — Windows runs a program \
+             from a Low-labelled folder at Low; the installed copy in %LOCALAPPDATA%\\MI CS does \
+             not have that problem, so run MI CS from there instead of a web root or a sandbox \
+             output folder",
+            dir.display()
+        );
+        return dir;
+    }
     if !crate::platform::windows::elevation::is_elevated() {
         tracing::warn!(
             "data dir {} is not fully writable by this user — start MI CS once as \

@@ -41,16 +41,36 @@ fn error_response(req: JsonRpcRequest, message: &str) -> JsonRpcResponse {
 /// "Method failed internally", so the UI can show something actionable
 /// ("requires administrator rights", "the operation timed out", ...).
 fn detailed_error(req: JsonRpcRequest, method: &str, e: anyhow::Error) -> JsonRpcResponse {
+    let mut message = format!("{method} failed: {e:#}");
+    if let Some(hint) = readonly_hint(&e) {
+        message.push_str(" — ");
+        message.push_str(&hint);
+    }
     JsonRpcResponse {
         jsonrpc: "2.0".to_string(),
         result: None,
         error: Some(json!(JsonRpcError {
             code: -32000,
-            message: format!("{method} failed: {e:#}"),
+            message,
             data: None,
         })),
         id: req.id,
     }
+}
+
+/// The explanation appended when a failure is SQLite's `SQLITE_READONLY`.
+///
+/// "attempt to write a readonly database" is an access refusal, but nothing in
+/// that sentence says so; the user went looking for a corrupt file while the
+/// folder's permissions (or the process's integrity level) were the problem.
+pub(crate) fn readonly_hint(e: &anyhow::Error) -> Option<String> {
+    let readonly = e.chain().any(|cause| {
+        cause
+            .to_string()
+            .to_ascii_lowercase()
+            .contains("readonly database")
+    });
+    readonly.then(crate::storage::sqlite::readonly_hint)
 }
 
 impl Dispatcher {
