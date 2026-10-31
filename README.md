@@ -76,6 +76,13 @@ Honesty is a feature. Today, MI CS does **not**:
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
+- pretend the shipped build is **obfuscated or self-verifying**: it is neither. The
+  code is not obfuscated on purpose (symbols, strings and the Dart/Rust structure stay
+  readable, because the project asks to be auditable), and there is no
+  **integrity manifest**, so a repackaged copy cannot be told from ours *by the app
+  itself* — only updates are verified, by the embedded signature above. A signed
+  manifest plus a start-up self-check banner is planned (P5, `docs/THREAT-MODEL.md`
+  F-11);
 - claim **idle CPU below the 1 % budget**: the guard loop costs **0.156 % of one
   core = 0.0028 % of a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on
   versus `MICS_NO_GUARD=1`), so the budget holds whether it is read per core or per

@@ -283,7 +283,7 @@ what "next" means.
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
 | 6 | ~~Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required"~~ | **done** (verified in small step 6) — the test pins the ten sizes on all three `.ico` files and 6 assertions pass |
 | 7 | ~~`docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read~~ | **done** (verified in small step 7) — 10 sections, per-layer sees/detects/blocks, evidence table; README links it |
-| 8 | Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file | read §7 first |
+| 8 | ~~Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file~~ | **done** (small step 8) — the two notes are written into `THREAT-MODEL.md` (F-11 new, F-2 extended) and the README; the register rows now point at them |
 
 **Medium — a subsystem or a build leg**
 
@@ -421,6 +421,26 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 8 — the two cheap LOW rows became prose a reader can find**
+  - Both gaps were true and already recorded, but only in the register — the one place
+    a stranger does not read. This step moved them into the documents that exist for
+    exactly this purpose.
+  - **No obfuscation, no integrity manifest** → new `THREAT-MODEL.md` row **F-11**:
+    what is readable (strings, symbols, the Dart/Rust structure), what an attacker can
+    do with it (repackaging), why it is accepted (obfuscation hides the code from the
+    auditors this project invites, and it does not stop a reverse engineer), what
+    carries the security instead (pipe ACL F-1, update signature F-3), and what closes
+    it (P5 ج1–ج3: signed manifest + start-up self-check banner + a reproducible-build
+    note). README's "does not" list now says it in one paragraph, next to the
+    unsigned-binary bullet it belongs with.
+  - **The caller check's portable fallback** → `THREAT-MODEL.md` F-2 now spells out the
+    fallback concretely: with no `%PROGRAMDATA%\MICS` there is no account to compare
+    against, so the check falls back to the image name and logs `no installer account
+    recorded` once — and the pipe ACL is what still keeps other users out. The register
+    rows point at both places so the two never drift apart.
+  - Also closed the stale §0.1 row 8, which still said "dark mode is not yet measured"
+    after step 4 measured it: both palettes now assert 29 of 29.
 
 - **Small step 7 — `PROTECTION-MATRIX.md` verified, linked from the README, and its layer numbers reconciled**
   - The sheet already existed (243 lines, 10 sections); what this step added is the
@@ -1991,7 +2011,7 @@ click (P1.5) or a purchased certificate (P4).
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
-| 8 | Dark/light mode | **done** — palette, System mode follows live OS switches; the light palette is audited and fixed (**29 of 29** pairs clear WCAG 2.2, pinned by a test — `docs/CONTRAST.md`); dark mode is not yet measured | P2, أ2–أ3 |
+| 8 | ~~Dark/light mode~~ | **done** — palette, System mode follows live OS switches; **both** palettes are audited and fixed (**29 of 29** pairs clear WCAG 2.2 each, pinned by a test — `docs/CONTRAST.md`; dark closed in small step 4) | P2, أ2–أ3 |
 | 9 | Not hackable / not reverse-engineerable | **todo P5** — no obfuscation, no integrity manifest; be honest in README | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
@@ -2178,11 +2198,11 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** (`scripts\measure-guard-cpu.ps1`) *with one inert rule in force*; with the shipped starter pack the earlier runs measured 0.234 % — the difference is one-time startup matching, and it is not re-measured per rule pack | `guard/mod.rs`, `platform/windows/pids.rs` |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
-| LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
+| LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory. Documented in `THREAT-MODEL.md` F-2 (small step 8), where the pipe ACL is named as what still keeps other users out | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
-| LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
+| LOW | UI is not yet obfuscated and ships without an integrity manifest — **now written down where a stranger reads it** (small step 8): `THREAT-MODEL.md` F-11 states it as an accepted residual risk with the reasoning (obfuscation hides the code from the auditors; the pipe ACL and the update signature are what actually protect), and README's "does not" list says it plainly. The work itself is P5 (ج1–ج3) | P5, THREAT-MODEL F-11 |
 
 ## Icon sizes required for the application
 
