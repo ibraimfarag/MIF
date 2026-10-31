@@ -281,7 +281,7 @@ what "next" means.
 | 3 | ~~Close the Start-Menu shortcut name decision (keep «MI CS»)~~ | **done** — recorded as D-020; the name already matched |
 | 4 | ~~Dark-mode contrast audit → fix, mirroring أ2/أ3~~ | **done** — 7 of 29 dark pairs failed, all fixed; both modes now assert 29 of 29 (`docs/CONTRAST.md`, `test/dark_contrast_audit_test.dart`) |
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
-| 6 | Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required" | no new subsystem |
+| 6 | ~~Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required"~~ | **done** (verified in small step 6) — the test pins the ten sizes on all three `.ico` files and 6 assertions pass |
 | 7 | `docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read | P5 half-step |
 | 8 | Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file | read §7 first |
 
@@ -421,6 +421,22 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 6 — the icon pass was already there; it is now verified and recorded**
+  - The step asked for `test/icon_test.dart` plus the `app_icon.ico` size set. Both
+    already existed (the test was written with the icon pipeline), so this step is the
+    measurement that proves them, not new code: `flutter test --no-pub
+    test/icon_test.dart` → **6 assertions pass**.
+  - What those assertions actually pin: the ICONDIR table of all three `.ico` files
+    must equal exactly **{16, 20, 24, 32, 40, 48, 64, 96, 128, 256}** (a lost frame
+    fails; `equals` rather than "contains", so an extra or missing size is a
+    failure), `app_icon.ico` and `assets/icons/mics.ico` must be **byte-identical**
+    (one task art, no drift), `desktop.ico` must **differ** from it (otherwise
+    shipping it is pointless), and the four source/render inputs
+    (`task.svg`, `Desktop.svg`, `task.png`, `Desktop.png`) must exist.
+  - README's icon section already listed the ten sizes; it now also records the
+    measured result and the fact that the test fails the build on drift, so the claim
+    and the check sit next to each other.
 
 - **Small step 4 — dark mode is contrast-audited, fixed, and frozen (7 of 29 failed)**
   - Mirroring أ2/أ3 for light: the dark palette was **measured first** with the same
@@ -2166,8 +2182,15 @@ contain each of the following dimensions:
 | 256 × 256 *master* | Source for generating all the above sizes |
 
 **Pending icon‑related tasks**
-- [ ] Ensure `test/icon_test.dart` passes for all sizes without loss.
-- [ ] Verify `windows/runner/resources/app_icon.ico` includes all sizes.
+- [x] Ensure `test/icon_test.dart` passes for all sizes without loss — **verified
+      2026-10-31** (small step 6): `flutter test --no-pub test/icon_test.dart` runs 6
+      assertions and passes; the size set is asserted as *equals* the ten sizes, so a
+      lost frame fails rather than being tolerated, and the two task icons are
+      byte-identical while `desktop.ico` differs.
+- [x] Verify `windows/runner/resources/app_icon.ico` includes all sizes — same test:
+      it reads the ICONDIR table and requires exactly {16, 20, 24, 32, 40, 48, 64, 96,
+      128, 256} for `app_icon.ico`, `assets/icons/mics.ico` and
+      `assets/icons/desktop.ico`, and checks the rasterised SVG masters exist.
 
 **Other remaining tasks**
 - [x] Light‑mode contrast audit — 36 pairs measured against WCAG 2.2, 25 below their bar

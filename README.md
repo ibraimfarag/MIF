@@ -340,7 +340,9 @@ Every icon carries the ten sizes Windows actually asks for — **16, 20, 24, 32,
 the rasteriser art at **256×256 or larger** (Windows never uses more than 256;
 1024 is what keeps that 256 frame crisp). `test/icon_test.dart` fails the build
 if a size disappears, if the task icons drift apart, or if `desktop.ico` becomes
-a copy of the task icon.
+a copy of the task icon. Measured 2026-10-31: all three `.ico` files carry exactly
+those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
+`desktop.ico` differs — 6 assertions, all green.
 
 ## Project layout
 
