@@ -238,7 +238,8 @@ trusts it in `CurrentUser\Root` + `CurrentUser\TrustedPublisher` (neither needs
 administrator rights), then verifies every file and fails the release if one does
 not come back `Valid`. A self-signed signature is **local trust only**: it removes
 the prompt on your machine, it does not give the file a public reputation — that
-needs a real certificate and downloads by strangers (see `docs/TODO.md`, P4).
+needs a real certificate and downloads by strangers (see `docs/TODO.md`, P4, and
+[docs/COST.md](docs/COST.md) for what that costs and what stays free).
 
 **Icons.** `assets/icons/mics.png` is the 256×256 master art. Both Windows icons
 — `windows/runner/resources/app_icon.ico` (embedded in `mics_app.exe`, so it is

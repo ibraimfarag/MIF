@@ -45,8 +45,10 @@
 > components, 8 licenses, 0 copyleft, 0 unclassified, every text present), the pair
 > is committed, shipped in the ZIP and freshness-checked before every release
 > (ب1a, D-018) ·
-> **next: ب1b, `docs/COST.md` (no elevation, no money), then install the helper
-> once (one UAC prompt), then the NSIS installer — which folds the AUMID in — and
+> **next: the small steps in §0.5 — `docs\COST.md` (ب1b) is done and the helper's
+> install bug is fixed in `dab81d5` — then install the helper
+> once (one UAC prompt) whenever a human is at the machine, then the medium steps,
+> then the NSIS installer — which folds the AUMID in — and
 > the P6 QA harness**; the cheap wins
 > below need neither elevation nor money, then P4, P5, P6. README is written;
 > the app runs unelevated and was verified end-to-end on a real machine.
@@ -62,12 +64,13 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 وابدأ من ب1b
+> اقرأ docs/TODO.md §0 وابدأ من أول مهمة صغيرة في §0.5
 
-That means: read this section, then do step **ب1b** — `docs/COST.md`, the one
-remaining half of ب1 — as one small step, and stop for review. (**ب1a**, the
-CycloneDX SBOM and `THIRD-PARTY-NOTICES` plus their tests and the release wiring,
-is done; it was split out so each half stayed one small step.) The rules that
+That means: read this section, then take the **first unfinished small step in
+§0.5** (the order the user asked for: small → medium → large) as one small step,
+and stop for review. (`docs\COST.md` — ب1b — is done, and so is the fix for the
+helper's install button; the one thing that still needs a human is the UAC click
+in §0.2.) The rules that
 session must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
@@ -146,7 +149,8 @@ both binaries `Valid`).
    either definition of it.
 
 **This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **ب1b** in §0.3.
+is done. The next ordered step is **small step 2 of §0.5** (delete the dead
+VirusTotal client).
 
 ### 0.2 Blocked on the user
 
@@ -167,7 +171,8 @@ is done. The next ordered step is **ب1b** in §0.3.
 
 ### 0.3 The plan, in order — what a new session works through
 
-Every row is one commit-sized step unless it says otherwise; **ب1b is the first**
+Every row is one commit-sized step unless it says otherwise; **§0.5 carries the
+order the user picked (small → medium → large), and ب1b is done**
 (§0.0). "Needs you" is the list that cannot move without the user.
 
 **أ — close §0 (no elevation, no money)**
@@ -184,7 +189,7 @@ Every row is one commit-sized step unless it says otherwise; **ب1b is the first
 | Step | What | Needs you |
 |---|---|---|
 | ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
-| **ب1b** | `docs\COST.md`: the real costs (signing certificate) and what stays free | no — **first step of the next session** |
+| ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt | no |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
@@ -247,6 +252,48 @@ small decisions (VirusTotal client, Start-Menu shortcut name).
 - **Reply to the user in Egyptian Arabic**; code, comments, docs and commit
   messages in English. Never add telemetry or cloud calls; the UI never touches OS
   APIs — everything goes through the engine over JSON-RPC (`lib/core/ipc/`).
+
+### 0.5 The order the user asked for: small → medium → large
+
+On 2026-10-31 the user set the sequence for what is left: finish whatever is
+waiting on a human **first**, then the small tasks, then the medium ones, then the
+large ones. Two of the three human items are settled (the VirusTotal client goes —
+delete it in the small list below and say so in the README; the shortcut name stays
+«MI CS» — no code change), so what remains human is the one UAC click in §0.2 and a
+certificate (§0.2/ب5). The steps below are the same work as §0.3, split by size so a
+session always knows what "next" means.
+
+**Small — one sitting each, no elevation, no money, no new subsystem**
+
+| # | Step | Note |
+|---|---|---|
+| 1 | ~~`docs\COST.md` (ب1b)~~ | **done** — this commit |
+| 2 | Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone | the user's decision; the register MED row closes with it |
+| 3 | Close the Start-Menu shortcut name decision in D-008's file (keep «MI CS») | documentation only — the name already matches |
+| 4 | Dark-mode contrast audit → fix, mirroring أ2/أ3 (`docs/CONTRAST.md` gets a dark table, `test/dark_contrast_audit_test.dart` the same asserts) | the open LOW row (1.36:1 border) closes here |
+| 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
+| 6 | Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required" | no new subsystem |
+| 7 | `docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read | P5 half-step |
+| 8 | Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file | read §7 first |
+
+**Medium — a subsystem or a build leg**
+
+- **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
+- **ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
+  `--obfuscate --split-debug-info`)
+- **ج2** signed manifest + startup self-check + "unofficial build" banner
+- **ب4** the helper install folded into the installer (removes the UAC step)
+- **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
+- **هـ1** a default update-manifest URL + signature check
+- the register's open MED rows: Defender tamper protection, scheduled scan +
+  real-time watching, FirewallAPI COM instead of `netsh`, canary read-only
+
+**Large — where a human or money is required**
+
+- **ب3** the NSIS installer (folds the AUMID and ب4 in), **د3** E2E against the
+  built installer, **د4** `qa/report.html` + CI gate
+- **ب5** the certificate → **ب6** public release (both need the user)
+- scheduled scanning + real-time file watching as a real subsystem
 
 ---
 
@@ -360,11 +407,43 @@ click (P1.5) or a purchased certificate (P4).
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
-| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) — left = `docs\COST.md` and steps **ب1b–ب6** in §0.3 |
+| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) and the cost question is answered (ب1b, `docs\COST.md`) — left = steps **ب2–ب6** in §0.3 |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner, build hardening, README rewrite (**ج1–ج3**) |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **The money question is answered on paper (ب1b, `docs\COST.md`)**
+  - Today MI CS costs **nothing** to run or ship, and that is written down name by
+    name (toolchains, packaging, local self-signing, free RFC 3161 timestamping via
+    `scripts\sign.ps1`, our own rule packs, the user's own Defender as the real-time
+    layer, the user's own intel keys, static hosting, the SBOM tool). Two of those
+    are design decisions that are also cost decisions and are now named as such: no
+    telemetry/cloud means no backend bill, and using what Windows already has means
+    no AV or EDR licence.
+  - **The one purchase** is a CA-issued code-signing certificate, because without it
+    a stranger's Windows says "Unknown publisher" (measured: the release probe prints
+    `signed : NotSigned - Windows will show 'Unknown publisher'...`).
+  - The document earns its keep by recording the four constraints that decide *how*
+    that certificate can be used, and one of them changes code: under the CA/Browser
+    Forum's baseline (June 2023) the private key must live in hardware (token) or a
+    cloud service, so **`-PfxPath`/`-PfxPassword` stops being usable** with a
+    compliant certificate. The path that works is already in the repo — the
+    self-signed branch of `scripts\sign.ps1` signs with `signtool /sha1 <thumbprint>`
+    — so ب5 is "add a `-Thumbprint` selector and pass it through", not a rewrite. It
+    also notes that the publisher CN is pinned by D-016, that timestamps keep old
+    releases valid after renewal, and that EV's current SmartScreen advantage is a
+    verify-at-purchase question rather than something this project asserts.
+  - Prices are deliberately **not** quoted: they move, they are bundled with tokens
+    or cloud subscriptions, and they depend on the validation type; the shape (a
+    recurring subscription plus hardware/cloud) is what is fixed. The options table
+    covers OV, EV, cloud signing (Microsoft's service is **Artifact Signing** as of
+    2026, renamed from Trusted Signing), free OSS signing programmes, and the
+    Microsoft Store (which re-signs with Microsoft's own certificate and would need
+    the portable folder plus the `LocalSystem` helper repackaged as MSIX).
+  - `docs\COST.md`'s §5 is the ب5 checklist, and §3 lists what is deliberately not
+    bought (no telemetry backend, no AV/EDR licence, no cloud sandbox, no paid rule
+    feed, no update server, no CDN).
 
 - **The elevated install called a flag the CLI does not have (P1.5, first fix)**
   - Pressing **Settings → Engine → Install helper** only produced an error. The
@@ -1688,7 +1767,7 @@ click (P1.5) or a purchased certificate (P4).
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
 | 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
-| 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); `docs\COST.md` is ب1b | P4 |
+| 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); the cost sheet exists and names the single purchase (ب1b, `docs\COST.md`) | P4 |
 | 19 | Professional README | **done** — see row 10 | `README.md` |
 | 20 | L5 wording vs reality (LLM) | **decided** — optional local LLM + templates; wording fix in P5 | D-005 |
 | 21 | Living TODO/handoff file | **done** — this file | — |
@@ -1806,7 +1885,10 @@ signing certificate respectively), so this is the work that is always available.
 - [x] ~~SBOM (CycloneDX), `THIRD-PARTY-NOTICES`, dependency-license audit~~ — done
       (ب1a, D-018): `tool\sbom.dart` generates both from the lockfiles, the pair is
       committed, shipped in the package and freshness-checked before a release.
-- [ ] `docs/COST.md` — the only real cost is the signing certificate (ب1b).
+- [x] ~~`docs/COST.md` — the real costs and what stays free~~ — done (ب1b): the only
+      purchase is a CA-issued certificate; the sheet also records that its key must
+      be in hardware since June 2023, which retires the `-PfxPath` path in favour of
+      the `/sha1` one `scripts\sign.ps1` already has.
 
 ### P5 — trust & truth
 - [x] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
