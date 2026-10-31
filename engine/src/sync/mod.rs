@@ -319,17 +319,6 @@ impl SyncManager {
             });
         }
 
-        // Flush the offline VT queue now that we're back online.
-        let vt = crate::scanner::vt::VtClient::new();
-        let ops = self.storage.pop_queue_ops("vt_lookup", 100)?;
-        for (id, payload) in ops {
-            if let Ok(hash) = serde_json::from_str::<String>(&payload)
-                && vt.lookup_hash(&hash).await.is_ok()
-            {
-                let _ = self.storage.remove_queue_op(id);
-            }
-        }
-
         report.ioc_hash_total = self.storage.ioc_hash_count()?;
         report.ioc_domain_total = self.storage.ioc_domain_count()?;
         report.kev_total = self.storage.kev_count()?;
@@ -575,7 +564,6 @@ impl SyncManager {
             "kev_total": self.storage.kev_count()?,
             "cve_cache_total": self.storage.cached_cve_count()?,
             "geoip_countries": crate::ids::geoip::installed_countries().len(),
-            "vt_queue_len": self.storage.queue_len("vt_lookup")?,
             "last_success": last_success,
             // Seconds since the last successful intel sync; null when the
             // machine has never synced (fresh, fully-offline install).

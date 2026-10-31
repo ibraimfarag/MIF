@@ -89,7 +89,6 @@ class AppSettings {
   final bool autoResumeScans;
   final bool dndMode;
   final int syncIntervalHours;
-  final String vtApiKey;
   final String nvdApiKey;
   /// Custom sha256 hash feed for `ioc_hashes`; empty = not configured.
   final String iocFeedUrl;
@@ -114,7 +113,6 @@ class AppSettings {
     this.autoResumeScans = true,
     this.dndMode = false,
     this.syncIntervalHours = 6,
-    this.vtApiKey = '',
     this.nvdApiKey = '',
     this.iocFeedUrl = '',
     this.iocFeedKey = '',
@@ -149,7 +147,6 @@ class AppSettings {
         autoResumeScans: j['auto_resume_scans'] as bool? ?? true,
         dndMode: j['dnd'] as bool? ?? false,
         syncIntervalHours: (j['sync_interval_hours'] as num?)?.toInt() ?? 6,
-        vtApiKey: j['vt_api_key'] as String? ?? '',
         nvdApiKey: j['nvd_api_key'] as String? ?? '',
         iocFeedUrl: j['ioc_feed_url'] as String? ?? '',
         iocFeedKey: j['ioc_feed_key'] as String? ?? '',
@@ -175,7 +172,6 @@ class AppSettings {
         'auto_resume_scans': autoResumeScans,
         'dnd': dndMode,
         'sync_interval_hours': syncIntervalHours,
-        'vt_api_key': vtApiKey,
         'nvd_api_key': nvdApiKey,
         'ioc_feed_url': iocFeedUrl,
         'ioc_feed_key': iocFeedKey,
@@ -195,7 +191,6 @@ class AppSettings {
   Map<String, String> engineEnv() => {
         'MICS_SYNC_HOURS': syncIntervalHours.toString(),
         'MICS_DND': dndMode ? '1' : '0',
-        if (vtApiKey.isNotEmpty) 'MICS_VT_API_KEY': vtApiKey,
         if (lmUrl.isNotEmpty) 'MICS_LM_URL': lmUrl,
         if (lmModel.isNotEmpty) 'MICS_LM_MODEL': lmModel,
         if (updateManifestUrl.isNotEmpty)
@@ -235,7 +230,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     final hasLegacy = prefs.containsKey('guardAutostart') ||
         prefs.containsKey('dndMode') ||
         prefs.containsKey('syncIntervalHours') ||
-        prefs.containsKey('vtApiKey') ||
         prefs.containsKey('lmUrl') ||
         prefs.containsKey('lmModel') ||
         prefs.containsKey('updateManifestUrl') ||
@@ -252,7 +246,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       guardAutostart: prefs.getBool('guardAutostart') ?? true,
       dndMode: prefs.getBool('dndMode') ?? false,
       syncIntervalHours: prefs.getInt('syncIntervalHours') ?? 6,
-      vtApiKey: prefs.getString('vtApiKey') ?? '',
       lmUrl: prefs.getString('lmUrl') ?? '',
       lmModel: prefs.getString('lmModel') ?? '',
       updateManifestUrl: prefs.getString('updateManifestUrl') ?? '',
@@ -333,8 +326,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setCanaryPaths(List<String> paths) =>
       patch({'canary_paths': paths});
-
-  Future<void> setVtKey(String key) => patch({'vt_api_key': key});
 
   Future<void> setNvdKey(String key) => patch({'nvd_api_key': key});
 

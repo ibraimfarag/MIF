@@ -13,7 +13,6 @@
 //! "engine restarted mid-scan" a resume instead of a lost scan.
 
 pub mod quarantine;
-pub mod vt;
 pub mod yara_engine;
 
 use anyhow::{Context, Result};

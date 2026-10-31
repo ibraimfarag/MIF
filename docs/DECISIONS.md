@@ -241,11 +241,11 @@ variables that only applied when *this app* started the engine.
 - JSON-RPC `settings.get` / `settings.set`; a successful set broadcasts
   `event{type: settings.changed}` so any connected surface refreshes.
 - Consumers read the document instead of the environment: guard autostart,
-  auto-resume, DND (`toast.rs`), LM Studio URL/model, VT key, NVD key, update
+  auto-resume, DND (`toast.rs`), LM Studio URL/model, NVD key, update
   manifest URL, and the auto-sync cadence (re-read every cycle, so a change
   applies without restarting the engine).
 - Environment variables remain as a **test override** and are documented as
-  such (`MICS_SYNC_HOURS`, `MICS_DND`, `MICS_VT_API_KEY`, `MICS_LM_URL`,
+  such (`MICS_SYNC_HOURS`, `MICS_DND`, `MICS_LM_URL`,
   `MICS_LM_MODEL`, `MICS_UPDATE_MANIFEST_URL`, `NVD_API_KEY`).
 - UI: `AppSettings` is a typed mirror of the same field names; every control
   calls `settings.set`, the state updates from the engine's response, and the
@@ -725,3 +725,40 @@ instead of adding per-package exceptions when a new license looks odd; keeping
 `--check` in the release path so a package cannot ship an inventory that does not
 describe it; and keeping the four manual entries honest - the Visual C++ runtime
 stays `scope: excluded` with a name instead of an invented SPDX id.
+
+---
+
+## D-019 — There is no VirusTotal client: file reputation is local
+
+1. `engine\src\scanner\vt.rs`, the `vt_api_key` setting with its `MICS_VT_API_KEY`
+   test hook, the `sync_queue` table and the four storage calls that served it
+   (`queue_op`, `pop_queue_ops`, `remove_queue_op`, `queue_len`), the
+   Settings → Integrations field with its i18n keys, and the `vt_queue_len` field
+   of the sync report are deleted. The sync pass no longer flushes a lookup queue.
+2. Nothing replaces it. File reputation is what the machine already holds: the
+   IOC sha256 cache the user's own feed fills (`ioc_feed_url`), the YARA pack, and
+   the guard's behavioural rules. A hash is never sent anywhere for a verdict.
+3. `README.md` states it in both languages — in the "what it does not do" list,
+   the network row and the privacy paragraph — and `docs\THREAT-MODEL.md` §B6 no
+   longer lists a VirusTotal destination, because no code could reach one. The
+   secrets asset A7 and residual risk F-5 shrink to the two keys that remain.
+
+**Why.** The client was unreachable by construction: only the offline queue could
+call it, and nothing filled that queue, so what shipped was a settings field, an
+outbound destination, a queue table and a column of the sync status that together
+made the scanner look more capable than it is. The user decided on 2026-10-31 to
+delete it rather than build the queue that would feed it. A dead client is worse
+than an absent one: it is a secret to leak (A7/F-5) and a destination to justify
+for a capability the product does not have.
+
+**What this is not.** Not a decision against hash reputation — a key-free sha256
+feed can return through the existing `ioc_feed_url`, which the scanner already
+consults. Not a claim that multi-engine verdicts are unwanted, only that they are
+neither bought nor wired (`docs\COST.md` §3). Not a migration: the `sync_queue`
+table is dropped from the schema, and an existing database keeps an orphan table
+that SQLite ignores.
+
+**Commits us to.** Keeping the "does not" lists honest. If a reputation lookup
+ever returns, it ships in one commit with its §B6 destination row, its key's
+masking story (F-5, DPAPI) and the UI field that names it — and the register row
+that records its absence today is closed by that commit, not by a comment.

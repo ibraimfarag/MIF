@@ -22,7 +22,7 @@ a design decision that also happens to remove a bill.
 | Timestamping | free RFC 3161 (`http://timestamp.digicert.com`) — already used for every signed build, so published files keep verifying after the certificate expires | `scripts\sign.ps1` |
 | Detections | ours: 6 guard rules + 10 YARA rules written here, hot-reloadable; no per-seat rule subscription | `engine/rules/`, PROTECTION-MATRIX §2 |
 | Real-time protection | the user's own Windows Defender — MI CS audits it and shouts when it is off, rather than reselling an engine | PROTECTION-MATRIX §2 |
-| Symbol/threat intel | the user's own keys and quotas (NVD, an IOC feed URL, VirusTotal by hash) | `docs/THREAT-MODEL.md` §B6 |
+| Symbol/threat intel | the user's own keys and quotas (NVD, an IOC feed URL) | `docs/THREAT-MODEL.md` §B6 |
 | Hosting a download | free static hosting (GitHub Releases is the obvious one) — the update manifest is one signed file next to the release (D-016), so there is no server to run | `docs/THREAT-MODEL.md` §B6 |
 | The inventory | `tool\sbom.dart` is written here and needs no service: it reads the lockfiles | D-018, `sbom.cdx.json` |
 
@@ -103,9 +103,9 @@ comes from the CA. When it is known, add one line with the date to this file.
   buy, nothing to leak.
 - **No per-seat AV engine or managed EDR service** — Windows Defender is the
   real-time layer, and MI CS audits it instead of reselling it.
-- **No cloud sandbox / multi-engine file scanning** — VirusTotal is reachable
-  only by *hash* with the user's own key, and the register's open MED row is
-  whether that client stays at all (§0.2).
+- **No cloud sandbox / multi-engine file scanning** — there is no VirusTotal
+  client and no key to enter (D-019): file reputation is local (the IOC sha256
+  cache your own feed fills, plus YARA).
 - **No paid rule feed** — the shipped packs are ours and are hot-reloadable, so
   buying better content later is a content decision, not a licence one.
 - **No update server and no CDN** — one signed manifest and the release assets.

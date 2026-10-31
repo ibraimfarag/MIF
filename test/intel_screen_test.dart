@@ -77,7 +77,6 @@ Map<String, dynamic> _status({required bool online}) => <String, dynamic>{
       'kev_total': 1764,
       'cve_cache_total': 80,
       'geoip_countries': 0,
-      'vt_queue_len': 0,
       'last_success': online ? 1793313745 : null,
       'age_seconds': online ? 120 : null,
       'sync_interval_hours': 6,

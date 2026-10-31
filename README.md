@@ -63,8 +63,9 @@ Honesty is a feature. Today, MI CS does **not**:
 - detect **any writer touch** on a canary file — decoys are monitored by
   mtime/size polling, so a read-only open is not noticed (writes, renames and
   deletes are);
-- use the **VirusTotal** client in the scan path yet (the client exists, but
-  nothing queues a lookup);
+- send anything to **VirusTotal**: there is no client and no key to enter, so no
+  file — not even a hash — is ever looked up there. File reputation is local
+  (IOC hash cache + YARA) only;
 - promise that an update is signed by *us* and not just by *someone*: the payload
   must carry an embedded Authenticode signature from `CN=MI CS Code Signing` that
   Windows trusts (`docs/THREAT-MODEL.md` F-3), but the pin is the signer's name, not
@@ -91,7 +92,7 @@ Honesty is a feature. Today, MI CS does **not**:
 | **CPU / RAM** | 4 cores / 8 GB. The engine idles at ~11 MB RAM. |
 | **Disk** | ~150 MB for the app + engine, plus whatever the quarantine and intel cache grow to. |
 | **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |
-| **Network** | optional. Everything core works offline; the network is used only for intel sync, NVD lookups, VirusTotal (if you add a key) and a local LM Studio instance (if you run one). |
+| **Network** | optional. Everything core works offline; the network is used only for intel sync, NVD lookups and a local LM Studio instance (if you run one). |
 
 ## Install and first run
 
@@ -145,8 +146,8 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 - **No telemetry, no accounts, no ads.** Nothing about your usage is reported
   anywhere.
 - Nothing leaves the machine except what you explicitly trigger: intel sync
-  (public IOC feeds), NVD queries, VirusTotal lookups (only with your own key)
-  and a local LM Studio instance on `127.0.0.1` (only if you run one).
+  (public IOC feeds), NVD queries and a local LM Studio instance on `127.0.0.1`
+  (only if you run one).
 - State is local SQLite plus plain files you can inspect and delete.
 
 ## The five layers
@@ -170,7 +171,7 @@ One screen, eight sections; every field is validated and persisted by the engine
   on/off, volume, test toast, test sound.
 - **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
   feed URL and Auth-Key, sync now, live connectivity and freshness.
-- **Integrations** — VirusTotal key, LM Studio URL and model.
+- **Integrations** — LM Studio URL and model.
 - **Updates** — manifest URL, stable/beta channel, check, download and install.
 - **Engine** — executable path, connection state, start with Windows, and the
   **privileged helper** card (state, version, install/repair/remove).
@@ -426,7 +427,7 @@ a copy of the task icon.
 
 **اللي مابيعملهوش (بصراحة):** مفيش درايفر kernel ولا فلترة ترافيك داخلية؛ مفيش
 ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling — يعني قراءة الملف
-للقراءة فقط مش بتتسجّل؛ عميل VirusTotal موجود بس لسه مش مربوط بمسار الفحص؛
+للقراءة فقط مش بتتسجّل؛ مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
 التحديثات بتتحقق بـ SHA-256 بس (من غير توقيع رقمي)؛ ملفات التنفيذ **غير موقّعة**
 فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة اللي بتثبّت خدمة المساعدة لسه
 محتاجة تتجرّب بإيدك (الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم).
@@ -438,8 +439,7 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 والحماية والحجر والتقوية كلهم شغالين أوفلاين.
 
 **الخصوصية:** مفيش أي تتبّع ولا حسابات. كل حاجة محلية في SQLite، ومفيش حاجة بتطلع
-من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات، NVD، VirusTotal بمفتاحك،
-أو LM Studio محلي).
+من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات، NVD، أو LM Studio محلي).
 
 **ملفات البيانات:** `%PROGRAMDATA%\MICS` — أو `%LOCALAPPDATA%\MICS` لو الأول
 مش قابل للكتابة بحسابك. الاختيار بيتسجّل في `%LOCALAPPDATA%\MICS\.data-dir`

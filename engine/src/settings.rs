@@ -34,8 +34,6 @@ pub struct Settings {
     pub dnd: bool,
     /// Automatic intel refresh cadence (hours).
     pub sync_interval_hours: u32,
-    /// VirusTotal API key (optional; feature is offline-first).
-    pub vt_api_key: String,
     /// NVD API key (optional; raises the public rate limit).
     pub nvd_api_key: String,
     /// Custom sha256 hash-feed URL for `ioc_hashes`; empty = not configured
@@ -75,7 +73,6 @@ impl Default for Settings {
             auto_resume_scans: true,
             dnd: false,
             sync_interval_hours: 6,
-            vt_api_key: String::new(),
             nvd_api_key: String::new(),
             ioc_feed_url: String::new(),
             ioc_feed_key: String::new(),
@@ -132,7 +129,6 @@ impl Settings {
                     }
                     self.sync_interval_hours = v as u32;
                 }
-                "vt_api_key" => self.vt_api_key = string(value, key)?,
                 "nvd_api_key" => self.nvd_api_key = string(value, key)?,
                 "ioc_feed_url" => {
                     let v = string(value, key)?;
@@ -197,10 +193,6 @@ impl Settings {
     /// Effective NVD key: environment (tests) wins over the stored value.
     pub fn nvd_key(&self) -> String {
         std::env::var("NVD_API_KEY").unwrap_or_else(|_| self.nvd_api_key.clone())
-    }
-
-    pub fn vt_key(&self) -> String {
-        std::env::var("MICS_VT_API_KEY").unwrap_or_else(|_| self.vt_api_key.clone())
     }
 
     /// Effective custom hash-feed URL (environment wins, as with every other
@@ -661,7 +653,6 @@ mod tests {
             "theme": "light",
             "dnd": true,
             "sync_interval_hours": 24,
-            "vt_api_key": "abc",
             "lm_url": "http://localhost:1234",
             "canary_paths": ["C:\\a", "C:\\b"],
             "sound_volume": 10,
@@ -673,7 +664,6 @@ mod tests {
         assert_eq!(back.lang, "en");
         assert_eq!(back.theme, "light");
         assert_eq!(back.sync_interval_hours, 24);
-        assert_eq!(back.vt_api_key, "abc");
         assert_eq!(back.canary_paths.len(), 2);
         assert_eq!(back.sound_volume, 10);
         assert!(!back.toast_enabled);

@@ -76,7 +76,6 @@ class SyncStatus {
   const SyncStatus({
     required this.online,
     required this.iocHashes,
-    required this.vtQueue,
     required this.ageSeconds,
     required this.intervalHours,
     this.iocDomains = 0,
@@ -88,7 +87,6 @@ class SyncStatus {
 
   final bool online;
   final int iocHashes;
-  final int vtQueue;
 
   /// Seconds since the last successful intel sync; `null` = never synced.
   final int? ageSeconds;
@@ -109,7 +107,6 @@ class SyncStatus {
   factory SyncStatus.fromJson(Map<String, dynamic> j) => SyncStatus(
         online: j['online'] as bool? ?? false,
         iocHashes: (j['ioc_hash_total'] as num?)?.toInt() ?? 0,
-        vtQueue: (j['vt_queue_len'] as num?)?.toInt() ?? 0,
         ageSeconds: (j['age_seconds'] as num?)?.toInt(),
         intervalHours: (j['sync_interval_hours'] as num?)?.toInt() ?? 6,
         iocDomains: (j['ioc_domain_total'] as num?)?.toInt() ?? 0,
@@ -124,7 +121,6 @@ class SyncStatus {
   static const empty = SyncStatus(
     online: false,
     iocHashes: 0,
-    vtQueue: 0,
     ageSeconds: null,
     intervalHours: 6,
   );

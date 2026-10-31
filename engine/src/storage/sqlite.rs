@@ -131,12 +131,6 @@ impl Storage {
                 dismissals INTEGER DEFAULT 0,
                 muted INTEGER DEFAULT 0
              );
-             CREATE TABLE IF NOT EXISTS sync_queue (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                kind TEXT,
-                payload TEXT,
-                created_at INTEGER
-             );
              -- Durable scan jobs: the queue is persisted so a scan survives an
              -- engine restart and resumes at the exact file it stopped on.
              CREATE TABLE IF NOT EXISTS jobs (
@@ -569,38 +563,6 @@ impl Storage {
         Ok(rows.flatten().collect())
     }
 
-    // ---- offline sync queue ----
-
-    pub fn queue_op(&self, kind: &str, payload: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO sync_queue (kind, payload, created_at)
-             VALUES (?1, ?2, strftime('%s','now'))",
-            rusqlite::params![kind, payload],
-        )?;
-        Ok(())
-    }
-
-    pub fn pop_queue_ops(&self, kind: &str, limit: usize) -> Result<Vec<(i64, String)>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, payload FROM sync_queue WHERE kind = ?1 ORDER BY id LIMIT ?2",
-        )?;
-        let rows = stmt
-            .query_map(rusqlite::params![kind, limit as i64], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })?
-            .flatten()
-            .collect();
-        Ok(rows)
-    }
-
-    pub fn remove_queue_op(&self, id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM sync_queue WHERE id = ?1", [id])?;
-        Ok(())
-    }
-
     // ---- incidents ----
 
     pub fn create_incident(&self, title: &str, severity: &str, at: i64) -> Result<i64> {
@@ -802,15 +764,6 @@ impl Storage {
             .flatten()
             .collect();
         Ok(rows)
-    }
-
-    pub fn queue_len(&self, kind: &str) -> Result<u64> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn.query_row(
-            "SELECT COUNT(*) FROM sync_queue WHERE kind = ?1",
-            [kind],
-            |r| r.get(0),
-        )?)
     }
 
     // ---- scan jobs (resumable) ----

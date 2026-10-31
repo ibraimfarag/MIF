@@ -260,14 +260,6 @@ class SettingsScreen extends ConsumerWidget {
             title: context.tr('settings.integrations'),
             children: [
               _TextSetting(
-                label: context.tr('settings.vtKey'),
-                hint: 'VirusTotal API key',
-                initial: s.vtApiKey,
-                obscure: true,
-                onSave: notifier.setVtKey,
-              ),
-              const SizedBox(height: 8),
-              _TextSetting(
                 label: context.tr('settings.lmUrl'),
                 hint: 'http://127.0.0.1:1234',
                 initial: s.lmUrl,

@@ -68,9 +68,10 @@ Open a fresh session and paste exactly this:
 
 That means: read this section, then take the **first unfinished small step in
 §0.5** (the order the user asked for: small → medium → large) as one small step,
-and stop for review. (`docs\COST.md` — ب1b — is done, and so is the fix for the
-helper's install button; the one thing that still needs a human is the UAC click
-in §0.2.) The rules that
+and stop for review. (`docs\COST.md` — ب1b — is done, the helper's install button
+worked and the service is installed, running and reachable, and the dead
+VirusTotal client is deleted; the two things that still need a human are the
+certificate in §0.2 and the three-operation helper acceptance.) The rules that
 session must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
@@ -88,14 +89,15 @@ session must keep, all from `AGENTS.md`:
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-31, `main` @ `8273086`). The whole
+**Where the project stands** (2026-10-31, `main` @ `85b6db3`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
 helper, intel sync (D-012), resumable jobs, desktop notification cards, bilingual
 UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
-`SHA256SUMS`, and Authenticode signing that works on this machine. The names and
-icons are settled and a probe now fails the release if they drift:
+`SHA256SUMS`, and Authenticode signing that works on this machine. The engine now
+also refuses to serve from a Low-integrity folder and names the cause (trap 21).
+The names and icons are settled and a probe now fails the release if they drift:
 
 | Surface | Name |
 |---|---|
@@ -119,7 +121,9 @@ both binaries `Valid`).
 > `dist` sits in a low-integrity web root (`H:\FlyEnv\...\server\www\`): Windows
 > refuses notification cards to a process launched from there
 > (`0x80073D54 ... confined folder`), and that folder has already been emptied once
-> by host tooling outside this repo (trap 16).
+> by host tooling outside this repo (trap 16). Everything started from there also
+> runs at Low integrity, which is what trap 21 and `mics-engine`'s startup guard
+> are about.
 
 ### 0.1 Do this next — needs no elevation and no money (in this order)
 
@@ -149,8 +153,8 @@ both binaries `Valid`).
    either definition of it.
 
 **This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **small step 2 of §0.5** (delete the dead
-VirusTotal client).
+is done. The next ordered step is **small step 3 of §0.5** (close the Start-Menu
+shortcut name note in D-008's file).
 
 ### 0.2 Blocked on the user
 
@@ -165,9 +169,9 @@ VirusTotal client).
    `CurrentUser\Root` + `TrustedPublisher`, signs DLLs then EXEs before hashing and
    zipping. A public release needs the certificate (the `-PfxPath`/`-PfxPassword`
    path already timestamps), and only then does SmartScreen stop warning strangers.
-3. **Two decisions:** the VirusTotal client is dead code — wire the sync queue that
-   is supposed to fill it, or delete it and say so in the README (MED); and whether
-   the Start-Menu shortcut should also be named `MICS` (today it is `MI CS`).
+3. ~~**Two decisions**~~ — both answered on 2026-10-31: the VirusTotal client is
+   **deleted** (D-019, small step 2), and the Start-Menu shortcut keeps the name
+   `MI CS` (small step 3 writes that into D-008's file; no code change).
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -221,16 +225,16 @@ order the user picked (small → medium → large), and ب1b is done**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries 21 open rows (2 HIGH, 6 MED, the rest LOW). The MED ones
+`docs/TODO.md` §7 carries 20 open rows (2 HIGH, 5 MED, the rest LOW). The MED ones
 worth pulling forward once the phases above allow it: **no scheduled scan and no
-real-time file watching**, the dead VirusTotal client (see §0.2), the canary checker
-being poll-based, and the firewall going through `netsh` instead of FirewallAPI COM.
+real-time file watching**, the canary checker being poll-based, and the firewall
+going through `netsh` instead of FirewallAPI COM.
 The HIGH ones are the installer and the incomplete package when `rules\` is dropped by
 hand — both are ب's job.
 
-**Blocked on the user (listed in §0.2, do not plan around them):** one UAC prompt for
-the helper (ب4 removes the need for it), a real signing certificate (ب5), and two
-small decisions (VirusTotal client, Start-Menu shortcut name).
+**Blocked on the user (listed in §0.2, do not plan around them):** a real signing
+certificate (ب5), and the three-operation helper acceptance in §0.2 — its install
+prompt was answered on 2026-10-31 (the service is installed, running and reachable).
 
 ### 0.4 Environment must-knows (the short version of §8)
 
@@ -257,18 +261,19 @@ small decisions (VirusTotal client, Start-Menu shortcut name).
 
 On 2026-10-31 the user set the sequence for what is left: finish whatever is
 waiting on a human **first**, then the small tasks, then the medium ones, then the
-large ones. Two of the three human items are settled (the VirusTotal client goes —
-delete it in the small list below and say so in the README; the shortcut name stays
-«MI CS» — no code change), so what remains human is the one UAC click in §0.2 and a
-certificate (§0.2/ب5). The steps below are the same work as §0.3, split by size so a
-session always knows what "next" means.
+large ones. Two of the three human items are settled (the VirusTotal client is
+deleted — D-019, small step 2; the shortcut name stays «MI CS» — small step 3, no
+code change) and the helper's install prompt was answered the same day, so what
+remains human is a certificate (§0.2/ب5) and the three-operation helper acceptance.
+The steps below are the same work as §0.3, split by size so a session always knows
+what "next" means.
 
 **Small — one sitting each, no elevation, no money, no new subsystem**
 
 | # | Step | Note |
 |---|---|---|
 | 1 | ~~`docs\COST.md` (ب1b)~~ | **done** — this commit |
-| 2 | Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone | the user's decision; the register MED row closes with it |
+| 2 | ~~Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone~~ | **done** — D-019; the register MED row closed with it |
 | 3 | Close the Start-Menu shortcut name decision in D-008's file (keep «MI CS») | documentation only — the name already matches |
 | 4 | Dark-mode contrast audit → fix, mirroring أ2/أ3 (`docs/CONTRAST.md` gets a dark table, `test/dark_contrast_audit_test.dart` the same asserts) | the open LOW row (1.36:1 border) closes here |
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
@@ -412,6 +417,36 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 2 — the dead VirusTotal client is gone, and the product says so (D-019)**
+  - What the code lost: `engine\src\scanner\vt.rs` (124 lines), the `vt_api_key`
+    setting with the `MICS_VT_API_KEY` test hook, the `sync_queue` table and the
+    four storage calls that served it (`queue_op`, `pop_queue_ops`,
+    `remove_queue_op`, `queue_len`), the sync pass's queue flush, the
+    `vt_queue_len` field of the sync report, the Settings → Integrations field
+    with its two i18n entries and the typed mirror — 227 lines deleted, 10 added,
+    the largest share of it code that nothing could reach.
+  - **Why delete instead of wiring it:** the client was unreachable by
+    construction — only the offline queue could call it and nothing filled that
+    queue — so what shipped was a settings field, an outbound destination, a table
+    and a sync-status column that made the scanner look more capable than it is.
+    The user chose deletion on 2026-10-31; D-019 records it, including what would
+    have to come back with it (a §B6 destination row, the F-5 masking story and
+    the UI field that names the key).
+  - **Documents moved with the code, in the same commit:** `README.md` (English
+    "does not" list, requirements network row, privacy paragraph; Arabic
+    equivalent), `docs\THREAT-MODEL.md` (asset A7 and residual risk F-5 shrink to
+    two keys; the §B6 destination table loses its `virustotal.com` row and says
+    why nothing can reach one; `MICS_VT_API_KEY` leaves the B9 hook list),
+    `docs\COST.md` (§3 now says there is no client and no key at all),
+    `docs\PROTECTION-MATRIX.md` (the hash dimension explains the absent client
+    instead of a queue nothing fills), `AGENTS.md` rule 8's outbound-traffic list,
+    and this file.
+  - **Verified:** the four checks are green (cargo test **82 passed** — the deleted
+    module carried no tests of its own, and two settings assertions went with the
+    field; `flutter test` 65; `flutter analyze` and `clippy --release -D warnings`
+    clean), and after the commit a grep for any VirusTotal symbol outside the
+    documents that explain its absence returns nothing.
 
 - **`readonly database` and "helper not answering" were one bug: a Low-integrity build**
   - The report: clicking **Settings → Engine → Install/Repair** answered
@@ -1935,8 +1970,12 @@ signing certificate respectively), so this is the work that is always available.
       the autostart `reg` calls, `icacls`, `taskkill` and `sc.exe` all run through
       `ToolCall`, the async Defender scan carries its own `tokio::time::timeout`,
       and a test fails on any bare `Command::new` outside the runner.
-- [ ] Decide the VirusTotal client's fate: wire the sync queue that fills it, or
-      delete the dead code and say so in the README (MED).
+- [x] VirusTotal client's fate decided and executed: the client was dead code (only
+      the offline queue could call it, and nothing filled the queue), so it is
+      **deleted** — `scanner/vt.rs`, `vt_api_key`/`MICS_VT_API_KEY`, the
+      `sync_queue` table and its four storage calls, the Settings → Integrations
+      field and `vt_queue_len`. README says so in both languages (D-019). The
+      register MED row closed with it.
 - [x] Regenerate the portable ZIP + `SHA256SUMS` from the current
       `dist/MICS-portable`, so the published artifact matches the deployed build
       (`scripts\make-release.ps1` + `scripts\verify-release.ps1`; the folder now
@@ -2026,7 +2065,6 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | LOW | A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS" (the threat model already says a card is UI, not proof) | `notify/toast.rs`, THREAT-MODEL §B10 |
-| MED | VirusTotal client is dead code (only reachable from the sync queue, which nothing fills) | `scanner/vt.rs` |
 | MED | **No scheduled scan and no real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection at all (Windows Defender is the real-time layer, and the audit says so loudly when it is off) | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
@@ -2038,7 +2076,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
-| LOW | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them) | `settings.rs`, THREAT-MODEL F-5 |
+| LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | **Dark mode is not contrast-audited** — light mode is, and clears 29/29 (`docs/CONTRAST.md`), but nothing measures the dark palette: its border `#1E293B` on `#0A0E14` is 1.36:1, i.e. below the 3:1 a boundary needs, so the audit has to be re-run in dark mode before claiming the same for it | `app_theme.dart`, `test/light_contrast_audit_test.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 

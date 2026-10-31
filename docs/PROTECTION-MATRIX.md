@@ -64,8 +64,8 @@ restored or deleted. A scan never stops a process or a file from loading.
   `guard/etw.rs` used to imply otherwise).
 - **The hash dimension is empty by default.** No key-free SHA-256 feed is left
   (abuse.ch wants an Auth-Key), so `ioc_hashes` reports `not_configured` until a URL
-  and key are supplied. The VirusTotal client exists but is only reachable from a
-  sync queue nothing fills, so it cannot enrich a scan today.
+  and key are supplied. There is no VirusTotal client (D-019), so a hash is never
+  looked up off-box either: reputation is the local cache plus YARA.
 - **Detection content is a starter pack** (6 guard rules, 10 YARA rules). The
   engine is the product; the packs are a demonstration until real content is
   curated, and `verify-release.ps1` checks that they *load*, not what they catch.

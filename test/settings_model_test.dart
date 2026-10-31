@@ -27,7 +27,6 @@ void main() {
       themeMode: ThemeMode.light,
       dndMode: true,
       syncIntervalHours: 24,
-      vtApiKey: 'abc',
       canaryPaths: ['C:\\a', 'C:\\b'],
     );
     final json = s.toEngineJson();
@@ -35,7 +34,6 @@ void main() {
     expect(json['theme'], 'light');
     expect(json['dnd'], isTrue);
     expect(json['sync_interval_hours'], 24);
-    expect(json['vt_api_key'], 'abc');
     expect(json['canary_paths'], hasLength(2));
     // Every documented key must be present in a full write.
     for (final key in const [
@@ -66,7 +64,6 @@ void main() {
       autoResumeScans: false,
       dndMode: true,
       syncIntervalHours: 12,
-      vtApiKey: 'vt',
       nvdApiKey: 'nvd',
       iocFeedUrl: 'https://example.com/hashes.csv',
       iocFeedKey: 'auth-key',
@@ -88,7 +85,6 @@ void main() {
     expect(back.autoResumeScans, isFalse);
     expect(back.dndMode, isTrue);
     expect(back.syncIntervalHours, 12);
-    expect(back.vtApiKey, 'vt');
     expect(back.nvdApiKey, 'nvd');
     expect(back.iocFeedUrl, 'https://example.com/hashes.csv');
     expect(back.iocFeedKey, 'auth-key');
@@ -112,7 +108,7 @@ void main() {
   });
 
   test('a partial patch merges without wiping other fields', () {
-    const current = AppSettings(dndMode: true, syncIntervalHours: 24, vtApiKey: 'k');
+    const current = AppSettings(dndMode: true, syncIntervalHours: 24);
     final merged = AppSettings.fromEngineJson({
       ...current.toEngineJson(),
       'lang': 'en',
@@ -120,6 +116,5 @@ void main() {
     expect(merged.lang, AppLang.en);
     expect(merged.dndMode, isTrue);
     expect(merged.syncIntervalHours, 24);
-    expect(merged.vtApiKey, 'k');
   });
 }

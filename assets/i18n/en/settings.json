@@ -50,7 +50,6 @@
     "settings.toastsHint":  "A card above the taskbar for every security event: a caught virus, an attack, or protection that acted. Do-not-disturb silences everything below CRITICAL.",
     "settings.updates":  "Updates",
     "settings.volume":  "Volume",
-    "settings.vtKey":  "VirusTotal API key (optional)",
     "settings.testSound":  "Play a test sound",
     "settings.manifestHint":  "No manifest URL configured — updates are disabled. Paste the release manifest URL above."
 }

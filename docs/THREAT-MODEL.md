@@ -40,7 +40,7 @@ Scope: the shipped Windows 10/11 x64 product — `mics_app.exe` (UI, manifested
 | A4 | **The verdict** — the audit score, a finding's state, a scan result | engine memory, DB, UI | Trust misplaced: a false `Secure` retires the user's vigilance (this is why the engine owns the score — D-014) |
 | A5 | Quarantine blobs (live malware samples) | `%PROGRAMDATA%\MICS\Quarantine` | Working samples; also evidence destruction if deleted |
 | A6 | Engine state and logs (scan history, incidents, canaries, intel state, job queue, `priv.log`) | data dir, `%PROGRAMDATA%\MICS\logs` | Knowledge of what was detected; tamper evidence |
-| A7 | Secrets: `vt_api_key`, `nvd_api_key`, `ioc_feed_key` | `settings.json` (plaintext — F-5) | Quota abuse, attribution to the user's key |
+| A7 | Secrets: `nvd_api_key`, `ioc_feed_key` | `settings.json` (plaintext — F-5) | Quota abuse, attribution to the user's key |
 | A8 | Reports | `Documents\MICS-Reports` | Findings export (no secrets) |
 | A9 | Availability of protection | engine process, guard loop, helper service | Time and quiet to act (F-8) |
 
@@ -145,9 +145,12 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 | `raw.githubusercontent.com` (StevenBlack hosts) | a GET, nothing machine-specific | intel sync, when that source is configured |
 | `cisa.gov` KEV feed | a GET | intel sync |
 | `services.nvd.nist.gov` | installed product identifiers (CPE/keyword query), key optional | vulnerability scan |
-| `virustotal.com/api/v3/files/<sha256>` | **a hash only**, never file content | explicit lookup (`scanner/vt.rs`) |
 | `dns.google`, `1.1.1.1` | a HEAD/GET probe with no payload | the "online?" check, cached 30 s (`sync/mod.rs::online`) |
 | LM Studio (`lm_url`, default `http://127.0.0.1:1234`) | the finding text to explain | LLM explain, explicit |
+
+There is **no VirusTotal client and no key for it** (D-019), so no file and not
+even a hash is ever sent anywhere for reputation; that destination is gone from
+this list because no code could reach one.
 
 `settings.rs` accepts `https://` everywhere and `http://` **only for loopback**
 (`127.0.0.0/8`, `::1`, the literal name `localhost`) — that is what a local LM
@@ -186,7 +189,7 @@ local code (F-6).
 
 `MICS_DATA_DIR`, `MICS_PIPE_NAME` (full path), `PROGRAMDATA`, `MICS_ENGINE_PATH`,
 `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `MICS_NO_AUTO_RESUME`, `MICS_HELPER_PIPE`
-(**bare** name — `privileged/ops.rs` prefixes `\\.\pipe\`, F-8), `MICS_VT_API_KEY`,
+(**bare** name — `privileged/ops.rs` prefixes `\\.\pipe\`, F-8),
 `NVD_API_KEY`, `MICS_LM_URL`. Whoever can set the engine's environment decides
 where it reads and writes and whether the guard runs. That requires the ability to
 create a process as the user, which already implies the same-token power described
@@ -232,7 +235,7 @@ product trusts the label.
 | F-2 | **Closed as a distinct-user risk** (F-2a + F-2b): the helper reads the caller's pid, image and token SID, and answers only `mics-engine.exe` running as the account that owns `%PROGRAMDATA%\MICS`. What is left is not another user — it is a process running as the *installing user*, which can already answer a UAC prompt itself (D-007's trade), plus the portable fallback where no account is recorded yet | D-007 removes per-action prompts by accepting that the install owner is the trust anchor | Nothing further for F-2; the portable fallback is the LOW register entry, and a future service-mode engine running as `SYSTEM` would need a new decision |
 | F-3 | The update signer is pinned by **subject name** (`CN=MI CS Code Signing`), not by thumbprint — a certificate with that same CN issued by a CA that failed identity validation would still pass | A thumbprint pin would break on every locally re-issued certificate, making the next release refuse its own payload | Pin the thumbprint once a release certificate with a stable lifetime exists, or carry the expected thumbprint inside a separately signed manifest |
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
-| F-5 | `vt_api_key` / `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
+| F-5 | `nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json` | Any local user who can read that file can already read the engine's own state | DPAPI-protect the secret fields (machine or user scope) and show them masked/never in reports |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |
 | F-8 | No self-defense: same-token code can kill the engine, replace binaries, edit `rules\`, or point the engine at another data dir through its environment | Stopping a same-token attacker requires kernel callbacks or a second service — A-9 territory | Run the engine under a watchdog service and verify the package's signature before loading rules |
 | F-9 | No memory scanning, no unpacking/emulation, no AMSI, no pre-execution blocking (no minifilter) | Usermode-only and driver-free is a product decision (no driver install, no BSOD risk) | Documented in `PROTECTION-MATRIX.md`; the guard's behaviour rules are the compensating control |
