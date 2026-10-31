@@ -156,8 +156,8 @@ both binaries `Valid`).
    either definition of it.
 
 **This section is empty now**: every step that needed neither elevation nor money
-is done. The next ordered step is **small step 4 of §0.5** (the dark-mode contrast
-audit and its fix).
+is done. The next ordered step is **small step 5 of §0.5** (light-theme screenshots
+for the README).
 
 ### 0.2 Blocked on the user
 
@@ -279,7 +279,7 @@ what "next" means.
 | 1 | ~~`docs\COST.md` (ب1b)~~ | **done** — this commit |
 | 2 | ~~Delete the dead VirusTotal client (`engine/src/scanner/vt.rs` + its wiring and tests) and say in the README that hash lookups are gone~~ | **done** — D-019; the register MED row closed with it |
 | 3 | ~~Close the Start-Menu shortcut name decision (keep «MI CS»)~~ | **done** — recorded as D-020; the name already matched |
-| 4 | Dark-mode contrast audit → fix, mirroring أ2/أ3 (`docs/CONTRAST.md` gets a dark table, `test/dark_contrast_audit_test.dart` the same asserts) | the open LOW row (1.36:1 border) closes here |
+| 4 | ~~Dark-mode contrast audit → fix, mirroring أ2/أ3~~ | **done** — 7 of 29 dark pairs failed, all fixed; both modes now assert 29 of 29 (`docs/CONTRAST.md`, `test/dark_contrast_audit_test.dart`) |
 | 5 | Light-theme screenshots for the README (the same proof-is-textual rules apply: the images illustrate, the text proves) | README polish |
 | 6 | Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required" | no new subsystem |
 | 7 | `docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read | P5 half-step |
@@ -421,6 +421,42 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Small step 4 — dark mode is contrast-audited, fixed, and frozen (7 of 29 failed)**
+  - Mirroring أ2/أ3 for light: the dark palette was **measured first** with the same
+    29 pairs the UI actually paints — palette tokens as text on the page and on a
+    card, the card border, the accent fills, `onPrimary`/`onSecondary`/`onError`,
+    both snackbar rows read back out of a rendered `SnackBar`, the nav-rail icons,
+    and the tinted banners composited with `blendOver`. **7 of 29 were below their
+    WCAG bar**, and the card is the binding surface in dark mode (the lighter of the
+    two, the mirror of light mode where the page bound).
+  - The failures and their ratios: border `#1E293B` 1.32:1 on the page / 1.21:1 on a
+    card; secondary text `#64748B` 4.06:1 / 3.73:1; declared `onError` (`#FFFFFF` on
+    `#F43F5E`) 3.67:1; the settings error bar (85 % red over the dark page) 3.92:1;
+    the block-action badge (red on red 15 %) 4.19:1.
+  - The fix, dark tokens only: `border` → `#5C6C80` (3.60 / **3.31** — the dimmest
+    slate that clears 3:1 on the card), `muted` → `#788AA0` (5.47 / 5.02), `red` →
+    `#FB5F7B` (6.47 / 5.94, and it carries the badge to 4.91 and the translucent bar
+    to 4.76), and `colorScheme.onError` takes the page colour in dark mode (6.47:1),
+    as `onPrimary`/`onSecondary` already did. `background` was deliberately left at
+    `#0A0E14` because `AppTheme.isDark` compares exactly that literal.
+  - **Two screens were painting a pair no audit could see** (the same class of bug
+    the light audit found): `guard_screen.dart` (Start/Stop Guard) and
+    `hardening_screen.dart` (Fix) forced `foregroundColor: Colors.white` over the
+    green/red fill — 1.92:1 and 2.99:1 in dark mode. They now use
+    `AppColors.background`, the token `filledButtonTheme` already paints on a filled
+    button: 10.06:1 / 6.47:1 dark, and light goes 7.68→7.15 / 6.29→5.85 (still
+    passing, `#FFFFFF`→`#F4F7FB`).
+  - **The two audits now share `test/contrast_audit_harness.dart`** (pair type, bars,
+    hex, the finding builder, the real-`SnackBar` painter and the registrars), so
+    they cannot drift in what they measure. Equivalence was proved rather than
+    assumed: the light table was captured before the refactor and diffed after — 32
+    printed lines, byte-identical, so light's frozen numbers did not move.
+  - Verified: `flutter test --no-pub` **72 passed** (65 + 7 new dark tests), both
+    audits print `29 of 29 pairs clear their bar`, `cargo test` 82 passed,
+    `clippy --release -D warnings` clean, `flutter analyze` no issues. README's test
+    counts were stale (51/31) and are now 82/72, plus a paragraph per language saying
+    contrast is measured in both modes.
 
 - **Small step 3 — the Start-Menu name question is closed (D-020)**
   - The open question was whether the Start-Menu shortcut should be renamed `MICS`
@@ -2106,7 +2142,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
-| LOW | **Dark mode is not contrast-audited** — light mode is, and clears 29/29 (`docs/CONTRAST.md`), but nothing measures the dark palette: its border `#1E293B` on `#0A0E14` is 1.36:1, i.e. below the 3:1 a boundary needs, so the audit has to be re-run in dark mode before claiming the same for it | `app_theme.dart`, `test/light_contrast_audit_test.dart` |
+| LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | LOW | UI is not yet obfuscated and ships without an integrity manifest | P5 |
 
 ## Icon sizes required for the application

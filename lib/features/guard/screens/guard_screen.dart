@@ -193,7 +193,7 @@ class _GuardScreenState extends ConsumerState<GuardScreen> {
             style: FilledButton.styleFrom(
               backgroundColor:
                   st.running ? AppColors.red : AppColors.green,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.background,
             ),
           ),
         ]),

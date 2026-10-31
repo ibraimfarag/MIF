@@ -260,11 +260,11 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ```powershell
 cd engine
-cargo test                                # 51 tests
+cargo test                                # 82 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
-flutter test --no-pub                     # 31 tests
+flutter test --no-pub                     # 72 tests, including both contrast audits
 
 # End-to-end transport check (needs an engine on an isolated pipe)
 $env:MICS_PIPE_NAME   = '\\.\pipe\mics_engine_test'
@@ -286,6 +286,13 @@ Test hooks exist so an isolated engine can be run without touching production
 code: `MICS_DATA_DIR`, `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`,
 `MICS_NO_AUTO_RESUME`, `MICS_ENGINE_PATH`, `MICS_HELPER_PIPE`,
 `MICS_HELPER_LOG`.
+
+**Contrast is measured, not eyeballed.** `test/light_contrast_audit_test.dart` and
+`test/dark_contrast_audit_test.dart` score every colour pair the shipped UI paints
+against WCAG 2.2 (4.5:1 for text, 3:1 for boundaries and icons) and fail when one
+drops below its bar; `docs/CONTRAST.md` records both modes — 29 of 29 pairs pass in
+each, after the light fix (أ3) and the dark fix (small step 4 of `docs/TODO.md`
+§0.5).
 
 ## Icons
 
@@ -453,8 +460,11 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (51) و `cargo clippy` نضيف، و`flutter analyze`
-بدون ملاحظات و`flutter test` (31). وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
+**الاختبارات:** `cargo test` (82) و `cargo clippy` نضيف، و`flutter analyze`
+بدون ملاحظات و`flutter test` (72). والتباين اللوني **متقاس مش بالتقدير**: وضعين
+فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
+والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
+وفيه أدوات تحقق بتختبر الحقيقة مش الكود:
 `tool/` لنقل البيانات بين الواجهة والمحرك، و`scripts\verify-toast.ps1` بيتأكد إن
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
 خدمة المساعدة ورفضها الآمن من غير أي UAC، و`scripts\verify-release.ps1` بيتأكد إن

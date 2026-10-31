@@ -5,26 +5,33 @@ import 'package:flutter/material.dart';
 class AppColors {
   static Color background = const Color(0xFF0A0E14);
   static Color surface = const Color(0xFF111826);
-  static Color border = const Color(0xFF1E293B);
+  static Color border = const Color(0xFF5C6C80);
   static Color cyan = const Color(0xFF22D3EE);
   static Color green = const Color(0xFF34D399);
-  static Color red = const Color(0xFFF43F5E);
+  static Color red = const Color(0xFFFB5F7B);
   static Color orange = const Color(0xFFFB923C);
   static Color yellow = const Color(0xFFEAB308);
   static Color text = const Color(0xFFE2E8F0);
-  static Color muted = const Color(0xFF64748B);
+  static Color muted = const Color(0xFF788AA0);
 
+  /// Every token here is measured against WCAG 2.2 on both dark surfaces this UI
+  /// paints (`test/dark_contrast_audit_test.dart` pins the ratios, and
+  /// `docs/CONTRAST.md` records them). `border` has to clear 3:1 as a boundary
+  /// against the card and not only against the page (the card is the lighter of
+  /// the two, so it is the binding one), and the accents are text at 10-13 px,
+  /// so they have to clear 4.5:1 on both. Do not darken one without re-running
+  /// that test.
   static void applyDark() {
     background = const Color(0xFF0A0E14);
     surface = const Color(0xFF111826);
-    border = const Color(0xFF1E293B);
+    border = const Color(0xFF5C6C80);
     cyan = const Color(0xFF22D3EE);
     green = const Color(0xFF34D399);
-    red = const Color(0xFFF43F5E);
+    red = const Color(0xFFFB5F7B);
     orange = const Color(0xFFFB923C);
     yellow = const Color(0xFFEAB308);
     text = const Color(0xFFE2E8F0);
-    muted = const Color(0xFF64748B);
+    muted = const Color(0xFF788AA0);
   }
 
   /// Every token here is measured against WCAG 2.2 on both surfaces this UI
@@ -94,7 +101,10 @@ class AppTheme {
         onPrimary: dark ? const Color(0xFF0A0E14) : Colors.white,
         onSecondary: dark ? const Color(0xFF0A0E14) : Colors.white,
         onSurface: AppColors.text,
-        onError: Colors.white,
+        // A bright accent fill takes the page colour in dark mode: white on
+        // `#FB5F7B` is 3.0:1, the page colour is 6.47:1 (measured in
+        // `test/dark_contrast_audit_test.dart`).
+        onError: dark ? const Color(0xFF0A0E14) : Colors.white,
         outline: AppColors.border,
       ),
       dividerColor: AppColors.border,

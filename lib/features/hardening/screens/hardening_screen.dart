@@ -187,7 +187,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                     },
                     style: FilledButton.styleFrom(
                         backgroundColor: AppColors.green,
-                        foregroundColor: Colors.white),
+                        foregroundColor: AppColors.background),
                     child: Text(context.tr('common.fix')),
                   ),
                 if (a.applied)
