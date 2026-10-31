@@ -1,8 +1,9 @@
 # AGENTS.md — read this before touching MI CS
 
-**Start here:** [`docs/TODO.md`](docs/TODO.md) — read **§0 "Resume here"** first
-(current state, the next ordered steps, what is blocked on a human, and the
-environment must-knows), then the plan and known issues below it — and
+**Start here:** [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is left, with
+priorities, estimates and the order to work in — then [`docs/TODO.md`](docs/TODO.md)
+**§0 "Resume here"** (current state, the next ordered step, what is blocked on a
+human, and the environment must-knows), then
 [`docs/DECISIONS.md`](docs/DECISIONS.md) (decided architecture, do not silently
 reverse it).
 
@@ -13,7 +14,7 @@ reverse it).
 | `lib/` | Flutter UI (Riverpod). **No OS APIs in the UI** — everything goes through the engine. |
 | `engine/` | Rust crate `mics-engine` (JSON-RPC 2.0). |
 | `engine/rules/` | Bundled YARA pack + Sigma-like guard rules (hot-reloaded). |
-| `docs/` | TODO/handoff, decisions, (later) threat model + protection matrix. |
+| `docs/` | Roadmap (what is left), TODO/handoff, decisions, threat model + protection matrix. |
 | `tool/` | Dev-only Dart probes (`pipe_smoke`, `pipe_probe`); not shipped. |
 | `dist/` | Portable package (ignored by git). |
 
@@ -36,7 +37,8 @@ If cargo complains about `.cargo-build-lock` access, set
 
 1. **Reply to the user in Egyptian Arabic.** Code, comments, identifiers, docs,
    commit messages in English.
-2. One phase = one conventional commit; update `docs/TODO.md` in the same commit.
+2. One phase = one conventional commit; update `docs/TODO.md` (and the matching row
+   in `docs/ROADMAP.md`) in the same commit.
 3. No placeholders, no TODOs in code, no `unwrap()` in production paths.
 4. The engine owns all OS access; the UI only speaks JSON-RPC through
    `lib/core/ipc/`. Whitelisted methods only.

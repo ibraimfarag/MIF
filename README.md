@@ -9,7 +9,9 @@ explains, and suggests the next action instead of dumping raw data.
 
 > **Status: pre-release.** The features below are implemented and covered by
 > tests, but packaging, code signing and the single-elevation helper are still
-> in progress. Live status: [`docs/TODO.md`](docs/TODO.md). Design decisions:
+> in progress. What is left, with priorities and estimates:
+> [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
+> [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
@@ -391,7 +393,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/sounds/` | In-house notification cues. |
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
 | `scripts/` | User-facing helpers and acceptance probes: code signing, shortcuts, `verify-toast.ps1`, `verify-helper.ps1`. |
-| `docs/` | `TODO.md` (live status), `DECISIONS.md` (why things are the way they are), `PRIVILEGED-OPS.md` (the helper's complete operation list). |
+| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status), `DECISIONS.md` (why things are the way they are), `PRIVILEGED-OPS.md` (the helper's complete operation list). |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
@@ -502,6 +504,10 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 بدون ملاحظات و`flutter test` (72). والتباين اللوني **متقاس مش بالتقدير**: وضعين
 فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
 والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
+
+**اللي فاضل:** كل المتبقي لحد آخر المشروع — بالمراحل والأولوية والوقت التقريبي
+وترتيب الشغل — في [`docs/ROADMAP.md`](docs/ROADMAP.md)؛ واللي بيتوقف على حضرتك
+حاجتين بس: قبول خدمة المساعدة (٣ عمليات، ١٥ دقيقة) وشهادة التوقيع.
 
 **صور الواجهة:** الصور الأربعة فوق (لوحة المعلومات، الفحص، الاستخبارات، الإعدادات)
 **مرسومة** من كود الواجهة نفسه ببيانات تجريبية — مش لقطات من جهاز حقيقي — وشغّال

@@ -64,24 +64,28 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 وابدأ من أول مهمة صغيرة في §0.5
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وابدأ بـ ج1 (build hardening) ثم ب3
+> (installer)، خطوة واحدة في كل مرة ومعاها كوميت.
 
-That means: read this section, then take the **first unfinished small step in
-§0.5** (the order the user asked for: small → medium → large) as one small step,
-and stop for review. (`docs\COST.md` — ب1b — is done, the helper's install button
-worked and the service is installed, running and reachable, and the dead
-VirusTotal client is deleted; the two things that still need a human are the
-certificate in §0.2 and the three-operation helper acceptance.) The rules that
-session must keep, all from `AGENTS.md`:
+That means: read §0 and `docs/ROADMAP.md`, take the **first step of the ROADMAP's
+"order to work in"** (currently **ج1 — build hardening**), do it as one small step,
+and stop for review. §0.5 (the small list the user asked for) is **finished**; the
+remaining work is release engineering, integrity and QA, all of it laid out with
+estimates in `docs/ROADMAP.md`. The two things that still need a human are the
+certificate in §0.2 and the three-operation helper acceptance (the service itself is
+installed, running and reachable). The rules that session must keep, all from
+`AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
   cheap in time and tokens; do not bundle steps;
-- **one step = one conventional commit**, with `docs/TODO.md` updated in the same
-  commit (move the finished item into the Done log, not just tick it);
+- **one step = one conventional commit**, with `docs/TODO.md` **and** `docs/ROADMAP.md`
+  updated in the same commit (move the finished item into the Done log, not just tick
+  it);
 - the **four checks must be green before every commit**: `cargo test`,
   `cargo clippy --release -- -D warnings`, `flutter analyze --no-pub`,
   `flutter test --no-pub`. Run cargo from `engine\` with
-  `$env:YRX_REGENERATE_MODULES_RS="false"` and `CARGO_TARGET_DIR` set (see §8);
+  `$env:YRX_REGENERATE_MODULES_RS="false"` (and `CARGO_TARGET_DIR` if it complains,
+  see §8);
 - **reply in Egyptian Arabic**; code, comments, docs, identifiers and commit messages
   in English;
 - no live probe without the isolation env vars (`MICS_NO_SINGLETON`, an isolated
@@ -89,7 +93,7 @@ session must keep, all from `AGENTS.md`:
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-31, `main` @ `85b6db3`). The whole
+**Where the project stands** (2026-10-31, `main` @ `512b2a6`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
@@ -97,7 +101,10 @@ helper, intel sync (D-012), resumable jobs, desktop notification cards, bilingua
 UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
 `SHA256SUMS`, and Authenticode signing that works on this machine. The engine now
 also refuses to serve from a Low-integrity folder and names the cause (trap 21).
-The names and icons are settled and a probe now fails the release if they drift:
+Both themes are **measured** now (29 of 29 contrast pairs each, asserted in
+`test/{light,dark}_contrast_audit_test.dart`), and the README carries four
+light-theme renders that regenerate from the UI itself. The names and icons are
+settled and a probe now fails the release if they drift:
 
 | Surface | Name |
 |---|---|
@@ -141,8 +148,8 @@ both binaries `Valid`).
    snackbar went 1.00:1 → 21.00:1), `audit_models.dart`/`cvssColor` read the
    palette instead of dark-mode literals, the palette gained a `yellow` token, and
    every ratio is an assertion in `test/light_contrast_audit_test.dart`.
-   Before/after numbers: `docs/CONTRAST.md`. Dark mode is still unmeasured (the
-   register row says so).
+   Before/after numbers: `docs/CONTRAST.md`. Dark mode was measured in small step 4
+   (7 of 29 pairs failed, all fixed) — **both** modes now assert 29 of 29.
 3. ~~**أ4 — AUMID registration (LOW)**~~ — done: `scripts\register-aumid.ps1` writes
    `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName "MI CS"`, `IconUri` =
    the app's own exe: no elevation, no new file) and tags both shortcuts with
@@ -157,8 +164,12 @@ both binaries `Valid`).
 
 **This section is empty now**, and so is the rest of §0.5: **all eight small steps are
 done** (the register keeps only rows that need elevation, money, a signing certificate
-or a decision from you). What is left in the project is in §7: the P1.5 helper
-acceptance (three operations, needs you), P4 signing, and the P5/P6 work.
+or a decision from you). What is left is no longer "small steps" — it is the release,
+integrity and QA work in **`docs/ROADMAP.md`** (phases, tasks, priorities, estimates
+and the order to work in). Short version: **ج1 build hardening → ب3 installer →
+ب4 helper fold-in → ج2 signed manifest → د1/د2 QA**, with the P1.5 helper acceptance
+(three operations, needs you) and P4 signing (needs the certificate) as the two
+things that cannot move without you.
 
 ### 0.2 Blocked on the user
 
@@ -179,8 +190,16 @@ acceptance (three operations, needs you), P4 signing, and the P5/P6 work.
 
 ### 0.3 The plan, in order — what a new session works through
 
+**`docs/ROADMAP.md` is the authoritative order and carries the estimates.** The tables
+below remain the per-phase detail it was built from, with the step IDs the ROADMAP
+uses. The chosen order is:
+
+> **ج1** build hardening → **ب3** installer → **ب4** helper fold-in → **ج2** signed
+> manifest → **د1 + د2** QA → **هـ1 + و1** → **ب2 / د3 / د4** → **ب5 → ب6** once the
+> certificate exists.
+
 Every row is one commit-sized step unless it says otherwise; **§0.5 carries the
-order the user picked (small → medium → large), and ب1b is done**
+order the user picked (small → medium → large), and it is finished**
 (§0.0). "Needs you" is the list that cannot move without the user.
 
 **أ — close §0 (no elevation, no money)**
@@ -229,7 +248,8 @@ order the user picked (small → medium → large), and ب1b is done**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries 20 open rows (2 HIGH, 5 MED, the rest LOW). The MED ones
+`docs/TODO.md` §7 carries 19 open rows (2 HIGH, 5 MED, 12 LOW — the dark-mode row
+closed in small step 4). The MED ones
 worth pulling forward once the phases above allow it: **no scheduled scan and no
 real-time file watching**, the canary checker being poll-based, and the firewall
 going through `netsh` instead of FirewallAPI COM.
