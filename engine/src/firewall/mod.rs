@@ -57,13 +57,90 @@ fn elevated() -> bool {
     crate::platform::windows::elevation::is_elevated()
 }
 
-/// Default-Deny Outbound per profile (1 = Block, 0 = Allow). Elevation is the
-/// caller's business — this is the body the helper runs.
+/// The three profiles Windows keeps independent policies for. Default-Deny is
+/// only honest when all three agree, so every read and write walks this list.
+const PROFILES: [&str; 3] = ["domainprofile", "privateprofile", "publicprofile"];
+
+/// Every profile's policy, from **one** `show allprofiles` call.
+///
+/// This is the only spelling that answers the question: `netsh advfirewall show
+/// <profile> state` prints the on/off state and *not* the policy line, which is
+/// why the Default-Deny switch used to read "off" no matter what was set.
+fn read_policies() -> Result<Vec<(String, String)>> {
+    let text = run_netsh(&["show", "allprofiles"])?;
+    let found = parse_policies(&text);
+    for profile in PROFILES {
+        if !found.iter().any(|(p, _)| p == profile) {
+            anyhow::bail!(
+                "netsh did not report a firewall policy for {profile}: {}",
+                text.trim()
+            );
+        }
+    }
+    Ok(found)
+}
+
+/// Pulls `("domainprofile", "BlockInbound,AllowOutbound")` out of a
+/// `show allprofiles` dump. Pure, so the shape is pinned by a test instead of by
+/// whatever netsh prints on the machine that happens to run the suite.
+pub(crate) fn parse_policies(text: &str) -> Vec<(String, String)> {
+    let mut profile = String::new();
+    let mut found = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(head) = line.strip_suffix(" Profile Settings:") {
+            profile = format!("{}profile", head.to_ascii_lowercase());
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("Firewall Policy") {
+            let value = value.trim();
+            if !profile.is_empty() && value.contains(',') {
+                found.push((profile.clone(), value.to_string()));
+            }
+        }
+    }
+    found
+}
+
+/// The inbound half of a profile's policy — preserved on every write, because
+/// flipping the *outbound* policy is the whole request and Windows' own default
+/// (`BlockInbound`) must survive both directions.
+pub(crate) fn inbound_of<'a>(policies: &'a [(String, String)], profile: &str) -> &'a str {
+    policies
+        .iter()
+        .find(|(p, _)| p == profile)
+        .and_then(|(_, v)| v.split(',').next())
+        .map(str::trim)
+        .unwrap_or("BlockInbound")
+}
+
+pub(crate) fn outbound_is_blocked(policies: &[(String, String)], profile: &str) -> bool {
+    policies
+        .iter()
+        .find(|(p, _)| p == profile)
+        .and_then(|(_, v)| v.split(',').nth(1))
+        .map(|o| o.trim().eq_ignore_ascii_case("BlockOutbound"))
+        .unwrap_or(false)
+}
+
+/// Default-Deny Outbound per profile. Elevation is the caller's business — this
+/// is the body the helper runs.
+///
+/// `netsh` takes the pair as **one** comma-separated argument, inbound first
+/// (`BlockInbound,AllowOutbound`). Passing the halves as two arguments is what
+/// "The number of arguments provided is not valid" was: the toggle never worked.
 pub fn set_default_deny_now(enabled: bool) -> Result<()> {
-    let policy = if enabled { "blockoutbound" } else { "allowoutbound" };
-    info!("Setting default outbound policy -> {policy}");
-    for profile in ["domainprofile", "privateprofile", "publicprofile"] {
-        run_netsh(&["set", profile, "firewallpolicy", policy, "allowinbound"])?;
+    let outbound = if enabled { "BlockOutbound" } else { "AllowOutbound" };
+    info!("Setting the default outbound policy -> {outbound} (inbound left as it is)");
+    let policies = read_policies()?;
+    for profile in PROFILES {
+        let inbound = inbound_of(&policies, profile);
+        run_netsh(&[
+            "set",
+            profile,
+            "firewallpolicy",
+            &format!("{inbound},{outbound}"),
+        ])?;
     }
     Ok(())
 }
@@ -125,9 +202,13 @@ impl FirewallManager {
             .map(|_| ())
     }
 
+    /// True only when **every** profile blocks outbound, so a half-changed
+    /// firewall cannot show up as "on".
     pub async fn is_default_deny_enabled() -> Result<bool> {
-        let text = run_netsh(&["show", "domainprofile", "state"])?;
-        Ok(text.contains("BlockOutbound") || text.contains("blockoutbound"))
+        let policies = read_policies()?;
+        Ok(PROFILES
+            .iter()
+            .all(|profile| outbound_is_blocked(&policies, profile)))
     }
 
     /// Reads every firewall rule owned by MI CS (MICS-* prefix).

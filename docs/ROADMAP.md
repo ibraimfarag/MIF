@@ -35,7 +35,7 @@ a human** (one UAC-acceptance session and a signing certificate).
 | **د — P6 QA** | `qa/` harness over every JSON-RPC method, per-screen widget tests, E2E on the built artifact, report + CI gate | **not started** — `tool/` has two smoke probes, no harness | 🟠 MED (largest block of work) | 13–21 h | E2E after ب3; the rest: nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **19 open rows** (2 HIGH, 5 MED, 12 LOW) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
-| **P1.5** | helper acceptance: three privileged operations with **zero** prompts | engine + helper + UI done and proven unelevated | 🔴 **HIGH** — this is the product's core promise | **15 min of your time** | **you** |
+| **P1.5** | helper acceptance: three privileged operations with **zero** prompts | the first attempt (2026-11-01) found **two engine bugs instead of a helper problem** — both fixed that day (netsh policy argument shape, PowerShell quoting in the hardening snapshots); the helper itself was installed, running and reachable | 🔴 **HIGH** — this is the product's core promise | **15 min of your time** | **you** — and MI CS must be started *unelevated* for the helper path to be exercised |
 
 Total: **~35–62 h of work** plus the certificate (money + procurement time).
 

@@ -180,11 +180,21 @@ things that cannot move without you.
 ### 0.2 Blocked on the user
 
 1. **One UAC prompt — install the privileged helper (this finishes P1.5).**
-   In the running app: **Settings → Engine → Install helper**. Then, in the same
-   session, enable Default-Deny, turn SMBv1 off and import a hosts list: expect
-   **zero** further prompts and one `phase=start`/`phase=done` pair per operation
-   in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything under that step is already
-   proven unelevated by `scripts\verify-helper.ps1`.
+   The first attempt (2026-11-01) failed for two reasons that are now fixed — see the
+   Done log: the `netsh` policy argument shape and a PowerShell quoting error in the
+   SMBv1/RDP/UAC snapshots. The service itself is installed, running and reachable from
+   a normal folder (`installed:true running:true reachable:true`), so the prompt may not
+   appear at all. What is still needed:
+   - start MI CS **unelevated** (an elevated engine runs privileged operations itself,
+     so nothing reaches the helper and `priv.log` stays empty — that is how the first
+     attempt silently missed the helper entirely);
+   - Settings → Engine → Install helper only if the app asks for it;
+   - then, in the same session: enable Default-Deny, turn SMBv1 off and add one domain
+     in IDS (that is the hosts write).
+
+   Expect **zero** further prompts and one `phase=start`/`phase=done` pair per operation
+   in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything under that step is already proven
+   unelevated by `scripts\verify-helper.ps1`.
 2. **A real OV/EV certificate (this is the public half of P4).** The local half is
    done: `scripts\make-release.ps1 -Sign` self-signs, trusts the certificate in
    `CurrentUser\Root` + `TrustedPublisher`, signs DLLs then EXEs before hashing and
@@ -455,6 +465,52 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **The helper acceptance test found two engine bugs, not a missing helper (2026-11-01)**
+  - The first real run of the privileged path (Default-Deny, then SMBv1) failed in the
+    engine, not in the helper: `fw.default_deny.enable` answered `netsh failed: The
+    number of arguments provided is not valid` and `hardening.apply` died as
+    `powershell failed: … Unexpected token
+    'HKLM\SYSTEM\CurrentControlSet\Services\mrxsmb10\" /v Start …'`. The helper was
+    installed, running and reachable the whole time (`helper-status` from the packaged
+    copy: `installed:true running:true reachable:true`) and `priv.log` held **no**
+    entry for either call — both failures happened before the elevation step, in the
+    code that prepares it.
+  - **Default-Deny could never have worked.** `netsh advfirewall set <profile>
+    firewallpolicy` takes the pair as **one** comma-separated argument, inbound first
+    (`BlockInbound,AllowOutbound`); the engine passed `blockoutbound` and
+    `allowinbound` as two arguments, so Windows refused every profile. It also,
+    separately, (a) hard-coded `AllowInbound` on every write — switching the toggle
+    *off* would have opened inbound instead of restoring Windows' default — and (b)
+    read the state from `show <profile> state`, which prints no policy line at all, so
+    the switch could only ever show "off". All three are fixed: one `show allprofiles`
+    read, the inbound half preserved on every write, and `is_default_deny_enabled` true
+    only when **all three** profiles block outbound.
+  - **The SMBv1 snapshot could not parse.** `\"` is not an escape inside a PowerShell
+    double-quoted string, so the script that generates the rollback line closed its own
+    string early and PowerShell refused the whole apply — before the helper was ever
+    involved. `rdp_off` and `uac_on` carried the identical shape, i.e. the same bug was
+    waiting for the next user. The snapshot scripts now live in one place each
+    (`snapshot_script`, `pub(crate)`, so a test can see them), build their answer with
+    single-quoted format strings, and print nothing for a value that is not there —
+    `reg add … /d  /f` used to be the "rollback" when `mrxsmb10` was absent, which is
+    the state of a machine that never enabled SMBv1 (this one included).
+  - **Four tests, and they have teeth.** `every_powershell_script_we_generate_parses`
+    compiles every apply and snapshot script with `[scriptblock]::Create` through the
+    production runner (parse only, never executes); the old SMBv1 script was run
+    through that harness by hand first and reproduces the user's `Unexpected token`
+    verbatim. `snapshots_run_unelevated_and_are_acceptable_rollbacks` runs each
+    snapshot and feeds the output to `validate_rollback`;
+    `a_quoted_registry_path_survives_the_powershell_runner` proves the `-Command` round
+    trip keeps `reg add "HKLM\…"` quotes intact;
+    `the_firewall_policy_is_read_from_one_netsh_dump` pins the line `netsh` really
+    prints (`BlockInbound,AllowOutbound`) instead of the one we assumed.
+  - Checks: `cargo test` **86 passed**, `cargo clippy --release -- -D warnings` clean,
+    `flutter analyze --no-pub` no issues, `flutter test --no-pub` **72 passed**.
+  - **Still needs the human** (and now for a second reason): the attempt ran with MI CS
+    started **elevated**, and an elevated engine runs privileged operations itself
+    (`is_elevated()`), so nothing reaches the helper and `priv.log` stays empty. To
+    exercise the helper path the app has to run unelevated.
 
 - **ج1 — the release binaries are hardened, and the PE is what proves it (D-021)**
   - The ROADMAP put build hardening before the installer for one reason: everything
@@ -2562,6 +2618,37 @@ settings and read environment variables only.
       it measured. Diagnose with `icacls <folder>` (the `Mandatory Label` line) and
       never run MI CS from this tree — the runnable copy lives in
       `%LOCALAPPDATA%\MI CS`.
+
+22. **`\"` is not an escape in PowerShell, and an elevated engine hides a broken
+    helper path.** Two lessons from the same failed acceptance run (2026-11-01):
+    - Inside a PowerShell **double-quoted** string the backslash is literal and the
+      quote closes it; the escape is a backtick (`` `" ``) or a doubled quote. A script
+      that builds a rollback line with `\"HKLM\…\"` therefore ends its own string early
+      and PowerShell refuses the whole thing with `Unexpected token 'HKLM\…\"'` — which
+      reads like a permissions problem but is a parse error, thrown *before* the
+      elevated step ever runs. Build the line with a single-quoted format string
+      instead, and let a test compile every script (`[scriptblock]::Create`, parse
+      only) rather than waiting for a user to find it.
+    - `netsh advfirewall set <profile> firewallpolicy` takes **one** comma-separated
+      argument, inbound first — `BlockInbound,AllowOutbound` — and the only way to read
+      it back is `netsh advfirewall show allprofiles`; `show <profile> state` prints no
+      policy line. Passing the halves as two arguments is "The number of arguments
+      provided is not valid", and nothing says so until someone flips the toggle.
+    - And the reason both went unnoticed: when MI CS runs **elevated**, `is_elevated()`
+      sends every privileged operation straight through the local code path, so the
+      helper is never called and `priv.log` stays empty while the failure looks like a
+      helper problem. An acceptance run must start the app unelevated, or it proves
+      nothing about the helper.
+
+23. **`Set-Content -Encoding UTF8` mangles a UTF-8 source file** (PS 5.1 reads it as
+    ANSI, then writes the mojibake back as UTF-8 — and a `Get-Content` +
+    `Set-Content` round trip also swallowed the first byte of the file). It is the same
+    trap that double-encoded the README once (see §0.4). Never rewrite a source file
+    with `Set-Content`; use the editor tools, or read with `[System.IO.File]::ReadAllText`
+    (which strips a BOM) and write with
+    `[System.IO.File]::WriteAllText($p, $text, UTF8Encoding($false))`. Catch it with
+    `git diff` before committing: the diff shows `use` as `se` and every em dash as
+    three characters.
 
 ---
 

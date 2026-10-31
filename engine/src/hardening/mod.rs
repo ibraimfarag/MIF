@@ -82,7 +82,7 @@ fn ps_run_with_timeout(args: &[&str], timeout: std::time::Duration) -> Result<(b
     Ok((out.success, out.text))
 }
 
-fn ps_run(command: &str) -> Result<String> {
+pub(crate) fn ps_run(command: &str) -> Result<String> {
     let (ok, text) =
         ps_run_with_timeout(&["-NoProfile", "-Command", command], std::time::Duration::from_secs(60))?;
     if !ok && !text.contains("elevation") {
@@ -249,7 +249,7 @@ fn applied_state(action_id: &str) -> bool {
 /// Read-only PowerShell that reports Defender's effective PUA state (policy
 /// first, then the local preference store — the same precedence the audit
 /// check uses) as `pua=<0|1|2|absent>`.
-const PUA_STATE_SCRIPT: &str = r"$p=(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine' -ErrorAction SilentlyContinue).PUAProtection; $l=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender' -ErrorAction SilentlyContinue).PUAProtection; $v=if($null -ne $p){$p}elseif($null -ne $l){$l}else{'absent'}; Write-Output ('pua=' + $v)";
+pub(crate) const PUA_STATE_SCRIPT: &str = r"$p=(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine' -ErrorAction SilentlyContinue).PUAProtection; $l=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender' -ErrorAction SilentlyContinue).PUAProtection; $v=if($null -ne $p){$p}elseif($null -ne $l){$l}else{'absent'}; Write-Output ('pua=' + $v)";
 
 /// Extracts the value `PUA_STATE_SCRIPT` printed. `None` means Defender had
 /// nothing set there, which a rollback has to reproduce exactly (remove the
@@ -283,9 +283,36 @@ pub(crate) fn pua_rollback(value: Option<u32>) -> String {
     }
 }
 
-/// Captures the exact values a rollback would restore, as a PowerShell
-/// script that re-applies the OLD state.
-fn snapshot_current(action_id: &str) -> Result<String> {
+/// The read-only PowerShell that reports one action's touched state **as the
+/// rollback script** that would restore it.
+///
+/// Kept separate from the runner so a test can prove every script parses before
+/// a user has to find out. The scripts build their answer with a *single-quoted*
+/// format string: `\"` is not an escape inside a PowerShell double-quoted
+/// string, and the SMBv1 script shipped with one — PowerShell ended the string
+/// early and every apply died as `UnexpectedToken` before it reached the
+/// elevation path (reported 2026-11-01).
+///
+/// A value that is not there prints nothing: an empty snapshot makes
+/// `rollback` refuse, which is better than writing `reg add ... /d  /f`.
+pub(crate) fn snapshot_script(action_id: &str) -> Option<&'static str> {
+    match action_id {
+        "smbv1_off" => Some(
+            r#"$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\mrxsmb10' -ErrorAction SilentlyContinue).Start; $out=('Set-SmbServerConfiguration -EnableSMB1Protocol {0} -Force' -f $s); if($null -ne $m){$out=$out + ('; reg add "HKLM\SYSTEM\CurrentControlSet\Services\mrxsmb10" /v Start /t REG_DWORD /d {0} /f' -f $m)}; Write-Output $out"#,
+        ),
+        "rdp_off" => Some(
+            r#"$v=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -ErrorAction SilentlyContinue).fDenyTSConnections; if($null -ne $v){Write-Output ('reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d {0} /f' -f $v)}"#,
+        ),
+        "uac_on" => Some(
+            r#"$k='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; $a=(Get-ItemProperty $k -ErrorAction SilentlyContinue).EnableLUA; $p=(Get-ItemProperty $k -ErrorAction SilentlyContinue).PromptOnSecureDesktop; $out=@(); if($null -ne $a){$out+=('reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v EnableLUA /t REG_DWORD /d {0} /f' -f $a)}; if($null -ne $p){$out+=('reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v PromptOnSecureDesktop /t REG_DWORD /d {0} /f' -f $p)}; Write-Output ($out -join '; ')"#,
+        ),
+        _ => None, // scans have nothing to roll back
+    }
+}
+
+/// Captures the exact values a rollback would restore, as a PowerShell script
+/// that re-applies the OLD state.
+pub(crate) fn snapshot_current(action_id: &str) -> Result<String> {
     // PUA state is *read* here — never written back. The previous script
     // recorded the old value by calling `Set-MpPreference` itself, which needs
     // an elevated token and therefore made every repair fail with a raw
@@ -295,17 +322,8 @@ fn snapshot_current(action_id: &str) -> Result<String> {
         let out = ps_run(PUA_STATE_SCRIPT)?;
         return Ok(pua_rollback(parse_pua_state(&out)?));
     }
-    let script = match action_id {
-        "smbv1_off" => {
-            "$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10' -ErrorAction SilentlyContinue).Start; \"Set-SmbServerConfiguration -EnableSMB1Protocol $s -Force; reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\\\" /v Start /t REG_DWORD /d $m /f\""
-        }
-        "rdp_off" => {
-            "$v=(Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server').fDenyTSConnections; \"reg add \\\"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\\" /v fDenyTSConnections /t REG_DWORD /d $v /f\""
-        }
-        "uac_on" => {
-            "$a=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').EnableLUA; $p=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').PromptOnSecureDesktop; \"reg add \\\"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\\" /v EnableLUA /t REG_DWORD /d $a /f; reg add \\\"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\\" /v PromptOnSecureDesktop /t REG_DWORD /d $p /f\""
-        }
-        _ => return Ok(String::new()), // scans have nothing to roll back
+    let Some(script) = snapshot_script(action_id) else {
+        return Ok(String::new());
     };
     let out = ps_run(script)?;
     // Keep only the generated rollback command line(s).

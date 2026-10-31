@@ -210,13 +210,23 @@ Observed on this machine (unelevated, 2026-10-30):
 
 ## What is still unproven
 
-The **elevated install itself** — `sc create` + the service start + the pipe ACL
-in the LocalSystem context — needs one interactive UAC prompt that no automated
-run can answer. Until that has been done once on a machine, the honest statement
-is "the protocol, the validation, the audit trail, the refusal paths and the
-status reporting are proven; the install is not". The acceptance test for that
-step is `Settings → Engine → Install helper`, then a default-deny toggle with no
-second prompt.
+The **elevated install itself** has been done once on this machine and it holds:
+`helper-status --json` from a normal folder reports `installed:true running:true
+reachable:true version:"0.1.0"`, and `priv.log` records `install requested` →
+`service starting (pid=…)` → `install finished, helper state=running`. What that run
+did *not* prove is the UAC half of D-007: the app was already elevated, so it installed
+the service itself instead of raising the prompt.
+
+Still open is the **end-to-end privileged path from the UI**, which has to be done once
+with the app running **unelevated** — an elevated engine runs privileged operations in
+its own process and never touches the helper, so `priv.log` stays empty and the run
+proves nothing. The first attempt (2026-11-01) got that wrong and also found two engine
+bugs (a wrong `netsh` policy argument shape and a PowerShell quoting error in the
+hardening snapshots), both fixed the same day — see `docs/TODO.md` Done log.
+
+The steps: `Settings → Engine → Install helper` (only if the app asks), then
+Default-Deny, SMBv1 off and one IDS domain in the same session — **zero** further
+prompts, one `phase=start`/`phase=done` pair per operation.
 
 Publisher attribution in that prompt still needs the trusted certificate from
 D-002; until then Windows shows the helper's unsigned identity.

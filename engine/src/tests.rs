@@ -614,6 +614,120 @@ mod tests {
         assert!(validate_rollback(&"reg add \"HKLM\\x\" /v a /t REG_DWORD /d 1 /f\n".repeat(9)).is_err());
     }
 
+    /// Every script we hand PowerShell must **parse**. The SMBv1 snapshot shipped
+    /// with `\"` inside a double-quoted PowerShell string (not an escape), so every
+    /// apply died as `UnexpectedToken` before it could reach the elevated step and
+    /// the user got the raw parser dump. Parse only — `[scriptblock]::Create`
+    /// never runs what it compiles — so this stays a test instead of a probe.
+    #[test]
+    fn every_powershell_script_we_generate_parses() {
+        let mut scripts: Vec<(String, String)> = Vec::new();
+        for action in crate::hardening::list_actions() {
+            let (command, _) = crate::hardening::command_for(&action.id)
+                .unwrap_or_else(|e| panic!("no command for {}: {e}", action.id));
+            scripts.push((format!("apply-{}", action.id), command));
+            if let Some(snapshot) = crate::hardening::snapshot_script(&action.id) {
+                scripts.push((format!("snapshot-{}", action.id), snapshot.to_string()));
+            }
+        }
+        scripts.push((
+            "snapshot-pua_protection".to_string(),
+            crate::hardening::PUA_STATE_SCRIPT.to_string(),
+        ));
+        assert_scripts_parse(&scripts);
+    }
+
+    /// What a snapshot prints has to be a script the helper will accept, and it
+    /// has to work **unelevated** — that is the whole reason it is a read.
+    #[test]
+    fn snapshots_run_unelevated_and_are_acceptable_rollbacks() {
+        for action in ["pua_protection", "smbv1_off", "rdp_off", "uac_on"] {
+            let snapshot = crate::hardening::snapshot_current(action)
+                .unwrap_or_else(|e| panic!("the {action} snapshot failed: {e:#}"));
+            assert!(
+                !snapshot.trim().is_empty(),
+                "the {action} snapshot is empty — a rollback would have nothing to restore"
+            );
+            crate::privileged::validate_rollback(&snapshot).unwrap_or_else(|e| {
+                panic!("the {action} snapshot is not an acceptable rollback: {e}\n{snapshot}")
+            });
+        }
+    }
+
+    /// `-Command` carries a quoted registry path intact. The apply commands embed
+    /// one anyway (`reg add "HKLM\..."`); a runner that let the shell eat those
+    /// quotes would fail in exactly the place the snapshot just stopped failing.
+    /// Read-only on purpose.
+    #[test]
+    fn a_quoted_registry_path_survives_the_powershell_runner() {
+        let out = crate::hardening::ps_run(
+            "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\" /v ProgramFilesDir",
+        )
+        .expect("a read-only reg query must run");
+        assert!(
+            out.contains("ProgramFilesDir"),
+            "the quoted path did not reach reg.exe: {out}"
+        );
+    }
+
+    /// The policy is read from the line `netsh show allprofiles` really prints,
+    /// and the inbound half is preserved: the old code passed `AllowInbound` on
+    /// every write, so switching Default-Deny *off* would have opened inbound —
+    /// and it read `show <profile> state`, which has no policy line at all, so
+    /// the switch could never show as on.
+    #[test]
+    fn the_firewall_policy_is_read_from_one_netsh_dump() {
+        use crate::firewall::{inbound_of, outbound_is_blocked, parse_policies};
+        let dump = "\r\nDomain Profile Settings: \r\n\
+                    ----------------------------------------------------------------------\r\n\
+                    State                                 ON\r\n\
+                    Firewall Policy                       BlockInbound,AllowOutbound\r\n\
+                    \r\nPrivate Profile Settings: \r\n\
+                    ----------------------------------------------------------------------\r\n\
+                    State                                 ON\r\n\
+                    Firewall Policy                       BlockInbound,BlockOutbound\r\n\
+                    Ok.\r\n";
+        let policies = parse_policies(dump);
+        assert_eq!(policies.len(), 2);
+        assert_eq!(inbound_of(&policies, "domainprofile"), "BlockInbound");
+        assert!(!outbound_is_blocked(&policies, "domainprofile"));
+        assert!(outbound_is_blocked(&policies, "privateprofile"));
+        // A profile netsh did not mention is "not on" — never a panic, never a guess.
+        assert!(!outbound_is_blocked(&policies, "publicprofile"));
+        assert_eq!(inbound_of(&policies, "publicprofile"), "BlockInbound");
+        assert!(parse_policies("State                                 ON").is_empty());
+    }
+
+    /// Compiles each script with `[scriptblock]::Create` in one PowerShell
+    /// process (a parse, never an execution) and reports every one that fails.
+    fn assert_scripts_parse(scripts: &[(String, String)]) {
+        let dir = std::env::temp_dir().join(format!("mics-ps-parse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a temp dir for the parse check");
+        for (index, (name, script)) in scripts.iter().enumerate() {
+            std::fs::write(dir.join(format!("{index:02}-{name}.ps1")), script)
+                .expect("write the script to parse");
+        }
+        let command = format!(
+            "$bad=0; Get-ChildItem -LiteralPath '{}' -Filter *.ps1 | Sort-Object Name | \
+             ForEach-Object {{ try {{ $null=[scriptblock]::Create((Get-Content -Raw -LiteralPath $_.FullName)) }} \
+             catch {{ $bad=1; Write-Output ('PARSE-FAIL ' + $_.Name + ': ' + $_.Exception.Message) }} }}; \
+             exit $bad",
+            dir.display()
+        );
+        let out = match crate::hardening::ps_run(&command) {
+            Ok(text) => text,
+            // The parse check itself exits 1 when a script does not compile, and
+            // `ps_run` turns that into the PowerShell text we want to show.
+            Err(e) => format!("{e:#}"),
+        };
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !out.contains("PARSE-FAIL"),
+            "a script we generate does not parse:\n{out}"
+        );
+    }
+
     #[test]
     fn service_definition_quotes_the_install_path() {
         use crate::privileged::service::{bin_path, parse_query};
