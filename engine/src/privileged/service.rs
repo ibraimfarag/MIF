@@ -1,7 +1,8 @@
 //! Installing, querying and supervising the `MICSHelper` service (D-007).
 //!
 //! The service definition is a one-line `sc create` pointing back at this same
-//! executable with `--helper-service`, so there is nothing extra to ship and an
+//! executable with the `helper-service` subcommand, so there is nothing extra to
+//! ship and an
 //! upgrade cannot leave an old helper behind: `install-helper` rewrites the
 //! definition with the current path.
 
@@ -23,6 +24,7 @@ use windows::Win32::System::Threading::GetCurrentProcessId;
 
 use super::ops::SERVICE_NAME;
 use super::server;
+use super::SERVICE_COMMAND;
 
 const DESCRIPTION: &str = "Runs MI CS privileged operations (firewall, hosts, hardening) on \
                            behalf of the unelevated MI CS UI. Every call is audited in \
@@ -32,10 +34,11 @@ const DESCRIPTION: &str = "Runs MI CS privileged operations (firewall, hosts, ha
 static STOP: AtomicBool = AtomicBool::new(false);
 static STATUS_HANDLE: AtomicIsize = AtomicIsize::new(0);
 
-/// `binPath` for `sc create`: the current executable plus the service flag.
-/// Quoted because the install path contains spaces (`Program Files`).
+/// `binPath` for `sc create`: the current executable plus the service body, which
+/// is a **subcommand** (`helper-service`), never a flag. Quoted because the
+/// install path contains spaces (`Program Files`).
 pub fn bin_path(exe: &Path) -> String {
-    format!("\"{}\" --helper-service", exe.display())
+    format!("\"{}\" {}", exe.display(), SERVICE_COMMAND)
 }
 
 /// Argument vector for `sc create` (pure, so the quoting is testable).

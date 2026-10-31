@@ -413,6 +413,31 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The service's own `binPath` had the same bug — and a test was guarding it (P1.5, second fix)**
+  - With the install button fixed, the elevated step got further and **created**
+    the service, which then refused to start: `sc start failed: [SC] StartService
+    FAILED 1053`. The reason was already written down, by the first fix, in the
+    helper's own log (`%PROGRAMDATA%\MICS\logs\engine.log` — where a LocalSystem
+    helper resolves its data directory):
+    `command line refused: error: unexpected argument '--helper-service' found`.
+    `service::bin_path()` was building `binPath` as `"<exe>" --helper-service`: the
+    same flag-for-a-subcommand mistake, one layer deeper.
+  - **The older test made it worse, not better.** `service_definition_quotes_the_install_path`
+    asserted the exact broken string, so it stayed green and every reader saw a
+    tick for a definition that could never run. It now asserts the *shape* — the
+    built `binPath` contains no `--` at all, and ends with the subcommand constant
+    — and it builds its expectation from `privileged::SERVICE_COMMAND` instead of
+    a literal, so test and code cannot disagree.
+  - `SERVICE_COMMAND` sits next to `INSTALL_COMMAND`/`UNINSTALL_COMMAND`, and both
+    CLI tests now cover all three commands: each must be accepted by the real CLI,
+    and each flag spelling is proven to be refused as an unknown argument.
+  - Measured cost of the whole class: one dead install button, one service that
+    could not start, and every privileged operation (firewall, hosts, hardening)
+    behind them. What finally surfaced it was the instrumentation added by the
+    first fix — the hidden child's refusal now lands in a log file instead of
+    being an exit code — and what would have caught it a day earlier is a test
+    that asserts shape rather than a literal.
+
 - **The money question is answered on paper (ب1b, `docs\COST.md`)**
   - Today MI CS costs **nothing** to run or ship, and that is written down name by
     name (toolchains, packaging, local self-signing, free RFC 3161 timestamping via
@@ -1312,7 +1337,7 @@ click (P1.5) or a purchased certificate (P4).
 
 - **P1.5 — the privileged helper: one prompt instead of one per action**
   - What shipped: `MICSHelper`, a LocalSystem service that points back at the
-    same `mics-engine.exe --helper-service`, plus the engine's client
+    same `mics-engine.exe helper-service`, plus the engine's client
     (`engine/src/privileged/`): a **closed** op set (ping/version, three firewall
     ops, hosts rewrite, hardening run/rollback), shape validation *before*
     anything runs, `phase=start`/`phase=done` audit lines that carry a payload
@@ -2111,13 +2136,20 @@ settings and read environment variables only.
     since the engine launches it with `SW_HIDE`, stderr reaches no file and the only
     symptom at the caller is "the elevated step failed (exit code 2)". That was
     P1.5's install button, dead for a day while `verify-helper.ps1` stayed green (it
-    tests the helper console path, not the argument). Two rules came out of it: keep
-    the elevated step's name in one constant and have a test parse it with the real
-    CLI, and log the reason for a non-zero exit (`main()` now does) instead of
-    trusting stderr. Diagnosing any "the engine did nothing" case: read
-    `%LOCALAPPDATA%\MICS\logs\engine.log` (**not** `%PROGRAMDATA%` — `resolve_base_dir`
-    picks the per-user dir when the machine-wide one is not writable, and records the
-    choice in `%LOCALAPPDATA%\MICS\.data-dir`).
+    tests the helper console path, not the argument). **It happened three times**:
+    the install call, the uninstall call, and the service `binPath` — the last one
+    presenting as `sc start failed: 1053` from the SCM and nothing else. Three rules
+    came out of it: keep every command spelling in one constant
+    (`privileged::INSTALL_COMMAND`/`UNINSTALL_COMMAND`/`SERVICE_COMMAND`) and parse
+    it with the real CLI in a test; assert the **shape** of a generated command line
+    (no `--` in `binPath`) rather than a literal string, because a literal test can
+    pin the bug; and log the reason for a non-zero exit instead of trusting stderr.
+    Diagnosing any "the engine did nothing" case: read
+    `%LOCALAPPDATA%\MICS\logs\engine.log` for the UI-side engine, and
+    `%PROGRAMDATA%\MICS\logs\engine.log` for the LocalSystem helper (**not**
+    `%PROGRAMDATA%` alone — `resolve_base_dir` picks the per-user dir when the
+    machine-wide one is not writable, and records the choice in
+    `%LOCALAPPDATA%\MICS\.data-dir`).
 
 ---
 

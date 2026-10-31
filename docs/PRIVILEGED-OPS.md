@@ -100,9 +100,11 @@ the child can log anything, which is what the first shipped build did:
 1. `sc stop` + `sc delete` any previous definition, so an upgraded exe path and
    the current description replace the old service instead of leaving a stale
    one behind.
-2. `sc create MICSHelper binPath="<current exe>" --helper-service start= auto
+2. `sc create MICSHelper binPath="<current exe>" helper-service start= auto
    obj= LocalSystem` — the service points at the same executable that needs the
-   work, so there is nothing extra to ship.
+   work, so there is nothing extra to ship. The body is the `helper-service`
+   **subcommand**, never `--helper-service`: as a flag, clap refuses it, the
+   process exits 2, and the SCM only reports `sc start failed: 1053`.
 3. `sc description …` (the audit-file location is in the description).
 4. `sc start`, then **poll the pipe for up to 20 s** and only report success when
    the helper actually answers: "sc said Ok" is not the same as "the engine can

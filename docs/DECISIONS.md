@@ -182,7 +182,8 @@ publisher-named UAC prompt requires the trusted certificate from D-002.
 **Implementation addendum (2026-10-30).** The list now lives in
 `docs/PRIVILEGED-OPS.md` (the threat model will link to it, not duplicate it),
 and the helper is `MICSHelper`, a LocalSystem service that points back at the
-same `mics-engine.exe --helper-service`, so an upgrade rewrites the definition
+same `mics-engine.exe helper-service` (a subcommand, not a flag — see D-007 rule 4),
+so an upgrade rewrites the definition
 instead of leaving an old helper behind.
 
 1. **`Op` is a closed enum**, not a command line: eight named operations

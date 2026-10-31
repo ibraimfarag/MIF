@@ -1,7 +1,7 @@
 //! The privileged side of D-007: the pipe the `MICSHelper` service serves.
 //!
 //! Runs elevated (LocalSystem when installed as a service, or whatever token
-//! `--helper-console` was started with). Every request is validated against the
+//! `helper-console` was started with). Every request is validated against the
 //! closed [`Op`] set, logged to `%PROGRAMDATA%\MICS\logs\priv.log` **before** it
 //! runs and again with its outcome, and then executed through the same code the
 //! engine uses — the helper is a gate, not a second implementation.
@@ -351,7 +351,7 @@ pub fn probe() -> Option<HelperVersion> {
 ///
 /// The CLI already runs inside a tokio runtime, so building a second one and
 /// blocking this thread on it panics ("cannot start a runtime from within a
-/// runtime") — which is what `--helper-console` used to do on every start. The
+/// runtime") — which is what the console mode used to do on every start. The
 /// loop therefore gets its own thread and runtime, exactly like the SCM's
 /// service thread and the integration test.
 pub fn run_console() -> Result<()> {

@@ -24,9 +24,19 @@ pub use ops::{Op, SERVICE_NAME};
 /// code 2)" — and every privileged operation went through that same call.
 ///
 /// `the_elevated_step_is_a_subcommand_the_cli_accepts` in `src/tests.rs` parses
-/// these two strings with the real CLI, so the spelling cannot drift again.
+/// these strings with the real CLI, so the spelling cannot drift again.
 pub const INSTALL_COMMAND: &str = "install-helper";
 pub const UNINSTALL_COMMAND: &str = "uninstall-helper";
+
+/// What `MICSHelper`'s `binPath` runs: the service body, and a subcommand too.
+///
+/// The same mistake lived a third time here, and a hidden child hides it twice
+/// over: the SCM starts the process, clap refuses `--helper-service`, the process
+/// exits 2, and the only symptom the engine sees is
+/// `sc start failed: [SC] StartService FAILED 1053` — a service that does not
+/// answer in time. `bin_path()` is the only place allowed to build this string,
+/// and `tests.rs` asserts the built `binPath` carries no `--` spelling.
+pub const SERVICE_COMMAND: &str = "helper-service";
 
 // Only the tests call the validators through this module path; production code
 // validates inside `ops` itself.

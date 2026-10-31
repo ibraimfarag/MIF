@@ -11,12 +11,16 @@ mod tests {
     /// the child can log anything, so the UI could only report an exit code and
     /// every privileged operation failed on it. Parsing the same strings with
     /// the real CLI is what keeps the two from drifting apart again.
+    ///
+    /// All three run the engine: the two the UI triggers, and the body the SCM
+    /// starts for the installed service (`binPath`).
     #[test]
     fn the_elevated_step_is_a_subcommand_the_cli_accepts() {
         use clap::Parser;
         for command in [
             crate::privileged::INSTALL_COMMAND,
             crate::privileged::UNINSTALL_COMMAND,
+            crate::privileged::SERVICE_COMMAND,
         ] {
             crate::Cli::try_parse_from(["mics-engine", command]).unwrap_or_else(|e| {
                 panic!("{command} is not a command the CLI accepts: {e}")
@@ -32,6 +36,7 @@ mod tests {
         for flag in [
             format!("--{}", crate::privileged::INSTALL_COMMAND),
             format!("--{}", crate::privileged::UNINSTALL_COMMAND),
+            format!("--{}", crate::privileged::SERVICE_COMMAND),
         ] {
             let err = match crate::Cli::try_parse_from(["mics-engine", flag.as_str()]) {
                 Ok(_) => panic!("{flag} was accepted — the CLI spells it without dashes"),
@@ -612,11 +617,23 @@ mod tests {
     #[test]
     fn service_definition_quotes_the_install_path() {
         use crate::privileged::service::{bin_path, parse_query};
+        use crate::privileged::SERVICE_COMMAND;
         let path = Path::new(r"C:\Program Files\MI CS\mics-engine.exe");
         assert_eq!(
             bin_path(path),
-            "\"C:\\Program Files\\MI CS\\mics-engine.exe\" --helper-service"
+            format!("\"C:\\Program Files\\MI CS\\mics-engine.exe\" {SERVICE_COMMAND}")
         );
+        // The service body is a subcommand. Spelled `--helper-service` the SCM
+        // starts a process that clap refuses (exit 2) and then only reports
+        // `sc start failed: 1053` — which is exactly how this shipped once, with
+        // this very test asserting the broken string. So assert the *shape*, not
+        // a literal: the built binPath must never contain a `--` flag.
+        assert!(
+            !bin_path(path).contains("--"),
+            "the service body is a subcommand, not a flag: {}",
+            bin_path(path)
+        );
+        assert!(bin_path(path).ends_with(SERVICE_COMMAND));
         let args = crate::privileged::service::sc_create_args(path);
         assert!(args.contains(&"obj=".to_string()) && args.contains(&"LocalSystem".to_string()));
         // `sc` parses its own argv, so `key=` and the value travel as separate
