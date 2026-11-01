@@ -30,13 +30,21 @@ and removes the whole product, tags both shortcuts' `System.AppUserModel.ID` thr
 What is left is **release engineering, integrity, QA, and the two things that need
 a human** (one UAC-acceptance session and a signing certificate).
 
+On 2026-11-01 the user approved the QA and reliability track (§3): the pipeline has
+one entry point now (`scripts/pipeline.ps1`, ز0) and the contract harness over all
+62 JSON-RPC methods is next. The opsec work starts from a measured baseline rather
+than a guess — the engine ships **1241** `cargo` strings and the build user's home
+path, which is a privacy leak as much as a fingerprint (ط1).
+
 ## 1. Phases
 
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
 | **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + local signing work | 🔴 **HIGH** (the register's only HIGH row: "no installer") | 8–16 h | certificate + release hosting: **you**; the rest: nothing |
 | **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — build hardening landed (ج1, D-021); threat model and protection matrix exist | 🟠 MED | 4–7 h | nothing |
-| **د — P6 QA** | `qa/` harness over every JSON-RPC method, per-screen widget tests, E2E on the built artifact, report + CI gate | **not started** — `tool/` has two smoke probes, no harness | 🟠 MED (largest block of work) | 13–21 h | E2E after ب3; the rest: nothing |
+| **د — P6 QA** | pipeline entry point, `qa/` contract harness over every JSON-RPC method, every screen and control, E2E on the built artifact, report + CI gate | **in progress** — ز0 landed (the pipeline script, 2026-11-01); the harness is next | 🟠 MED (largest block of work) | 17–28 h | the system-tier contract runs on this machine, not CI |
+| **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction), crash/hang detection with a bug ID and opt-in delivery (webhook/SMTP/WhatsApp), in-app cards in the bottom corner per direction | **not started** | 🟠 MED | 17–26 h | ز2 needs D-023 + the user's channel choice |
+| **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **not started** — the baseline is measured (ط1) | 🟠 MED | 6–10 h | nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **19 open rows** (2 HIGH, 5 MED, 12 LOW) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
 | **P1.5** | helper acceptance: three privileged operations with **zero** prompts | the first attempt (2026-11-01) found **two engine bugs instead of a helper problem** — both fixed that day (netsh policy argument shape, PowerShell quoting in the hardening snapshots); the helper itself was installed, running and reachable | 🔴 **HIGH** — this is the product's core promise | **15 min of your time** | **you** — and MI CS must be started *unelevated* for the helper path to be exercised |
@@ -51,10 +59,17 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | ~~**ب3**~~ | ~~**NSIS installer**: engine + `rules` + offline intel, shortcuts, AUMID, one UAC, uninstaller, upgrade path, `scripts\verify-installer.ps1`~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` produce `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB, NSIS 3.11); the per-user variant installs 70 files with the hardened, signed engine (`E64A6FDE...`, `Valid`) and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore` (`Get-StartApps` shows no exe-path entry); the uninstaller refuses a copy the helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s, restoring the machine afterwards | ✅ | — | Left for a human: one **per-machine** run (one UAC click, §0.2). |
 | **ب4** | Fold the privileged-helper install into the installer (removes the separate UAC step) | 🟠 | 1–2 h | After ب3. |
 | **ج2** | **Signed SHA-256 manifest** of shipped files + startup self-check + "unofficial build" banner | 🟠 | 3–5 h | Closes F-11; reuses the local self-signed certificate. 2 commits. |
-| **د1** | `qa/` harness: every JSON-RPC method × (happy path, invalid params, permission failure, schema) | 🟠 | 6–10 h | Longest single item; build it from the dispatcher's method table so it cannot go stale. |
-| **د2** | Per-screen widget tests (13 screens) | 🟠 | 4–6 h | `test/widget_test.dart` already has `FakeIpc`; the Settings screen had **no** test and hid a real bug. |
-| **د3** | E2E against the built artifact (the ب3 installer) | 🟡 | 2–3 h | After ب3. |
-| **د4** | `qa/report.html` + `.md`, and CI fails when a feature is not registered | 🟡 | 1–2 h | After د1. |
+| ~~**د0**~~ | ~~**Pipeline entry point**: `scripts/pipeline.ps1` with tiers, fail-fast, a JSON report, and the CI workflow calling it instead of repeating the four checks~~ — **done** (ز0, 2026-11-01): `fast` = the four checks (measured 16.3 + 13.8 + 7.4 + 2.4 s), `full` adds both release builds and the engine smoke, `release` is where the artifact verifiers land; CI caches `engine/target` and uploads the report | ✅ | — | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
+| **د1** | `qa/` contract harness: every method × (happy path, invalid params, unknown method, result schema), registry generated from `dispatcher.rs` and freshness-checked | 🟠 | 6–10 h | Longest single item; the registry is what stops it going stale. System-tier methods assert the refusal contract in CI and the real outcome on this machine. |
+| **د2** | Every screen, every interactive control: the same fixtures drive a `FakeEngine`, ar/RTL + en/LTR, empty/loading/error states, and a ledger that fails when a control was never exercised | 🟠 | 6–9 h | `test/widget_test.dart` already has `FakeIpc`; the Settings screen had **no** test and hid a real bug. |
+| **د3** | E2E against the built artifact (the ب3 installer) | 🟡 | 2–3 h | After the harness and the per-machine run. |
+| **د5** | Coverage gates, `qa/report.html` + `.md`, and CI fails when a feature is not registered | 🟡 | 2–4 h | Closes the د block. |
+| **ز1** | Language off the title bar into a Settings dropdown; `AppLang` → language code + direction table; `settings.rs` accepts the bundled set | 🟠 | 3–5 h | One `add_language` path, and a parity test proves a third language works before one is shipped. |
+| **ز2** | Crash/hang: session marker, panic/error capture, `MICS-<date>-<hash>` bug id, local bundle, delivery through `mics-engine report` (webhook / SMTP / WhatsApp), dedupe and deadlines | 🟠 | 12–16 h | Needs **D-023** and the channel choice; no third binary (the names are frozen by D-020). |
+| **ز3** | In-app cards: bottom corner, right for LTR and left for RTL, fed by the existing alert gate (`LOW` finally has the in-app home `alert.rs` already describes) | 🟡 | 2–3 h | After ز2, because the crash cards show the bug id and the delivery state. |
+| **ط1** | Fingerprint sweep + ratchet. Baseline measured 2026-11-01 on `dist\MICS-portable`: 39 `flutter` hits in `mics_app.exe`, 50 `flutter` + 66 `dart` + `pubspec` in `data\app.so`, 1891 + 748 in `flutter_windows.dll`, and **1241 `cargo` + 97 `rustc`** in `mics-engine.exe` — those carry `C:\Users\<account>\.cargo\registry\...` | 🟠 | 3–5 h | `--remap-path-prefix` deletes the user path; the framework strings go on an allowlist with a written reason each, and the counts may only fall. |
+| **ط2** | Tamper tests: a byte flip per binary, a swapped DLL, an edited manifest, a copied install — each must be refused or reported | 🟠 | 2–3 h | Sits on ج2's signed manifest. |
+| **ط3** | `verify-opsec.ps1` + `verify-tamper.ps1` wired into `-Tier release` | 🟡 | 1–2 h | After ط1/ط2. |
 | **هـ1** | Default update-manifest URL compiled in + signature check on the manifest before applying | 🟡 | 2–3 h | Shares the key handling with ج2. |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, `verify-release.ps1` aware of the arch | 🟡 | 3–5 h | ⚠️ No ARM64 machine here: build + compile-verified only, and say so. |
 | **و1** | **Scheduled scan** (closes half of the MED row "no scheduled scan and no real-time watching") | 🟠 | 2–3 h | Cheapest MED row with user-visible value. |
@@ -65,6 +80,11 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | **ب6** | Public release: signed ZIP + installer, version bump, README updated | 🔴 | 1–2 h | Needs ب5 and somewhere to publish (GitHub Releases?). |
 
 ## 3. The order to work in
+
+**The approved track (2026-11-01) runs first, one commit per step:**
+**ز0** *(done)* → **د1** → **د2** → **ز1** → **ز2** → **ز3** → **ط1–ط3** → **د5**.
+It is what the user picked over the release lane; the list below is the release lane
+the project returns to afterwards.
 
 1. ~~**ج1 build hardening**~~ — **done** (D-021): the binaries are hardened before
    anything packages them.

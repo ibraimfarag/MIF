@@ -5,8 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  analyze-test:
+  pipeline:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,36 +19,26 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
         with:
-          components: clippy
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
 
-      - name: Flutter analyze
-        run: flutter analyze --fatal-infos
-
-      - name: Flutter test
-        run: flutter test
-
-      - name: Build engine
-        working-directory: engine
-        run: cargo build --release
-
-      - name: Engine tests
-        working-directory: engine
-        run: cargo test
-
-      - name: Clippy (zero warnings)
-        working-directory: engine
-        run: cargo clippy --release -- -D warnings
-
-      - name: Build Windows app
-        run: flutter build windows --release
-
-      - name: Smoke test engine
-        run: |
-          ./engine/target/release/mics-engine.exe benchmark
+      # The same script a human runs before a commit, so the two cannot drift.
+      # `full` adds the release builds that used to live only here.
+      - name: Pipeline (full)
+        shell: pwsh
+        run: ./scripts/pipeline.ps1 -Tier full
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -53,3 +47,5 @@ jobs:
           path: |
             build/windows/x64/runner/Release/
             engine/target/release/mics-engine.exe
+            build/pipeline-full.json
+          if-no-files-found: warn

@@ -49,12 +49,15 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ب4 — fold the privileged helper's install into the installer.** ب3 is
+> **next: د1 — the `qa/` contract harness over every JSON-RPC method** (the user
+> approved the QA/reliability track on 2026-11-01; §0.3b carries it, and
+> `scripts/pipeline.ps1` is where every check now runs). ب4 (folding the helper
+> install into the installer) stays the release-engineering lane. ب3 is
 > finished and measured (all three steps, 2026-11-01): the installer builds around
 > the hardened package, installs and removes the whole product (70 files), tags
 > **both** shortcuts with `System.AppUserModel.ID` through `IPropertyStore`, refuses
 > to uninstall a copy its privileged helper still points at (`/S _?=$INSTDIR` →
-> **5**, nothing removed), and `scripts\verify-installer.ps1` now proves all of it
+> **5**, nothing removed), and `scripts\verify-installer.ps1` proves all of it
 > end to end in **126 s** (install, measure, uninstall, refuse, restore itself). The
 > per-machine run is the one ب3 item left, and it needs one UAC click from you; the
 > helper acceptance in §0.2 item 1 and a signing certificate are the other two that
@@ -73,17 +76,18 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ب4 (ضمّ تثبيت الـ helper داخل
-> الـ installer)، خطوة واحدة في كل مرة ومعاها كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ د1 (harness الـ qa على كل
+> method في الـ engine)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
+> `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
-That means: read §0 and `docs/ROADMAP.md`, take the **first step of the ROADMAP's
-"order to work in"** (currently **ب4 - folding the helper install in**), do it as one
-small step,
-and stop for review. §0.5 (the small list the user asked for) is **finished**; the
-remaining work is release engineering, integrity and QA, all of it laid out with
-estimates in `docs/ROADMAP.md`. The two things that still need a human are the
-certificate in §0.2 and the three-operation helper acceptance (the service itself is
-installed, running and reachable). The rules that session must keep, all from
+That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
+approved track in §0.3b** (currently **د1 - the contract harness**), do it as one
+small step, and stop for review. §0.5 is **finished**; the live work is the
+QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
+UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
+followed by the release-engineering lane. The two things that still need a human are
+the certificate in §0.2 and the three-operation helper acceptance (the service itself
+is installed, running and reachable). The rules that session must keep, all from
 `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
@@ -290,12 +294,39 @@ hand — both are ب's job.
 certificate (ب5), and the three-operation helper acceptance in §0.2 — its install
 prompt was answered on 2026-10-31 (the service is installed, running and reachable).
 
+### 0.3b The approved QA and reliability track (2026-11-01)
+
+The user approved this order, one commit-sized step at a time. It runs **before**
+the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
+`scripts/pipeline.ps1` is the entry point every step below plugs into.
+
+| ID | Step | Status |
+|---|---|---|
+| ~~**ز0**~~ | ~~`scripts/pipeline.ps1` (tiers + JSON report) and the CI workflow calls it instead of repeating the checks~~ — **done** | measured 2026-11-01 |
+| **د1** | `qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema), fixtures generated from `dispatcher.rs` so a new method cannot go unregistered | next |
+| **د2** | Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface | after د1 |
+| **ز1** | Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set | after د2 |
+| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | after ز1 |
+| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
+| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
+| **د5** | Coverage gates, `qa/report`, docs | last |
+
+**Still open for the user** (asked 2026-11-01, the track can start without them but
+ز2 needs the first two): the WhatsApp path (CallMeBot vs. an official Cloud API
+template), approval of **D-023** (opt-in, user-configured crash reports — rule 8 of
+`AGENTS.md` forbids any other outbound destination), and whether a real third
+language ships with ز1 or only the mechanism.
+
 ### 0.4 Environment must-knows (the short version of §8)
 
-- **Before every commit**, all four from `AGENTS.md`: `cargo test`,
-  `cargo clippy --release -- -D warnings`, `flutter analyze --no-pub`,
-  `flutter test --no-pub`. Set `$env:CARGO_TARGET_DIR = "$env:TEMP\mics-target"`
-  and `$env:YRX_REGENERATE_MODULES_RS = "false"` first.
+- **Before every commit**: `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\pipeline.ps1 -Tier fast -CargoTargetDir "$env:TEMP\mics-target"`. That is
+  the same four checks `AGENTS.md` names (`cargo test`, `cargo clippy --release --
+  -D warnings`, `flutter analyze --no-pub`, `flutter test --no-pub`), in order, with
+  the environment (`YRX_REGENERATE_MODULES_RS=false`, `CARGO_TARGET_DIR`) already
+  set - do not retype them, or the local run and CI drift apart again. `-List`
+  prints the steps, `-Only 'engine.*'` runs a subset, and `-Tier full` adds the
+  release builds plus the engine smoke.
 - **One phase = one conventional commit**, and this file is updated in the same
   commit. Commit messages are written to a file under `.git\` and passed with
   `git commit -F` (the write tool cannot expand `$env:TEMP`).
@@ -507,6 +538,31 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز0 - one pipeline script, so the checks a human runs and the checks CI runs are
+  the same checks**
+  - `scripts/pipeline.ps1` is now the only place the list lives: tiers `fast` (the
+    four checks), `full` (+ the engine and app release builds and the engine smoke)
+    and `release` (the artifact verifiers, as they land). Each step is a named
+    command with its own working directory, the run is fail-fast, and every run
+    writes `build/pipeline-<tier>.json` with per-step seconds and exit codes
+    (`build/` is gitignored).
+  - `.github/workflows/ci.yml` calls `-Tier full` instead of repeating the steps,
+    caches `engine/target` against `engine/Cargo.lock`, cancels superseded runs, and
+    uploads the report next to the binaries. The smoke test the workflow used to run
+    inline is now the `engine.smoke` step, so the local run covers it too.
+  - Measured on this machine (`-Tier fast -CargoTargetDir $env:TEMP\mics-target`):
+    `flutter.analyze` 16.3 s (no issues), `flutter.test` 13.8 s (72 tests),
+    `engine.test` 7.4 s (86 tests), `engine.clippy` 2.4 s - all PASS, and the report
+    was written. The `full` tier was not run for this commit (the engine binary it
+    would rebuild is the release one, and this step changed no Rust).
+  - Two traps met inside the script instead of around it: PowerShell 5.1 reads a
+    UTF-8 em-dash in a double-quoted string as a closing quote, so the script is
+    ASCII-only (the existing §8 rule, now enforced by habit); and
+    `Measure-Object -Property` cannot read a hashtable key, so the total is summed
+    by hand. Native stderr is also no longer allowed to terminate a step
+    (`$ErrorActionPreference = 'Continue'` around the call, exit code is the
+    verdict) - §8's trap 8, in the runner rather than in a note.
 
 - **fix - every IDS domain add was refused because the hosts file starts with a BOM**
   - Measured by the user's acceptance run, three attempts in a row:
@@ -2534,10 +2590,14 @@ signing certificate respectively), so this is the work that is always available.
       correlation + optional local-LLM explanations", command bar is regex.
 
 ### P6 — QA
-- [ ] `qa/` harness: feature manifest → drives every JSON-RPC method (happy path,
-      invalid params, permission failure, schema), UI widget tests per screen,
-      E2E on the built artifact, performance budgets → `qa/report.html` + `.md`.
-- [ ] CI runs the harness; a feature that is not registered fails the build.
+- [x] Pipeline entry point: `scripts/pipeline.ps1` (ز0) — tiers, JSON report, and
+      the CI workflow calls it instead of repeating the checks.
+- [ ] `qa/` contract harness: every JSON-RPC method (happy path, invalid params,
+      unknown method, schema) driven from `dispatcher.rs` so a new method cannot go
+      unregistered (د1), then the same fixtures drive a `FakeEngine` for every
+      screen and every interactive control (د2).
+- [ ] CI runs the harness; a feature that is not registered fails the build (د5).
+- [ ] E2E on the built artifact (د3) and `qa/report.html` + `.md` (د5).
 - [ ] Malware lab (later): isolated VM + snapshots, EICAR/AMTSO first, samples
       never in the repo, detection-efficacy report.
 
