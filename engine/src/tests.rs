@@ -587,6 +587,9 @@ mod tests {
             pua_rollback(None),
             "reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f".to_string(),
             "Set-SmbServerConfiguration -EnableSMB1Protocol True -Force; reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\" /v Start /t REG_DWORD /d 2 /f".to_string(),
+            // The shape the snapshot writes today: a literal, which is the only one
+            // PowerShell binds to a [bool] parameter.
+            "Set-SmbServerConfiguration -EnableSMB1Protocol $true -Force; reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\mrxsmb10\" /v Start /t REG_DWORD /d 2 /f".to_string(),
             "Set-MpPreference -PUAProtection Disabled".to_string(),
         ] {
             assert!(
@@ -651,6 +654,18 @@ mod tests {
             crate::privileged::validate_rollback(&snapshot).unwrap_or_else(|e| {
                 panic!("the {action} snapshot is not an acceptable rollback: {e}\n{snapshot}")
             });
+            if action == "smbv1_off" {
+                // Measured 2026-11-01 on a real machine: the snapshot formatted the
+                // boolean with `-f $s`, which prints `True`, and
+                // `-EnableSMB1Protocol True` binds the *string* "True" — the CIM
+                // cmdlet answers "Boolean parameters accept only Boolean values and
+                // numbers" and the rollback dies before it runs. The allow-list
+                // accepted the word, so only a literal check catches this.
+                assert!(
+                    snapshot.contains("$true") || snapshot.contains("$false"),
+                    "the SMBv1 rollback must carry a PowerShell boolean literal, not a word: {snapshot}"
+                );
+            }
         }
     }
 

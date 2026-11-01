@@ -191,23 +191,21 @@ things that cannot move without you.
 
 ### 0.2 Blocked on the user
 
-1. **One UAC prompt — install the privileged helper (this finishes P1.5).**
-   The first attempt (2026-11-01) failed for two reasons that are now fixed — see the
-   Done log: the `netsh` policy argument shape and a PowerShell quoting error in the
-   SMBv1/RDP/UAC snapshots. **The service is not installed right now**: the app removed
-   it at 15:53 local on 2026-11-01 (`phase=note helper service removed` in `priv.log`,
-   right after a `helper.uninstall` request), so this run is what puts it back and the
-   one prompt is the operation under test. What is needed:
-   - start MI CS **unelevated** (an elevated engine runs privileged operations itself,
-     so nothing reaches the helper and `priv.log` stays empty — that is how the first
-     attempt silently missed the helper entirely);
-   - Settings → Engine → Install helper (it will ask now), then wait for
-     `installed:true running:true reachable:true`;
-   - then, in the same session: enable Default-Deny, turn SMBv1 off and add one domain
-     in IDS (that is the hosts write).
-
-   Expect **zero** further prompts and one `phase=start`/`phase=done` pair per operation
-   in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything under that step is already proven
+1. **The last two operations of the helper acceptance (this finishes P1.5).**
+   Done on 2026-11-01, by the user, on a real install: the helper was installed with
+   **one** UAC prompt and is running from `%LOCALAPPDATA%\MI CS` (`STATE : 4 RUNNING`,
+   `ImagePath "C:\Users\<account>\AppData\Local\MI CS\mics-engine.exe"
+   helper-service`), `priv.log` records `phase=note install finished, helper
+   state=running` and three `phase=start`/`phase=done ok=true` pairs, and disabling
+   SMBv1 went through. Its **rollback** died on a bug that is fixed now (Done log,
+   2026-11-01) and wants one more press. What is left:
+   - with the helper **ready**, press **rollback** on the SMBv1 card, then disable
+     SMBv1 again;
+   - **Default-Deny Outbound** on (Network & Firewall), then off;
+   - one domain in **IDS (L2)** - that is the hosts write.
+   Expect **zero** further prompts and one `phase=start`/`phase=done` pair per
+   operation in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything else under P1.5 is
+   already proven unelevated by `scripts\verify-helper.ps1`.
    unelevated by `scripts\verify-helper.ps1`.
 2. **A real OV/EV certificate (this is the public half of P4).** The local half is
    done: `scripts\make-release.ps1 -Sign` self-signs, trusts the certificate in
@@ -507,6 +505,39 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **fix - the SMBv1 rollback could not run at all (found by the user's acceptance run)**
+  - Measured, not reasoned: the user pressed rollback on a real install and got
+    `EngineException(-32000) ... Set-SmbServerConfiguration : Cannot process argument
+    transformation on parameter 'EnableSMB1Protocol'. Cannot convert value
+    "System.String" to type "System.Boolean"`.
+  - Cause: `snapshot_script("smbv1_off")` formatted the recorded bool with `-f $s`, and
+    a formatted PowerShell bool prints `True`/`False`. In argument position those are
+    *strings*, and the CIM cmdlet refuses a string where it declares `[bool]` - the
+    rollback died at binding time, before the helper could do anything. The helper's
+    allow-list accepts the word, so the shape test written for exactly this class
+    (`rollback_scripts_are_allow_listed`) could not catch it either.
+  - Fix: the snapshot emits a literal through a branch
+    (`$(if($s){'$true'}else{'$false'})`), and it emits neither half when the value it
+    would restore is missing - a rollback that guesses is worse than one that refuses.
+  - Measured on the same machine, same cmdlet, unelevated:
+    `-EnableSMB1Protocol False` -> `ParameterArgumentTransformationError` (the user's
+    error, reproduced on demand); `-EnableSMB1Protocol $false` -> `Windows System Error
+    5` (**access denied**) - the binding was accepted and elevation is the only gate
+    left, which is what the helper is for. The shipped snapshot script, extracted from
+    `engine\src\hardening\mod.rs` and run with `-File`, now prints
+    `Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force; reg add
+    "HKLM\SYSTEM\CurrentControlSet\Services\mrxsmb10" /v Start /t REG_DWORD /d 4 /f`.
+  - Regression: `snapshots_run_unelevated_and_are_acceptable_rollbacks` asserts the
+    SMBv1 rollback carries a boolean *literal*, and the allow-list test now carries the
+    literal shape next to the word shape. `cargo test` 86 passed, clippy clean.
+  - P1.5 after that run: the helper is installed and running from
+    `%LOCALAPPDATA%\MI CS` (`STATE : 4 RUNNING`, `ImagePath "...\MI CS\mics-engine.exe"
+    helper-service`), one UAC prompt in total, and `priv.log` shows
+    `phase=note install finished, helper state=running` plus three
+    `phase=start`/`phase=done ok=true` pairs. Disabling SMBv1 went through; only its
+    rollback was broken. Still to press by hand: the rollback, Default-Deny and one IDS
+    domain.
 
 - **ب3 step 3 — the installer is verified by a script, not by hand (2026-11-01)**
   - `scripts\verify-installer.ps1` turns the throw-away probe steps 1–2 were measured
@@ -2788,6 +2819,16 @@ settings and read environment variables only.
     `[System.IO.File]::WriteAllText($p, $text, UTF8Encoding($false))`. Catch it with
     `git diff` before committing: the diff shows `use` as `se` and every em dash as
     three characters.
+
+24. **A bool formatted into a PowerShell command is a string.** `'... {0} ...' -f $s`
+    prints `True`, and in argument position PowerShell binds that as the *string*
+    "True" - a CIM cmdlet declaring `[bool]` refuses it with
+    `ParameterArgumentTransformationError` ("Boolean parameters accept only Boolean
+    values and numbers"), so the command never runs. Emit a literal instead
+    (`$(if($s){'$true'}else{'$false'})`). This is how the SMBv1 rollback shipped broken
+    while every test passed: the shape was allow-listed and the script parsed. Only the
+    parameter binder objected. A rollback path needs a test that pins the *literal*,
+    not just the shape.
 
 ---
 

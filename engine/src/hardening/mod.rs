@@ -298,7 +298,12 @@ pub(crate) fn pua_rollback(value: Option<u32>) -> String {
 pub(crate) fn snapshot_script(action_id: &str) -> Option<&'static str> {
     match action_id {
         "smbv1_off" => Some(
-            r#"$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\mrxsmb10' -ErrorAction SilentlyContinue).Start; $out=('Set-SmbServerConfiguration -EnableSMB1Protocol {0} -Force' -f $s); if($null -ne $m){$out=$out + ('; reg add "HKLM\SYSTEM\CurrentControlSet\Services\mrxsmb10" /v Start /t REG_DWORD /d {0} /f' -f $m)}; Write-Output $out"#,
+            // The switch argument must be a PowerShell *literal*: `-f $s` prints
+            // `True`, and `-EnableSMB1Protocol True` binds the string "True", which
+            // the CIM cmdlet refuses ("Boolean parameters accept only Boolean
+            // values and numbers") — measured 2026-11-01, the rollback died before
+            // it ran. `$true`/`$false` are the only shapes that bind.
+            r#"$s=(Get-SmbServerConfiguration).EnableSMB1Protocol; $m=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\mrxsmb10' -ErrorAction SilentlyContinue).Start; $out=''; if($null -ne $s){$out='Set-SmbServerConfiguration -EnableSMB1Protocol ' + $(if($s){'$true'}else{'$false'}) + ' -Force'}; if($null -ne $m){if($out){$out=$out + '; '}; $out=$out + ('reg add "HKLM\SYSTEM\CurrentControlSet\Services\mrxsmb10" /v Start /t REG_DWORD /d {0} /f' -f $m)}; Write-Output $out"#,
         ),
         "rdp_off" => Some(
             r#"$v=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -ErrorAction SilentlyContinue).fDenyTSConnections; if($null -ne $v){Write-Output ('reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d {0} /f' -f $v)}"#,
