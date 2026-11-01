@@ -146,6 +146,13 @@ pub fn validate_hosts(content: &str) -> Result<()> {
     if !content.contains(HOSTS_MARKER) {
         bail!("hosts document does not contain the MI CS marker");
     }
+    // A hosts file that already begins with a UTF-8 BOM puts U+FEFF at the head of
+    // line 1, and `str::trim` does not remove it (Rust does not class it as
+    // whitespace) — measured 2026-11-01: every write of an otherwise valid document
+    // was refused as `line 1 is not an address/host pair: "\u{feff}"` on a machine
+    // whose hosts file carries a BOM. The BOM is the file's encoding marker, not an
+    // entry: skip it here and keep writing the document byte for byte.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     for (index, line) in content.lines().enumerate() {
         // A hosts entry may carry a trailing comment (`127.0.0.1 host # note`).
         let line = match line.split_once('#') {

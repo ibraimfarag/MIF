@@ -574,6 +574,17 @@ mod tests {
         assert!(validate_hosts("# BEGIN MICS-IDS\ncmd /c whoami\n").is_err());
         assert!(validate_hosts("# BEGIN MICS-IDS\n0.0.0.0 bad host/path\n").is_err());
         assert!(validate_hosts(&format!("# BEGIN MICS-IDS\n{}\n", "0.0.0.0 a.b\n".repeat(400_000))).is_err());
+
+        // A BOM the file already carried is an encoding marker, not line 1. This
+        // machine's hosts file starts with one, and every IDS write was refused
+        // with `line 1 is not an address/host pair: "\u{feff}"` (2026-11-01).
+        let with_bom = format!("\u{feff}{good}");
+        assert!(
+            validate_hosts(&with_bom).is_ok(),
+            "a document the IDS path builds from a BOM-prefixed hosts file must validate"
+        );
+        // The BOM buys no leniency for what follows it.
+        assert!(validate_hosts("\u{feff}# BEGIN MICS-IDS\ncmd /c whoami\n").is_err());
     }
 
     #[test]

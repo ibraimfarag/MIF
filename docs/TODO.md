@@ -191,21 +191,23 @@ things that cannot move without you.
 
 ### 0.2 Blocked on the user
 
-1. **The last two operations of the helper acceptance (this finishes P1.5).**
-   Done on 2026-11-01, by the user, on a real install: the helper was installed with
-   **one** UAC prompt and is running from `%LOCALAPPDATA%\MI CS` (`STATE : 4 RUNNING`,
-   `ImagePath "C:\Users\<account>\AppData\Local\MI CS\mics-engine.exe"
-   helper-service`), `priv.log` records `phase=note install finished, helper
-   state=running` and three `phase=start`/`phase=done ok=true` pairs, and disabling
-   SMBv1 went through. Its **rollback** died on a bug that is fixed now (Done log,
-   2026-11-01) and wants one more press. What is left:
-   - with the helper **ready**, press **rollback** on the SMBv1 card, then disable
-     SMBv1 again;
-   - **Default-Deny Outbound** on (Network & Firewall), then off;
-   - one domain in **IDS (L2)** - that is the hosts write.
+1. **The IDS domain add - the last operation of the helper acceptance (this finishes
+   P1.5).**
+   Measured on 2026-11-01 by the user, on a real install, with **one** UAC prompt in
+   total: the helper was installed and is running from `%LOCALAPPDATA%\MI CS`
+   (`STATE : 4 RUNNING`, `ImagePath "...\MI CS\mics-engine.exe" helper-service`); the
+   SMBv1 apply went through and its rollback was pressed from the UI and answered
+   `ok=true` in 3184 ms; Default-Deny went on and off (`ok=true`, 1651 ms / 1899 ms).
+   All of them through the helper, none of them with a prompt. The **IDS add** is the
+   one that failed, three times in a row, on the validator bug that is fixed now (Done
+   log). What is left:
+   - swap in the rebuilt engine and press **Repair (one prompt)** in Settings → Engine,
+     because the helper is a running process and only loads the fixed binary when it
+     restarts;
+   - then add one domain in **IDS (L2)** - that is the hosts write - and check the
+     hosts file kept its BOM and gained the managed section.
    Expect **zero** further prompts and one `phase=start`/`phase=done` pair per
-   operation in `%PROGRAMDATA%\MICS\logs\priv.log`. Everything else under P1.5 is
-   already proven unelevated by `scripts\verify-helper.ps1`.
+   operation in `%PROGRAMDATA%\MICS\logs\priv.log`.
    unelevated by `scripts\verify-helper.ps1`.
 2. **A real OV/EV certificate (this is the public half of P4).** The local half is
    done: `scripts\make-release.ps1 -Sign` self-signs, trusts the certificate in
@@ -505,6 +507,29 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **fix - every IDS domain add was refused because the hosts file starts with a BOM**
+  - Measured by the user's acceptance run, three attempts in a row:
+    `ids.block.add failed: hosts line 1 is not an address/host pair: "\u{feff}"`, and
+    `priv.log` shows the helper received the document and refused it -
+    `phase=done ok=false error=hosts line 1 is not an address/host pair: "\u{feff}"`
+    (`bytes=7220 lines=167`). So the transport, the elevation and the marker check
+    all worked; only the validator disagreed with the file.
+  - Cause: this machine's hosts file begins with a UTF-8 BOM, the document the IDS
+    path builds inherits it, and `str::trim` does not remove U+FEFF (Rust does not
+    class it as whitespace, unlike what "trim whitespace" suggests), so line 1 was
+    the BOM alone and `is_hosts_entry` said no.
+  - Fix: `validate_hosts` skips one leading BOM before walking the lines and writes
+    the document unchanged - the BOM is the file's encoding marker, not an entry, and
+    the file keeps whatever prefix it already had.
+  - Test: `hosts_documents_are_shape_checked` now feeds a BOM-prefixed good document
+    (accepted) next to a BOM-prefixed hostile one (still refused), so the exception
+    cannot turn into leniency. `cargo test` 86 passed, clippy clean.
+  - P1.5 state after that run: Default-Deny went on and off through the helper
+    (`ok=true`, 1651 ms and 1899 ms) with no prompt; the SMBv1 rollback was pressed
+    from the UI at 16:27:56 and answered `ok=true` in 3184 ms with the same script hash
+    the end-to-end run used (`de441645d4054b16`); and the IDS add is the only operation
+    that failed - on this bug. It has to be retried against the rebuilt engine.
 
 - **fix - the SMBv1 rollback could not run at all (found by the user's acceptance run)**
   - Measured, not reasoned: the user pressed rollback on a real install and got
@@ -2829,6 +2854,15 @@ settings and read environment variables only.
     while every test passed: the shape was allow-listed and the script parsed. Only the
     parameter binder objected. A rollback path needs a test that pins the *literal*,
     not just the shape.
+
+25. **U+FEFF is not whitespace in Rust.** A hosts file that starts with a UTF-8 BOM
+    puts the BOM at the head of line 1, and `str::trim` leaves it there - so a
+    validator that walks `content.lines()` sees a line that is *only* U+FEFF and
+    rejects a document it built itself (`hosts line 1 is not an address/host pair:
+    "\u{feff}"`). Strip one leading BOM before validating, and write the document
+    back unchanged. The same trap applies to any file we read, edit and re-validate
+    (the `.ps1` files in this repo already have a BOM of their own, for the opposite
+    reason: PS 5.1 decodes without one as ANSI).
 
 ---
 
