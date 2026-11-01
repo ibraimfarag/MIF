@@ -100,13 +100,15 @@ installed, running and reachable). The rules that session must keep, all from
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-10-31, `main` @ `512b2a6`). The whole
+**Where the project stands** (2026-11-01, `main` @ `ae37805`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
 helper, intel sync (D-012), resumable jobs, desktop notification cards, bilingual
 UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
-`SHA256SUMS`, and Authenticode signing that works on this machine. The engine now
+`SHA256SUMS`, an **NSIS installer** (`dist\MICS-setup-<version>-x64.exe`, ب3 step 1:
+installed and uninstalled cleanly, D-022), and Authenticode signing that works on
+this machine. The engine now
 also refuses to serve from a Low-integrity folder and names the cause (trap 21).
 Both themes are **measured** now (29 of 29 contrast pairs each, asserted in
 `test/{light,dark}_contrast_audit_test.dart`), and the README carries four
@@ -313,6 +315,12 @@ prompt was answered on 2026-10-31 (the service is installed, running and reachab
   to `%TEMP%` first (step 3 turns exactly that into `scripts\verify-installer.ps1`).
   Also: a GUI installer does not block `&` in PowerShell — use
   `Start-Process -Wait` or you measure nothing.
+- **`make-release.ps1` needs `-EnginePath` in this checkout** (measured 2026-11-01):
+  `engine\target\release\mics-engine.exe` is a **stale pre-ج1** build (35.7 MB, no
+  `GUARD_CF`), so the default run is refused by its own hardening gate. The real
+  engine lives where `CARGO_TARGET_DIR` pointed:
+  `-EnginePath "$env:TEMP\mics-target\release\mics-engine.exe"`. The gate catching
+  this is the system working — do not "fix" it by relaxing the gate.
 - **Reply to the user in Egyptian Arabic**; code, comments, docs and commit
   messages in English. Never add telemetry or cloud calls; the UI never touches OS
   APIs — everything goes through the engine over JSON-RPC (`lib/core/ipc/`).
