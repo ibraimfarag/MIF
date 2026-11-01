@@ -194,13 +194,15 @@ things that cannot move without you.
 1. **One UAC prompt — install the privileged helper (this finishes P1.5).**
    The first attempt (2026-11-01) failed for two reasons that are now fixed — see the
    Done log: the `netsh` policy argument shape and a PowerShell quoting error in the
-   SMBv1/RDP/UAC snapshots. The service itself is installed, running and reachable from
-   a normal folder (`installed:true running:true reachable:true`), so the prompt may not
-   appear at all. What is still needed:
+   SMBv1/RDP/UAC snapshots. **The service is not installed right now**: the app removed
+   it at 15:53 local on 2026-11-01 (`phase=note helper service removed` in `priv.log`,
+   right after a `helper.uninstall` request), so this run is what puts it back and the
+   one prompt is the operation under test. What is needed:
    - start MI CS **unelevated** (an elevated engine runs privileged operations itself,
      so nothing reaches the helper and `priv.log` stays empty — that is how the first
      attempt silently missed the helper entirely);
-   - Settings → Engine → Install helper only if the app asks for it;
+   - Settings → Engine → Install helper (it will ask now), then wait for
+     `installed:true running:true reachable:true`;
    - then, in the same session: enable Default-Deny, turn SMBv1 off and add one domain
      in IDS (that is the hosts write).
 
