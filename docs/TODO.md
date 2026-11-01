@@ -49,15 +49,16 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: step 3 of the NSIS installer (ب3) — `scripts\verify-installer.ps1`.**
-> Steps 1 and 2 are done and measured: the installer builds around the hardened
-> package, installs and removes the whole product (70 files), tags **both**
-> shortcuts with `System.AppUserModel.ID` through `IPropertyStore` (the Shell files
-> "MI CS" under AppID `MICS` and leaves no entry under the exe path), and refuses
+> **next: ب4 — fold the privileged helper's install into the installer.** ب3 is
+> finished and measured (all three steps, 2026-11-01): the installer builds around
+> the hardened package, installs and removes the whole product (70 files), tags
+> **both** shortcuts with `System.AppUserModel.ID` through `IPropertyStore`, refuses
 > to uninstall a copy its privileged helper still points at (`/S _?=$INSTDIR` →
-> **5**, nothing removed). What is left in ب3 is that reusable verifier and the
-> **per-machine** run, which needs one UAC click from you; the helper acceptance in
-> §0.2 item 1 and a signing certificate are the two things that still need you.
+> **5**, nothing removed), and `scripts\verify-installer.ps1` now proves all of it
+> end to end in **126 s** (install, measure, uninstall, refuse, restore itself). The
+> per-machine run is the one ب3 item left, and it needs one UAC click from you; the
+> helper acceptance in §0.2 item 1 and a signing certificate are the other two that
+> still need you.
 > README is written; the app runs unelevated and was verified end-to-end on a real
 > machine.
 >
@@ -72,11 +73,11 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ب3 (installer) من الخطوة 2
-> (رابط الـ AUMID على الاختصار + التحقق الآلي)، خطوة واحدة في كل مرة ومعاها كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ب4 (ضمّ تثبيت الـ helper داخل
+> الـ installer)، خطوة واحدة في كل مرة ومعاها كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first step of the ROADMAP's
-"order to work in"** (currently **ب3 — the NSIS installer**, step 2), do it as one
+"order to work in"** (currently **ب4 - folding the helper install in**), do it as one
 small step,
 and stop for review. §0.5 (the small list the user asked for) is **finished**; the
 remaining work is release engineering, integrity and QA, all of it laid out with
@@ -102,14 +103,16 @@ installed, running and reachable). The rules that session must keep, all from
   — a real MI CS runs on this machine;
 - when a step is finished, say what was measured or verified, not just what changed.
 
-**Where the project stands** (2026-11-01, `main` @ `ae37805`). The whole
+**Where the project stands** (2026-11-01, `main`). The whole
 *unelevated* half of the product is implemented and verified on a real Windows 11
 machine: audit + one-click fixes, file scanner (YARA + IOC cache), encrypted
 quarantine, process guard + canaries, firewall/hosts through the privileged
 helper, intel sync (D-012), resumable jobs, desktop notification cards, bilingual
 UI with full RTL, sounds, the 8-section Settings screen, a portable ZIP +
-`SHA256SUMS`, an **NSIS installer** (`dist\MICS-setup-<version>-x64.exe`, ب3 step 1:
-installed and uninstalled cleanly, D-022), and Authenticode signing that works on
+`SHA256SUMS`, an **NSIS installer** (`dist\MICS-setup-<version>-x64.exe`, ب3 steps
+1–3: installs and uninstalls cleanly, tags both shortcuts, refuses to remove a copy
+the helper points at, and `scripts\verify-installer.ps1` proves all of it, D-022),
+and Authenticode signing that works on
 this machine. The engine now
 also refuses to serve from a Low-integrity folder and names the cause (trap 21).
 Both themes are **measured** now (29 of 29 contrast pairs each, asserted in
@@ -181,8 +184,8 @@ both binaries `Valid`).
 done** (the register keeps only rows that need elevation, money, a signing certificate
 or a decision from you). What is left is no longer "small steps" — it is the release,
 integrity and QA work in **`docs/ROADMAP.md`** (phases, tasks, priorities, estimates
-and the order to work in). Short version: **ج1 build hardening → ب3 installer →
-ب4 helper fold-in → ج2 signed manifest → د1/د2 QA**, with the P1.5 helper acceptance
+and the order to work in). Short version: **ب3 installer (done) → ب4 helper
+fold-in → ج2 signed manifest → د1/د2 QA**, with the P1.5 helper acceptance
 (three operations, needs you) and P4 signing (needs the certificate) as the two
 things that cannot move without you.
 
@@ -243,7 +246,7 @@ order the user picked (small → medium → large), and it is finished**
 | ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
 | ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
-| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt — **steps 1–2 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB), the per-user variant installs/removes cleanly, the installer tags both shortcuts' `System.AppUserModel.ID` through `IPropertyStore`, and the uninstaller refuses to remove a copy its privileged helper still points at. Left: `scripts\verify-installer.ps1` and the per-machine run | partly |
+| ~~**ب3**~~ | ~~NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB); the per-user variant installs 70 files and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore`; the uninstaller refuses a copy its helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s. Left for a human: one **per-machine** run (one UAC click) | done |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
 | **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
@@ -376,8 +379,7 @@ what "next" means.
 
 **Large — where a human or money is required**
 
-- **ب3** the NSIS installer (folds the AUMID and ب4 in), **د3** E2E against the
-  built installer, **د4** `qa/report.html` + CI gate
+- **د3** E2E against the built installer, **د4** `qa/report.html` + CI gate
 - **ب5** the certificate → **ب6** public release (both need the user)
 - scheduled scanning + real-time file watching as a real subsystem
 
@@ -464,6 +466,7 @@ not implemented yet, see D-008).
 | `scripts\make-installer.ps1` | Wraps the assembled package in the NSIS installer: re-runs `verify-hardening.ps1` on the binaries first (an installer can never ship what the ZIP gate refused), finds NSIS without needing it on `PATH`, and prints the exe, its SHA-256 and the scope. `-TestUser` builds the same script as a per-user, no-UAC variant, which is how the install/uninstall path gets verified without a human clicking a prompt; `-HelperServiceKey` (verification only) points the uninstaller's helper check at another registry key, so the refusal path can be measured without touching a real service |
 | `scripts\check-helper-ownership.ps1` | Whether the installed `MICSHelper` service points at one install folder: prints `RESULT: SAFE` / `OWNED` / `UNKNOWN` and exits 0 / 2 / 1. The uninstaller asks it before deleting anything, so a service is never left aiming at a deleted `mics-engine.exe`; read-only, no elevation |
 | `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, both halves of the AUMID the toast source needs (the registry key, and the shortcuts' `System.AppUserModel.ID` written by `register-aumid.ps1` through `IPropertyStore`), an Apps-&-features entry whose uninstaller refuses to remove a copy the privileged helper still points at, and an upgrade that reuses the previous install location instead of asking twice |
+| `scripts\verify-installer.ps1` | The installer's promises, measured on a real install: a silent per-user install into `%TEMP%`, the app, engine and rule packs landing, both shortcuts' `System.AppUserModel.ID`, the AUMID key and Apps-&-features entry pointing at that copy, `Get-StartApps` filing "MI CS" under `MICS` with nothing under the exe path, the checker's answers, the uninstaller removing all of it while the machine's helper and the user's own copy stay untouched, and the refusal (error level 5, everything left in place) against a synthetic service key. Exports and re-imports the AUMID key, deletes everything it created, no elevation, ~2 min |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -502,6 +505,29 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ب3 step 3 — the installer is verified by a script, not by hand (2026-11-01)**
+  - `scripts\verify-installer.ps1` turns the throw-away probe steps 1–2 were measured
+    with into the committed gate. It builds a per-user installer (or takes `-Setup`,
+    copying it out of `dist\` first because that folder is Low-integrity), installs it
+    into `%TEMP%`, measures every promise the installer makes, uninstalls it, and then
+    builds a second copy whose helper check points at a synthetic HKCU key so the
+    refusal branch runs without touching a real service.
+  - Measured end to end on this machine: **126 s**, `RESULT: PASS`, and the run
+    restored itself - the AUMID key back to the user's `MI CS` /
+    `%LOCALAPPDATA%\MI CS\mics_app.exe`, no stray shortcut or key, the user's 69-file
+    copy and its engine hash untouched. The install is the 69-file package plus
+    `uninstall.exe`; both shortcuts read `MICS`; `Get-StartApps` files the app under
+    `MICS` with nothing under the copy's exe path; the checker answers SAFE/SAFE, and
+    OWNED when a helper points at the copy it is asked about; `/S _?=$INSTDIR` answers
+    **5** while a plain `/S` answers 0, and the refused copy keeps the program, the
+    uninstaller, both shortcuts and its Apps & features entry.
+  - It refuses to start when this account already owns an `MI CS` shortcut or a
+    per-user Apps-&-features entry: it owns the names it creates, and deleting a real
+    install to measure a test one is not a trade this script makes.
+  - Checks: `cargo test` **86 passed**, `cargo clippy --release -- -D warnings`
+    clean, `flutter analyze --no-pub` no issues, `flutter test --no-pub` **72
+    passed**.
 
 - **ب3 step 2 — the shortcuts carry the AUMID, and the uninstaller refuses a copy the helper points at (2026-11-01)**
   - Both items that step 1 recorded as deliberately left out (D-022) are now
@@ -1092,7 +1118,7 @@ click (P1.5) or a purchased certificate (P4).
     per-user and per-machine, so a fresh install needs the script again: **ب3** folds
     it into the installer, where NSIS can write the key with `WriteRegStr` but not
     the shortcut property, so the installer will have to call this script (or a
-    helper) rather than only touching the registry.
+    helper) rather than only touching the registry (done in ب3 step 2: the installer unpacks the script into `$PLUGINSDIR` and calls it once per shortcut).
   - The register's AUMID row is now a smaller, different risk: a *forged* card is
     labelled "MI CS" too. That is written into `docs/THREAT-MODEL.md` §B10 - the
     label was never proof, and it now looks more convincing while proving the same
