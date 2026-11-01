@@ -1,4 +1,5 @@
 use crate::platform::traits::PlatformCollectors;
+mod crash;
 mod rpc;
 mod platform;
 mod dispatcher;
@@ -136,6 +137,10 @@ async fn run() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default subscriber failed");
 
+    // A panic must leave a report behind before the process dies (panic =
+    // "abort" in release). Installed before anything can panic.
+    crash::install_panic_hook();
+
     // Settings are the single source of truth (D-008) and must be loaded
     // before any subsystem reads them.
     let settings = settings::init();
@@ -177,6 +182,9 @@ async fn run() -> Result<()> {
         std::process::id(),
         settings::Settings::base_dir().display()
     );
+    // Where a support case will be read from: "send me the file in this folder"
+    // needs the folder in the log, not in a source file.
+    tracing::info!("crash reports: {}", crash::reports_dir_path().display());
 
     // Windows gives a process the integrity label of the folder its image sits
     // in, and a Low process cannot write Medium state. Serving anyway produces
@@ -213,6 +221,7 @@ async fn run() -> Result<()> {
                     return Ok(());
                 }
             };
+            crash::begin_session("serve");
             tracing::info!("Starting engine in --serve mode (stdio)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
@@ -252,6 +261,9 @@ async fn run() -> Result<()> {
                     println!("{}", serde_json::to_string(&resp)?);
                 }
             }
+            // The stdio client went away (the UI closed): a deliberate end, not a
+            // crash, so the next start must not file one.
+            crash::end_session("clean");
         }
         Some(Commands::Service) => {
             let _instance = match platform::windows::single_instance::acquire() {
@@ -261,6 +273,7 @@ async fn run() -> Result<()> {
                     return Ok(());
                 }
             };
+            crash::begin_session("service");
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
@@ -290,6 +303,7 @@ async fn run() -> Result<()> {
             if let Err(e) = platform::windows::pipe::run_pipe_server().await {
                 error!("Pipe server error: {e:#}");
             }
+            crash::end_session("clean");
         }
         Some(Commands::Audit { json }) => {
             let collectors = platform::windows::collectors::WindowsCollectors;

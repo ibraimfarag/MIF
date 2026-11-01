@@ -1,6 +1,6 @@
-# qa — the contract between the app and the engine
+﻿# qa — the contract between the app and the engine
 
-The UI never touches the OS: it speaks 62 JSON-RPC methods over
+The UI never touches the OS: it speaks 65 JSON-RPC methods over
 `\\.\pipe\mics_engine` and nothing else ([D-006](../docs/DECISIONS.md)). That
 pipe is therefore the product's entire public surface, and `qa/` is what proves
 the surface is still there, still shaped the way the UI expects, and still
@@ -106,6 +106,22 @@ Exit code 0 means every case passed. The report is `build/qa-contract.json`:
   update manifest are `network` rows.
 - **The UI.** This file is about the engine side of the pipe; the screens and
   controls are tested in `test/` and, from د2 on, in `qa/ui/`.
+
+### The scenarios that are not rows
+
+Three behaviours cannot be expressed as "call this, expect that shape", so they
+are hand-written in `contract.dart` and print their own `PASS`/`FAIL` lines:
+
+| Scenario | What it proves |
+|---|---|
+| `scan` | A job runs to `done`, its findings survive a re-read, and a finished job cannot be cancelled. |
+| `settings` | A write is readable back, a refused value leaves the old one in place, and a language tag nobody ships yet (`de`) is stored. |
+| `crash` | Start an engine (no reports), **kill it**, start another on the same data dir: exactly one `unclean-exit` report, the documented id shape, the dead pid inside it, `..\..\settings.json` refused as an id, and the report removable. |
+| `qa.definitely.not.a.method` | An unregistered method answers `-32601`, not a fake result. |
+
+The `crash` scenario starts two extra engines of its own, and both are stopped in
+a `finally` — a failed case must not leave a service behind on the machine that
+runs it.
 
 ## Why the client polls instead of blocking
 

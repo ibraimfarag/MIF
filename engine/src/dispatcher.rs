@@ -439,6 +439,51 @@ impl Dispatcher {
                     }
                 }
             }
+            "crash.list" => {
+                let limit = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("limit"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(50) as usize;
+                Some(json!(crate::crash::list(limit)))
+            }
+            "crash.get" => {
+                let Some(bug_id) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("bug_id"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing bug_id");
+                };
+                match crate::crash::get(&bug_id) {
+                    Some(report) => Some(report),
+                    None => {
+                        return error_response(req, &format!("no such report: {bug_id}"));
+                    }
+                }
+            }
+            "crash.delete" => {
+                let Some(bug_id) = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("bug_id"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                else {
+                    return error_response(req, "missing bug_id");
+                };
+                // A malformed id is a client bug, not "nothing to delete": say so
+                // instead of answering `false` to something that was never a
+                // report. A well-formed id that is not there stays idempotent.
+                if !crate::crash::valid_bug_id(&bug_id) {
+                    return error_response(req, &format!("not a bug id: {bug_id}"));
+                }
+                let deleted = crate::crash::delete(&bug_id);
+                Some(json!({"deleted": deleted, "bug_id": bug_id}))
+            }
             "quarantine.list" => {
                 match crate::scanner::quarantine::QuarantineManager::new() {
                     Ok(m) => match m.list() {

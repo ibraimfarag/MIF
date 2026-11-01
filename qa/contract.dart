@@ -96,6 +96,7 @@ Future<void> main(List<String> args) async {
     if (options.only == null) {
       ok &= await _scanScenario(pipe, emptyDir);
       ok &= await _settingsScenario(pipe);
+      ok &= await _crashScenario(enginePath, sandbox, pipeName);
     }
 
     // The engine has to survive every case: a handler that kills the process
@@ -424,6 +425,131 @@ Future<bool> _settingsScenario(PipeClient pipe) async {
   });
   print('  ${ok ? 'PASS' : 'FAIL'}  settings round-trip '
       '(en -> refused "english" -> de -> ar)');
+  return ok;
+}
+
+// ------------------------------------------------------------------- crash
+
+/// The crash report loop, proved on the real binary without making it panic.
+///
+/// A run that is killed leaves its session marker unclosed; the next run has to
+/// notice that exactly once, write a report that says who died and when, and let
+/// it be read and removed. The panic path itself is covered by the engine's own
+/// unit tests (the hook writes the bundle before `panic = "abort"` ends the
+/// process), and this scenario is the half that only exists across two
+/// processes.
+Future<bool> _crashScenario(
+    String enginePath, Directory sandbox, String pipeName) async {
+  final scratch = Directory('${sandbox.path}${Platform.pathSeparator}crash')
+    ..createSync(recursive: true);
+  EngineHost? first;
+  EngineHost? second;
+  var ok = true;
+  try {
+    // A fresh data dir: starting with no marker means nothing to report.
+    first = await EngineHost.start(
+        enginePath: enginePath, sandbox: scratch, pipeName: '${pipeName}c1');
+    var pipe = PipeClient.connect('${pipeName}c1',
+        timeout: const Duration(seconds: 20));
+    final clean = await pipe.call('crash.list');
+    final cleanList = clean.result as List? ?? const [];
+    final cleanOk = clean.ok && cleanList.isEmpty;
+    ok &= cleanOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'first-start-has-no-reports',
+      'ok': cleanOk,
+      'detail': clean.short,
+    });
+    print('  ${cleanOk ? 'PASS' : 'FAIL'}  crash  first start files nothing '
+        '(${clean.short})');
+
+    // Kill it: no goodbye, which is what a crash, a power cut or Task Manager
+    // looks like from the inside.
+    final deadPid = first.process.pid;
+    await first.stop();
+    first = null;
+
+    second = await EngineHost.start(
+        enginePath: enginePath, sandbox: scratch, pipeName: '${pipeName}c2');
+    pipe = PipeClient.connect('${pipeName}c2',
+        timeout: const Duration(seconds: 20));
+    final after = await pipe.call('crash.list');
+    final afterList = after.result as List? ?? const [];
+    final reportedOk =
+        after.ok && afterList.length == 1 && afterList.first['kind'] == 'unclean-exit';
+    ok &= reportedOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'a-killed-run-is-reported-once',
+      'ok': reportedOk,
+      'detail': after.short,
+    });
+    print('  ${reportedOk ? 'PASS' : 'FAIL'}  crash  a killed run is reported '
+        'once (${after.short})');
+
+    if (afterList.isEmpty) return ok;
+    final bugId = '${afterList.first['bug_id']}';
+    final shapeOk = RegExp(r'^MICS-\d{8}-[0-9a-f]{6}$').hasMatch(bugId);
+    ok &= shapeOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'the-bug-id-has-the-documented-shape',
+      'ok': shapeOk,
+      'detail': bugId,
+    });
+    print('  ${shapeOk ? 'PASS' : 'FAIL'}  crash  bug id $bugId');
+
+    final report = await pipe.call('crash.get', params: {'bug_id': bugId});
+    final sessionPid = (report.result as Map?)?['session'] is Map
+        ? ((report.result as Map)['session'] as Map)['pid']
+        : null;
+    final readOk = report.ok &&
+        (report.result as Map?)?['bug_id'] == bugId &&
+        sessionPid == deadPid;
+    ok &= readOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'the-report-names-the-process-that-died',
+      'ok': readOk,
+      'detail': 'session pid $sessionPid, killed $deadPid',
+    });
+    print('  ${readOk ? 'PASS' : 'FAIL'}  crash  the report names the process '
+        'that died (session pid $sessionPid, killed $deadPid)');
+
+    // The id comes from a pipe client, so it must never be able to name a file
+    // outside the reports directory.
+    final traversal =
+        await pipe.call('crash.get', params: {'bug_id': r'..\..\settings.json'});
+    final traversalOk = !traversal.ok;
+    ok &= traversalOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'a-path-is-not-a-bug-id',
+      'ok': traversalOk,
+      'detail': traversal.short,
+    });
+    print('  ${traversalOk ? 'PASS' : 'FAIL'}  crash  a path is not a bug id '
+        '(${traversal.short})');
+
+    final removed = await pipe.call('crash.delete', params: {'bug_id': bugId});
+    final deleteOk =
+        removed.ok && (removed.result as Map?)?['deleted'] == true;
+    final empty = await pipe.call('crash.list');
+    final emptyOk = (empty.result as List? ?? const []).isEmpty;
+    ok &= deleteOk && emptyOk;
+    _results.add({
+      'method': 'crash',
+      'case': 'a-report-can-be-removed',
+      'ok': deleteOk && emptyOk,
+      'detail': removed.short,
+    });
+    print('  ${deleteOk && emptyOk ? 'PASS' : 'FAIL'}  crash  a report can be '
+        'removed');
+  } finally {
+    await first?.stop();
+    await second?.stop();
+  }
   return ok;
 }
 

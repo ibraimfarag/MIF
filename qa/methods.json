@@ -441,6 +441,37 @@
       "params": null,
       "expect": "object",
       "note": "With no manifest URL configured the answer is disabled without any traffic."
+    },
+    {
+      "method": "crash.list",
+      "class": "read",
+      "params": { "limit": 5 },
+      "expect": "array",
+      "note": "Reads the reports the engine wrote for panics and unclean exits. Empty is the healthy answer, and it is read from the isolated data dir, so the harness never sees this machine's real reports."
+    },
+    {
+      "method": "crash.get",
+      "class": "read",
+      "missing": true,
+      "invalid": { "bug_id": "not-a-bug-id" },
+      "extra": [
+        {
+          "case": "unknown-id-is-refused",
+          "params": { "bug_id": "MICS-20260101-abc123" },
+          "expect": "error"
+        }
+      ],
+      "note": "A report id is validated before it is turned into a path, so `..\\..\\settings.json` cannot be asked for; an unknown id is an error rather than an empty object."
+    },
+    {
+      "method": "crash.delete",
+      "class": "sandbox",
+      "params": { "bug_id": "MICS-20260101-abc123" },
+      "expect": "object",
+      "want": { "deleted": false },
+      "missing": true,
+      "invalid": { "bug_id": "../../session" },
+      "note": "Removing a report that does not exist answers deleted=false (idempotent, like job.cancel). It only ever touches the reports directory."
     }
   ]
 }

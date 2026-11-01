@@ -49,11 +49,12 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز2 — crash and hang reporting** (ز1 is done: the language is a table in
-> `lib/core/i18n/app_i18n.dart`, the title bar has no language button, Settings
-> owns a dropdown, and the engine accepts any language tag instead of `ar`/`en`;
-> 110 Dart tests, contract 65 cases / 0 failed). ز2 needs **D-023** and your
-> choice of channel before it can deliver anything off the machine. The user
+> **next: ز2, second half — the hang detector and the UI that shows a bug id**
+> (the engine half is done and contract-proved: a panic and a killed run each
+> become one `MICS-<date>-<hash>` report with a JSON+text bundle under
+> `<data dir>\crashes\`, readable over `crash.list`/`crash.get`; 100 engine
+> tests, contract 78 cases / 0 failed, 110 Dart tests). Delivery off the machine
+> needs **D-023** and is the last slice. The user
 > approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
@@ -82,12 +83,12 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز2 (كشف الهنج والكراش، bug ID،
-> باكدج محلي، وإرسال اختياري)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
-> `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز2 (النص التاني: كشف الهنج من
+> غير رد الـ ping، وشاشة بتعرض الـ bug id)، خطوة واحدة في كل مرة ومعاها كوميت،
+> وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
-approved track in §0.3b** (currently **ز2 - crash and hang reporting**), do it as one
+approved track in §0.3b** (currently **ز2 - hang detector and the bug-id UI**), do it as one
 small step, and stop for review. §0.5 is **finished**; the live work is the
 QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
 UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
@@ -312,7 +313,7 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**د1**~~ | ~~`qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema)~~ — **done**, and the registry is checked against `dispatcher.rs` by `test/qa_registry_test.dart` | measured 2026-11-01: 64 cases, 15 skipped with reasons, 18.4 s |
 | ~~**د2**~~ | ~~Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface~~ — **done** | measured 2026-11-01: 13 screens + the shell, 63 controls in a committed ledger, 99 Dart tests in 13 s |
 | ~~**ز1**~~ | ~~Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set~~ — **done** | measured 2026-11-01: 10 new registry tests, 110 Dart tests, contract 65 cases / 0 failed |
-| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | next |
+| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | **first half done**: panic + unclean-exit detection, `MICS-<date>-<hash>` id, JSON+text bundle, `crash.*` methods, contract-proved across two processes. Left: hang detector, UI, delivery (D-023; WhatsApp = Open WhatsApp bridge) |
 | **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
 | **د5** | Coverage gates, `qa/report`, docs | last |
@@ -544,6 +545,51 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز2, first half - a crash now has a name and a file, and nothing leaves the
+  machine**
+  - `engine/src/crash.rs` detects two failures that a user experiences as "it
+    just stopped": **a panic** (a hook runs before `panic = "abort"` ends the
+    process, which is why the report is written first) and **a run that never
+    said goodbye** (a session marker is written at startup, closed at the end,
+    and an unclosed one at the next start is a kill, a power cut, or a death
+    that left no panic behind). A hung process is the third case and cannot be
+    detected from inside itself - the UI's unanswered `ping` is the next step.
+  - The **bug id** is `MICS-<yyyymmdd>-<6 hex>`, and the hex is a SHA-256 of
+    `version + kind + message + location` - the *failure*, not the moment. So the
+    same crash has the same id on every machine running the same build, "send me
+    the bug id" is a sentence that means something, and a repeat bumps
+    `occurrences`/`last_seen` on the existing report instead of filing a second
+    one. Two different call sites in the same function are two ids.
+  - Each report is two files under `<data dir>\crashes\`: `MICS-….json` (what the
+    UI and any future delivery reads) and `MICS-….txt` (what a human can paste
+    into a message: what happened, where, which session, and the last **60** log
+    lines). The log tail is capped at 64 KB, cut on a line boundary, and every
+    key-shaped value is replaced with `<redacted>` - the engine does not log
+    secrets today, and the redactor is there so it still cannot happen after
+    someone adds one.
+  - `crash.list` / `crash.get` / `crash.delete` are the pipe surface (62 -> 65
+    methods). `bug_id` is validated character by character *before* it becomes a
+    path, so `..\..\settings.json` is refused instead of read; a well-formed id
+    that is not there is idempotent for `delete` and an error for `get`.
+  - The contract harness gained a scenario that only exists across processes:
+    start an engine (no reports), **kill it**, start another on the same data
+    dir, and assert exactly one `unclean-exit` report, the documented id shape,
+    the dead pid inside the report, the traversal refusal, and removal. Measured
+    2026-11-01: **78 cases, 0 failed, 15 classified not-to-run**; 6 of the new
+    cases are that scenario.
+  - The panic hook's messy half is testable without a global hook (which would
+    fire on every other test's deliberate panic): the payload reader is a
+    function with three shapes (`&str`, `String`, anything else) and the recorder
+    takes the payload, so `cargo test` covers "a panic produces a panic report
+    with its location, and the same panic twice is one report".
+  - Measured: **100 engine tests** (was 87), `clippy -D warnings` clean, 110 Dart
+    tests, `flutter analyze` clean.
+  - Deliberately not here: **delivery**. There is no URL, socket or HTTP client in
+    `crash.rs`; that half needs **D-023** (rule 8), and the user has now said the
+    WhatsApp path will be an **Open WhatsApp bridge**, not WhatsApp itself - so
+    the integration is a local/bridge endpoint, not the Meta Cloud API. Nothing
+    was built against a channel that is still being chosen.
 
 - **ز1 - the language is a table, not a button in the title bar**
   - `AppLang` stopped being an enum. It is now a value with four facts:
