@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-10-31 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> Last updated: 2026-11-01 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
@@ -49,13 +49,15 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: step 2 of the NSIS installer (ب3).** Step 1 is done and measured: the
-> installer builds around the hardened package and installs and removes the whole
-> product (70 files, 51.7 MB, engine `E64A6FDE…` — hardened and `Valid`-signed —
-> verified *inside* the install; the
-> uninstaller removed the folder, both shortcuts, the AUMID key and the Apps &
-> features entry, exit code 0). The helper acceptance in §0.2 item 1 (one UAC
-> prompt) and a signing certificate are the two things that still need you.
+> **next: step 3 of the NSIS installer (ب3) — `scripts\verify-installer.ps1`.**
+> Steps 1 and 2 are done and measured: the installer builds around the hardened
+> package, installs and removes the whole product (70 files), tags **both**
+> shortcuts with `System.AppUserModel.ID` through `IPropertyStore` (the Shell files
+> "MI CS" under AppID `MICS` and leaves no entry under the exe path), and refuses
+> to uninstall a copy its privileged helper still points at (`/S _?=$INSTDIR` →
+> **5**, nothing removed). What is left in ب3 is that reusable verifier and the
+> **per-machine** run, which needs one UAC click from you; the helper acceptance in
+> §0.2 item 1 and a signing certificate are the two things that still need you.
 > README is written; the app runs unelevated and was verified end-to-end on a real
 > machine.
 >
@@ -169,8 +171,8 @@ both binaries `Valid`).
    `System.AppUserModel.ID = MICS`. `scripts\verify-aumid.ps1` reported **4
    problems** before and **5 of 5** after, including `Get-StartApps` filing the app
    under `MICS` instead of under the exe path; `-Remove` reverses both, and a real
-   card still reached the desktop afterwards (`verify-toast.ps1` PASS). It moves into
-   the NSIS installer with **ب3**.
+   card still reached the desktop afterwards (`verify-toast.ps1` PASS). It **moved
+   into the installer with ب3 step 2**, which tags both shortcuts it creates.
 4. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
    core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
    either definition of it.
@@ -241,7 +243,7 @@ order the user picked (small → medium → large), and it is finished**
 | ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
 | ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
-| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt — **step 1 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB) and the per-user variant installs/removes cleanly. Left: the shortcut's `System.AppUserModel.ID`, uninstall-side helper cleanup, `verify-installer.ps1`, and the per-machine run | partly |
+| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt — **steps 1–2 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB), the per-user variant installs/removes cleanly, the installer tags both shortcuts' `System.AppUserModel.ID` through `IPropertyStore`, and the uninstaller refuses to remove a copy its privileged helper still points at. Left: `scripts\verify-installer.ps1` and the per-machine run | partly |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
 | **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
@@ -315,6 +317,16 @@ prompt was answered on 2026-10-31 (the service is installed, running and reachab
   to `%TEMP%` first (step 3 turns exactly that into `scripts\verify-installer.ps1`).
   Also: a GUI installer does not block `&` in PowerShell — use
   `Start-Process -Wait` or you measure nothing.
+- **The installer writes the two things NSIS cannot** (ب3 step 2, every trap
+  measured): the shortcuts' `System.AppUserModel.ID` (a Shell property — `WriteRegStr`
+  covers only the registry half) and the answer to "does the helper point at this
+  copy", both through scripts it unpacks into `$PLUGINSDIR`, never into `$INSTDIR`.
+  Traps: a native command line binds only the **first** value to a PowerShell array
+  parameter (`-Shortcut "a" "b"` tags `a` and silently drops `b` — one call per
+  shortcut); an uninstaller **always answers 0** to its caller because NSIS copies it
+  to `%TEMP%` and runs it there (appendix D.1), so read a refusal with
+  `uninstall.exe /S _?=$INSTDIR`, and put `_?=` **last** or NSIS swallows the rest of
+  the command line into `$INSTDIR`.
 - **`make-release.ps1` needs `-EnginePath` in this checkout** (measured 2026-11-01):
   `engine\target\release\mics-engine.exe` is a **stale pre-ج1** build (35.7 MB, no
   `GUARD_CF`), so the default run is refused by its own hardening gate. The real
@@ -449,8 +461,9 @@ not implemented yet, see D-008).
 | `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, the **extracted** copy answers the helper protocol, puts a real card on the desktop, loads its own `rules\guard` + `rules\yara` rather than the built-in fallback, and its binaries pass `verify-hardening.ps1` while `data\app.so` carries no Dart class names and no symbol table ships in the zip |
 | `dart run tool\sbom.dart` | What is inside the package, generated from what is pinned: `sbom.cdx.json` (CycloneDX 1.6) + `THIRD-PARTY-NOTICES` from `cargo metadata`/`Cargo.lock`, `pubspec.lock`/`dart pub deps --json`, the Flutter SDK's `LICENSE` and the two shipped fonts. `--check` exits 1 and prints `RESULT: FAIL` instead of writing when the committed pair is stale (`--verbose` lists what is excluded, and which components ship no text of their own); `make-release.ps1` runs it before it builds and `test\sbom_test.dart` re-derives the same inventory from the lockfiles |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
-| `scripts\make-installer.ps1` | Wraps the assembled package in the NSIS installer: re-runs `verify-hardening.ps1` on the binaries first (an installer can never ship what the ZIP gate refused), finds NSIS without needing it on `PATH`, and prints the exe, its SHA-256 and the scope. `-TestUser` builds the same script as a per-user, no-UAC variant, which is how the install/uninstall path gets verified without a human clicking a prompt |
-| `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, the AUMID the toast source needs, an Apps-&-features entry with a working uninstaller, and an upgrade that reuses the previous install location instead of asking twice |
+| `scripts\make-installer.ps1` | Wraps the assembled package in the NSIS installer: re-runs `verify-hardening.ps1` on the binaries first (an installer can never ship what the ZIP gate refused), finds NSIS without needing it on `PATH`, and prints the exe, its SHA-256 and the scope. `-TestUser` builds the same script as a per-user, no-UAC variant, which is how the install/uninstall path gets verified without a human clicking a prompt; `-HelperServiceKey` (verification only) points the uninstaller's helper check at another registry key, so the refusal path can be measured without touching a real service |
+| `scripts\check-helper-ownership.ps1` | Whether the installed `MICSHelper` service points at one install folder: prints `RESULT: SAFE` / `OWNED` / `UNKNOWN` and exits 0 / 2 / 1. The uninstaller asks it before deleting anything, so a service is never left aiming at a deleted `mics-engine.exe`; read-only, no elevation |
+| `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, both halves of the AUMID the toast source needs (the registry key, and the shortcuts' `System.AppUserModel.ID` written by `register-aumid.ps1` through `IPropertyStore`), an Apps-&-features entry whose uninstaller refuses to remove a copy the privileged helper still points at, and an upgrade that reuses the previous install location instead of asking twice |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -489,6 +502,49 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ب3 step 2 — the shortcuts carry the AUMID, and the uninstaller refuses a copy the helper points at (2026-11-01)**
+  - Both items that step 1 recorded as deliberately left out (D-022) are now
+    closed, and both were the kind that only a real install could measure.
+  - **The shortcut's `System.AppUserModel.ID`.** The installer unpacks
+    `register-aumid.ps1` + `aumid-interop.ps1` into its temporary `$PLUGINSDIR`
+    (never into `$INSTDIR` — the package stays byte-for-byte the one
+    `make-release.ps1` assembled) and tags both shortcuts through `IPropertyStore`,
+    which NSIS has no command for. Measured on the per-user build
+    (`MICS-setup-test.exe`, 15.8 MB, sha256 `98819F6AC6CDE17E959072B2F53AE4817241286ED60DB87BA74BDE5015A13604`):
+    after a silent install, `[MicsAumid]::Read` answers **MICS** on
+    `...\Start Menu\Programs\MI CS\MI CS.lnk` *and* on
+    `...\OneDrive\Desktop\MI CS.lnk`, and `Get-StartApps` files "MI CS" under AppID
+    `MICS` with **no** entry under this copy's exe path. That last number is the
+    before/after: the first build passed both shortcuts in one `-Shortcut "a" "b"`
+    call, tagged only the first, and the Shell listed the desktop icon as
+    `...\mics-verify4\install\mics_app.exe` — a native command line binds only the
+    first value to a PowerShell array parameter. The installer now makes one call per
+    shortcut, and the trap is written in both files.
+  - **The uninstaller and the privileged helper.** The helper service is the app's
+    (D-022), so a copy it still points at cannot be taken apart: the uninstaller asks
+    the new `scripts\check-helper-ownership.ps1` before it touches anything and, on
+    OWNED, says which button removes the helper and aborts. Measured: the checker
+    answered **2/OWNED** for `%LOCALAPPDATA%\MI CS` while the machine's service
+    pointed at it (**0/SAFE** for the test copy, **0/SAFE** for a service that does
+    not exist); a verification build (`-HelperServiceKey`) whose helper points into
+    the test copy refuses (`/S _?=$INSTDIR` → **5**) with the program, the
+    uninstaller, both shortcuts and the Apps-&-features entry still in place, and the
+    same uninstaller exits 0 and removes everything once that key is gone.
+  - **Three NSIS/PowerShell facts measured on the way**, all now written where the
+    next person will look: an uninstaller **always answers 0** to its caller (NSIS
+    copies it to `%TEMP%` and runs it there — appendix D.1), so the refusal's error
+    level is only readable the documented way; `_?=` must be **last**, because put
+    first it swallows the rest of the command line into `$INSTDIR` and the result was
+    a "successful" uninstall that removed the shortcuts and the registry entry and
+    left every file; and the machine's own `MICSHelper` was removed **by the app**
+    during this step (`helper.uninstall` in `priv.log`, 15:53 local) — the installer
+    and its uninstaller only ever read that key, which the log and the before/after
+    definition check both show.
+  - Checks: `cargo test` **86 passed**, `cargo clippy --release -- -D warnings`
+    clean, `flutter analyze --no-pub` no issues, `flutter test --no-pub` **72
+    passed**. Deliberately not in this step: `scripts\verify-installer.ps1` (step 3)
+    and the per-machine run, which still needs one UAC click.
 
 - **ب3 step 1 — the product has an installer, and it installs and removes cleanly (2026-11-01)**
   - `installer\mics.nsi` + `scripts\make-installer.ps1` compile the assembled package

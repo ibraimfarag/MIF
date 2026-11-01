@@ -26,6 +26,13 @@
   no UAC prompt. scripts\verify-installer.ps1 uses it to install and remove the
   product without a human clicking anything.
 
+.PARAMETER HelperServiceKey
+  Registry path of the privileged helper service the uninstaller asks about.
+  Default: HKLM\SYSTEM\CurrentControlSet\Services\MICSHelper, the real service.
+  ONLY a verification build passes anything else, so the "refuse to uninstall a
+  copy the helper points at" path can be exercised without touching a real
+  service.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\make-installer.ps1
 
@@ -38,6 +45,7 @@ param(
   [string]$PackageDir,
   [string]$Makensis,
   [string]$Out,
+  [string]$HelperServiceKey,
   [switch]$TestUser
 )
 
@@ -102,12 +110,28 @@ if ($hardeningExit -ne 0) {
 }
 
 $nsi = Join-Path $root "installer\mics.nsi"
+
+# The installer embeds these (into its temporary plugins folder, never into the
+# package): register-aumid.ps1 writes the shortcuts' System.AppUserModel.ID
+# through IPropertyStore, which NSIS has no command for, and
+# check-helper-ownership.ps1 is what the uninstaller asks before removing a copy
+# the privileged helper still points at.
+$scriptDir = Join-Path $root "scripts"
+$embedded = @("register-aumid.ps1", "aumid-interop.ps1", "check-helper-ownership.ps1")
+$missingScripts = @($embedded | Where-Object { -not (Test-Path (Join-Path $scriptDir $_)) })
+if ($missingScripts.Count -gt 0) {
+  Write-Output ("RESULT: FAIL - the installer's scripts are missing: {0}" -f ($missingScripts -join ", "))
+  exit 1
+}
+
 $defines = @(
   "/DVERSION=$Version",
   "/DSRCDIR=$PackageDir",
+  "/DSCRIPTDIR=$scriptDir",
   "/DOUTFILE=$Out"
 )
 if ($TestUser) { $defines += "/DTESTUSER" }
+if ($HelperServiceKey) { $defines += "/DHELPER_SVC_KEY=$HelperServiceKey" }
 
 Write-Host "compiling $nsi with $Makensis ..."
 $log = Join-Path $env:TEMP "mics-nsis.log"

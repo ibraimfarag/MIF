@@ -138,7 +138,9 @@ features, and an uninstaller). Pick one:
 **Installer (recommended).** Run `MICS-setup-<version>-x64.exe` and click through
 one UAC prompt. It installs for every user under `%ProgramFiles%\MI CS`, creates the
 Start-Menu entry, the desktop icon, the Apps & features entry and the AUMID Windows
-labels notification cards with. `Uninstall MI CS` removes the lot.
+labels notification cards with — the registry key *and* the shortcut's
+`System.AppUserModel.ID`, so the Shell files the app under `MI CS` rather than under
+the exe path. `Uninstall MI CS` removes the lot.
 
 **Portable.** Nothing registered, nothing to uninstall: take
 `MICS-portable-<version>-x64.zip`, or the already-unpacked `dist\MICS-portable`
@@ -167,10 +169,11 @@ The engine log says which rule file it loaded (`rules\yara\starter.yar` and
 "built-in starter pack" instead, the copy is incomplete — `rules\` is missing.
 
 **Uninstall:** quit MI CS from the tray and remove the helper
-(`Settings → Engine → Remove helper`, one prompt) **first** — the uninstaller does
-not touch a service it did not install. Then remove the program: installed copies go
-through `Uninstall MI CS` (Start Menu) or Apps & features, portable copies are just
-the folder. Either way the data folder below stays until you delete it yourself.
+(`Settings → Engine → Remove helper`, one prompt) **first** — the uninstaller never
+creates or deletes that service, and it refuses to remove a copy the helper still
+points at (it says so and changes nothing). Then remove the program: installed copies
+go through `Uninstall MI CS` (Start Menu) or Apps & features, portable copies are
+just the folder. Either way the data folder below stays until you delete it yourself.
 The only other registry entries MI CS creates are the installer's own (shortcuts,
 the AUMID, the Apps & features entry — all removed with the program) and an optional
 `HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed by the same

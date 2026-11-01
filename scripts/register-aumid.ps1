@@ -33,6 +33,11 @@
 .NOTES
   ASCII only on purpose: Windows PowerShell 5.1 decodes .ps1 files as ANSI (see
   docs/TODO.md 8.9). `scripts\verify-aumid.ps1` reads all of it back.
+
+  Calling this from a native command line (`powershell -File ... -Shortcut "a" "b"`)
+  binds only the first value to the array parameter and leaves the rest unbound and
+  silent, so tag one shortcut per call - that is what installer\mics.nsi does. From
+  a PowerShell session `-Shortcut @("a", "b")` does what it looks like.
 #>
 param(
   [string]$AppDir = "",

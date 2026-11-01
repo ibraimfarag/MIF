@@ -885,7 +885,21 @@ again. ب3 wraps the artifact `make-release.ps1` already produces and
 
 **What this costs.** Per-machine installs need the human's UAC click, so the
 per-machine path cannot be verified by an agent alone — it is verified as the
-per-user build plus a manual run. The shortcut's `System.AppUserModel.ID` (which
-needs `IPropertyStore`, so the installer must call `register-aumid.ps1` or carry a
-plugin) is deliberately not in step 1; until step 2 the toast source label comes from
-the registry key alone.
+per-user build plus a manual run.
+
+**Step 2 (2026-11-01) closed the two things step 1 left open, without widening what
+the installer owns:**
+
+* The shortcuts carry `System.AppUserModel.ID` — a Shell property on the `.lnk`, not
+  a registry value, so `WriteRegStr` cannot write it — because the installer unpacks
+  `scripts\register-aumid.ps1` (with its interop file) into its temporary
+  `$PLUGINSDIR` and calls it. **Never** into `$INSTDIR`: the packaged bytes stay
+  exactly the ones the release gate checked, and nothing new is installed. A
+  property that cannot be written costs the label on the card, not the card, so a
+  failure warns in the details log instead of aborting the install.
+* The uninstaller **refuses** to remove a copy the privileged helper still points at
+  (it asks `scripts\check-helper-ownership.ps1`, which is read-only) and tells the
+  user to remove the helper in the app first. It does **not** stop or delete the
+  service in either direction: that service is the app's to create and to remove,
+  which is what "never invents state" has to mean for an uninstaller too. Folding the
+  helper's *install* in remains ب4, and it is ب4 that will have to revisit this rule.

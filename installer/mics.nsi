@@ -1,16 +1,20 @@
 ; MI CS — Windows installer (NSIS 3.x)
 ;
-; Step 1 of ب3: install the files, one Start-Menu entry, a desktop icon, the
-; AUMID the toast identity needs, and an entry in Apps & features that can
-; uninstall it again. The privileged helper stays where it is for now (the app
-; installs it behind one UAC prompt); folding it into this installer is ب4, and
-; the shortcut's System.AppUserModel.ID property is step 2 of ب3.
+; Steps 1-2 of ب3: install the files, one Start-Menu entry, a desktop icon, the
+; AUMID the toast identity needs — both halves of it: the registry key, and the
+; shortcut's System.AppUserModel.ID, which is a Shell property IPropertyStore
+; writes (scripts\register-aumid.ps1) and NSIS cannot. An entry in Apps & features
+; removes the lot again, and the uninstaller refuses to take apart a copy the
+; privileged helper still points at, because that service is the app's to create
+; and remove (D-022). Folding the helper's *install* into this installer is ب4.
 ;
 ; Everything is driven by defines the build script passes in:
-;   /DVERSION=0.1.0 /DSRCDIR=<package> /DOUTFILE=<exe> [/DTESTUSER]
+;   /DVERSION=0.1.0 /DSRCDIR=<package> /DSCRIPTDIR=<repo scripts> /DOUTFILE=<exe>
+;   [/DTESTUSER] [/DHELPER_SVC_KEY=<registry path>]
 ; TESTUSER builds the same script per-user under %LOCALAPPDATA% with no UAC
 ; prompt, which is how scripts\verify-installer.ps1 installs and removes it
-; without a human clicking anything. The shipped build is per-machine.
+; without a human clicking anything. The shipped build is per-machine, and only a
+; verification build redefines HELPER_SVC_KEY (it defaults to the real service).
 ;
 ; Unicode: the product name and the Arabic UI behind it assume it.
 
@@ -29,12 +33,27 @@ SetCompressor /SOLID lzma
 !ifndef OUTFILE
   !define OUTFILE "MICS-setup-${VERSION}-x64.exe"
 !endif
+!ifndef SCRIPTDIR
+  !error "SCRIPTDIR must point at the repo's scripts folder (pass /DSCRIPTDIR=...)"
+!endif
 
 !define APP_NAME "MI CS"
 !define APP_EXE "mics_app.exe"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\MICS"
 !define AUMID_KEY "Software\Classes\AppUserModelId\MICS"
 !define AUMID "MICS"
+
+; The privileged helper the app installs (engine\src\privileged\ops.rs,
+; SERVICE_NAME). This installer never creates it - it only asks whose it is before
+; removing a copy it points at. A verification build may point this elsewhere; the
+; shipped build must leave the default.
+!ifndef HELPER_SVC_KEY
+  !define HELPER_SVC_KEY "HKLM\SYSTEM\CurrentControlSet\Services\MICSHelper"
+!endif
+
+; $SYSDIR resolves to System32 on 32-bit Windows and to SysWOW64 on 64-bit, which
+; is exactly where a 32-bit installer's own PowerShell lives.
+!define POWERSHELL "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
 
 Name "${APP_NAME} ${VERSION}"
 BrandingText "${APP_NAME} ${VERSION}"
@@ -74,6 +93,10 @@ VIAddVersionKey "LegalCopyright" "MI CS"
 ; asking again and leaving a second one behind.
 Function .onInit
   SetShellVarContext ${SHELL_CONTEXT}
+  ; $PLUGINSDIR is where the AUMID writer is unpacked (and deleted again on exit):
+  ; the package folder itself must stay byte-for-byte the one the release gate
+  ; checked, so nothing of ours is written into $INSTDIR from here.
+  InitPluginsDir
 !ifndef TESTUSER
   ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
   ${If} $0 != ""
@@ -100,6 +123,33 @@ Section "MI CS" SecMain
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" "$INSTDIR\uninstall.exe"
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
+
+  ; The other half of the toast identity: the Shell files a shortcut - and a card
+  ; raised under the same id - by System.AppUserModel.ID, which is a property on
+  ; the .lnk, not a registry value, so WriteRegStr cannot set it. The proven
+  ; IPropertyStore writer is scripts\register-aumid.ps1; the installer unpacks it
+  ; (with its interop file) into the temporary plugins folder and calls it for
+  ; both shortcuts it just created. Failing to write the property costs the label
+  ; on the card, not the card, so it warns instead of aborting the install.
+  SetOutPath "$PLUGINSDIR"
+  File "${SCRIPTDIR}\register-aumid.ps1"
+  File "${SCRIPTDIR}\aumid-interop.ps1"
+  SetOutPath "$INSTDIR"
+  ; One call per shortcut, deliberately: through a native command line PowerShell
+  ; binds only the first value to an array parameter, so
+  ; `-Shortcut "a.lnk" "b.lnk"` tags a.lnk and leaves b.lnk unbound and silent
+  ; (measured - the desktop icon came out of the first build untagged while the
+  ; Start-Menu one read MICS).
+  nsExec::ExecToLog '"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\register-aumid.ps1" -AppDir "$INSTDIR" -Shortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"'
+  Pop $0
+  nsExec::ExecToLog '"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\register-aumid.ps1" -AppDir "$INSTDIR" -Shortcut "$DESKTOP\${APP_NAME}.lnk"'
+  Pop $1
+  ${If} $0 == "0"
+  ${AndIf} $1 == "0"
+    DetailPrint "System.AppUserModel.ID = ${AUMID} written on both shortcuts"
+  ${Else}
+    DetailPrint "WARNING: the shortcut AUMID property was not written (start menu exit $0, desktop exit $1) - the card source label still comes from the registry key"
+  ${EndIf}
 
   ; The toast identity: Windows shows the card's source as this AppID. The key
   ; is per-user, so it is written for the account that ran the installer (UAC
@@ -137,13 +187,42 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext ${SHELL_CONTEXT}
 
+  ; Refuse before anything is touched when the privileged helper still points at
+  ; this copy: the service would be left aimed at a deleted mics-engine.exe, and
+  ; removing a service this installer never created is the app's job (D-022), not
+  ; ours. The answer comes from the shipped, separately measurable checker rather
+  ; than a second copy of the comparison. The MessageBox is what a user sees; the
+  ; error level is set for a scripted caller, which has to run the uninstaller the
+  ; documented way to read it at all (NSIS copies an uninstaller to %TEMP% and
+  ; runs it from there, so a plain `uninstall.exe /S` always answers 0 - appendix
+  ; D.1): `uninstall.exe /S _?=$INSTDIR` answers 5 when this refusal fires (the
+  ; switch must be last - anywhere else NSIS swallows the rest of the command line
+  ; into $INSTDIR, which was measured: the result was a "successful" uninstall
+  ; that took the shortcuts and the registry entry and left the files).
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File "${SCRIPTDIR}\check-helper-ownership.ps1"
+  nsExec::ExecToLog '"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\check-helper-ownership.ps1" -InstallDir "$INSTDIR" -ServiceKey "${HELPER_SVC_KEY}"'
+  Pop $0
+  ; 2 means the helper points here, 1 that the key could not be read, anything
+  ; else that the check itself did not run. All three refuse, but only the first
+  ; is fixed by pressing the app's button, so the message says which one it was.
+  ${If} $0 == "2"
+    DetailPrint "uninstall refused: the privileged helper still points at $INSTDIR"
+    SetErrorLevel 5
+    MessageBox MB_OK|MB_ICONSTOP "MI CS cannot be uninstalled while its privileged helper still points at this copy.$\r$\n$\r$\nOpen MI CS, go to Settings -> Engine and remove the helper, then run this uninstaller again.$\r$\n$\r$\nNothing has been removed."
+    Abort
+  ${ElseIf} $0 != "0"
+    DetailPrint "uninstall refused: the helper check did not answer definitively (exit $0)"
+    SetErrorLevel 5
+    MessageBox MB_OK|MB_ICONSTOP "MI CS could not confirm that no privileged helper points at this copy, so nothing has been removed.$\r$\n$\r$\nIf MI CS is installed, open it, go to Settings -> Engine and remove the helper, then run this uninstaller again. If this is a portable copy that never installed the helper, run the uninstaller again from an account where Windows PowerShell works."
+    Abort
+  ${EndIf}
+
   nsExec::ExecToLog 'taskkill /IM ${APP_EXE} /F'
   Pop $0
   Sleep 400
 
-  ; The helper service is installed by the app, not by this script: removing it
-  ; needs its own elevation and is folded in with ب4. Say so instead of leaving
-  ; a service behind silently.
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
@@ -165,5 +244,5 @@ Section "Uninstall"
     DeleteRegKey HKLM "${UNINST_KEY}"
   !endif
 
-  DetailPrint "If the privileged helper was installed, remove it from the app (Settings -> Engine) before uninstalling."
+  DetailPrint "Files, shortcuts, the AUMID and the Apps & features entry are gone. Your state folder (audit trail, quarantine, logs) is kept - delete it by hand if you want it gone."
 SectionEnd

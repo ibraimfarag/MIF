@@ -23,8 +23,11 @@ release is hardened** (ج1, D-021): Control Flow Guard on both binaries — whic
 (35.7 → 24.0 MB), the Dart snapshot obfuscated, and `scripts\verify-hardening.ps1`
 gating the release on what the file says rather than on the build flags.
 
-What is left is **release engineering, integrity, QA, and the two things that need
-a human** (one UAC-acceptance session and a signing certificate).
+The installer is **two of its three steps done and measured** (ب3, 2026-11-01): it
+installs and removes the whole product, tags both shortcuts' `System.AppUserModel.ID`
+through `IPropertyStore`, and refuses to remove a copy its privileged helper still
+points at. What is left is **release engineering, integrity, QA, and the two things
+that need a human** (one UAC-acceptance session and a signing certificate).
 
 ## 1. Phases
 
@@ -44,7 +47,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | ID | Task | Priority | Est. | Notes / first commit |
 |---|---|--:|--:|---|
 | ~~**ج1**~~ | ~~**Build hardening**: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info`~~ — **done** (D-021): CFG on both binaries (measured from the PE, and it was absent before), engine 35.7 → 24.0 MB, obfuscated Dart with symbols kept out of the package, and `verify-hardening.ps1` gating the release | ✅ | 2–3 h | Landed 2026-10-31; the installer now packs hardened binaries. |
-| **ب3** | **NSIS installer**: engine + `rules` + offline intel, shortcuts, AUMID, one UAC, uninstaller, upgrade path, `scripts\verify-installer.ps1` — **step 1 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` produce `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB, NSIS 3.11), and the per-user variant installed 70 files / 51.7 MB with the hardened, signed engine (`E64A6FDE…`, `Valid`), Start-Menu + desktop shortcuts and an Apps-&-features entry, then uninstalled to nothing (exit 0) | 🟠 | 2–3 h left | Step 2: the shortcut's `System.AppUserModel.ID` + uninstall-side helper cleanup. Step 3: `verify-installer.ps1`. The per-machine install still needs the user's UAC prompt. |
+| **ب3** | **NSIS installer**: engine + `rules` + offline intel, shortcuts, AUMID, one UAC, uninstaller, upgrade path, `scripts\verify-installer.ps1` — **steps 1–2 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` produce `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB, NSIS 3.11); the per-user variant installs 70 files with the hardened, signed engine (`E64A6FDE...`, `Valid`) and removes everything (exit 0); the installer tags **both** shortcuts' `System.AppUserModel.ID` through `IPropertyStore` (measured: the Shell files "MI CS" under `MICS`, with no exe-path entry); and the uninstaller **refuses** a copy the privileged helper still points at (`/S _?=$INSTDIR` → 5, nothing removed) | 🟠 | 1–1.5 h left | Step 3: `scripts\verify-installer.ps1`. The per-machine install still needs the user's UAC prompt. |
 | **ب4** | Fold the privileged-helper install into the installer (removes the separate UAC step) | 🟠 | 1–2 h | After ب3. |
 | **ج2** | **Signed SHA-256 manifest** of shipped files + startup self-check + "unofficial build" banner | 🟠 | 3–5 h | Closes F-11; reuses the local self-signed certificate. 2 commits. |
 | **د1** | `qa/` harness: every JSON-RPC method × (happy path, invalid params, permission failure, schema) | 🟠 | 6–10 h | Longest single item; build it from the dispatcher's method table so it cannot go stale. |
@@ -64,8 +67,9 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 
 1. ~~**ج1 build hardening**~~ — **done** (D-021): the binaries are hardened before
    anything packages them.
-2. **ب3 installer** (3 commits) — turns the project from a ZIP into a product and now
-   packs hardened binaries.
+2. **ب3 installer** (3 steps; **2 done**) — turns the project from a ZIP into a
+   product, now with hardened binaries, tagged shortcuts and a guarded uninstaller;
+   left: `scripts\verify-installer.ps1` and the per-machine run.
 3. **ب4 helper fold-in** — removes the extra UAC step.
 4. **ج2 signed manifest + self-check** — completes the integrity story on top of ب3's
    file list.
