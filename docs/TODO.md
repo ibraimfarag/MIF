@@ -49,9 +49,13 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: the NSIS installer (ب3), which is the register's only HIGH row**; the
-> helper acceptance in §0.2 item 1 (one UAC prompt) and a signing certificate are
-> the two things that still need you, and the P6 QA harness follows the installer.
+> **next: step 2 of the NSIS installer (ب3).** Step 1 is done and measured: the
+> installer builds around the hardened package and installs and removes the whole
+> product (70 files, 51.7 MB, engine `E64A6FDE…` — hardened and `Valid`-signed —
+> verified *inside* the install; the
+> uninstaller removed the folder, both shortcuts, the AUMID key and the Apps &
+> features entry, exit code 0). The helper acceptance in §0.2 item 1 (one UAC
+> prompt) and a signing certificate are the two things that still need you.
 > README is written; the app runs unelevated and was verified end-to-end on a real
 > machine.
 >
@@ -66,11 +70,12 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وابدأ بـ ج1 (build hardening) ثم ب3
-> (installer)، خطوة واحدة في كل مرة ومعاها كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ب3 (installer) من الخطوة 2
+> (رابط الـ AUMID على الاختصار + التحقق الآلي)، خطوة واحدة في كل مرة ومعاها كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first step of the ROADMAP's
-"order to work in"** (currently **ج1 — build hardening**), do it as one small step,
+"order to work in"** (currently **ب3 — the NSIS installer**, step 2), do it as one
+small step,
 and stop for review. §0.5 (the small list the user asked for) is **finished**; the
 remaining work is release engineering, integrity and QA, all of it laid out with
 estimates in `docs/ROADMAP.md`. The two things that still need a human are the
@@ -234,7 +239,7 @@ order the user picked (small → medium → large), and it is finished**
 | ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
 | ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
-| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt | no |
+| **ب3** | NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt — **step 1 done** (2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB) and the per-user variant installs/removes cleanly. Left: the shortcut's `System.AppUserModel.ID`, uninstall-side helper cleanup, `verify-installer.ps1`, and the per-machine run | partly |
 | **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
 | **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
@@ -299,6 +304,15 @@ prompt was answered on 2026-10-31 (the service is installed, running and reachab
   never delete the live package folder; UTF-8 must be written with
   `[System.IO.File]::WriteAllLines(..., UTF8Encoding($false))` to avoid the
   double-encoded README that happened once. Scripts stay ASCII-only.
+- **The installer needs NSIS, but not on `PATH`** (ب3): `make-installer.ps1` also
+  looks in `%LOCALAPPDATA%\mics-tools\nsis-<ver>\makensis.exe`, so an unzipped
+  portable copy is enough — *building* needs no elevation, only running the
+  per-machine installer does. **Never run a setup or a verifier from `dist\`**:
+  that folder is Low-integrity (trap 21), so the process cannot even create its own
+  `%TEMP%` target and a silent install exits **0 having done nothing**. Copy the exe
+  to `%TEMP%` first (step 3 turns exactly that into `scripts\verify-installer.ps1`).
+  Also: a GUI installer does not block `&` in PowerShell — use
+  `Start-Process -Wait` or you measure nothing.
 - **Reply to the user in Egyptian Arabic**; code, comments, docs and commit
   messages in English. Never add telemetry or cloud calls; the UI never touches OS
   APIs — everything goes through the engine over JSON-RPC (`lib/core/ipc/`).
@@ -427,6 +441,8 @@ not implemented yet, see D-008).
 | `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, the **extracted** copy answers the helper protocol, puts a real card on the desktop, loads its own `rules\guard` + `rules\yara` rather than the built-in fallback, and its binaries pass `verify-hardening.ps1` while `data\app.so` carries no Dart class names and no symbol table ships in the zip |
 | `dart run tool\sbom.dart` | What is inside the package, generated from what is pinned: `sbom.cdx.json` (CycloneDX 1.6) + `THIRD-PARTY-NOTICES` from `cargo metadata`/`Cargo.lock`, `pubspec.lock`/`dart pub deps --json`, the Flutter SDK's `LICENSE` and the two shipped fonts. `--check` exits 1 and prints `RESULT: FAIL` instead of writing when the committed pair is stale (`--verbose` lists what is excluded, and which components ship no text of their own); `make-release.ps1` runs it before it builds and `test\sbom_test.dart` re-derives the same inventory from the lockfiles |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
+| `scripts\make-installer.ps1` | Wraps the assembled package in the NSIS installer: re-runs `verify-hardening.ps1` on the binaries first (an installer can never ship what the ZIP gate refused), finds NSIS without needing it on `PATH`, and prints the exe, its SHA-256 and the scope. `-TestUser` builds the same script as a per-user, no-UAC variant, which is how the install/uninstall path gets verified without a human clicking a prompt |
+| `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, the AUMID the toast source needs, an Apps-&-features entry with a working uninstaller, and an upgrade that reuses the previous install location instead of asking twice |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -465,6 +481,37 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ب3 step 1 — the product has an installer, and it installs and removes cleanly (2026-11-01)**
+  - `installer\mics.nsi` + `scripts\make-installer.ps1` compile the assembled package
+    into `dist\MICS-setup-0.1.0-x64.exe` — **15.8 MB**, sha256
+    `304678D69F11C87B335B8F6947F47DCDDE4D518B4E4A4E77B6EF28FA1BB4CC54`, NSIS 3.11
+    (portable copy, no admin to build). The ZIP is no longer the only way to get MI CS.
+  - **Measured, not asserted.** The per-user variant (`-TestUser`, same script, no
+    UAC) was installed silently into `%TEMP%\mics-verify3\install`: **70 files /
+    51.7 MB**, `mics-engine.exe` = the package's `E64A6FDE…` — hardened **and**
+    `Valid`-signed, so what ships is the release engine — Start-Menu folder with
+    `MI CS.lnk` + `Uninstall MI CS.lnk`, the
+    desktop icon, `HKCU\Software\Classes\AppUserModelId\MICS` (`DisplayName=MI CS`,
+    `IconUri=<install>\mics_app.exe`) and the Apps-&-features entry
+    (`DisplayName=MI CS 0.1.0`, `UninstallString=…\uninstall.exe`). Then
+    `uninstall.exe /S` exited 0 and the folder, both shortcuts, the AUMID key and the
+    ARP key were **all gone**; the machine's own AUMID registration was restored after
+    the test.
+  - Three traps measured on the way: PowerShell's `&` does **not** wait for a GUI
+    installer (the first check measured an empty folder while the setup was still
+    running — use `Start-Process -Wait`); a setup started from `dist\` runs at
+    **Low** integrity and cannot create its `%TEMP%` target, so it exits **0 having
+    installed nothing** (trap 21 again, now with an installer-shaped symptom); and
+    `make-release.ps1` without `-EnginePath` stages the **stale** pre-ج1 engine from
+    `engine\target\release` (35.7 MB, no `GUARD_CF`) — the hardening gate refuses to
+    publish it, which is also how the three `signature.rs` tests came to fail: the
+    package had been rebuilt unsigned. Re-signing it (`-SkipBuild -Sign -EnginePath
+    …\mics-target\release\mics-engine.exe`) turned the suite back to 86 passing.
+  - Deliberately not in this step (D-022): the shortcut's `System.AppUserModel.ID`,
+    uninstall-side helper cleanup (ب4), and `scripts\verify-installer.ps1`. The
+    **per-machine** installer has not been run by a human yet — that is the UAC
+    prompt in §0.2.
 
 - **The helper acceptance test found two engine bugs, not a missing helper (2026-11-01)**
   - The first real run of the privileged path (Default-Deny, then SMBv1) failed in the

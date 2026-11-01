@@ -130,24 +130,35 @@ flutter test --no-pub tool\write_screenshots_test.dart
 
 ## Install and first run
 
-Today MI CS ships as a **portable folder and a portable archive** (an installer is
-still to come):
+Today MI CS ships as a **portable folder and a portable archive**, and as an
+**installer** (`MICS-setup-<version>-x64.exe`, built with NSIS from the same
+package — one UAC prompt, a Start-Menu entry, a desktop icon, an entry in Apps &
+features, and an uninstaller). Pick one:
 
-1. Take `MICS-portable-<version>-x64.zip`, or the already-unpacked
-   `dist\MICS-portable` folder, and put it anywhere (for example
-   `C:\Program Files\MI CS\`). `dist\SHA256SUMS` lists the SHA-256 of the zip and
-   of the files inside it, so a single extracted file can be checked too. The
-   unpacked folder is a convenience copy: if MI CS is running from it,
-   `make-release.ps1` leaves it alone rather than deleting files in use — the zip
-   is the release.
-2. Run `mics_app.exe`. Windows may warn about an unknown publisher, or SmartScreen
+**Installer (recommended).** Run `MICS-setup-<version>-x64.exe` and click through
+one UAC prompt. It installs for every user under `%ProgramFiles%\MI CS`, creates the
+Start-Menu entry, the desktop icon, the Apps & features entry and the AUMID Windows
+labels notification cards with. `Uninstall MI CS` removes the lot.
+
+**Portable.** Nothing registered, nothing to uninstall: take
+`MICS-portable-<version>-x64.zip`, or the already-unpacked `dist\MICS-portable`
+folder, and put it anywhere (the installed location, `%LOCALAPPDATA%\MI CS\`, a USB
+stick — not a Low-integrity folder such as a web root, see §8 trap 21).
+`dist\SHA256SUMS` lists the SHA-256 of the zip and of the files inside it, so a
+single extracted file can be checked too. If MI CS is running from the unpacked
+folder, `make-release.ps1` leaves it alone rather than deleting files in use — the
+zip is the release.
+
+Then, either way:
+
+1. Run `mics_app.exe`. Windows may warn about an unknown publisher, or SmartScreen
    may say it **can't reach** its reputation service — the build is unsigned, so
    there is nothing for it to verify. The
    [Troubleshooting](#troubleshooting) table has the run-anyway, hash-check and
    `Unblock-File` steps; signing is planned (see [What MI CS does not do](#what-mi-cs-does-not-do)).
-3. The app starts the engine automatically, runs a first audit (~10 s) and shows
+2. The app starts the engine automatically, runs a first audit (~10 s) and shows
    your score with the single most valuable fix to make.
-4. The first privileged fix asks once to install the helper
+3. The first privileged fix asks once to install the helper
    (`Settings → Engine → Install helper` also does it explicitly); the card then
    shows **ready** and no later action prompts again.
 
@@ -155,11 +166,15 @@ The engine log says which rule file it loaded (`rules\yara\starter.yar` and
 `rules\guard\starter.json` next to the binaries, hot-reloaded): if it ever says
 "built-in starter pack" instead, the copy is incomplete — `rules\` is missing.
 
-**Uninstall:** quit MI CS from the tray, remove the helper
-(`Settings → Engine → Remove helper`, one prompt), delete the app folder, then
-delete the data folder below. The only registry entry MI CS can create is an
-optional `HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed
-by the same screen.
+**Uninstall:** quit MI CS from the tray and remove the helper
+(`Settings → Engine → Remove helper`, one prompt) **first** — the uninstaller does
+not touch a service it did not install. Then remove the program: installed copies go
+through `Uninstall MI CS` (Start Menu) or Apps & features, portable copies are just
+the folder. Either way the data folder below stays until you delete it yourself.
+The only other registry entries MI CS creates are the installer's own (shortcuts,
+the AUMID, the Apps & features entry — all removed with the program) and an optional
+`HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed by the same
+screen.
 
 ## Where your data lives
 
@@ -234,6 +249,9 @@ flutter build windows --release
 
 # 3) Assemble the portable release (engine + rules + app + zip + SHA256SUMS)
 powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
+
+# 4) Wrap that exact package in the installer (needs NSIS, no admin to build)
+powershell -ExecutionPolicy Bypass -File scripts\make-installer.ps1
 ```
 
 `MICS_ENGINE_PATH` overrides the engine location if you keep it elsewhere.
@@ -249,6 +267,15 @@ staging build is then swapped into `dist\MICS-portable` — unless MI CS is runn
 from that folder, in which case it is left untouched and only the zip is
 refreshed. Add `-SkipBuild` to repackage without rebuilding the app, or
 `-EnginePath <exe>` when cargo builds somewhere else.
+
+`make-installer.ps1` wraps that folder — never a second assembly path — in
+`dist\MICS-setup-<version>-x64.exe`: it re-runs `verify-hardening.ps1` on the
+binaries first, so an installer cannot ship what the ZIP gate refused, and it finds
+NSIS on `PATH`, under `%LOCALAPPDATA%\mics-tools`, or in `Program Files`. Building
+needs no elevation; running the per-machine installer needs one UAC prompt.
+`-TestUser` builds the same script as a per-user, no-UAC variant (that is how the
+install/uninstall path is verified without a human clicking), and `-Out`/`-Makensis`
+override the output path and the compiler.
 
 Check what you just produced — hashes, completeness, and that the extracted copy
 serves the privileged helper protocol, puts a real card on the desktop, and loads

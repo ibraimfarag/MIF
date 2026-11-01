@@ -851,3 +851,41 @@ cost is accepted and named: the engine has no unwinder (a panicking task now end
 the process), and a stack trace needs the `dist\symbols\<version>` file that only
 the build machine has. A future "crash report" feature would have to ship a
 symbol upload, which would be a new decision, not a quiet un-stripping.
+
+## D-022 — The installer is the same package, per-machine by default, and it never invents state
+
+**Context.** The ZIP is not a product: a stranger has to know which folder to unpack
+where, `rules\` must land beside the binaries or the engine silently falls back to
+its compiled-in pack, the AUMID has to be registered or Windows shows an anonymous
+source on the notification card, and nothing appears in Apps & features to remove it
+again. ب3 wraps the artifact `make-release.ps1` already produces and
+`verify-release.ps1` already proves.
+
+**Decision.** One NSIS script (`installer\mics.nsi`) driven by defines from
+`scripts\make-installer.ps1`:
+
+* It packages **`dist\MICS-portable` unchanged** — the same bytes the ZIP gate
+  checked — and re-runs `verify-hardening.ps1` on those binaries first. The installer
+  is a wrapper, never a second assembly path that could drift from the release.
+* **Per-machine is the default** (`RequestExecutionLevel admin`, `$PROGRAMFILES64`),
+  so one UAC prompt installs for every user. The `-TestUser` define compiles the
+  *same* script as a per-user, no-UAC build under `%LOCALAPPDATA%`; that variant
+  exists so the install/uninstall path can be verified end-to-end without a human
+  clicking anything, and `scripts\verify-installer.ps1` (step 3) will use it.
+* **Shortcuts and the AUMID are part of the install**, because they are part of the
+  product: the Start-Menu folder, the desktop icon, `HKCU\Software\Classes\AppUserModelId\MICS`
+  and the Apps-&-features entry. The uninstaller removes all four.
+* **Upgrade reuses the previous location** (the uninstall key's `InstallLocation`)
+  and closes a running `mics_app.exe` before overwriting files, instead of installing
+  a second copy beside the first.
+* The installer **does not create data**: no `%PROGRAMDATA%\MICS` ACL change, no
+  service, no registry state beyond the four keys above. The engine keeps choosing
+  its own state directory, and the privileged helper stays the app's job (ب4 folds
+  it in). That keeps the installer uninstallable and auditable on its own.
+
+**What this costs.** Per-machine installs need the human's UAC click, so the
+per-machine path cannot be verified by an agent alone — it is verified as the
+per-user build plus a manual run. The shortcut's `System.AppUserModel.ID` (which
+needs `IPropertyStore`, so the installer must call `register-aumid.ps1` or carry a
+plugin) is deliberately not in step 1; until step 2 the toast source label comes from
+the registry key alone.
