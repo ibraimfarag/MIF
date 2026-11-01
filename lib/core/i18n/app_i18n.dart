@@ -8,15 +8,71 @@ import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Language packs: one folder per language, one JSON file per module
-/// (`assets/i18n/<lang>/<module>.json`). Adding a language = add a folder with
-/// the same module files + one entry in [bundledLangs]. Adding a module = add
-/// it to [i18nModules] and drop the file in every language folder (the parity
-/// test in `test/i18n_parity_test.dart` enforces both).
-enum AppLang { ar, en }
+/// (`assets/i18n/<code>/<module>.json`).
+///
+/// A language is one line in [AppLang.all] plus a folder: nothing else in the
+/// app knows that "Arabic" or "English" exist. Adding a module = add it to
+/// [i18nModules] and drop the file in every language folder; the parity test in
+/// `test/i18n_parity_test.dart` enforces both directions, and
+/// `test/lang_registry_test.dart` keeps [AppLang.all] and `assets/i18n/` in
+/// step.
+class AppLang {
+  const AppLang._(this.code, this.nativeName, this.englishName, this.direction);
 
-const bundledLangs = {
-  'ar': 'العربية',
-  'en': 'English',
+  /// BCP-47 tag, lower case. Also the asset folder and the value the engine
+  /// stores, so the three can never disagree.
+  final String code;
+
+  /// How the language names itself - what a picker should show, in every UI
+  /// language: an Arabic user looking for English is looking for "English".
+  final String nativeName;
+
+  /// The English name, for logs and tests.
+  final String englishName;
+
+  /// Which way this language's script runs. The UI reads it instead of
+  /// comparing against `AppLang.ar`.
+  final TextDirection direction;
+
+  static const ar = AppLang._('ar', 'العربية', 'Arabic', TextDirection.rtl);
+  static const en = AppLang._('en', 'English', 'English', TextDirection.ltr);
+
+  /// Every bundled language, in the order the picker shows them.
+  static const all = <AppLang>[ar, en];
+
+  /// The language for a stored code, or null when no pack matches. A regional
+  /// tag (`en-gb`) falls back to its primary subtag, because a pack is per
+  /// language and not per region.
+  static AppLang? byCode(String? code) {
+    if (code == null || code.isEmpty) return null;
+    final tag = code.toLowerCase();
+    for (final lang in all) {
+      if (lang.code == tag) return lang;
+    }
+    final primary = tag.split('-').first;
+    for (final lang in all) {
+      if (lang.code == primary) return lang;
+    }
+    return null;
+  }
+
+  bool get isRtl => direction == TextDirection.rtl;
+
+  Locale get locale => Locale(code);
+
+  @override
+  bool operator ==(Object other) => other is AppLang && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
+
+  @override
+  String toString() => code;
+}
+
+/// Code -> native name, for the pack loader and the parity test.
+final Map<String, String> bundledLangs = {
+  for (final lang in AppLang.all) lang.code: lang.nativeName,
 };
 
 /// Every translation module, in load order. Order does not matter for lookup
@@ -73,8 +129,7 @@ class I18nLoader extends AsyncNotifier<Map<String, Map<String, String>>> {
 
 String lookup(
     Map<String, Map<String, String>> tables, AppLang lang, String key) {
-  final code = lang == AppLang.ar ? 'ar' : 'en';
-  return tables[code]?[key] ?? tables['en']?[key] ?? key;
+  return tables[lang.code]?[key] ?? tables['en']?[key] ?? key;
 }
 
 // ---------- settings: engine is the source of truth (D-008) ----------
@@ -141,7 +196,7 @@ class AppSettings {
       };
 
   factory AppSettings.fromEngineJson(Map<String, dynamic> j) => AppSettings(
-        lang: (j['lang'] as String?) == 'en' ? AppLang.en : AppLang.ar,
+        lang: AppLang.byCode(j['lang'] as String?) ?? AppLang.ar,
         themeMode: themeFromString((j['theme'] as String?) ?? 'dark'),
         guardAutostart: j['guard_autostart'] as bool? ?? true,
         autoResumeScans: j['auto_resume_scans'] as bool? ?? true,
@@ -166,7 +221,7 @@ class AppSettings {
 
   /// Full document in the engine's own key names.
   Map<String, dynamic> toEngineJson() => {
-        'lang': lang == AppLang.en ? 'en' : 'ar',
+        'lang': lang.code,
         'theme': themeToString(themeMode),
         'guard_autostart': guardAutostart,
         'auto_resume_scans': autoResumeScans,
@@ -240,7 +295,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       return fromEngine;
     }
     final legacy = AppSettings(
-      lang: (prefs.getString('lang') ?? 'ar') == 'en' ? AppLang.en : AppLang.ar,
+      lang: AppLang.byCode(prefs.getString('lang')) ?? AppLang.ar,
       themeMode: AppSettings.themeFromString(
           prefs.getString('themeMode') ?? 'dark'),
       guardAutostart: prefs.getBool('guardAutostart') ?? true,
@@ -293,7 +348,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   }
 
   Future<void> setLang(AppLang lang) =>
-      patch({'lang': lang == AppLang.en ? 'en' : 'ar'});
+      patch({'lang': lang.code});
 
   Future<void> setThemeMode(ThemeMode mode) =>
       patch({'theme': AppSettings.themeToString(mode)});
@@ -377,8 +432,7 @@ extension TrX on BuildContext {
 }
 
 final rtlProvider = Provider<bool>((ref) {
-  return (ref.watch(settingsProvider).value?.lang ?? AppLang.ar) ==
-      AppLang.ar;
+  return (ref.watch(settingsProvider).value?.lang ?? AppLang.ar).isRtl;
 });
 
 /// Backwards-compat shim: old code watched this for the active language.

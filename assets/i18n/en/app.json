@@ -1,7 +1,5 @@
-{
+﻿{
   "app.name": "MI CS",
   "app.tagline": "Smart. Transparent. Open-source defense.",
-  "lang.ar": "العربية",
-  "lang.en": "English",
   "shell.theme": "Theme"
 }

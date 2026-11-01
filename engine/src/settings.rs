@@ -22,7 +22,12 @@ pub const MAX_SYNC_HOURS: u32 = 168;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// UI language: `ar` | `en`.
+    /// UI language as a BCP-47 tag (`ar`, `en`, `de`, `pt-br`).
+    ///
+    /// The engine does not keep a list of languages: the UI owns the packs, so
+    /// a language that ships next month must not need an engine change. It does
+    /// refuse anything that is not a tag, so a typo is an error instead of a
+    /// silently stored string.
     pub lang: String,
     /// `dark` | `light` | `system`.
     pub theme: String,
@@ -103,8 +108,8 @@ impl Settings {
             match key.as_str() {
                 "lang" => {
                     let v = string(value, key)?;
-                    if v != "ar" && v != "en" {
-                        bail!("lang must be \"ar\" or \"en\"");
+                    if !is_language_tag(&v) {
+                        bail!("lang must be a language tag like \"ar\" or \"en-gb\"");
                     }
                     self.lang = v;
                 }
@@ -520,6 +525,26 @@ fn boolean(value: &Value, key: &str) -> Result<bool> {
         .with_context(|| format!("{key} must be true or false"))
 }
 
+/// A language tag the UI can have a pack for: `xx` or `xx-YY`, lower-case
+/// primary subtag (BCP-47 shape, not a closed list — see the `lang` field).
+fn is_language_tag(tag: &str) -> bool {
+    let (primary, region) = match tag.split_once('-') {
+        Some((primary, region)) => (primary, Some(region)),
+        None => (tag, None),
+    };
+    let primary_ok =
+        (2..=3).contains(&primary.len()) && primary.bytes().all(|b| b.is_ascii_lowercase());
+    if !primary_ok {
+        return false;
+    }
+    match region {
+        None => true,
+        Some(region) => {
+            (2..=8).contains(&region.len()) && region.bytes().all(|b| b.is_ascii_alphanumeric())
+        }
+    }
+}
+
 /// Refuses a cleartext URL that is not loopback.
 ///
 /// `http://127.0.0.1:1234` is the LM Studio default and never leaves the machine,
@@ -602,6 +627,26 @@ mod tests {
         assert!(s.apply_patch(&json!({"unknown_key": 1})).is_err());
         assert!(s.apply_patch(&json!({"dnd": "yes"})).is_err());
         assert!(s.apply_patch(&json!({"toast_enabled": "no"})).is_err());
+    }
+
+    #[test]
+    fn lang_accepts_any_language_tag_and_refuses_the_rest() {
+        let mut s = Settings::default();
+        // The two packs that exist today, plus two the UI could ship tomorrow:
+        // adding a language must not need an engine change.
+        for ok in ["ar", "en", "de", "pt-br", "zh-hant"] {
+            s.apply_patch(&json!({ "lang": ok }))
+                .unwrap_or_else(|e| panic!("{ok} rejected: {e}"));
+            assert_eq!(s.lang, ok);
+        }
+        for bad in ["", "a", "english", "EN", "en-", "en--gb", "en_gb", "ar1"] {
+            assert!(
+                s.apply_patch(&json!({ "lang": bad })).is_err(),
+                "{bad:?} should not be a language tag"
+            );
+        }
+        // A refused patch leaves the stored language alone.
+        assert_eq!(s.lang, "zh-hant");
     }
 
     #[test]

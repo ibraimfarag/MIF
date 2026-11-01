@@ -49,10 +49,12 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز1 — the language leaves the title bar** (د2 is done and measured:
-> all 13 screens plus the shell, every control tapped, and a committed ledger
-> that fails when a control appears or disappears — 99 Dart tests, `qa/ui/`
-> holds the fake engine, the fixtures and the harness). The user approved the
+> **next: ز2 — crash and hang reporting** (ز1 is done: the language is a table in
+> `lib/core/i18n/app_i18n.dart`, the title bar has no language button, Settings
+> owns a dropdown, and the engine accepts any language tag instead of `ar`/`en`;
+> 110 Dart tests, contract 65 cases / 0 failed). ز2 needs **D-023** and your
+> choice of channel before it can deliver anything off the machine. The user
+> approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
 > `engine.contract`. ب4 (folding the helper
@@ -80,12 +82,12 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز1 (اللغة تخرج من التايتل
-> بار وتدخل الإعدادات كدروب داون، مع جدول لغة/اتجاه)، خطوة واحدة في كل مرة
-> ومعاها كوميت، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز2 (كشف الهنج والكراش، bug ID،
+> باكدج محلي، وإرسال اختياري)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
+> `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
-approved track in §0.3b** (currently **ز1 - the language leaves the title bar**), do it as one
+approved track in §0.3b** (currently **ز2 - crash and hang reporting**), do it as one
 small step, and stop for review. §0.5 is **finished**; the live work is the
 QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
 UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
@@ -309,8 +311,8 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز0**~~ | ~~`scripts/pipeline.ps1` (tiers + JSON report) and the CI workflow calls it instead of repeating the checks~~ — **done** | measured 2026-11-01 |
 | ~~**د1**~~ | ~~`qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema)~~ — **done**, and the registry is checked against `dispatcher.rs` by `test/qa_registry_test.dart` | measured 2026-11-01: 64 cases, 15 skipped with reasons, 18.4 s |
 | ~~**د2**~~ | ~~Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface~~ — **done** | measured 2026-11-01: 13 screens + the shell, 63 controls in a committed ledger, 99 Dart tests in 13 s |
-| **ز1** | Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set | next |
-| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | after ز1 |
+| ~~**ز1**~~ | ~~Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set~~ — **done** | measured 2026-11-01: 10 new registry tests, 110 Dart tests, contract 65 cases / 0 failed |
+| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | next |
 | **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
 | **د5** | Coverage gates, `qa/report`, docs | last |
@@ -542,6 +544,58 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز1 - the language is a table, not a button in the title bar**
+  - `AppLang` stopped being an enum. It is now a value with four facts:
+    `code` (which is the asset folder *and* the string the engine stores, so the
+    three cannot disagree), `nativeName` (what the picker shows, in its own
+    script), `englishName` (logs and tests) and `direction`. `AppLang.all` is the
+    only list of languages in the app, and adding one is: a folder with the same
+    module files, one line in that list, one line in `pubspec.yaml`.
+  - The title bar lost its language button entirely (`_TitleBar` no longer takes
+    a `lang`), and Settings owns a labelled dropdown
+    (`settings.language` + `Icons.translate`) that lists every bundled language
+    by its native name - which is the only way a user who cannot read the
+    current language can find theirs. It replaced a two-segment button, which
+    does not survive a third language.
+  - Direction is now read from the language instead of compared against Arabic:
+    `isRtl`, `lang.locale`, and `supportedLocales` built from the table. Every
+    comparison that was really a direction check is gone. One `== AppLang.ar`
+    survives on purpose - the hardening screen picks between the two action
+    names the engine ships (`name` / `nameAr`), which is a language choice and
+    not a layout one - and it now compares `AppLang` values that are equal by
+    code, so it keeps working when the list grows.
+  - The engine stopped keeping a list: `settings.set lang` is validated as a
+    **language tag** (`is_language_tag`: lower-case primary subtag, optional
+    region) instead of `ar`/`en`, so shipping a language needs no engine release
+    - and a typo is still refused (`english` is an error, `de` is stored). This
+    is a *loosening* of a validated field, so it is recorded where it is tested:
+    `qa/methods.json`'s `settings.set` invalid case changed from `xx` (now legal)
+    to `english`, plus a new `de` case, and the hand-written round-trip scenario
+    in `qa/contract.dart` changed the same way - it was the only thing that
+    still assumed `xx` was invalid.
+  - `test/lang_registry_test.dart` (10 tests) is the seam that was missing: the
+    registry, `assets/i18n/`, and `pubspec.yaml` must agree, or a bundled
+    language renders every key raw; directions must include both RTL and LTR
+    (Arabic pinned); `byCode` resolves case-insensitively and falls back to the
+    primary subtag, and returns null for a language nobody bundled; `lookup`
+    falls back to English and then to the key itself.
+  - A Settings behaviour test drives the real thing: pick العربية from the
+    dropdown and the screen switches pack (`اللغة` appears, `Language` is gone),
+    the tree flips to RTL, `rtlProvider` is true, and the engine received
+    `settings.set {"lang": "ar"}`. A dropdown that only changed its own label
+    would fail this test.
+  - `lang.ar` / `lang.en` were removed from both packs: a language's own name
+    lives in the registry now, and two sources of truth for it is how they drift.
+  - Measured 2026-11-01: **110 Dart tests** in 13 s (was 99), `flutter analyze`
+    clean, **contract 65 cases / 0 failed / 15 skipped** against the release
+    engine, `scripts\pipeline.ps1 -Tier fast` green.
+  - Correction to the د2 entry above: the "first frame can show raw i18n keys"
+    row I added to the risk register was **wrong** - `lib/main.dart` does not
+    build the router at all until the settings *and* the packs have values, so
+    the harness was emulating the splash, not working around a bug. The row is
+    replaced with what is actually true (a language missing from `pubspec.yaml`
+    is silent, now caught by the registry test).
 
 - **د2 - every screen and every control, driven by the same fixtures the contract
   harness uses**
@@ -2718,7 +2772,8 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory. Documented in `THREAT-MODEL.md` F-2 (small step 8), where the pipe ACL is named as what still keeps other users out | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
-| LOW | **The first frame can show raw i18n keys**: `context.tr` reads the language tables without watching them, and `AppShell` rebuilds when the *settings* resolve. If the settings document arrives before the packs finish loading (`rootBundle` is slower than the engine pipe on a cold start), the screen that built in between keeps rendering `settings.dnd` until something else rebuilds it - the UI sweep hit this and had to pre-load both before mounting. The fix belongs with **ز1** (the language becomes a startup gate with a dropdown), not in the test harness | `app_i18n.dart` (`TrX.tr`, `localeProvider`), `app_shell.dart` |
+| LOW | **A language folder that `pubspec.yaml` does not declare renders every key raw, silently**: the pack loader swallows a failed asset read on purpose ("a module that has not been translated yet must not break the app"), so nothing logs or fails when a whole language is missing from the asset list. `test/lang_registry_test.dart` now fails instead, and the app itself gates its first frame on the settings *and* the packs (`lib/main.dart`), so this cannot reach a user who is running a correct build | `pubspec.yaml`, `test/lang_registry_test.dart`, `lib/main.dart` |
+| LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | LOW | **No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself* (the obfuscation half of this row closed in ج1/D-021: both binaries are CFG-instrumented and stripped, the Dart snapshot is obfuscated, and `verify-hardening.ps1` fails the release when that stops being true). `THREAT-MODEL.md` F-11 says what carries the security instead; the manifest + self-check banner is ج2 | P5, THREAT-MODEL F-11 |

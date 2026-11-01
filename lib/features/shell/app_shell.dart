@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
@@ -62,7 +62,6 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
     final engineState =
         engineAsync.value ?? ref.read(engineIpcProvider).state;
     final rtl = ref.watch(rtlProvider);
-    final lang = ref.watch(localeProvider);
 
     final loc = GoRouterState.of(context).uri.path;
     final selectedIndex =
@@ -84,7 +83,7 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
           ),
           child: Column(
             children: [
-              _TitleBar(lang: lang, engineState: engineState),
+              _TitleBar(engineState: engineState),
               Expanded(
                 child: Row(
                   children: [
@@ -170,8 +169,7 @@ class _IntelChip extends ConsumerWidget {
 // ---------------- title bar (macOS style) ----------------
 
 class _TitleBar extends ConsumerWidget {
-  const _TitleBar({required this.lang, required this.engineState});
-  final AppLang lang;
+  const _TitleBar({required this.engineState});
   final EngineState engineState;
 
   @override
@@ -263,14 +261,6 @@ class _TitleBar extends ConsumerWidget {
                     ThemeMode.dark;
                 ref.read(settingsProvider.notifier).setThemeMode(
                     cur == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);
-              },
-            ),
-            _HeaderIcon(
-              icon: Icons.language,
-              tooltip: lang == AppLang.ar ? 'English' : 'العربية',
-              onTap: () {
-                ref.read(settingsProvider.notifier).setLang(
-                    lang == AppLang.ar ? AppLang.en : AppLang.ar);
               },
             ),
             const SizedBox(width: 10),

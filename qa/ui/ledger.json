@@ -68,6 +68,7 @@
       "_SelectionKeepAlive/Checkbox"
     ],
     "screens.settings": [
+      "DropdownButton<AppLang>(العربية)",
       "DropdownButton<String>(stable)",
       "DropdownButton<int>(1 h)",
       "FilledButton(Install helper (one prompt))",
@@ -79,7 +80,6 @@
       "OutlinedButton(Remove)",
       "OutlinedButton(Send a test notification)",
       "OutlinedButton(Sync now)",
-      "SegmentedButton<AppLang>(العربية)",
       "SegmentedButton<ThemeMode>(Dark)",
       "SwitchListTile(Auto-quarantine detections by default)",
       "SwitchListTile(Desktop notifications)",
@@ -117,7 +117,6 @@
       "InkWell(Online)",
       "TextField(Ask anything… \"scan the system\" · \"start the guard\" · \"report\")",
       "_ExclusiveMouseRegion/InkWell",
-      "_ExclusiveMouseRegion/InkWell#2",
       "_TrafficLight/GestureDetector",
       "_TrafficLight/GestureDetector#2",
       "_TrafficLight/GestureDetector#3"

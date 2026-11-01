@@ -66,18 +66,36 @@ class SettingsScreen extends ConsumerWidget {
                 onSelectionChanged: (v) => notifier.setThemeMode(v.first),
               ),
               const SizedBox(height: 12),
-              SegmentedButton<AppLang>(
-                segments: [
-                  ButtonSegment(
-                      value: AppLang.ar,
-                      label: Text(context.tr('lang.ar'))),
-                  ButtonSegment(
-                      value: AppLang.en,
-                      label: Text(context.tr('lang.en'))),
-                ],
-                selected: {s.lang},
-                onSelectionChanged: (v) => notifier.setLang(v.first),
-              ),
+              Row(children: [
+                Icon(Icons.translate, size: 16, color: AppColors.muted),
+                const SizedBox(width: 8),
+                Text(context.tr('settings.language'),
+                    style: TextStyle(color: AppColors.text, fontSize: 13)),
+                const Spacer(),
+                DropdownButton<AppLang>(
+                  value: s.lang,
+                  dropdownColor: AppColors.surface,
+                  underline: const SizedBox.shrink(),
+                  borderRadius: BorderRadius.circular(10),
+                  items: [
+                    for (final lang in AppLang.all)
+                      DropdownMenuItem(
+                        value: lang,
+                        child: Text(lang.nativeName,
+                            style: TextStyle(
+                                color: AppColors.text,
+                                fontSize: 13,
+                                // Each name is shown in its own script, which is
+                                // the only way a user who cannot read the current
+                                // language can find theirs.
+                                fontFamilyFallback: const ['Segoe UI'])),
+                      ),
+                  ],
+                  onChanged: (lang) {
+                    if (lang != null) notifier.setLang(lang);
+                  },
+                ),
+              ]),
             ],
           ),
 

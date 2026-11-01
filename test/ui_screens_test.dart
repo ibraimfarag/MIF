@@ -1,4 +1,4 @@
-﻿// Every screen, mounted the way the app mounts it, with a fake engine that
+// Every screen, mounted the way the app mounts it, with a fake engine that
 // answers from the contract registry - and then every control under it tapped.
 //
 // Two claims are being tested, and they fail differently:
@@ -22,6 +22,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/features/audit/screens/audit_screen.dart';
 import 'package:mics_app/features/canaries/screens/canaries_screen.dart';
 import 'package:mics_app/features/dashboard/screens/dashboard_screen.dart';
@@ -134,5 +135,33 @@ void main() {
     expect(engine.lastParams('noise.mute'),
         {'category': 'guard_alert:guard-002'},
         reason: 'the mute was for the wrong category');
+  });
+
+  // The language lives in Settings now, and it is more than a string: it picks
+  // the pack, it tells the engine what to store, and it decides which way the
+  // whole tree runs. All three are asserted here because a dropdown that only
+  // changes the label would pass a screenshot test.
+  testWidgets('settings: the language dropdown switches pack, direction and engine',
+      (tester) async {
+    final mounted = await openScreen(tester, const SettingsScreen());
+    expect(find.text('Language'), findsOneWidget,
+        reason: 'the language picker is not in Settings');
+    expect(Directionality.of(tester.element(find.text('Language'))),
+        TextDirection.ltr);
+
+    await tester.tap(find.byType(DropdownButton<AppLang>));
+    await settle(tester);
+    await tester.tap(find.text('العربية').last);
+    await settle(tester);
+
+    expect(mounted.engine.lastParams('settings.set'), {'lang': 'ar'},
+        reason: 'the chosen language never reached the engine');
+    expect(find.text('اللغة'), findsOneWidget,
+        reason: 'the screen did not switch to the Arabic pack');
+    expect(find.text('Language'), findsNothing);
+    expect(Directionality.of(tester.element(find.text('اللغة'))),
+        TextDirection.rtl,
+        reason: 'an RTL language must lay the tree out right-to-left');
+    expect(mounted.container.read(rtlProvider), isTrue);
   });
 }

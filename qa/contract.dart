@@ -393,17 +393,25 @@ Future<bool> _scanScenario(PipeClient pipe, Directory empty) async {
 
 /// Settings are the engine's document (D-008): a write must be readable back,
 /// and a refused value must leave the previous one in place.
+///
+/// The refused value is `english`, not `xx`: a language tag the UI has no pack
+/// for is *accepted* (the UI owns the packs, the engine only owns the shape), so
+/// the refusal case has to be something that is not a tag at all.
 Future<bool> _settingsScenario(PipeClient pipe) async {
   var ok = true;
   final toEnglish = await pipe.call('settings.set', params: {'lang': 'en'});
   ok &= toEnglish.ok;
   final readBack = await pipe.call('settings.get');
   ok &= readBack.ok && readBack.result is Map && readBack.result['lang'] == 'en';
-  final refused = await pipe.call('settings.set', params: {'lang': 'xx'});
+  final refused = await pipe.call('settings.set', params: {'lang': 'english'});
   ok &= !refused.ok;
   final unchanged = await pipe.call('settings.get');
   ok &= unchanged.ok && unchanged.result is Map &&
       unchanged.result['lang'] == 'en';
+  // A tag for a language nobody has shipped yet is stored, not rejected: the
+  // next language must not need an engine release.
+  final future = await pipe.call('settings.set', params: {'lang': 'de'});
+  ok &= future.ok && future.result is Map && future.result['lang'] == 'de';
   final restored = await pipe.call('settings.set', params: {'lang': 'ar'});
   ok &= restored.ok;
 
@@ -411,9 +419,11 @@ Future<bool> _settingsScenario(PipeClient pipe) async {
     'method': 'settings',
     'case': 'round-trip',
     'ok': ok,
-    'detail': ok ? 'en persisted, xx refused, ar restored' : 'see above',
+    'detail':
+        ok ? 'en persisted, "english" refused, de stored, ar restored' : 'see above',
   });
-  print('  ${ok ? 'PASS' : 'FAIL'}  settings round-trip (en -> refused xx -> ar)');
+  print('  ${ok ? 'PASS' : 'FAIL'}  settings round-trip '
+      '(en -> refused "english" -> de -> ar)');
   return ok;
 }
 

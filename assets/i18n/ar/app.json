@@ -1,7 +1,5 @@
-{
+﻿{
   "app.name": "مركز MI CS للدفاع السيبراني",
   "app.tagline": "حماية ذكية، شفافة، ومفتوحة المصدر",
-  "lang.ar": "العربية",
-  "lang.en": "English",
   "shell.theme": "المظهر"
 }

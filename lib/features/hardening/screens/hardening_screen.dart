@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
@@ -91,7 +91,11 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
   @override
   Widget build(BuildContext context) {
     final actions = ref.watch(hardeningProvider);
-    final isAr = ref.watch(localeProvider) == AppLang.ar;
+    // Not a direction check: the engine ships two names per action (`name` and
+    // `nameAr`), so a screen that shows the human-readable one has to pick a
+    // language rather than ask "is this RTL". `AppLang` compares by code, so
+    // this keeps working when the language list grows.
+    final preferArabicNames = ref.watch(localeProvider) == AppLang.ar;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -141,7 +145,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(isAr ? a.nameAr : a.name,
+                    Text(preferArabicNames ? a.nameAr : a.name,
                         style: TextStyle(
                             color: AppColors.text,
                             fontWeight: FontWeight.w700,
@@ -181,7 +185,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                       setState(() {
                         _busy = null;
                         _message = err ??
-                            '✓ ${isAr ? a.nameAr : a.name} — applied'
+                            '✓ ${preferArabicNames ? a.nameAr : a.name} — applied'
                                 '${delta != null && delta != 0 ? "  (score ${delta > 0 ? "+" : ""}$delta)" : ""}';
                       });
                     },
@@ -205,7 +209,7 @@ class _HardeningScreenState extends ConsumerState<HardeningScreen> {
                       setState(() {
                         _busy = null;
                         _message = err ??
-                            '↩ ${isAr ? a.nameAr : a.name} — rolled back';
+                            '↩ ${preferArabicNames ? a.nameAr : a.name} — rolled back';
                       });
                     },
                     child: Text(context.tr('hardening.rollback')),

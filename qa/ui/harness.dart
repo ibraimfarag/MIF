@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -133,9 +134,25 @@ Future<Mounted> openScreen(
 
   await tester.pumpWidget(ProviderScope(
     overrides: overrides,
-    child: MaterialApp.router(
-      theme: AppTheme.darkTheme,
-      routerConfig: router,
+    child: Consumer(
+      // The app's own root does exactly this (`lib/main.dart`): the locale - and
+      // therefore the writing direction - comes from the stored language, so a
+      // language switch in Settings flips the whole tree. Mounting a fixed
+      // English MaterialApp would hide that.
+      builder: (context, ref, _) {
+        final lang = ref.watch(settingsProvider).value?.lang ?? AppLang.ar;
+        return MaterialApp.router(
+          theme: AppTheme.darkTheme,
+          routerConfig: router,
+          locale: lang.locale,
+          supportedLocales: [for (final l in AppLang.all) l.locale],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+        );
+      },
     ),
   ));
   await settle(tester);

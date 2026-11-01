@@ -201,8 +201,8 @@ class _MicsAppState extends ConsumerState<MicsApp>
       darkTheme: AppTheme.darkTheme,
       themeMode: settings.value?.themeMode ?? ThemeMode.dark,
       routerConfig: appRouter,
-      locale: lang == AppLang.ar ? const Locale('ar') : const Locale('en'),
-      supportedLocales: const [Locale('ar'), Locale('en')],
+      locale: lang.locale,
+      supportedLocales: [for (final l in AppLang.all) l.locale],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
