@@ -49,9 +49,10 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: د1 — the `qa/` contract harness over every JSON-RPC method** (the user
-> approved the QA/reliability track on 2026-11-01; §0.3b carries it, and
-> `scripts/pipeline.ps1` is where every check now runs). ب4 (folding the helper
+> **next: د2 — every screen and every control, driven from the same fixtures** (the
+> user approved the QA/reliability track on 2026-11-01; §0.3b carries it, د1 is
+> done and `scripts/pipeline.ps1` is where every check now runs, including
+> `engine.contract`). ب4 (folding the helper
 > install into the installer) stays the release-engineering lane. ب3 is
 > finished and measured (all three steps, 2026-11-01): the installer builds around
 > the hardened package, installs and removes the whole product (70 files), tags
@@ -76,12 +77,12 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ د1 (harness الـ qa على كل
-> method في الـ engine)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ د2 (اختبار كل شاشة وكل
+> زرار في الـ UI من نفس الـ fixtures)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
-approved track in §0.3b** (currently **د1 - the contract harness**), do it as one
+approved track in §0.3b** (currently **د2 - every screen and control**), do it as one
 small step, and stop for review. §0.5 is **finished**; the live work is the
 QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
 UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
@@ -303,8 +304,8 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ID | Step | Status |
 |---|---|---|
 | ~~**ز0**~~ | ~~`scripts/pipeline.ps1` (tiers + JSON report) and the CI workflow calls it instead of repeating the checks~~ — **done** | measured 2026-11-01 |
-| **د1** | `qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema), fixtures generated from `dispatcher.rs` so a new method cannot go unregistered | next |
-| **د2** | Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface | after د1 |
+| ~~**د1**~~ | ~~`qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema)~~ — **done**, and the registry is checked against `dispatcher.rs` by `test/qa_registry_test.dart` | measured 2026-11-01: 64 cases, 15 skipped with reasons, 18.4 s |
+| **د2** | Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface | next |
 | **ز1** | Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set | after د2 |
 | **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | after ز1 |
 | **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
@@ -538,6 +539,55 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **د1 - every JSON-RPC method now has a case, and a test that keeps the list
+  whole**
+  - `qa/methods.json` is the surface as a document: one row per method with its
+    `class` (`pure`/`read`/`sandbox` run for real; `mutating`/`network`/`desktop`
+    only ever carry a refusal case, because this runs on the machine it protects),
+    the call to make, the shape to expect, an optional `want` map pinning the
+    values that make the shape meaningful, `missing`/`invalid` refusal cases, and
+    `extra` named cases for a contract that is more than one call. Every row has a
+    `note`; a row that could not produce a case is a test failure, not a comment.
+  - `qa/contract.dart` starts a real `mics-engine` in a fresh `%TEMP%` sandbox with
+    `MICS_DATA_DIR`/`PROGRAMDATA`/`MICS_PIPE_NAME`/`MICS_NO_*` set, then: an
+    unknown method must answer `-32601`; every row runs; then three scenarios the
+    single calls cannot express - a scan on an empty folder to `state=done` with
+    `job.get`/`job.list`/`job.cancel` agreeing, a settings round trip where `xx`
+    is refused and the previous value survives, and a final `ping` that proves the
+    engine is still serving. It writes `build/qa-contract.json` and exits non-zero
+    on the first summary line that disagrees.
+  - `test/qa_registry_test.dart` parses the dispatcher's match table (arms at
+    twelve spaces, with a guard against the parse going vacuous) and fails unless
+    the two sets are equal, no method is listed twice, every class/expect is from
+    the allowed vocabulary, `want` only appears on objects, no skipped row carries
+    an `expect` that would silently not run, and every placeholder is
+    `@sandbox/...` so the document stays machine-independent.
+  - Measured (`-Tier full -Only engine.contract`, release binary): **64 cases, 0
+    failed, 15 methods classified not-to-run with a reason each, 18.4 s**. The
+    skipped fifteen are the ones that would change this machine (firewall profile,
+    Defender scan, helper/service install, canary files, toast) or leave it (NVD,
+    the intel feeds, LM Studio, the update manifest) - all still registered, so the
+    count stays honest. With the registry test in place the `fast` tier is
+    **42.3 s** (analyze 11.8, **81** Dart tests 21.2, 86 Rust tests 7.0, clippy
+    2.3), still one command.
+  - The harness found three contract mismatches on its first real run, all fixed
+    in the registry rather than papered over: `noise.stats` returns an array (one
+    row per learned category), `job.resume` of an unknown id answers
+    `not_resumable` *unless* another job is active, in which case it is an error -
+    so the row moved before any scan starts and `want` pins the answer, and
+    `quarantine.delete` is deliberately idempotent where `restore` is not (an
+    already-missing blob still answers `deleted`, because the postcondition holds),
+    which is what `extra` exists for.
+  - One trap worth the paragraph: the first full run reported six timeouts that
+    were the harness's own fault. The client polled with `sleep()`, which blocks
+    the isolate's event loop, which stops the `process.stdout`/`stderr` listeners
+    that drain the engine's stdio; the engine logs every request to stderr
+    synchronously, so a full 64 KB pipe parked its reader inside an `info!` call -
+    process alive, pipe open, nothing read. Polling with `await Future.delayed`
+    keeps the drain alive and the deadline honest. The production path was never
+    affected (`ProcessStartMode.detached`, stdio not piped), so this was the
+    harness learning the same lesson the UI avoids by construction.
 
 - **ز0 - one pipeline script, so the checks a human runs and the checks CI runs are
   the same checks**

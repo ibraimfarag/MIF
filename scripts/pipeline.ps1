@@ -151,6 +151,25 @@ $steps = @(
         What = 'The built engine starts and runs its own benchmark'
     },
     @{
+        Id   = 'engine.contract'
+        Tier = 'full'
+        Dir  = $repo
+        Run  = {
+            # The dispatcher's whole surface, against the release binary in a
+            # throw-away data dir: every method answers in its documented shape,
+            # every malformed call is refused, and the engine is still serving
+            # at the end. qa/methods.json is the list; test/qa_registry_test.dart
+            # keeps it equal to the dispatcher's match table.
+            if ($env:CARGO_TARGET_DIR) {
+                $exe = Join-Path $env:CARGO_TARGET_DIR 'release\mics-engine.exe'
+            } else {
+                $exe = Join-Path (Join-Path $repo 'engine') 'target\release\mics-engine.exe'
+            }
+            dart run qa\contract.dart --engine $exe
+        }
+        What = 'All 62 JSON-RPC methods answer, or refuse, as documented'
+    },
+    @{
         Id   = 'app.build'
         Tier = 'full'
         Dir  = $repo

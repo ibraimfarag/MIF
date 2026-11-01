@@ -1,0 +1,439 @@
+{
+  "version": 1,
+  "engine": "engine/src/dispatcher.rs",
+  "about": "One row per JSON-RPC method the dispatcher answers. The set of `method` values must equal the dispatcher's match table exactly (test/qa_registry_test.dart fails otherwise), so a method cannot ship without a row. `class` decides what the harness is allowed to do: pure/read/sandbox run for real against an isolated data dir; mutating/network/desktop only run a refusal case, or carry a `skip` reason.",
+  "classes": {
+    "pure": "No OS state is read or written. Runs for real.",
+    "read": "Reads OS or DB state, writes nothing. Runs for real.",
+    "sandbox": "Would write, but only inside the isolated data dir the harness creates. Runs for real.",
+    "mutating": "Changes this machine (firewall, registry, hosts, services, files outside the sandbox). Only a refusal case runs, or it is skipped with a reason.",
+    "network": "Sends a request off the machine. Never runs here.",
+    "desktop": "Shows UI on the interactive desktop. Never runs here."
+  },
+  "methods": [
+    {
+      "method": "ping",
+      "class": "pure",
+      "params": null,
+      "expect": "string",
+      "note": "The liveness answer every other check depends on."
+    },
+    {
+      "method": "status",
+      "class": "pure",
+      "params": null,
+      "expect": "object",
+      "note": "Build version, platform and pid."
+    },
+    {
+      "method": "audit.run",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "invalid": { "sections": ["not-a-section"] },
+      "note": "Full audit of the real machine: read-only, seconds long."
+    },
+    {
+      "method": "net.connections",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Enumerates live TCP/UDP connections."
+    },
+    {
+      "method": "fw.default_deny.enable",
+      "class": "mutating",
+      "skip": "changes the Windows firewall profile of this machine",
+      "note": "Needs an elevation run; the contract only proves it is registered."
+    },
+    {
+      "method": "fw.default_deny.disable",
+      "class": "mutating",
+      "skip": "changes the Windows firewall profile of this machine",
+      "note": "Same as enable."
+    },
+    {
+      "method": "vuln.scan.start",
+      "class": "network",
+      "skip": "starts a durable job that queries NVD",
+      "note": "Not run: outbound traffic and a job that outlives the harness."
+    },
+    {
+      "method": "vuln.scan",
+      "class": "network",
+      "skip": "blocking NVD scan, minutes long",
+      "note": "Kept for probes; the UI uses vuln.scan.start."
+    },
+    {
+      "method": "fw.rules.list",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Reads the firewall rules through netsh."
+    },
+    {
+      "method": "fw.rules.add",
+      "class": "mutating",
+      "missing": true,
+      "note": "No params means no rule object: refused before netsh runs."
+    },
+    {
+      "method": "fw.rules.remove",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a name, before netsh runs."
+    },
+    {
+      "method": "fw.default_deny.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Reads the outbound policy."
+    },
+    {
+      "method": "fw.country.block",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a country code, before netsh runs."
+    },
+    {
+      "method": "job.list",
+      "class": "read",
+      "params": { "limit": 5 },
+      "expect": "array",
+      "note": "Reads the isolated job table."
+    },
+    {
+      "method": "job.get",
+      "class": "read",
+      "missing": true,
+      "note": "Refused without a job id; the scan scenario covers the hit."
+    },
+    {
+      "method": "job.cancel",
+      "class": "read",
+      "params": { "job_id": "qa-no-such-job" },
+      "expect": "object",
+      "note": "An unknown id answers cancelled=false, not an error."
+    },
+    {
+      "method": "job.resume",
+      "class": "read",
+      "params": { "job_id": "qa-no-such-job" },
+      "expect": "object",
+      "want": { "status": "not_resumable" },
+      "note": "Runs before any scan starts: with a job active the answer is the 'another job is running' error instead, so the case that can be pinned is the unknown id."
+    },
+    {
+      "method": "scan.start",
+      "class": "sandbox",
+      "params": { "path": "@sandbox/empty", "quarantine": false },
+      "expect": "object",
+      "note": "Scans an empty folder the harness created; quarantine is off."
+    },
+    {
+      "method": "scan.stop",
+      "class": "pure",
+      "params": null,
+      "expect": "object",
+      "want": { "stopped": "true" },
+      "note": "Stops the scan the case above started, so the answer must be stopped=true."
+    },
+    {
+      "method": "quarantine.list",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Reads the isolated quarantine store."
+    },
+    {
+      "method": "quarantine.restore",
+      "class": "mutating",
+      "missing": true,
+      "invalid": { "blob_id": "qa-no-such-blob" },
+      "note": "A missing id is refused; an unknown id fails before touching a file."
+    },
+    {
+      "method": "quarantine.delete",
+      "class": "mutating",
+      "missing": true,
+      "extra": [
+        {
+          "case": "unknown-id-is-idempotent",
+          "params": { "blob_id": "qa-no-such-blob" },
+          "expect": "object"
+        }
+      ],
+      "note": "Delete is idempotent where restore is not: an already-missing blob still answers deleted, because the postcondition (it is not there) holds."
+    },
+    {
+      "method": "defender.scan.quick",
+      "class": "mutating",
+      "skip": "starts a real Defender quick scan of this machine",
+      "note": "Minutes long and it is Defender's state, not ours."
+    },
+    {
+      "method": "quarantine.add",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a path, before any file is moved."
+    },
+    {
+      "method": "sync.now",
+      "class": "network",
+      "skip": "fetches the configured intel feeds",
+      "note": "Outbound traffic; never part of a local contract run."
+    },
+    {
+      "method": "sync.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Reads the cached sync state; no fetch."
+    },
+    {
+      "method": "guard.start",
+      "class": "mutating",
+      "skip": "starts the ETW guard session on this machine",
+      "note": "The harness runs with MICS_NO_GUARD=1 for exactly this reason."
+    },
+    {
+      "method": "guard.stop",
+      "class": "pure",
+      "params": null,
+      "expect": "object",
+      "note": "Stopping a guard that was never started is a no-op."
+    },
+    {
+      "method": "guard.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Reports rule and event counts."
+    },
+    {
+      "method": "guard.rules.list",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Reads the bundled rules plus the user file in the sandbox."
+    },
+    {
+      "method": "guard.rules.add",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused when the params are not a rule object."
+    },
+    {
+      "method": "canary.list",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Reads the decoy configuration in the sandbox."
+    },
+    {
+      "method": "canary.configure",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a paths array, before anything is deployed."
+    },
+    {
+      "method": "canary.deploy",
+      "class": "mutating",
+      "skip": "creates decoy files on disk",
+      "note": "Writes outside the sandbox by design."
+    },
+    {
+      "method": "incident.list",
+      "class": "read",
+      "params": { "limit": 5 },
+      "expect": "array",
+      "note": "Reads the isolated incident table."
+    },
+    {
+      "method": "incident.close",
+      "class": "mutating",
+      "missing": true,
+      "invalid": { "incident_id": "not-an-integer" },
+      "note": "Refused without an integer id."
+    },
+    {
+      "method": "noise.stats",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "One row per noise category, empty until the learner has seen traffic."
+    },
+    {
+      "method": "noise.mute",
+      "class": "sandbox",
+      "params": { "category": "qa-probe" },
+      "expect": "object",
+      "missing": true,
+      "note": "A new category is muted in the isolated database only."
+    },
+    {
+      "method": "noise.unmute",
+      "class": "sandbox",
+      "params": { "category": "qa-probe" },
+      "expect": "object",
+      "missing": true,
+      "note": "Reverses the mute above."
+    },
+    {
+      "method": "guard.event.dismiss",
+      "class": "sandbox",
+      "params": { "category": "qa-probe" },
+      "expect": "object",
+      "missing": true,
+      "note": "Records a dismissal in the isolated database."
+    },
+    {
+      "method": "ids.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Reads the hosts file; writes nothing."
+    },
+    {
+      "method": "ids.block.add",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a domains array, so the hosts file is untouched."
+    },
+    {
+      "method": "ids.block.remove",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a domain, so the hosts file is untouched."
+    },
+    {
+      "method": "ids.blocklist.import",
+      "class": "mutating",
+      "missing": true,
+      "note": "Refused without a path, so the hosts file is untouched."
+    },
+    {
+      "method": "geoip.lookup",
+      "class": "read",
+      "params": { "ip": "203.0.113.9" },
+      "expect": "object",
+      "invalid": { "ip": 123 },
+      "note": "Reads the bundled country lists; a documentation-range address resolves to null."
+    },
+    {
+      "method": "update.download",
+      "class": "network",
+      "skip": "downloads the configured update manifest",
+      "note": "Outbound traffic."
+    },
+    {
+      "method": "update.apply",
+      "class": "sandbox",
+      "params": { "staged": "@sandbox/missing-update.zip" },
+      "expect": "error",
+      "note": "A missing archive must fail without touching the install."
+    },
+    {
+      "method": "notify.test",
+      "class": "desktop",
+      "skip": "raises a real Windows toast on this machine",
+      "note": "The toast path has its own probe (scripts/verify-toast.ps1)."
+    },
+    {
+      "method": "hardening.list",
+      "class": "read",
+      "params": null,
+      "expect": "array",
+      "note": "Reads the action table."
+    },
+    {
+      "method": "hardening.apply",
+      "class": "sandbox",
+      "params": { "action": "qa-not-an-action" },
+      "expect": "error",
+      "note": "An unknown action is refused before anything is changed."
+    },
+    {
+      "method": "hardening.rollback",
+      "class": "sandbox",
+      "params": { "action": "qa-not-an-action" },
+      "expect": "error",
+      "note": "Same refusal contract as apply."
+    },
+    {
+      "method": "report.export",
+      "class": "sandbox",
+      "params": null,
+      "expect": "object",
+      "note": "Writes the markdown report into the isolated data dir."
+    },
+    {
+      "method": "llm.explain",
+      "class": "network",
+      "skip": "posts the finding to the configured LM Studio endpoint",
+      "note": "Outbound even when the endpoint is loopback."
+    },
+    {
+      "method": "nl.command",
+      "class": "pure",
+      "params": { "text": "hello there" },
+      "expect": "object",
+      "missing": true,
+      "note": "Unmatched text answers matched=false and executes nothing."
+    },
+    {
+      "method": "helper.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Queries the helper service; read-only."
+    },
+    {
+      "method": "helper.install",
+      "class": "mutating",
+      "skip": "opens a UAC prompt and installs a service",
+      "note": "The one operation that must stay a human decision."
+    },
+    {
+      "method": "helper.uninstall",
+      "class": "mutating",
+      "skip": "removes the privileged helper service",
+      "note": "Destructive by definition."
+    },
+    {
+      "method": "service.install",
+      "class": "mutating",
+      "skip": "writes an HKCU Run autostart entry",
+      "note": "Machine state outside the sandbox."
+    },
+    {
+      "method": "service.remove",
+      "class": "mutating",
+      "skip": "deletes the HKCU Run autostart entry",
+      "note": "Machine state outside the sandbox."
+    },
+    {
+      "method": "settings.get",
+      "class": "pure",
+      "params": null,
+      "expect": "object",
+      "note": "The whole settings document, from the isolated file."
+    },
+    {
+      "method": "settings.set",
+      "class": "sandbox",
+      "params": { "lang": "en" },
+      "expect": "object",
+      "invalid": { "lang": "xx" },
+      "note": "Validated and persisted into the isolated settings.json."
+    },
+    {
+      "method": "update.check",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "With no manifest URL configured the answer is disabled without any traffic."
+    }
+  ]
+}

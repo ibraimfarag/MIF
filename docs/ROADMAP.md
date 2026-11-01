@@ -60,7 +60,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | **ب4** | Fold the privileged-helper install into the installer (removes the separate UAC step) | 🟠 | 1–2 h | After ب3. |
 | **ج2** | **Signed SHA-256 manifest** of shipped files + startup self-check + "unofficial build" banner | 🟠 | 3–5 h | Closes F-11; reuses the local self-signed certificate. 2 commits. |
 | ~~**د0**~~ | ~~**Pipeline entry point**: `scripts/pipeline.ps1` with tiers, fail-fast, a JSON report, and the CI workflow calling it instead of repeating the four checks~~ — **done** (ز0, 2026-11-01): `fast` = the four checks (measured 16.3 + 13.8 + 7.4 + 2.4 s), `full` adds both release builds and the engine smoke, `release` is where the artifact verifiers land; CI caches `engine/target` and uploads the report | ✅ | — | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
-| **د1** | `qa/` contract harness: every method × (happy path, invalid params, unknown method, result schema), registry generated from `dispatcher.rs` and freshness-checked | 🟠 | 6–10 h | Longest single item; the registry is what stops it going stale. System-tier methods assert the refusal contract in CI and the real outcome on this machine. |
+| ~~**د1**~~ | ~~`qa/` contract harness: every method × (happy path, invalid params, unknown method, result schema), registry generated from `dispatcher.rs` and freshness-checked~~ — **done** (2026-11-01): `qa/methods.json` documents all **62** methods, `qa/contract.dart` runs the surface against a real engine in a `%TEMP%` sandbox (**64 cases, 0 failed, 15 classified not-to-run with a reason, 18.4 s** on the release binary), and `test/qa_registry_test.dart` fails if the registry and the dispatcher's match table ever disagree | ✅ | — | `qa/README.md` carries the rules; `engine.contract` is a `full`-tier pipeline step, so CI runs it. |
 | **د2** | Every screen, every interactive control: the same fixtures drive a `FakeEngine`, ar/RTL + en/LTR, empty/loading/error states, and a ledger that fails when a control was never exercised | 🟠 | 6–9 h | `test/widget_test.dart` already has `FakeIpc`; the Settings screen had **no** test and hid a real bug. |
 | **د3** | E2E against the built artifact (the ب3 installer) | 🟡 | 2–3 h | After the harness and the per-machine run. |
 | **د5** | Coverage gates, `qa/report.html` + `.md`, and CI fails when a feature is not registered | 🟡 | 2–4 h | Closes the د block. |
@@ -82,7 +82,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 ## 3. The order to work in
 
 **The approved track (2026-11-01) runs first, one commit per step:**
-**ز0** *(done)* → **د1** → **د2** → **ز1** → **ز2** → **ز3** → **ط1–ط3** → **د5**.
+**ز0** *(done)* → **د1** *(done)* → **د2** → **ز1** → **ز2** → **ز3** → **ط1–ط3** → **د5**.
 It is what the user picked over the release lane; the list below is the release lane
 the project returns to afterwards.
 
