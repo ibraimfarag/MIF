@@ -1,0 +1,372 @@
+{
+  "about": "The content behind the contract. qa/methods.json says what shape a method answers with; this file says what it answers with when a screen needs something to show. A widget test that mounts a screen gets these replies through qa/ui/fake_engine.dart, so the UI and the contract harness describe one surface: a method that changes shape fails the contract, and a method that disappears fails both. Values are deliberately mundane (a finished scan, one blocked domain, one failing feed): the tests are about behaviour, not about how dramatic the data looks.",
+  "methods": {
+    "audit.run": {
+      "score": 62,
+      "findings": [
+        {
+          "section": "Defender",
+          "item": "Real-time Protection",
+          "status": "Secure",
+          "severity": "Low",
+          "description": "Real-time protection is on.",
+          "fix_available": false
+        },
+        {
+          "section": "SMBv1",
+          "item": "SMBv1 protocol",
+          "status": "Vulnerable",
+          "severity": "High",
+          "description": "SMBv1 is enabled. It has no place on a workstation.",
+          "fix_available": true
+        },
+        {
+          "section": "Firewall",
+          "item": "Outbound default",
+          "status": "Warning",
+          "severity": "Medium",
+          "description": "Outbound traffic is allowed by default.",
+          "fix_available": true
+        },
+        {
+          "section": "RDP",
+          "item": "Remote Desktop",
+          "status": "Secure",
+          "severity": "Low",
+          "description": "Remote Desktop is disabled.",
+          "fix_available": false
+        }
+      ],
+      "startup_entries": [
+        {
+          "name": "OneDrive",
+          "command": "C:/Users/qa/AppData/Local/Microsoft/OneDrive/OneDrive.exe /background",
+          "location": "HKCU/Run"
+        }
+      ],
+      "scheduled_tasks": [
+        {
+          "name": "MicrosoftEdgeUpdateTaskMachineCore",
+          "path": "C:/Windows/System32/tasks/MicrosoftEdgeUpdateTaskMachineCore"
+        }
+      ]
+    },
+    "guard.status": {
+      "running": true,
+      "rules": [
+        {
+          "id": "guard-001",
+          "name": "Encoded PowerShell",
+          "severity": "high",
+          "action": "alert"
+        },
+        {
+          "id": "guard-002",
+          "name": "Office spawning a shell",
+          "severity": "critical",
+          "action": "block"
+        },
+        {
+          "id": "guard-003",
+          "name": "LOLBin download",
+          "severity": "medium",
+          "action": "alert"
+        }
+      ]
+    },
+    "guard.rules.list": [
+      {
+        "id": "guard-001",
+        "name": "Encoded PowerShell",
+        "severity": "high",
+        "action": "alert",
+        "enabled": true
+      },
+      {
+        "id": "guard-002",
+        "name": "Office spawning a shell",
+        "severity": "critical",
+        "action": "block",
+        "enabled": true
+      }
+    ],
+    "ids.status": {
+      "blocked_domains": ["ads.example", "tracker.example"],
+      "hosts_managed": true
+    },
+    "incident.list": [
+      {
+        "incident_id": "INC-2026-0001",
+        "title": "Encoded PowerShell from a document",
+        "severity": "high",
+        "opened_at": 1793300000,
+        "closed": false,
+        "timeline": [
+          {
+            "at": 1793300000,
+            "kind": "detected",
+            "detail": "guard-002 fired for WINWORD.EXE"
+          }
+        ]
+      },
+      {
+        "incident_id": "INC-2026-0002",
+        "title": "Blocked outbound connection",
+        "severity": "medium",
+        "opened_at": 1793200000,
+        "closed": true,
+        "timeline": []
+      }
+    ],
+    "quarantine.list": [
+      {
+        "blob_id": "0f8a1c9d2e3b4a5c6d7e8f9012345678",
+        "original_path": "C:/Users/qa/Downloads/invoice.exe",
+        "reason": "YARA: Suspicious_Packer",
+        "size": 1048576,
+        "restored": false
+      },
+      {
+        "blob_id": "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+        "original_path": "C:/Users/qa/Downloads/setup_tool.exe",
+        "reason": "YARA: Credential_Dumper",
+        "size": 524288,
+        "restored": false
+      }
+    ],
+    "job.list": [
+      {
+        "job_id": "scan-20261101-120000-001",
+        "kind": "scan",
+        "state": "done",
+        "path": "C:/Users/qa/Downloads",
+        "root": "C:/Users/qa/Downloads",
+        "total": 120,
+        "processed": 120,
+        "scanned": 118,
+        "skipped": 2,
+        "findings_count": 2,
+        "duration_ms": 4210,
+        "stopped": false
+      },
+      {
+        "job_id": "vuln_scan-20261101-113000-002",
+        "kind": "vuln_scan",
+        "state": "done",
+        "path": "C:/Program Files",
+        "root": "C:/Program Files",
+        "total": 40,
+        "processed": 40,
+        "scanned": 40,
+        "skipped": 0,
+        "findings_count": 3,
+        "duration_ms": 8200,
+        "stopped": false
+      }
+    ],
+    "net.connections": [
+      {
+        "local_address": "192.168.1.20:51544",
+        "remote_address": "93.184.216.34:443",
+        "protocol": "TCP",
+        "state": "ESTABLISHED",
+        "process_name": "chrome.exe",
+        "process_id": 4242,
+        "direction": "Out"
+      },
+      {
+        "local_address": "0.0.0.0:445",
+        "remote_address": "0.0.0.0:0",
+        "protocol": "TCP",
+        "state": "LISTENING",
+        "process_name": "System",
+        "process_id": 4,
+        "direction": "In"
+      },
+      {
+        "local_address": "127.0.0.1:53000",
+        "remote_address": "127.0.0.1:8080",
+        "protocol": "TCP",
+        "state": "ESTABLISHED",
+        "process_name": "mics-engine.exe",
+        "process_id": 9001,
+        "direction": "Out"
+      }
+    ],
+    "fw.default_deny.status": {
+      "default_deny_outbound": true
+    },
+    "fw.rules.list": [
+      {
+        "name": "MICS-Block-C2-Range",
+        "enabled": true,
+        "direction": "Out",
+        "action": "Block",
+        "remote_addresses": "203.0.113.0/24",
+        "protocol": "TCP",
+        "local_ports": "Any",
+        "remote_ports": "443"
+      },
+      {
+        "name": "MICS-Allow-Update",
+        "enabled": true,
+        "direction": "Out",
+        "action": "Allow",
+        "remote_addresses": "198.51.100.10",
+        "protocol": "TCP",
+        "local_ports": "Any",
+        "remote_ports": "443"
+      }
+    ],
+    "canary.list": [
+      ["C:/Users/qa/Documents/taxes.docx", true],
+      ["C:/Users/qa/Documents/passwords.kdbx", true],
+      ["C:/Users/qa/Documents/notes.txt", false]
+    ],
+    "hardening.list": [
+      {
+        "id": "smbv1_off",
+        "name": "Disable SMBv1",
+        "name_ar": "إيقاف SMBv1",
+        "explanation": "SMBv1 has no place on a workstation.",
+        "applied": false
+      },
+      {
+        "id": "rdp_off",
+        "name": "Disable Remote Desktop",
+        "name_ar": "إيقاف سطح المكتب البعيد",
+        "explanation": "Nothing listens on 3389 when RDP is off.",
+        "applied": true
+      },
+      {
+        "id": "uac_on",
+        "name": "Require UAC consent",
+        "name_ar": "طلب موافقة UAC",
+        "explanation": "Elevation prompts for every administrator action.",
+        "applied": true
+      }
+    ],
+    "sync.status": {
+      "online": true,
+      "ioc_hash_total": 1200,
+      "ioc_domain_total": 76737,
+      "kev_total": 1764,
+      "cve_cache_total": 80,
+      "geoip_countries": 249,
+      "last_success": 1793313745,
+      "age_seconds": 120,
+      "sync_interval_hours": 6,
+      "version": "0.1.0",
+      "sources": [
+        {
+          "source": "ioc_domains",
+          "network": true,
+          "on_demand": false,
+          "state": "ok",
+          "age_seconds": 120,
+          "seconds_to_due": 21480,
+          "failures": 0,
+          "items": 76737,
+          "detail": "76737 new of 76737 blocked names"
+        },
+        {
+          "source": "ioc_hashes",
+          "network": true,
+          "on_demand": false,
+          "state": "not_configured",
+          "age_seconds": null,
+          "seconds_to_due": 21480,
+          "failures": 0,
+          "items": 0,
+          "detail": "no hash feed configured"
+        },
+        {
+          "source": "kev",
+          "network": true,
+          "on_demand": false,
+          "state": "failed",
+          "age_seconds": 90000,
+          "seconds_to_due": 900,
+          "failures": 3,
+          "items": 1764,
+          "last_error": "HTTP 503"
+        },
+        {
+          "source": "nvd",
+          "network": true,
+          "on_demand": true,
+          "state": "ok",
+          "age_seconds": 600,
+          "seconds_to_due": null,
+          "failures": 0,
+          "items": 80,
+          "detail": "4 live NVD lookups (0 from cache, 40 CVEs)"
+        }
+      ]
+    },
+    "sync.now": {
+      "status": "success",
+      "sources_ok": 3,
+      "sources_failed": 1
+    },
+    "helper.status": {
+      "service": "MICSHelper",
+      "installed": true,
+      "running": true,
+      "state": "running",
+      "reachable": true,
+      "elevated": true,
+      "version": "0.1.0",
+      "pipe": "\\\\.\\pipe\\mics_helper"
+    },
+    "update.check": {
+      "status": "up_to_date",
+      "current": "0.1.0",
+      "latest": "0.1.0",
+      "notes_en": "No changes.",
+      "url": ""
+    },
+    "noise.stats": [
+      {
+        "category": "guard:guard-003",
+        "dismissals": 5,
+        "muted": false
+      }
+    ],
+    "report.export": {
+      "path": "C:/Users/qa/AppData/Local/MICS/reports/report-20261101.md",
+      "bytes": 4096
+    },
+    "nl.command": {
+      "intent": "scan",
+      "params": {
+        "path": "C:/Users/qa/Downloads"
+      },
+      "explanation": "Runs a scan of the Downloads folder."
+    },
+    "llm.explain": {
+      "explanation": "This finding means the process wrote an encoded script to disk and started it.",
+      "model": "local-model",
+      "from_cache": true
+    },
+    "geoip.lookup": {
+      "country": "NL",
+      "iso": "NL",
+      "city": "Amsterdam",
+      "asn": "AS64500"
+    },
+    "service.install": {
+      "status": "installed"
+    },
+    "service.remove": {
+      "status": "removed"
+    },
+    "notify.test": {
+      "status": "shown"
+    },
+    "guard.event.dismiss": {
+      "dismissals": 5,
+      "mute_suggested": true
+    }
+  }
+}

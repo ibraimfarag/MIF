@@ -49,10 +49,13 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: د2 — every screen and every control, driven from the same fixtures** (the
-> user approved the QA/reliability track on 2026-11-01; §0.3b carries it, د1 is
-> done and `scripts/pipeline.ps1` is where every check now runs, including
-> `engine.contract`). ب4 (folding the helper
+> **next: ز1 — the language leaves the title bar** (د2 is done and measured:
+> all 13 screens plus the shell, every control tapped, and a committed ledger
+> that fails when a control appears or disappears — 99 Dart tests, `qa/ui/`
+> holds the fake engine, the fixtures and the harness). The user approved the
+> QA/reliability track on 2026-11-01; §0.3b carries it, and
+> `scripts/pipeline.ps1` is where every check now runs, including
+> `engine.contract`. ب4 (folding the helper
 > install into the installer) stays the release-engineering lane. ب3 is
 > finished and measured (all three steps, 2026-11-01): the installer builds around
 > the hardened package, installs and removes the whole product (70 files), tags
@@ -77,12 +80,12 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ د2 (اختبار كل شاشة وكل
-> زرار في الـ UI من نفس الـ fixtures)، خطوة واحدة في كل مرة ومعاها كوميت، وشغّل
-> `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
+> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز1 (اللغة تخرج من التايتل
+> بار وتدخل الإعدادات كدروب داون، مع جدول لغة/اتجاه)، خطوة واحدة في كل مرة
+> ومعاها كوميت، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
 That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
-approved track in §0.3b** (currently **د2 - every screen and control**), do it as one
+approved track in §0.3b** (currently **ز1 - the language leaves the title bar**), do it as one
 small step, and stop for review. §0.5 is **finished**; the live work is the
 QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
 UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
@@ -305,8 +308,8 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 |---|---|---|
 | ~~**ز0**~~ | ~~`scripts/pipeline.ps1` (tiers + JSON report) and the CI workflow calls it instead of repeating the checks~~ — **done** | measured 2026-11-01 |
 | ~~**د1**~~ | ~~`qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema)~~ — **done**, and the registry is checked against `dispatcher.rs` by `test/qa_registry_test.dart` | measured 2026-11-01: 64 cases, 15 skipped with reasons, 18.4 s |
-| **د2** | Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface | next |
-| **ز1** | Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set | after د2 |
+| ~~**د2**~~ | ~~Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface~~ — **done** | measured 2026-11-01: 13 screens + the shell, 63 controls in a committed ledger, 99 Dart tests in 13 s |
+| **ز1** | Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set | next |
 | **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | after ز1 |
 | **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
@@ -539,6 +542,47 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **د2 - every screen and every control, driven by the same fixtures the contract
+  harness uses**
+  - `qa/ui/fake_engine.dart` answers a screen the way `qa/methods.json` says the
+    engine answers: the shape comes from the registry row, the content from
+    `qa/ui/fixtures.json` (25 methods), and only the methods whose answer depends
+    on what came before are simulated (the language, the job table, the two push
+    streams). A method the dispatcher does not have fails the test instead of
+    returning `null`.
+  - `qa/ui/harness.dart` mounts a screen the way `app_router.dart` does (Riverpod
+    overrides for the IPC client and the language packs, a throw-away router with
+    a stub for every route a screen can navigate to, a 1700x2400 viewport) and
+    then **sweeps**: it walks the rendered tree, taps every control once
+    (re-reading the tree between taps, because a tap rebuilds the screen), closes
+    any dialog a tap opened, and reports what it touched. Labels are the widget
+    type plus the tooltip or text a human would name it by (`IconButton(Restore)`,
+    `GestureDetector(Settings)`), with an occurrence suffix so four identical
+    icons stay four controls.
+  - `qa/ui/ledger.json` is the ratchet: 14 entries, **93 controls** (13 screens +
+    the shell), sorted and committed. A control that appears or disappears fails
+    the test and prints the diff; regenerating is an explicit
+    `$env:UI_LEDGER_WRITE = "1"`, so the diff is the thing a reviewer reads.
+  - Two behaviours that a fixture cannot cover are tested directly, because they
+    only exist once the engine pushes something: a `job_finished` event pulls the
+    completed job and the screen shows its findings, and a `guard.event.dismiss`
+    that answers `mute_suggested: true` makes the mute offer appear (and the mute
+    button then sends `noise.mute` for the right category).
+  - The sweep found and fixed four unnamed controls: the add/delete buttons on
+    the canaries screen and the per-row delete on IDS and firewall had no
+    tooltip, so they were invisible to a screen reader and unnamed in the ledger.
+    `common.add` / `common.remove` now exist in both packs and all four carry one.
+  - Measured 2026-11-01: **99 Dart tests in 13 s** (was 81), `flutter analyze`
+    clean, `scripts\pipeline.ps1 -Tier fast` green. The shell needs two plugin
+    channels mocked (`window_manager`, `tray_manager`) and its green window button
+    needs `isMaximized` to answer `false` — answering `null` throws inside the
+    title bar.
+  - Honest limits, repeated because they will be asked again: this proves every
+    control is *reachable and does not throw against a fake engine*, not that it
+    does the right thing on a real machine (that is د3/د5 and the manual runs),
+    and the screens are mounted without the shell's 13 rail items being part of
+    each screen's own count — the shell is swept once, on its own.
 
 - **د1 - every JSON-RPC method now has a case, and a test that keeps the list
   whole**
@@ -2674,6 +2718,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory. Documented in `THREAT-MODEL.md` F-2 (small step 8), where the pipe ACL is named as what still keeps other users out | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
+| LOW | **The first frame can show raw i18n keys**: `context.tr` reads the language tables without watching them, and `AppShell` rebuilds when the *settings* resolve. If the settings document arrives before the packs finish loading (`rootBundle` is slower than the engine pipe on a cold start), the screen that built in between keeps rendering `settings.dnd` until something else rebuilds it - the UI sweep hit this and had to pre-load both before mounting. The fix belongs with **ز1** (the language becomes a startup gate with a dropdown), not in the test harness | `app_i18n.dart` (`TrX.tr`, `localeProvider`), `app_shell.dart` |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | LOW | **No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself* (the obfuscation half of this row closed in ج1/D-021: both binaries are CFG-instrumented and stripped, the Dart snapshot is obfuscated, and `verify-hardening.ps1` fails the release when that stops being true). `THREAT-MODEL.md` F-11 says what carries the security instead; the manifest + self-check banner is ج2 | P5, THREAT-MODEL F-11 |

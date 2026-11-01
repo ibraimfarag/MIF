@@ -113,6 +113,7 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
+            tooltip: context.tr('common.add'),
             onPressed: () {
               final p = _pathController.text.trim();
               if (p.isNotEmpty) {
@@ -149,6 +150,7 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
                     overflow: TextOverflow.ellipsis),
               ),
               IconButton(
+                tooltip: context.tr('common.remove'),
                 icon: Icon(Icons.delete_outline,
                     size: 16, color: AppColors.muted),
                 onPressed: () =>

@@ -1,0 +1,126 @@
+{
+  "about": "Every interactive control each screen (and the shell) exposed during its sweep, sorted. Written by qa/ui/harness.dart; regenerate with UI_LEDGER_WRITE=1. A diff here is a change to what a user can press.",
+  "entries": {
+    "screens.audit": [
+      "FilledButton(Run first audit)",
+      "IconButton(Explain this finding)",
+      "IconButton(Explain this finding)#2",
+      "IconButton(Explain this finding)#3",
+      "IconButton(Explain this finding)#4",
+      "OutlinedButton(Fix)",
+      "OutlinedButton(Fix)#2",
+      "OutlinedButton(Refresh)"
+    ],
+    "screens.canaries": [
+      "FilledButton(Deploy decoys)",
+      "IconButton(Add)",
+      "IconButton(Remove)",
+      "IconButton(Remove)#2",
+      "IconButton(Remove)#3",
+      "TextField(C:\\Users\\...\\Documents\\secret.txt.canary)"
+    ],
+    "screens.dashboard": [
+      "FilledButton(Fix)"
+    ],
+    "screens.guard": [
+      "FilledButton(Stop Guard)",
+      "IconButton(Dismiss)",
+      "TextButton(Mute)"
+    ],
+    "screens.hardening": [
+      "FilledButton(Fix)",
+      "OutlinedButton(Rollback)",
+      "OutlinedButton(Rollback)#2"
+    ],
+    "screens.ids": [
+      "FilledButton(Block)",
+      "IconButton(Remove)",
+      "IconButton(Remove)#2",
+      "OutlinedButton(Refresh)",
+      "TextField(tracker.example.com)"
+    ],
+    "screens.incidents": [
+      "OutlinedButton(Refresh)"
+    ],
+    "screens.intel": [
+      "FilledButton(Sync now)"
+    ],
+    "screens.network": [
+      "IconButton(Remove)",
+      "IconButton(Remove)#2",
+      "OutlinedButton(Refresh)",
+      "SegmentedButton<int>(Network & Firewall)",
+      "SwitchListTile(Default-Deny Outbound)",
+      "TextField(e.g. RU)"
+    ],
+    "screens.reports": [
+      "FilledButton(Export now)"
+    ],
+    "screens.scanner": [
+      "FilledButton(Scan)",
+      "IconButton(Delete forever)",
+      "IconButton(Delete forever)#2",
+      "IconButton(Restore)",
+      "IconButton(Restore)#2",
+      "OutlinedButton(Refresh)",
+      "SegmentedButton<int>(Malware Scanner)",
+      "TextField(C:\\Users\\...\\Downloads)",
+      "_SelectionKeepAlive/Checkbox"
+    ],
+    "screens.settings": [
+      "DropdownButton<String>(stable)",
+      "DropdownButton<int>(1 h)",
+      "FilledButton(Install helper (one prompt))",
+      "FilledButton(Repair (one prompt))",
+      "FilledButton(Start with Windows)",
+      "OutlinedButton(Check for updates)",
+      "OutlinedButton(Play a test sound)",
+      "OutlinedButton(Remove from startup)",
+      "OutlinedButton(Remove)",
+      "OutlinedButton(Send a test notification)",
+      "OutlinedButton(Sync now)",
+      "SegmentedButton<AppLang>(العربية)",
+      "SegmentedButton<ThemeMode>(Dark)",
+      "SwitchListTile(Auto-quarantine detections by default)",
+      "SwitchListTile(Desktop notifications)",
+      "SwitchListTile(Do not disturb)",
+      "SwitchListTile(Notification sounds)",
+      "SwitchListTile(Resume interrupted scans)",
+      "SwitchListTile(Start the process guard with the engine)",
+      "TextField(Auth-Key)",
+      "TextField(Empty = engine defaults in Documents and Desktop)",
+      "TextField(NVD API 2.0 key)",
+      "TextField(http://127.0.0.1:1234)",
+      "TextField(https://…/hashes.csv)",
+      "TextField(https://…/mics-manifest.json)",
+      "TextField(local-model)",
+      "_SliderRow/Slider"
+    ],
+    "screens.vulns": [
+      "FilledButton(NVD Scan)",
+      "OutlinedButton(Cancel)"
+    ],
+    "shell": [
+      "GestureDetector(Canaries)",
+      "GestureDetector(Dashboard)",
+      "GestureDetector(Hardening Center)",
+      "GestureDetector(IDS (L2))",
+      "GestureDetector(Incidents)",
+      "GestureDetector(Intelligence)",
+      "GestureDetector(Malware Scanner)",
+      "GestureDetector(Network & Firewall)",
+      "GestureDetector(Process Guard)",
+      "GestureDetector(Reports)",
+      "GestureDetector(Settings)",
+      "GestureDetector(System Audit)",
+      "GestureDetector(Vulnerabilities)",
+      "InkWell(Online)",
+      "TextField(Ask anything… \"scan the system\" · \"start the guard\" · \"report\")",
+      "_ExclusiveMouseRegion/InkWell",
+      "_ExclusiveMouseRegion/InkWell#2",
+      "_TrafficLight/GestureDetector",
+      "_TrafficLight/GestureDetector#2",
+      "_TrafficLight/GestureDetector#3"
+    ]
+  }
+}

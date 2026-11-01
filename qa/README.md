@@ -18,6 +18,40 @@ The fourth thing is `test/qa_registry_test.dart`, which fails if `methods.json`
 and the dispatcher's match table ever disagree — so a method cannot ship
 untested, and a row cannot outlive its method.
 
+## The other half: `ui/`
+
+The contract proves the engine answers. It says nothing about what the app does
+with the answer, and a widget test that only checks the first frame says nothing
+about the twelve buttons under it. `qa/ui/` closes that gap:
+
+| File | What it is |
+|---|---|
+| `fake_engine.dart` | An `EngineIpc` that answers from `methods.json` (shape) and `fixtures.json` (content), records every call, and simulates the four things whose answer depends on what came before: the language, the job table, and the two push streams. |
+| `fixtures.json` | What each method returns when a screen needs something to show. 25 methods: a finished scan, one blocked domain, one failing feed. |
+| `harness.dart` | Mounts a screen the way the router does (Riverpod overrides, a throw-away router with stubs for every route a tap can navigate to, a 1700x2400 viewport) and then **sweeps** it: walk the tree, tap every control once, close what opens, report what happened. |
+| `ledger.json` | The controls each screen exposed, sorted and committed. A diff here is a change to what a user can press. |
+
+Two tests use it — `test/ui_screens_test.dart` (13 screens) and
+`test/ui_shell_test.dart` (rail, window buttons, command box) — and the sweep
+labels a control by its type plus the tooltip or text a human would name it by,
+with an occurrence suffix so four identical icons stay four controls.
+
+**Regenerating the ledger** after an intended change:
+
+```powershell
+$env:UI_LEDGER_WRITE = "1"; flutter test --no-pub test/ui_screens_test.dart test/ui_shell_test.dart
+```
+
+and read the diff. Without the variable the file is read-only, and a control that
+appeared or disappeared fails the build in both directions.
+
+What the sweep proves and what it does not: every control is **reachable and does
+not throw against a fake engine**, and the set of controls cannot silently
+change. It does not prove a button does the right thing on a real machine
+(`engine.contract` and the manual runs are what carry that), and it deliberately
+normalises to English between taps so labels are comparable — RTL is covered by
+`test/i18n_parity_test.dart` and `test/dark_contrast_audit_test.dart`, not here.
+
 ## Running it
 
 ```powershell

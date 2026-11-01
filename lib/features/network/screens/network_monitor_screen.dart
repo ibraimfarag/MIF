@@ -407,6 +407,7 @@ class _FirewallView extends ConsumerWidget {
                     ]),
               ),
               IconButton(
+                tooltip: context.tr('common.remove'),
                 icon: Icon(Icons.delete_outline,
                     size: 18, color: AppColors.muted),
                 onPressed: () =>

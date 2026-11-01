@@ -1,6 +1,8 @@
-{
+﻿{
   "common.critical": "Critical",
+  "common.add": "Add",
   "common.fix": "Fix",
+  "common.remove": "Remove",
   "common.high": "High",
   "common.low": "Low",
   "common.medium": "Medium",

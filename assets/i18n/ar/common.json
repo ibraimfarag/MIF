@@ -1,5 +1,7 @@
-{
+﻿{
   "common.critical": "حرج",
+  "common.add": "إضافة",
+  "common.remove": "إزالة",
   "common.fix": "إصلاح",
   "common.high": "مرتفع",
   "common.low": "منخفض",

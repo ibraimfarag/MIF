@@ -211,6 +211,7 @@ class _IdsScreenState extends ConsumerState<IdsScreen> {
                     style: AppTheme.mono(size: 11.5, color: AppColors.text)),
               ),
               IconButton(
+                tooltip: context.tr('common.remove'),
                 icon: Icon(Icons.delete_outline,
                     size: 16, color: AppColors.muted),
                 onPressed: () =>
