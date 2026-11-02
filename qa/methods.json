@@ -447,7 +447,7 @@
       "class": "read",
       "params": { "limit": 5 },
       "expect": "array",
-      "note": "Reads the reports the engine wrote for panics and unclean exits. Empty is the healthy answer, and it is read from the isolated data dir, so the harness never sees this machine's real reports."
+      "note": "Reads the reports the engine wrote for panics, unclean exits and hangs (the last one filed by the watchdog thread when the runtime's heartbeat stops). Empty is the healthy answer, and it is read from the isolated data dir, so the harness never sees this machine's real reports."
     },
     {
       "method": "crash.get",

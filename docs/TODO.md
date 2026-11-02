@@ -49,11 +49,14 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز2-ب — the hang detector** (ز2-أ is done and contract-proved: a panic and
-> a killed run each become one `MICS-<date>-<hash>` report with a JSON+text bundle
-> under `<data dir>\crashes\`, readable over `crash.list`/`crash.get`; 100 engine
-> tests, contract 78 cases / 0 failed, 110 Dart tests). The rest of the track is
-> cut into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
+> **next: ز2-ج — the bug-id surface** (ز2-أ and ز2-ب are done and proved: a panic
+> and a killed run each become one `MICS-<date>-<hash>` report with a JSON+text
+> bundle under `<data dir>\crashes\`, readable over `crash.list`/`crash.get`, and
+> a `std::thread` watchdog — started with the session — files a `hang` report
+> naming the stuck duration and the last request when the runtime's heartbeat
+> stops; 106 engine tests, contract 78 cases / 0 failed, 110 Dart tests). The rest
+> of the track is cut into commit-sized slices in §0.3b, and §0.3c says what each
+> one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
 > endpoint and is the only blocked slice. The user
 > approved the
@@ -85,12 +88,12 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ز2-ب**: كشف الهنج (watchdog thread يكتب تقرير `hang` بنفسه لو الـ runtime
-> وقف). خطوة واحدة بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast`
-> قبل الكوميت.
+> **ز2-ج**: سطح الـ bug-id (قسم Diagnostics في Settings يعرض التقارير، ينسخ
+> الـ id، ويحذف التقرير). خطوة واحدة بس، كوميت واحد، وشغّل
+> `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ز2-ب - the hang detector** as one commit-sized slice, and stop for review.
+**ز2-ج - the bug-id surface** as one commit-sized slice, and stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -317,8 +320,8 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**د2**~~ | ~~Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface~~ — **done** | measured 2026-11-01: 13 screens + the shell, 63 controls in a committed ledger, 99 Dart tests in 13 s |
 | ~~**ز1**~~ | ~~Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set~~ — **done** | measured 2026-11-01: 10 new registry tests, 110 Dart tests, contract 65 cases / 0 failed |
 | ~~**ز2-أ**~~ | ~~Crash capture: session marker, panic hook, `MICS-<date>-<hash>` bug id, JSON + text bundle under `<data dir>\crashes\`, `crash.list` / `crash.get` / `crash.delete`~~ — **done** | measured 2026-11-01: 100 engine tests, contract 78 cases / 0 failed, a killed engine is reported once with its pid |
-| **ز2-ب** | **Hang detector**: a watchdog thread the runtime cannot block names a hang (`hang` report from the engine itself, so nothing off the machine and no UI filesystem access). Details and the honest limits are in §0.3c | next |
-| **ز2-ج** | **The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls | after ز2-ب |
+| ~~**ز2-ب**~~ | ~~**Hang detector**: a watchdog thread the runtime cannot block names a hang (`hang` report from the engine itself, so nothing off the machine and no UI filesystem access). Details and the honest limits are in §0.3c~~ — **done** | measured 2026-11-02: 106 engine tests (+6), one report per frozen heartbeat with the stuck time and the last request, no false report from a runtime that keeps beating |
+| **ز2-ج** | **The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls | next |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
 | **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash cards show the bug id from ز2-ج | after ز2-ج |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
@@ -332,7 +335,7 @@ what was measured. Do not bundle two slices because one "looks small".
 
 | Slice | Done means |
 |---|---|
-| **ز2-ب** hang detector | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
+| ~~**ز2-ب** hang detector~~ — **done** (2026-11-02) | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
 | **ز2-ج** bug-id surface | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
 | **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |
 | **ز3** cards | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says whether it was delivered. |
@@ -344,7 +347,7 @@ what was measured. Do not bundle two slices because one "looks small".
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
 destination) and the endpoint shape of the **Open WhatsApp bridge** (the user
 chose an Open WhatsApp integration, *not* WhatsApp itself, so no Meta Cloud API
-work is needed). Neither blocks ز2-ب or ز2-ج.
+work is needed). Neither blocks ز2-ج.
 
 ### 0.4 Environment must-knows (the short version of §8)
 
@@ -567,6 +570,52 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز2, second half (ب) - a runtime that stops answering now files its own hang
+  report**
+  - `engine/src/watchdog.rs` is a `std::thread` (deliberately **not** a tokio
+    task), started where the session marker is written (`serve` and `service`),
+    that watches a heartbeat the runtime bumps: a timer task every **5 s** plus
+    every JSON-RPC request that enters the dispatcher. If the heartbeat stays
+    silent for the **20 s** deadline - four beats, so a busy machine or one slow
+    tick is not a hang - the thread writes the report itself through
+    `crash.rs`, which is why it can report a wedged runtime at all: the process
+    is alive, only the scheduler stopped.
+  - The report is a new kind (`hang`) in the existing bundle: the same
+    `MICS-<date>-<hash>` id shape and the same JSON + text pair under
+    `<data dir>\crashes\`, readable over `crash.list` / `crash.get`. The message
+    says **how long the heartbeat was silent** and **which request the
+    dispatcher saw last** (`last request: scan.start`), so a support case does
+    not have to guess. The id is hashed from the *last request*, not from the
+    measured duration or the moment: the same hang keeps one id and a repeat is
+    counted, while a hang during a different request is a different report.
+  - One stall is one report: the first poll past the deadline files it, every
+    later poll skips until a heartbeat returns, and a later stall gets its own
+    (the same id again, so `occurrences` is the honest count). Nothing is sent
+    anywhere - still no URL, no socket, no HTTP client in `crash.rs`, and the UI
+    writes no files: it reads over the pipe, and its surface is ز2-ج.
+  - Measured 2026-11-02: **106 engine tests** (was 100), `clippy -D warnings`
+    clean, and a real `serve` engine started with the isolation hooks answered
+    `ping`, closed its session cleanly and filed **zero** reports. The new tests
+    freeze the heartbeat on purpose and read the file the thread wrote: exactly
+    one report, its `occurrences` 1, a duration at least the deadline, the last
+    request named, nothing when there was no request, nothing at all while the
+    heartbeat keeps beating, and a stopped watchdog joins its thread.
+  - **Honest limits, in the code and here**: (1) a hang that takes the whole
+    process with it - a deadlock inside the allocator, a driver call stuck
+    before the thread starts, a killed process - is **invisible**, because the
+    watchdog is a thread of that process and dies with it; that case is what the
+    session marker and the next start's `unclean-exit` report are for (ز2-أ);
+    (2) one request that is merely slow is **not** a hang on purpose - a long
+    `audit.run` or a Defender scan must never be filed as one, and on the
+    multi-threaded runtime the timer keeps beating while one worker sits in a
+    blocking Windows call, so the detector covers a runtime that stopped
+    scheduling tasks at all, not a single stuck request; (3) the UI's own
+    unanswered `ping` is still not a *detector* here - the engine reports the
+    hang it can see, and the UI-side half stays with ز2-ج.
+  - No pipe surface changed (still 65 methods), so `qa/methods.json` and
+    `test/qa_registry_test.dart` needed no new row; the contract harness's crash
+    scenario is unaffected (its engines are killed, not wedged).
 
 - **ز2, first half - a crash now has a name and a file, and nothing leaves the
   machine**

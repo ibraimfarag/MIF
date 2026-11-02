@@ -22,6 +22,7 @@ mod settings;
 mod smart;
 mod update;
 mod storage;
+mod watchdog;
 
 use clap::{Parser, Subcommand};
 use anyhow::Result;
@@ -222,6 +223,9 @@ async fn run() -> Result<()> {
                 }
             };
             crash::begin_session("serve");
+            // A plain thread, not a tokio task: it is still there when the
+            // runtime is not, which is what makes it able to report the hang.
+            watchdog::start_session();
             tracing::info!("Starting engine in --serve mode (stdio)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
@@ -274,6 +278,9 @@ async fn run() -> Result<()> {
                 }
             };
             crash::begin_session("service");
+            // See `serve`: the hang detector starts with the session and lives
+            // outside the runtime it watches.
+            watchdog::start_session();
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
             resume_jobs_on_startup();

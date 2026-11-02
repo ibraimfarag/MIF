@@ -1,4 +1,4 @@
-//! Crash reporting, first half: detect it, name it, write it down (ز2).
+//! Crash reporting: detect it, name it, write it down (ز2).
 //!
 //! Nothing in this module sends anything anywhere. One JSON bundle and one
 //! readable text file per distinct failure are written under
@@ -16,14 +16,14 @@
 //!   the engine starts and [`end_session`] closes it on the way out. Finding an
 //!   unclosed marker at startup means the previous engine was killed, lost
 //!   power, or died without a panic.
-//!
-//! A **hang** is the third case and it is deliberately not here: a process that
-//! is hung cannot report its own hang. The UI decides that from a `ping` it
-//! never got an answer to, and files the report through a `crash.note`-style
-//! method that ships with that detector - so nothing here names a kind that
-//! cannot be produced yet.
+//! * **a hang** - a runtime that stopped making progress while the process is
+//!   still alive cannot report that from inside the runtime, so a separate
+//!   plain OS thread watches it ([`crate::watchdog`]) and calls
+//!   [`note_hang_in`] itself. A hang that takes the whole process with it stays
+//!   invisible here and shows up as the `unclean-exit` case above.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -32,6 +32,8 @@ use sha2::{Digest, Sha256};
 pub const KIND_PANIC: &str = "panic";
 /// The previous run ended without closing its session marker.
 pub const KIND_UNCLEAN_EXIT: &str = "unclean-exit";
+/// The runtime stopped making progress; filed by [`crate::watchdog`].
+pub const KIND_HANG: &str = "hang";
 
 /// How many log lines travel with a report. Enough to see what was happening,
 /// small enough to paste into a message.
@@ -43,7 +45,12 @@ const LOG_TAIL_BYTES: usize = 64 * 1024;
 
 /// Where the session marker and the reports live. Resolved once per process,
 /// like the settings data dir it comes from (`MICS_DATA_DIR` is the test hook).
-fn root() -> PathBuf {
+/// Where the session marker and the reports live. Resolved once per process,
+/// like the settings data dir it comes from (`MICS_DATA_DIR` is the test hook).
+///
+/// The watchdog is handed this path when it starts, so its own tests never
+/// touch the real data dir.
+pub(crate) fn root() -> PathBuf {
     crate::settings::Settings::base_dir()
 }
 
@@ -92,15 +99,19 @@ pub fn valid_bug_id(id: &str) -> bool {
 ///
 /// The version is part of the hash on purpose: a crash that survives an update
 /// is a different report, and mixing builds would hide that.
-fn bug_id_for(kind: &str, message: &str, location: Option<&str>) -> String {
+///
+/// `key` is normally the message. A hang passes a stable key instead, because
+/// its message carries how long it was stuck and that must not become part of
+/// the failure's identity.
+fn bug_id_for(kind: &str, key: &str, location: Option<&str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
     hasher.update(b"\x1f");
     hasher.update(kind.as_bytes());
     hasher.update(b"\x1f");
-    // The message can carry a temp path or a job id; hashing keeps the id stable
+    // The key can carry a temp path or a job id; hashing keeps the id stable
     // for the same failure while never putting those in a filename by hand.
-    hasher.update(message.as_bytes());
+    hasher.update(key.as_bytes());
     hasher.update(b"\x1f");
     hasher.update(location.unwrap_or("").as_bytes());
     let digest = hasher.finalize();
@@ -116,7 +127,7 @@ fn bug_id_for(kind: &str, message: &str, location: Option<&str>) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
     pub bug_id: String,
-    /// [`KIND_PANIC`] or [`KIND_UNCLEAN_EXIT`] today; the hang detector adds its own.
+    /// [`KIND_PANIC`], [`KIND_UNCLEAN_EXIT`] or [`KIND_HANG`].
     pub kind: String,
     /// First time this failure was seen (RFC 3339, UTC).
     pub created: String,
@@ -175,7 +186,43 @@ fn write_marker(root: &Path, marker: &Marker) -> std::io::Result<()> {
 /// Record a failure and return its bug id, or `None` when nothing could be
 /// written (a read-only data dir must not turn a report into a second failure).
 fn note_in(root: &Path, kind: &str, message: &str, location: Option<&str>) -> Option<String> {
-    let bug_id = bug_id_for(kind, message, location);
+    note_keyed(root, kind, message, location, message)
+}
+
+/// A hang, filed by [`crate::watchdog`] from its own thread.
+///
+/// The message says how long the heartbeat was silent and which request the
+/// dispatcher saw last; the id is hashed from the last request alone, so the
+/// same hang keeps one id no matter how long it lasted, and a second one during
+/// a different request is a different report. There is no call site to point at,
+/// so `location` stays empty - the last request is the "where".
+pub(crate) fn note_hang_in(
+    root: &Path,
+    stuck: Duration,
+    deadline: Duration,
+    last_request: Option<&str>,
+) -> Option<String> {
+    let last = last_request.unwrap_or("none");
+    let message = format!(
+        "the engine's task loop stopped making progress: no heartbeat for {:.1} s \
+         (deadline {:.1} s), last request: {last}",
+        stuck.as_secs_f64(),
+        deadline.as_secs_f64()
+    );
+    let key = format!("task loop stopped; last request: {last}");
+    note_keyed(root, KIND_HANG, &message, None, &key)
+}
+
+/// The one writer: [`note_in`] keys a report by its message, a hang by its own
+/// stable key.
+fn note_keyed(
+    root: &Path,
+    kind: &str,
+    message: &str,
+    location: Option<&str>,
+    key: &str,
+) -> Option<String> {
+    let bug_id = bug_id_for(kind, key, location);
     let now = timestamp();
     let existing = report_path(root, &bug_id)
         .and_then(|p| std::fs::read_to_string(p).ok())
@@ -824,6 +871,57 @@ mod tests {
         assert_eq!(report["kind"], KIND_UNCLEAN_EXIT);
         assert_eq!(report["log_tail"].as_array().unwrap().len(), 0);
         assert_eq!(report["location"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn a_hang_is_named_by_what_was_running_not_by_how_long_it_took() {
+        let root = temp_root("hang");
+        let first = note_hang_in(
+            &root,
+            Duration::from_millis(500),
+            Duration::from_secs(20),
+            Some("audit.run"),
+        )
+        .expect("a hang is a report");
+        // The message carries the newest duration; the id must not.
+        let second = note_hang_in(
+            &root,
+            Duration::from_secs(9),
+            Duration::from_secs(20),
+            Some("audit.run"),
+        )
+        .unwrap();
+        assert_eq!(first, second, "the same hang keeps one id");
+        let report = get_in(&root, &first).unwrap();
+        assert_eq!(report["kind"], KIND_HANG);
+        assert_eq!(report["occurrences"], 2);
+        assert_eq!(report["location"], serde_json::Value::Null);
+        let message = report["message"].as_str().unwrap();
+        assert!(message.contains("no heartbeat for 9.0 s"), "{message}");
+        assert!(message.contains("deadline 20.0 s"), "{message}");
+        assert!(message.contains("last request: audit.run"), "{message}");
+
+        // A hang during another request, or with no request at all, is a
+        // different failure rather than a repeat of this one.
+        let other = note_hang_in(
+            &root,
+            Duration::from_secs(21),
+            Duration::from_secs(20),
+            Some("scan.start"),
+        )
+        .unwrap();
+        assert_ne!(first, other);
+        let idle = note_hang_in(&root, Duration::from_secs(21), Duration::from_secs(20), None)
+            .unwrap();
+        assert_ne!(first, idle);
+        assert_ne!(other, idle);
+        assert!(
+            get_in(&root, &idle).unwrap()["message"]
+                .as_str()
+                .unwrap()
+                .contains("last request: none")
+        );
+        assert_eq!(list_in(&root, 0).len(), 3, "three distinct hangs");
     }
 
     #[test]

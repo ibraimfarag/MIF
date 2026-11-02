@@ -76,6 +76,10 @@ pub(crate) fn readonly_hint(e: &anyhow::Error) -> Option<String> {
 impl Dispatcher {
     pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
+        // Proof of life for the hang detector, plus the method its report names
+        // if this runtime stops answering (ز2-ب). A no-op when no session
+        // started a watchdog, as in a unit test.
+        crate::watchdog::note_request(&req.method);
 
         let mut unknown = false;
         let result = match req.method.as_str() {
