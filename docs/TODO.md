@@ -49,12 +49,13 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز2, second half — the hang detector and the UI that shows a bug id**
-> (the engine half is done and contract-proved: a panic and a killed run each
-> become one `MICS-<date>-<hash>` report with a JSON+text bundle under
-> `<data dir>\crashes\`, readable over `crash.list`/`crash.get`; 100 engine
-> tests, contract 78 cases / 0 failed, 110 Dart tests). Delivery off the machine
-> needs **D-023** and is the last slice. The user
+> **next: ز2-ب — the hang detector** (ز2-أ is done and contract-proved: a panic and
+> a killed run each become one `MICS-<date>-<hash>` report with a JSON+text bundle
+> under `<data dir>\crashes\`, readable over `crash.list`/`crash.get`; 100 engine
+> tests, contract 78 cases / 0 failed, 110 Dart tests). The rest of the track is
+> cut into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
+> Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
+> endpoint and is the only blocked slice. The user
 > approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
@@ -83,15 +84,17 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 و docs/ROADMAP.md، وكمّل بـ ز2 (النص التاني: كشف الهنج من
-> غير رد الـ ping، وشاشة بتعرض الـ bug id)، خطوة واحدة في كل مرة ومعاها كوميت،
-> وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
+> اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
+> **ز2-ب**: كشف الهنج (watchdog thread يكتب تقرير `hang` بنفسه لو الـ runtime
+> وقف). خطوة واحدة بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast`
+> قبل الكوميت.
 
-That means: read §0 and `docs/ROADMAP.md`, take the **first open step of the
-approved track in §0.3b** (currently **ز2 - hang detector and the bug-id UI**), do it as one
-small step, and stop for review. §0.5 is **finished**; the live work is the
-QA/reliability track the user approved on 2026-11-01 (pipeline, contract harness,
-UI coverage, the language move, crash/hang reporting, the fingerprint sweep),
+That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
+**ز2-ب - the hang detector** as one commit-sized slice, and stop for review.
+§0.3c says what "done" means for every remaining slice, so a new session does not
+have to re-derive it. §0.5 is **finished**; the live work is the
+approved track in §0.3b (pipeline, contract harness,
+UI coverage, the language move, crash reporting, the fingerprint sweep),
 followed by the release-engineering lane. The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
@@ -313,16 +316,35 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**د1**~~ | ~~`qa/` contract harness: every JSON-RPC method x (happy path, invalid params, unknown method, schema)~~ — **done**, and the registry is checked against `dispatcher.rs` by `test/qa_registry_test.dart` | measured 2026-11-01: 64 cases, 15 skipped with reasons, 18.4 s |
 | ~~**د2**~~ | ~~Every screen, every interactive control: those fixtures drive a `FakeEngine`, so the UI and the engine are exercised from one surface~~ — **done** | measured 2026-11-01: 13 screens + the shell, 63 controls in a committed ledger, 99 Dart tests in 13 s |
 | ~~**ز1**~~ | ~~Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set~~ — **done** | measured 2026-11-01: 10 new registry tests, 110 Dart tests, contract 65 cases / 0 failed |
-| **ز2** | Crash/hang detection, bug ID, local bundle, opt-in delivery (webhook / SMTP / WhatsApp) — needs **D-023** | **first half done**: panic + unclean-exit detection, `MICS-<date>-<hash>` id, JSON+text bundle, `crash.*` methods, contract-proved across two processes. Left: hang detector, UI, delivery (D-023; WhatsApp = Open WhatsApp bridge) |
-| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate | after ز2 |
+| ~~**ز2-أ**~~ | ~~Crash capture: session marker, panic hook, `MICS-<date>-<hash>` bug id, JSON + text bundle under `<data dir>\crashes\`, `crash.list` / `crash.get` / `crash.delete`~~ — **done** | measured 2026-11-01: 100 engine tests, contract 78 cases / 0 failed, a killed engine is reported once with its pid |
+| **ز2-ب** | **Hang detector**: a watchdog thread the runtime cannot block names a hang (`hang` report from the engine itself, so nothing off the machine and no UI filesystem access). Details and the honest limits are in §0.3c | next |
+| **ز2-ج** | **The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls | after ز2-ب |
+| **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
+| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash cards show the bug id from ز2-ج | after ز2-ج |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
 | **د5** | Coverage gates, `qa/report`, docs | last |
 
-**Still open for the user** (asked 2026-11-01, the track can start without them but
-ز2 needs the first two): the WhatsApp path (CallMeBot vs. an official Cloud API
-template), approval of **D-023** (opt-in, user-configured crash reports — rule 8 of
-`AGENTS.md` forbids any other outbound destination), and whether a real third
-language ships with ز1 or only the mechanism.
+### 0.3c How each remaining slice is done (so a new session can start cold)
+
+Every slice below is **one commit**, ends with the four checks green through
+`scripts\pipeline.ps1 -Tier fast`, and moves its row up into the Done log with
+what was measured. Do not bundle two slices because one "looks small".
+
+| Slice | Done means |
+|---|---|
+| **ز2-ب** hang detector | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
+| **ز2-ج** bug-id surface | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
+| **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |
+| **ز3** cards | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says whether it was delivered. |
+| **ط1** fingerprint | `--remap-path-prefix` removes the build user's home path, the counts for `flutter`/`dart`/`cargo`/`rustc` are recorded in an allowlist with a written reason per entry, and a ratchet test fails when a count rises. |
+| **ط2 / ط3** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; `verify-opsec.ps1` + `verify-tamper.ps1` run under `-Tier release`. |
+| **د5** report | `qa/report.html` + `.md` from the contract JSON, coverage gates, and CI fails when a feature is not registered. |
+
+**Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
+user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
+destination) and the endpoint shape of the **Open WhatsApp bridge** (the user
+chose an Open WhatsApp integration, *not* WhatsApp itself, so no Meta Cloud API
+work is needed). Neither blocks ز2-ب or ز2-ج.
 
 ### 0.4 Environment must-knows (the short version of §8)
 
@@ -2801,7 +2823,7 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | No installer: the portable ZIP + `SHA256SUMS` are produced and verified, but there is no NSIS installer, no code signing and no published download | `dist/`, P4 |
+| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6 | `dist/`, `installer/`, P4 |
 | HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
 | LOW | A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age (it re-reads the section it just changed, which is where the staleness would matter) | `traits.rs`, `providers.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |

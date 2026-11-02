@@ -13,7 +13,7 @@ stated where it is real.
 
 ## Where we are
 
-`main`, 2026-10-31. Everything that needed neither elevation nor money is
+`main`, 2026-11-02. Everything that needed neither elevation nor money is
 implemented **and** measured: the eight small steps of §0.5 are closed (dead
 VirusTotal client deleted, names frozen, both contrast modes audited at 29 of 29
 pairs, four light-theme renders, icon set verified, `PROTECTION-MATRIX.md` given
@@ -30,11 +30,15 @@ and removes the whole product, tags both shortcuts' `System.AppUserModel.ID` thr
 What is left is **release engineering, integrity, QA, and the two things that need
 a human** (one UAC-acceptance session and a signing certificate).
 
-On 2026-11-01 the user approved the QA and reliability track (§3): the pipeline has
-one entry point now (`scripts/pipeline.ps1`, ز0) and the contract harness over all
-62 JSON-RPC methods is next. The opsec work starts from a measured baseline rather
-than a guess — the engine ships **1241** `cargo` strings and the build user's home
-path, which is a privacy leak as much as a fingerprint (ط1).
+On 2026-11-01 the user approved the QA and reliability track (§3), and five of its
+slices have landed: the pipeline entry point (ز0), the contract harness over all
+**65** JSON-RPC methods (د1), every screen and control swept against the same
+fixtures (د2), the language moved into Settings as a table (ز1), and crash capture
+with a bug id and a local bundle (ز2-أ). What is open on that track is cut into
+commit-sized slices in `docs/TODO.md` §0.3b/§0.3c. The opsec work starts from a
+measured baseline rather than a guess — the engine ships **1241** `cargo` strings
+and the build user's home path, which is a privacy leak as much as a fingerprint
+(ط1).
 
 ## 1. Phases
 
@@ -42,8 +46,8 @@ path, which is a privacy leak as much as a fingerprint (ط1).
 |---|---|---|---|--:|---|
 | **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + local signing work | 🔴 **HIGH** (the register's only HIGH row: "no installer") | 8–16 h | certificate + release hosting: **you**; the rest: nothing |
 | **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — build hardening landed (ج1, D-021); threat model and protection matrix exist | 🟠 MED | 4–7 h | nothing |
-| **د — P6 QA** | pipeline entry point, `qa/` contract harness over every JSON-RPC method, every screen and control, E2E on the built artifact, report + CI gate | **in progress** — ز0 landed (the pipeline script, 2026-11-01); the harness is next | 🟠 MED (largest block of work) | 17–28 h | the system-tier contract runs on this machine, not CI |
-| **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID and opt-in delivery (webhook/SMTP/WhatsApp), in-app cards in the bottom corner per direction | **partly done** (ز1) | 🟠 MED | 17–26 h | ز2 needs D-023 + the user's channel choice |
+| **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), E2E on the built artifact (د3), report + CI gate (د5) | **mostly done** — ز0, د1, د2 landed 2026-11-01; د3 and د5 are left | 🟠 MED | 4–7 h | the system-tier contract runs on this machine, not CI |
+| **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture done, 2026-11-01; hang detector + UI next]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**), in-app cards in the bottom corner per direction | **partly done** (ز1, ز2-أ) | 🟠 MED | 12–20 h | ز2-د needs D-023 + the bridge endpoint |
 | **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **not started** — the baseline is measured (ط1) | 🟠 MED | 6–10 h | nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **19 open rows** (2 HIGH, 5 MED, 12 LOW) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
@@ -82,9 +86,13 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 ## 3. The order to work in
 
 **The approved track (2026-11-01) runs first, one commit per step:**
-**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2** → **ز3** → **ط1–ط3** → **د5**.
+**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** (hang detector) → **ز2-ج** (bug-id surface) → **ز2-د** (delivery, blocked on D-023) → **ز3** → **ط1–ط3** → **د5**.
 It is what the user picked over the release lane; the list below is the release lane
 the project returns to afterwards.
+
+**What each open slice has to prove before it is committed** is written down in
+`docs/TODO.md` §0.3c, so a session that starts cold does not re-derive it — and
+`docs/TODO.md` §0.0 carries the prompt to paste into a new session.
 
 1. ~~**ج1 build hardening**~~ — **done** (D-021): the binaries are hardened before
    anything packages them.
