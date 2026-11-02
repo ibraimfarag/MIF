@@ -103,13 +103,16 @@ Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
 > **ج2**: مانيفست SHA-256 موقّع لكل الملفات المشحونة + فحص ذاتي عند التشغيل +
-> بانر «نسخة غير رسمية» لو الملفات اتغيّرت (وده اللي بيفتح ط2 لاحقًا). خطوة
-> واحدة بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> بانر «نسخة غير رسمية» لو الملفات اتغيّرت (وده اللي بيفتح ط2 لاحقًا) — التصميم
+> محسوم في `D-025`: المانيفست resource جوّا `mics-engine.exe`، كوميتين (النص
+> المنتج وبعده القارئ)، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
 **ج2 - the signed SHA-256 manifest of the shipped files, the start-up self-check
-and the "unofficial build" banner** as one commit-sized slice, and stop for
-review.
+and the "unofficial build" banner** — designed in **D-025**, two commits: the
+producer (`make-release.ps1` builds and injects `MICS_MANIFEST`, `verify-manifest.ps1`
+proves it) and the reader (`status.integrity` + the About notice) — and stop for
+review after each.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -291,7 +294,7 @@ order the user picked (small → medium → large), and it is finished**
 | Step | What | Needs you |
 |---|---|---|
 | ~~**ج1**~~ | ~~Build hardening~~ — **done**: Control Flow Guard on both binaries (read back from the PE: `GUARD_CF` + a real guard function table), the engine built with `lto="fat"`/`codegen-units=1`/`panic=abort`/`strip=symbols` (**35.7 → 24.0 MB**), the Dart release obfuscated with its symbol table kept out of the package, and a release gate that refuses an unhardened or unobfuscated build (D-021) | measured 2026-10-31 |
-| **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner | no |
+| **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner — design settled 2026-11-03 (**D-025**): the manifest is an `RT_RCDATA` resource inside `mics-engine.exe`, built after signing and injected before the engine is signed again; two commits (producer + `verify-manifest.ps1`, then the reader + About notice) | no |
 | **ج3** | Deliberate README rewrite ("what it does / does not do") once the above is real | no |
 
 **د — P6 QA**
@@ -357,6 +360,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ز3** cards~~ — **done** (2026-11-02) | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says delivery is off (no report has a delivery state until ز2-د, D-024). The engine pushes the card as its own `alert` notification, parks it when no UI is attached, and the shell paints it as a widget the sweep can tap. |
 | ~~**ط1** fingerprint~~ — **done** (2026-11-02) | The Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` (in `make-release.ps1` and the `engine.build` step), and the shipped engine went from **1238** hits of the account name to **0**. `scripts/verify-opsec.ps1` counts the markers and compares them with `qa/opsec-baseline.json`: a forbidden string (the profile path and its leaf, computed on the machine running the probe) must be absent, a counted marker (`flutter`/`dart`/`cargo`/`rustc`/`pubspec`) may only fall, a binary missing from the baseline fails until a human adds it with a reason, and an entry with no reason fails. `test/opsec_baseline_test.dart` guards the file in the fast tier. Run by `make-release.ps1` on the staging folder, so a leaking build is never packaged. |
 | ~~**ط3** wiring~~ — **done** (2026-11-02) | `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` - the packaged artifact, not the build folder - so `-Tier release` refuses a package that names the build account or grew a counted fingerprint. `verify-tamper.ps1` joins it with ط2. |
+| **ج2** manifest + self-check | **Two commits; design settled 2026-11-03 (`D-025`), so a new session can start cold.** Commit 1 (producer): `make-release.ps1` signs every PE, then builds `MICS_MANIFEST` (`format`, `version`, `files[{path, bytes, sha256}]`, sorted by path) from those final bytes, injects it as an `RT_RCDATA` resource into the staged `mics-engine.exe`, signs the engine again, and `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes every listed file — a package whose manifest does not describe it never leaves the staging folder. Commit 2 (consumer): the engine reads its own resource, verifies its own signature through `platform\windows\signature.rs`, hashes the listed files, and reports `integrity` in `status` as `ok` / `untrusted-certificate` (our CN, chain untrusted: one neutral line in About, no banner) / `unverified` (About notice plus an alert card naming what failed). The engine is not in its own manifest; its integrity is the signature. Measured, not assumed: the manifest's file names enter the engine's strings, so its `flutter` count rises by one per `data\flutter_assets\...` path — a written reason in `qa\opsec-baseline.json`, and the QA report regenerated in the same commit. |
 | **ط2** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; sits on **ج2**'s signed manifest, so it lands after ج2. |
 | ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
 

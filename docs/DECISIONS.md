@@ -968,3 +968,78 @@ the installer owns:**
   service in either direction: that service is the app's to create and to remove,
   which is what "never invents state" has to mean for an uninstaller too. Folding the
   helper's *install* in remains ب4, and it is ب4 that will have to revisit this rule.
+
+---
+
+## D-025 — The integrity manifest lives inside the signed engine
+
+**Status:** accepted (2026-11-03)
+
+**Context.** F-11 keeps the LOW row "no signed integrity manifest, so a
+repackaged copy is not detectable by the app itself", and D-001 promises a signed
+SHA-256 manifest plus an "unofficial build" notice for builds that fail the check.
+D-016 rule 1 already fixed the primitive for anything the engine trusts: an
+**embedded** Authenticode signature checked by `WinVerifyTrust` plus a signer-CN
+pin, because a catalog entry a different machine may not have is not a proof. A
+manifest cannot be a loose `.json` next to the binaries either: whoever repackages
+the install edits it, and the program would believe the edit. So the question was
+never "what format", it was "what carries the signature".
+
+**Decision.** (ج2, two commits: the producer, then the reader.)
+
+1. **Carrier.** The manifest is one JSON document — `format`, `version`, and
+   `files: [{path, bytes, sha256}]`, sorted by path, paths relative to the package
+   root — stored as an `RT_RCDATA` resource named `MICS_MANIFEST` inside
+   `mics-engine.exe`. It is **not** shipped as a loose file: a copy nothing
+   verifies is a trap. `scripts\verify-manifest.ps1 -Measure` prints it.
+2. **Authenticity comes from the container, not the document.** Editing the
+   manifest breaks the engine's Authenticode signature; re-signing with any other
+   certificate fails the `EXPECTED_SIGNER_CN` pin that
+   `engine\src\platform\windows\signature.rs` already enforces for updates.
+3. **The engine is not listed in its own manifest** (self-reference). Its
+   integrity is its signature; the release `SHA256SUMS` and the installer cover
+   the file itself.
+4. **Order in `make-release.ps1`.** Stage → hardening and opsec gates → sign
+   every PE → build the manifest from those final bytes (signatures included) →
+   inject the resource into the staged engine → sign the engine again (its
+   signature must cover the injected bytes) → `verify-manifest.ps1` re-reads the
+   resource from the staged package and re-hashes every listed file. A package
+   whose manifest does not describe it never leaves the staging folder.
+5. **Three states, one banner.** `status` gains `integrity`:
+   - `ok` — signed by MI CS Code Signing, Windows trusts the chain, and every
+     listed file hashes as published;
+   - `untrusted-certificate` — our CN, but this Windows does not trust the
+     certificate yet (the self-signed situation D-002 records). About says so in
+     one neutral line and **no banner** appears, because the build is ours;
+   - `unverified` — missing or broken signature, another signer, unreadable
+     manifest, or a listed file that is missing, renamed or changed. About shows
+     the notice and the engine raises an alert card naming what failed.
+6. **Local only.** The check reads the install directory and nothing else: no
+   network, no new file, no new dependency (`sha2` and the `windows` crate are
+   already there).
+
+**Why.** It turns "the app trusts the bytes because a document agreed with them"
+into "the bytes carry a signature this build was told to expect, and every file
+matches the one the release signed for" — with the primitive already proven in
+`signature.rs`, and without a second signature format, a catalog store, or a loose
+file to edit. The three states keep the notice honest under D-002: a self-signed
+official copy is not "unofficial", and the strict reading ("an untrusted chain is
+an integrity failure") would put the banner on every copy we ship until a CA
+certificate exists — a signal that always fires says nothing.
+
+**What this is not.** Not a defence against a determined repackager who rebuilds
+the engine from source and patches the constant: it is GPL, and F-11 says so. The
+banner tells the user what the bytes are; it does not stop a patched build, and it
+does not replace code-signing trust (that is D-002's certificate, and no decision
+here changes it). Not "anybody Windows trusts": the CN pin is what makes a
+differently-signed rebuild visible, and its residual is the one D-016 rule 4
+records.
+
+**Commits us to.** Keeping the resource name, the `format: 1` envelope and the
+sorted path list stable, so the self-check, `verify-manifest.ps1` and ط2's tamper
+tests all read the same thing; keeping the manifest build **after** signing in
+`make-release.ps1`, and re-signing the engine after the injection; and measuring
+one consequence instead of waving it through — the manifest names every shipped
+file, so `data\flutter_assets\...` enters the engine's strings and its `flutter`
+count in `qa\opsec-baseline.json` **rises** with a written reason, which also
+means the QA report is regenerated in that commit.
