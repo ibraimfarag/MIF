@@ -1,4 +1,4 @@
-﻿# qa — the contract between the app and the engine
+# qa — the contract between the app and the engine
 
 The UI never touches the OS: it speaks 65 JSON-RPC methods over
 `\\.\pipe\mics_engine` and nothing else ([D-006](../docs/DECISIONS.md)). That
@@ -96,6 +96,28 @@ Exit code 0 means every case passed. The report is `build/qa-contract.json`:
   call (e.g. an idempotent delete).
 - **skip** is a recorded decision not to run, with the reason. Every skipped row
   still has to exist, so the count stays honest.
+
+## The opsec baseline: `opsec-baseline.json`
+
+One more committed file, and not about the pipe: what the **shipped bytes** are
+allowed to say about the machine that built them. `scripts/verify-opsec.ps1`
+counts five markers (`flutter`, `dart`, `cargo`, `rustc`, `pubspec`,
+case-insensitive, over ISO-8859-1 bytes) in every binary of a package and
+compares the result with this file:
+
+- a count **above** the baseline fails; below it is reported so the baseline can
+  be tightened, because the ratchet only turns one way;
+- a binary the file does not list fails until someone adds it with a reason;
+- the build account's profile path (computed on the machine that runs the probe,
+  never stored here) must appear **zero** times;
+- an entry with no written reason fails.
+
+`-Measure` prints the table and the JSON to paste in, and writes nothing:
+raising a count is a decision a human records. `make-release.ps1` runs the probe
+against the staging folder, and `test/opsec_baseline_test.dart` keeps the file
+honest (reasons present, markers equal to the probe's own list, no user path).
+The `cargo`/`rustc` rows are what is left after ط1's
+`--remap-path-prefix=$env:USERPROFILE=/build`.
 
 ## Deliberately not covered here
 

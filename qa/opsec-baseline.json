@@ -1,0 +1,106 @@
+{
+  "artifact": "dist/MICS-portable",
+  "measured": "2026-11-02",
+  "definition": "case-insensitive substring count over the whole file, decoded as ISO-8859-1 (one byte, one character)",
+  "policy": {
+    "forbidden": "the profile path of the account that runs the probe, and its leaf directory: zero hits, always - the probe computes it, this file never stores it",
+    "counted": [
+      "flutter",
+      "dart",
+      "cargo",
+      "rustc",
+      "pubspec"
+    ],
+    "ratchet": "a count may only fall; a rise fails scripts/verify-opsec.ps1 and needs a written reason here, because that is a decision, not a measurement"
+  },
+  "files": {
+    "audioplayers_windows_plugin.dll": {
+      "counts": {
+        "flutter": {
+          "count": 104,
+          "reason": "the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename."
+        }
+      }
+    },
+    "dartjni.dll": {
+      "counts": {
+        "dart": {
+          "count": 101,
+          "reason": "a third-party JNI bridge built from the Flutter engine's sources; the strings are its type and API names."
+        }
+      }
+    },
+    "data\\app.so": {
+      "counts": {
+        "flutter": {
+          "count": 50,
+          "reason": "the AOT snapshot names the engine entry points and embedder API it links against."
+        },
+        "dart": {
+          "count": 66,
+          "reason": "the snapshot keeps the Dart VM's own type and library names; obfuscation renames ours, not the VM's."
+        },
+        "pubspec": {
+          "count": 1,
+          "reason": "the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine."
+        }
+      }
+    },
+    "flutter_windows.dll": {
+      "counts": {
+        "flutter": {
+          "count": 1891,
+          "reason": "the prebuilt Flutter engine is a third-party binary we do not compile; its strings are the framework's own and name no account."
+        },
+        "dart": {
+          "count": 748,
+          "reason": "the Dart VM inside that engine names itself; removing it would mean rebuilding Flutter from source."
+        }
+      }
+    },
+    "mics-engine.exe": {
+      "counts": {
+        "cargo": {
+          "count": 1242,
+          "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it."
+        },
+        "rustc": {
+          "count": 97,
+          "reason": "the engine's panic, version and RUST_BACKTRACE strings name the compiler that produced them; none of them carries a path."
+        }
+      }
+    },
+    "mics_app.exe": {
+      "counts": {
+        "flutter": {
+          "count": 39,
+          "reason": "the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger)."
+        }
+      }
+    },
+    "screen_retriever_windows_plugin.dll": {
+      "counts": {
+        "flutter": {
+          "count": 97,
+          "reason": "the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename."
+        }
+      }
+    },
+    "tray_manager_plugin.dll": {
+      "counts": {
+        "flutter": {
+          "count": 60,
+          "reason": "the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename."
+        }
+      }
+    },
+    "window_manager_plugin.dll": {
+      "counts": {
+        "flutter": {
+          "count": 60,
+          "reason": "the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename."
+        }
+      }
+    }
+  }
+}

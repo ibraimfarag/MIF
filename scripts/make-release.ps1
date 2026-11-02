@@ -161,6 +161,15 @@ if (-not $SkipBuild) {
   try {
     $env:MICS_REQUIRE_VERSION_RESOURCE = "1"
     $env:YRX_REGENERATE_MODULES_RS = "false"
+    # The shipped engine must not name this machine's user (docs/TODO.md, the
+    # fingerprint slice): rustc records the source directory of every dependency,
+    # which by default is `%USERPROFILE%\.cargo\registry\src\...`, so the release
+    # binary carried the account name 1238 times. The remap rewrites that prefix
+    # while compiling. `CARGO_ENCODED_RUSTFLAGS`, not `RUSTFLAGS`: it is split on
+    # the unit separator, so a profile path containing a space cannot break the
+    # flag. `scripts\verify-opsec.ps1` reads the result and refuses to publish a
+    # package that still names the account.
+    $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$($env:USERPROFILE)=/build"
     & cargo build --release
     $cargoExit = $LASTEXITCODE
   } finally {
@@ -252,6 +261,24 @@ try {
 if ($hardeningExit -ne 0) {
   Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
   Write-Output "RESULT: FAIL - the staged binaries are not hardened; nothing was published"
+  exit 1
+}
+
+# The build flags are one claim and the remap is another: this reads the staged
+# bytes and fails if they name the account that built them, or if a counted
+# fingerprint grew past `qa\opsec-baseline.json`.
+Write-Host "checking the staged binaries carry no build fingerprint..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-opsec.ps1") -Path $staging
+  $opsecExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($opsecExit -ne 0) {
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output "RESULT: FAIL - the staged files carry a build fingerprint; nothing was published"
   exit 1
 }
 

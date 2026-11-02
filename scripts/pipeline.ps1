@@ -131,7 +131,15 @@ $steps = @(
         Id   = 'engine.build'
         Tier = 'full'
         Dir  = Join-Path $repo 'engine'
-        Run  = { cargo build --release }
+        Run  = {
+            # A release build that is meant to be shipped must not name this
+            # machine's user. rustc records the source directory of every
+            # dependency, which by default is `%USERPROFILE%\.cargo\registry\...`;
+            # the remap rewrites that prefix, so `-Tier full` builds the same
+            # clean binary `make-release.ps1` packages.
+            $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$($env:USERPROFILE)=/build"
+            cargo build --release
+        }
         What = 'Release build of the engine'
     },
     @{

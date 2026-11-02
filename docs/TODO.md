@@ -49,20 +49,24 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ط1 — the fingerprint sweep** (ز2-أ, ز2-ب, ز2-ج and ز3 are done and
-> proved: a panic and a killed run each become one `MICS-<date>-<hash>` report with
-> a JSON+text bundle under `<data dir>\crashes\`, readable over
+> **next: ط3 — the ratchet in the release tier** (ز2-أ, ز2-ب, ز2-ج, ز3 and ط1 are
+> done and proved: a panic and a killed run each become one `MICS-<date>-<hash>`
+> report with a JSON+text bundle under `<data dir>\crashes\`, readable over
 > `crash.list`/`crash.get`; a `std::thread` watchdog — started with the session —
 > files a `hang` report naming the stuck duration and the last request when the
 > runtime's heartbeat stops; Settings → Diagnostics lists those reports, shows the
 > id and the readable message, copies the paste text whose first line is the id,
-> and deletes one; and the alert gate has a second destination, in-app cards in the
+> and deletes one; the alert gate has a second destination, in-app cards in the
 > window's bottom corner — every severity including LOW, the crash card carrying
-> its bug id, right in LTR and left in RTL. 111 engine tests, contract 78 cases / 0
-> failed, 115 Dart tests, shell ledger 21 controls). The rest of the track is cut
+> its bug id, right in LTR and left in RTL; and the shipped engine no longer names
+> the account that built it: `--remap-path-prefix` took the 1238 hits to 0, and
+> `scripts/verify-opsec.ps1` + `qa/opsec-baseline.json` ratchet the five counted
+> markers from a real measurement. 111 engine tests, contract 78 cases / 0 failed,
+> 120 Dart tests, shell ledger 21 controls). The rest of the track is cut
 > into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
-> endpoint and is the only blocked slice. The user
+> endpoint and is the only blocked slice besides ط2 (which sits on ج2's signed
+> manifest). The user
 > approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
@@ -92,12 +96,13 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ط1**: خطوة البصمة (fingerprint sweep) — `--remap-path-prefix` يشيل مسار مستخدم
-> البيلد، وقائمة سماح مكتوب سبب كل مدخل فيها، وتست بتمنع زيادة أي عدد. خطوة واحدة
-> بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **ط3**: وصّل `scripts\verify-opsec.ps1` كخطوة `opsec.verify` في `-Tier release`
+> جنب الـ verifiers التانية (ومتلمسش `verify-tamper.ps1` — دي ط2 وبتستنى ج2).
+> خطوة واحدة بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ط1 - the fingerprint sweep** as one commit-sized slice, and stop for review.
+**ط3 - the opsec ratchet inside `-Tier release`** as one commit-sized slice, and
+stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -328,7 +333,7 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز2-ج**~~ | ~~**The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls~~ — **done** | measured 2026-11-02: 114 Dart tests (+4), the ledger gained exactly the four Diagnostics controls and nothing else, and the id on screen is the id sent to `crash.get`/`crash.delete` and the id the pasted text starts with |
 | ~~**ز3**~~ | ~~In-app notification cards in the window's bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash card carries the bug id~~ — **done** | measured 2026-11-02: 111 engine tests (+5), 115 Dart tests (+1) and exactly two new controls in the shell ledger; the card measures `right = 1682` in LTR and `left = 18` in RTL inside the 1700-wide window |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
-| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | next |
+| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) — **ط1 done 2026-11-02**, tamper tests left | next: ط3 |
 | **د5** | Coverage gates, `qa/report`, docs | last |
 
 ### 0.3c How each remaining slice is done (so a new session can start cold)
@@ -343,8 +348,8 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ز2-ج** bug-id surface~~ — **done** (2026-11-02) | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
 | **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |
 | ~~**ز3** cards~~ — **done** (2026-11-02) | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says delivery is off (no report has a delivery state until ز2-د, D-024). The engine pushes the card as its own `alert` notification, parks it when no UI is attached, and the shell paints it as a widget the sweep can tap. |
-| **ط1** fingerprint | `--remap-path-prefix` removes the build user's home path, the counts for `flutter`/`dart`/`cargo`/`rustc` are recorded in an allowlist with a written reason per entry, and a ratchet test fails when a count rises. |
-| **ط2 / ط3** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; `verify-opsec.ps1` + `verify-tamper.ps1` run under `-Tier release`. |
+| ~~**ط1** fingerprint~~ — **done** (2026-11-02) | The Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` (in `make-release.ps1` and the `engine.build` step), and the shipped engine went from **1238** hits of the account name to **0**. `scripts/verify-opsec.ps1` counts the markers and compares them with `qa/opsec-baseline.json`: a forbidden string (the profile path and its leaf, computed on the machine running the probe) must be absent, a counted marker (`flutter`/`dart`/`cargo`/`rustc`/`pubspec`) may only fall, a binary missing from the baseline fails until a human adds it with a reason, and an entry with no reason fails. `test/opsec_baseline_test.dart` guards the file in the fast tier. Run by `make-release.ps1` on the staging folder, so a leaking build is never packaged. |
+| **ط2 / ط3** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; `verify-tamper.ps1` and the `-Tier release` wiring of `verify-opsec.ps1` run there (**ط3**). ط2 sits on **ج2**'s signed manifest. |
 | **د5** report | `qa/report.html` + `.md` from the contract JSON, coverage gates, and CI fails when a feature is not registered. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
@@ -575,6 +580,59 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ط1 - the shipped engine no longer names the account that built it**
+  - `rustc` records the source directory of every crate it compiles, so the
+    release engine carried `C:\Users\<account>\.cargo\registry\src\...` — and the
+    account name, **1238 times**, measured on the 2026-11-01 package. A file every
+    user runs was saying who built it and which registry the crates came from.
+  - Both paths that build the engine now compile with
+    `--remap-path-prefix=$env:USERPROFILE=/build`, set as
+    `CARGO_ENCODED_RUSTFLAGS` (not `RUSTFLAGS`: it is split on the unit
+    separator, so a profile path with a space cannot break the flag):
+    `scripts/make-release.ps1` and the `engine.build` step of
+    `scripts/pipeline.ps1 -Tier full`. Measured on the rebuilt binary: **0** hits
+    for the profile path and **0** for the account name (the 2026-11-01 package
+    had 1238 of each; 34 other `C:\Users\` strings remain and belong to crate
+    documentation that names other people's folders); a dependency panic now
+    reports `/build\.cargo\registry\src\...` instead of the build machine's
+    layout.
+  - What was *not* leaking, measured rather than assumed: the workspace path is
+    absent (0 hits for `H:\FlyEnv`), and `data\app.so`'s only two
+    `C:\Users\` strings are product copy (a `Downloads` example and the canary
+    path), so the Dart side needed no toolchain work.
+  - `scripts/verify-opsec.ps1` reads the shipped bytes and compares them with
+    `qa/opsec-baseline.json`: **forbidden** = the profile path of the account that
+    runs the probe and its leaf directory, so the baseline never stores the path
+    it forbids; **counted** = `flutter`/`dart`/`cargo`/`rustc`/`pubspec`,
+    case-insensitive substring counts over ISO-8859-1 bytes — the same definition
+    as the 2026-11-01 baseline, which `-Measure` reproduces exactly (1891 + 748,
+    39, 1241 + 97). `-Measure` only prints; it never edits the allowlist.
+  - The ratchet: a count above the baseline fails; a count below it is reported so
+    the baseline can be tightened; a binary the baseline does not list fails until
+    a human adds it with a reason; an entry whose reason is shorter than a
+    sentence fails. `make-release.ps1` runs the probe against the **staging**
+    folder next to the hardening check, so a leaking build is never published.
+    Negative control run 2026-11-02: the old package fails with
+    `this machine's account is named in the package: mics-engine.exe: 1238 x
+    'C:\Users\<account>'`.
+  - `test/opsec_baseline_test.dart` (5 tests, fast tier) guards the file: every
+    marker has a reason of at least 20 characters, the file's marker list is the
+    probe's own `$Counted` list read out of the script, the file is sorted, and it
+    never contains a Windows user path or the account that measured it.
+  - Honest limits: the counts are a **budget, not a guarantee** — `cargo` is 1242
+    where the 2026-11-01 package measured 1241, because the crate paths still say
+    `.cargo` (only their prefix is synthetic), and the toolchain's own name cannot
+    be removed from a Rust binary; the framework strings in `flutter_windows.dll`
+    (1891 + 748) are a prebuilt third-party DLL we do not compile. The measurement
+    above is a **staging copy** of the 2026-11-01 package with the freshly built
+    engine dropped in: the other eight files are byte-identical, so their counts
+    are the shipped ones, and the next `make-release.ps1` re-measures the real
+    package before it can publish.
+  - Measured 2026-11-02: 111 engine tests (unchanged: no engine source touched),
+    **120 Dart tests** (+5), the same shell ledger (21 controls), and
+    `verify-opsec.ps1` PASS on the staged package (`9 binaries, no shipped file
+    names this machine's account`) with the four fast checks green.
 
 - **ز3 - the alert gate has a second destination: in-app cards in the window**
   - `engine/src/notify/alert.rs` keeps D-013's desktop policy untouched and adds
