@@ -9,6 +9,8 @@
     "settings.canaryPathsHint":  "اتركه فاضي = المسارات الافتراضية في المستندات وسطح المكتب",
     "settings.channel":  "القناة",
     "settings.checkNow":  "اتأكد من التحديثات",
+    "settings.diagnostics":  "التشخيص",
+    "settings.diagnosticsHint":  "تقارير بيكتبها المحرك لما يحصل انهيار، أو تشغيل مبيقفلش نضيف، أو هنج. الـ bug id هو اللي الدعم محتاجه، ومفيش أي حاجة بتتبعت من هنا.",
     "settings.dnd":  "وضع عدم الإزعاج",
     "settings.dndHint":  "بيسكّت كل حاجة أقل من «حرج».",
     "settings.engine":  "المحرك",
@@ -51,5 +53,14 @@
     "settings.updates":  "التحديثات",
     "settings.volume":  "مستوى الصوت",
     "settings.testSound":  "جرّب الصوت",
-    "settings.manifestHint":  "مفيش رابط تحديث متظبّط — التحديثات متوقفة. الصق رابط ملف الإصدار فوق."
+    "settings.manifestHint":  "مفيش رابط تحديث متظبّط — التحديثات متوقفة. الصق رابط ملف الإصدار فوق.",
+    "diagnostics.empty":  "مفيش تقارير — مفيش حاجة فشلت.",
+    "diagnostics.loadFailed":  "مش قادر أقرا التقارير",
+    "diagnostics.openFailed":  "مش قادر أفتح التقرير",
+    "diagnostics.copy":  "انسخ التقرير",
+    "diagnostics.copyFailed":  "النسخ فشل",
+    "diagnostics.copied":  "التقرير اتنسخ — الـ bug id في أول سطر",
+    "diagnostics.delete":  "امسح التقرير",
+    "diagnostics.deleted":  "التقرير اتمسح",
+    "diagnostics.seen":  "اتكرر {count} مرة"
 }

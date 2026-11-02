@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/crash_reports.dart';
 import 'package:mics_app/core/ipc/helper_status.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/models/crash_models.dart';
 
 /// Complete application settings (D-008).
 ///
@@ -414,6 +417,20 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
 
+          // ---------- diagnostics: the bug-id surface (ز2-ج) ----------
+          _Section(
+            icon: Icons.bug_report_outlined,
+            title: context.tr('settings.diagnostics'),
+            children: [
+              Text(
+                context.tr('settings.diagnosticsHint'),
+                style: TextStyle(color: AppColors.muted, fontSize: 10.5),
+              ),
+              const SizedBox(height: 8),
+              const _DiagnosticsCard(),
+            ],
+          ),
+
           // ---------- about ----------
           _Section(
             icon: Icons.info_outline,
@@ -548,6 +565,225 @@ class _HelperCardState extends ConsumerState<_HelperCard> {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+/// Settings → Diagnostics (ز2-ج): the reports the engine wrote for a panic, an
+/// unclean exit or a hang.
+///
+/// It lists them (`crash.list`), opens one (`crash.get`), copies the text a user
+/// can paste — the bug id on the first line — and deletes it (`crash.delete`).
+/// The reports directory belongs to the engine: this widget never opens a file,
+/// and nothing here sends anything anywhere.
+class _DiagnosticsCard extends ConsumerStatefulWidget {
+  const _DiagnosticsCard();
+
+  @override
+  ConsumerState<_DiagnosticsCard> createState() => _DiagnosticsCardState();
+}
+
+class _DiagnosticsCardState extends ConsumerState<_DiagnosticsCard> {
+  /// The row that is open, and what `crash.get` answered for it.
+  String? _openId;
+  CrashReport? _open;
+
+  Future<void> _toggle(CrashSummary row) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final failed = context.tr('diagnostics.openFailed');
+    if (_openId == row.bugId) {
+      setState(() {
+        _openId = null;
+        _open = null;
+      });
+      return;
+    }
+    setState(() {
+      _openId = row.bugId;
+      _open = null;
+    });
+    try {
+      final report =
+          await ref.read(crashReportsProvider.notifier).open(row.bugId);
+      if (!mounted || _openId != row.bugId) return;
+      setState(() => _open = report);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _openId = null;
+        _open = null;
+      });
+      _failed(messenger, '$failed: $e');
+    }
+  }
+
+  Future<void> _copy(CrashReport report) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final copied = context.tr('diagnostics.copied');
+    final failed = context.tr('diagnostics.copyFailed');
+    try {
+      await Clipboard.setData(ClipboardData(text: report.pasteText));
+      _inform(messenger, copied);
+    } catch (e) {
+      _failed(messenger, '$failed: $e');
+    }
+  }
+
+  Future<void> _delete(String bugId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final done = context.tr('diagnostics.deleted');
+    try {
+      await ref.read(crashReportsProvider.notifier).delete(bugId);
+      if (!mounted) return;
+      if (_openId == bugId) {
+        setState(() {
+          _openId = null;
+          _open = null;
+        });
+      }
+      _inform(messenger, done);
+    } catch (e) {
+      _failed(messenger, '$e');
+    }
+  }
+
+  /// The messengers are handed in from a frame that had a `BuildContext`: no
+  /// context is touched after an await.
+  void _inform(ScaffoldMessengerState messenger, String message) {
+    messenger.showSnackBar(SnackBar(
+      content: Text(message, maxLines: 3, overflow: TextOverflow.ellipsis),
+    ));
+  }
+
+  void _failed(ScaffoldMessengerState messenger, String message) {
+    messenger.showSnackBar(SnackBar(
+      content: Text(message, maxLines: 3, overflow: TextOverflow.ellipsis),
+      backgroundColor: AppColors.red.withValues(alpha: 0.85),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ref.watch(crashReportsProvider).when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (e, _) => Text(
+            '${context.tr('diagnostics.loadFailed')}: $e',
+            style: TextStyle(color: AppColors.orange, fontSize: 11),
+          ),
+          data: (reports) => reports.isEmpty
+              ? Text(context.tr('diagnostics.empty'),
+                  style: TextStyle(color: AppColors.muted, fontSize: 11.5))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [for (final row in reports) _row(row)],
+                ),
+        );
+  }
+
+  Widget _row(CrashSummary row) {
+    final open = _openId == row.bugId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          onTap: () => _toggle(row),
+          leading: Icon(_icon(row.kind), size: 18, color: _kindColor(row.kind)),
+          title: Text(row.bugId,
+              style: AppTheme.mono(size: 11.5, color: AppColors.text)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(row.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.muted, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(_meta(row),
+                  style: AppTheme.mono(size: 10, color: AppColors.muted)),
+            ],
+          ),
+          trailing: Icon(open ? Icons.expand_less : Icons.expand_more,
+              size: 18, color: AppColors.muted),
+        ),
+        if (open)
+          _open == null ? _opening() : _detail(_open!),
+        const Divider(height: 8),
+      ],
+    );
+  }
+
+  Widget _opening() => const Padding(
+        padding: EdgeInsets.only(left: 2, top: 2, bottom: 8),
+        child: SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+
+  /// The whole report as the user will paste it - the first line is the bug id
+  /// - with the two actions the section promises.
+  Widget _detail(CrashReport report) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 2, bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(report.pasteText,
+              style: AppTheme.mono(size: 10.5, color: AppColors.text)),
+          const SizedBox(height: 4),
+          Row(children: [
+            IconButton(
+              tooltip: context.tr('diagnostics.copy'),
+              onPressed: () => _copy(report),
+              icon: const Icon(Icons.copy_all_outlined, size: 16),
+              color: AppColors.cyan,
+            ),
+            IconButton(
+              tooltip: context.tr('diagnostics.delete'),
+              onPressed: () => _delete(report.bugId),
+              icon: const Icon(Icons.delete_outline, size: 16),
+              color: AppColors.red,
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  /// The one line of facts under the message: the engine's own kind, how often
+  /// the same failure was seen, and when it was last seen (UTC, as the engine
+  /// writes it).
+  String _meta(CrashSummary row) {
+    final seen = row.occurrences > 1
+        ? '${context.tr('diagnostics.seen').replaceAll('{count}', '${row.occurrences}')} · '
+        : '';
+    return '${row.kind} · $seen${row.lastSeen}';
+  }
+
+  IconData _icon(String kind) => switch (kind) {
+        'panic' => Icons.error_outline,
+        'unclean-exit' => Icons.power_off,
+        'hang' => Icons.hourglass_bottom,
+        _ => Icons.bug_report_outlined,
+      };
+
+  Color _kindColor(String kind) => switch (kind) {
+        'panic' => AppColors.red,
+        'unclean-exit' => AppColors.orange,
+        'hang' => AppColors.yellow,
+        _ => AppColors.muted,
+      };
 }
 
 /// Live connectivity + intel freshness, next to the manual sync button.

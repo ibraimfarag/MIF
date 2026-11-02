@@ -9,7 +9,8 @@
 //
 // Stateful methods are simulated only where a screen's behaviour depends on it:
 // settings (a language that can be read back), the job table (a scan that can be
-// watched to completion and then listed), and the two push streams.
+// watched to completion and then listed), the crash table (a report that can be
+// opened and deleted), and the two push streams.
 
 import 'dart:async';
 import 'dart:convert';
@@ -205,8 +206,60 @@ class FakeEngine extends EngineIpc {
         job['state'] = 'cancelled';
         scanRunning = false;
         return {'cancelled': true};
+      case 'crash.list':
+        _seedCrash();
+        final rows = _crash.values
+            .map((row) => _deepCopy(row) as Map<String, dynamic>)
+            .toList()
+          // The engine answers newest last-seen first.
+          ..sort((a, b) =>
+              '${b['last_seen']}'.compareTo('${a['last_seen']}'));
+        final limit = params?['limit'];
+        return limit is int && limit > 0 && rows.length > limit
+            ? rows.sublist(0, limit)
+            : rows;
+      case 'crash.get':
+        _seedCrash();
+        final id = params?['bug_id'];
+        final summary = id is String ? _crash[id] : null;
+        if (summary == null) throw EngineException('no such report: $id');
+        // The engine answers the report that was asked for: the list row wins
+        // for the fields both shapes carry, and the fixture supplies what only
+        // the full report has (version, session, log tail).
+        final template =
+            (_fixtures['crash.get'] as Map?)?.cast<String, dynamic>() ?? const {};
+        return _deepCopy({...template, ...summary});
+      case 'crash.delete':
+        _seedCrash();
+        final id = params?['bug_id'];
+        // The real dispatcher refuses a malformed id and answers `false` for a
+        // well-formed one that is not there (idempotent, like job.cancel).
+        if (id is! String || !_bugId.hasMatch(id)) {
+          throw EngineException('not a bug id: $id');
+        }
+        return {'deleted': _crash.remove(id) != null, 'bug_id': id};
     }
     return null;
+  }
+
+  static final _bugId = RegExp(r'^MICS-\d{8}-[0-9a-f]{6}$');
+
+  final Map<String, Map<String, dynamic>> _crash = {};
+  bool _crashSeeded = false;
+
+  /// The engine already has history before the screen opens: `crash.list` is a
+  /// query, not an action, so it starts from the fixture - and `crash.delete`
+  /// removes from this table, so a screen that re-reads the list sees the
+  /// report it deleted gone.
+  void _seedCrash() {
+    if (_crashSeeded) return;
+    _crashSeeded = true;
+    final seeded = _fixtures['crash.list'];
+    if (seeded is! List) return;
+    for (final row in seeded) {
+      final report = (row as Map).cast<String, dynamic>();
+      _crash[report['bug_id'] as String] = report;
+    }
   }
 
   /// `scan.start` and `vuln.scan.start` differ only in `kind`: the screens

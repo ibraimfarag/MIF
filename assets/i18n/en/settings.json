@@ -9,6 +9,8 @@
     "settings.canaryPathsHint":  "Empty = engine defaults in Documents and Desktop",
     "settings.channel":  "Channel",
     "settings.checkNow":  "Check for updates",
+    "settings.diagnostics":  "Diagnostics",
+    "settings.diagnosticsHint":  "Reports the engine wrote for a panic, a run that never said goodbye, or a hang. The bug id is what support needs, and nothing here is sent anywhere.",
     "settings.dnd":  "Do not disturb",
     "settings.dndHint":  "Silences everything below CRITICAL.",
     "settings.engine":  "Engine",
@@ -51,5 +53,14 @@
     "settings.updates":  "Updates",
     "settings.volume":  "Volume",
     "settings.testSound":  "Play a test sound",
-    "settings.manifestHint":  "No manifest URL configured — updates are disabled. Paste the release manifest URL above."
+    "settings.manifestHint":  "No manifest URL configured — updates are disabled. Paste the release manifest URL above.",
+    "diagnostics.empty":  "No reports — nothing has failed.",
+    "diagnostics.loadFailed":  "Reports could not be read",
+    "diagnostics.openFailed":  "The report could not be opened",
+    "diagnostics.copy":  "Copy report",
+    "diagnostics.copyFailed":  "Copy failed",
+    "diagnostics.copied":  "Report copied — the bug id is the first line",
+    "diagnostics.delete":  "Delete report",
+    "diagnostics.deleted":  "Report deleted",
+    "diagnostics.seen":  "seen {count} times"
 }

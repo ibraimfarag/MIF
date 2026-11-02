@@ -49,14 +49,16 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز2-ج — the bug-id surface** (ز2-أ and ز2-ب are done and proved: a panic
-> and a killed run each become one `MICS-<date>-<hash>` report with a JSON+text
-> bundle under `<data dir>\crashes\`, readable over `crash.list`/`crash.get`, and
-> a `std::thread` watchdog — started with the session — files a `hang` report
-> naming the stuck duration and the last request when the runtime's heartbeat
-> stops; 106 engine tests, contract 78 cases / 0 failed, 110 Dart tests). The rest
-> of the track is cut into commit-sized slices in §0.3b, and §0.3c says what each
-> one has to prove.
+> **next: ز3 — the in-app notification cards** (ز2-أ, ز2-ب and ز2-ج are done and
+> proved: a panic and a killed run each become one `MICS-<date>-<hash>` report with
+> a JSON+text bundle under `<data dir>\crashes\`, readable over
+> `crash.list`/`crash.get`; a `std::thread` watchdog — started with the session —
+> files a `hang` report naming the stuck duration and the last request when the
+> runtime's heartbeat stops; and Settings → Diagnostics lists those reports,
+> shows the id and the readable message, copies the paste text whose first line is
+> the id, and deletes one. 106 engine tests, contract 78 cases / 0 failed, 114
+> Dart tests). The rest of the track is cut into commit-sized slices in §0.3b, and
+> §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
 > endpoint and is the only blocked slice. The user
 > approved the
@@ -88,12 +90,13 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ز2-ج**: سطح الـ bug-id (قسم Diagnostics في Settings يعرض التقارير، ينسخ
-> الـ id، ويحذف التقرير). خطوة واحدة بس، كوميت واحد، وشغّل
-> `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **ز3**: كروت الإشعارات جوه التطبيق (الركن تحت، يمين في LTR وشمال في RTL،
+> مربوطة بـ alert gate الموجود، وكارت الانهيار بيحمل الـ bug id). خطوة واحدة بس،
+> كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ز2-ج - the bug-id surface** as one commit-sized slice, and stop for review.
+**ز3 - the in-app notification cards** as one commit-sized slice, and stop for
+review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -321,9 +324,9 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز1**~~ | ~~Language off the title bar, into Settings as a dropdown; `AppLang` enum -> language-code table with direction, engine accepts the bundled set~~ — **done** | measured 2026-11-01: 10 new registry tests, 110 Dart tests, contract 65 cases / 0 failed |
 | ~~**ز2-أ**~~ | ~~Crash capture: session marker, panic hook, `MICS-<date>-<hash>` bug id, JSON + text bundle under `<data dir>\crashes\`, `crash.list` / `crash.get` / `crash.delete`~~ — **done** | measured 2026-11-01: 100 engine tests, contract 78 cases / 0 failed, a killed engine is reported once with its pid |
 | ~~**ز2-ب**~~ | ~~**Hang detector**: a watchdog thread the runtime cannot block names a hang (`hang` report from the engine itself, so nothing off the machine and no UI filesystem access). Details and the honest limits are in §0.3c~~ — **done** | measured 2026-11-02: 106 engine tests (+6), one report per frozen heartbeat with the stuck time and the last request, no false report from a runtime that keeps beating |
-| **ز2-ج** | **The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls | next |
+| ~~**ز2-ج**~~ | ~~**The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls~~ — **done** | measured 2026-11-02: 114 Dart tests (+4), the ledger gained exactly the four Diagnostics controls and nothing else, and the id on screen is the id sent to `crash.get`/`crash.delete` and the id the pasted text starts with |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
-| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash cards show the bug id from ز2-ج | after ز2-ج |
+| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash cards show the bug id from ز2-ج | next |
 | **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
 | **د5** | Coverage gates, `qa/report`, docs | last |
 
@@ -336,9 +339,9 @@ what was measured. Do not bundle two slices because one "looks small".
 | Slice | Done means |
 |---|---|
 | ~~**ز2-ب** hang detector~~ — **done** (2026-11-02) | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
-| **ز2-ج** bug-id surface | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
+| ~~**ز2-ج** bug-id surface~~ — **done** (2026-11-02) | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
 | **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |
-| **ز3** cards | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says whether it was delivered. |
+| **ز3** cards | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says whether it was delivered. Until **ز2-د** lands no report carries a delivery state at all (the ز2-ج Done entry says why), so the card may only say delivery is off - it must not invent a field. |
 | **ط1** fingerprint | `--remap-path-prefix` removes the build user's home path, the counts for `flutter`/`dart`/`cargo`/`rustc` are recorded in an allowlist with a written reason per entry, and a ratchet test fails when a count rises. |
 | **ط2 / ط3** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; `verify-opsec.ps1` + `verify-tamper.ps1` run under `-Tier release`. |
 | **د5** report | `qa/report.html` + `.md` from the contract JSON, coverage gates, and CI fails when a feature is not registered. |
@@ -347,7 +350,8 @@ what was measured. Do not bundle two slices because one "looks small".
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
 destination) and the endpoint shape of the **Open WhatsApp bridge** (the user
 chose an Open WhatsApp integration, *not* WhatsApp itself, so no Meta Cloud API
-work is needed). Neither blocks ز2-ج.
+work is needed). Neither is needed for ز3, which reads the existing alert gate and
+only has to say that delivery is off.
 
 ### 0.4 Environment must-knows (the short version of §8)
 
@@ -570,6 +574,57 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز2, third slice (ج) - the bug id now has a surface a user can act on**
+  - `lib/models/crash_models.dart` reads the two shapes the engine sends
+    (`crash.list` summaries and `crash.get` full reports) and composes the text a
+    user pastes. **The bug id is the first line on its own**, because that is the
+    one thing a paste into a message, a ticket or a search box has to start with;
+    the field names under it are the ones the engine's own `.txt` uses (`kind`,
+    `when`, `version`, `where`, `session`, `what happened`, the log tail), and
+    they stay English like it - this text is read next to the engine's bundle
+    rather than as UI copy.
+  - `lib/core/ipc/crash_reports.dart` is the only door to the reports: an
+    `AsyncNotifierProvider` over `crash.list` (newest first, the newest 20),
+    `crash.get` for the row that was opened, and `crash.delete` followed by a
+    **re-read of the list**, so what stays on screen is what the engine still has
+    rather than what the UI hoped it deleted. The UI still opens no file and
+    writes none (rule 4) - the reports directory belongs to the engine.
+  - Settings → Diagnostics (between Engine and About) lists each report with its
+    kind icon, the readable message, the engine's own kind, the repeat count and
+    the last-seen time; opening one shows the whole paste text in a
+    `SelectableText` with **Copy report** and **Delete report**. Copy goes to the
+    OS clipboard: the UI itself still sends nothing anywhere (rule 8), and the
+    text exists only on the user's own clipboard.
+  - Measured 2026-11-02: **114 Dart tests** (was 110 - three for the paste-text
+    model and one behaviour test), `flutter analyze --fatal-infos` clean, 106
+    engine tests unchanged, `clippy -D warnings` clean, and the four checks green
+    through `scripts\pipeline.ps1 -Tier fast` (**86 s**). The control ledger for
+    `screens.settings` gained **exactly four** controls and no other screen
+    changed: `ListTile(MICS-20261101-a1b2c3)`, `ListTile(MICS-20261102-0d9743)`,
+    `IconButton(Copy report)`, `IconButton(Delete report)`.
+  - The behaviour test is the receipt that the id on screen is the id the engine
+    reported: it reads the row's own id, asserts it is the one that went out with
+    `crash.get` and `crash.delete` (`{'bug_id': ...}`), and asserts that what
+    reached the clipboard starts with that exact id and still carries the log
+    tail. It also proves the deleted row is gone **because the list was re-read**
+    and that deleting one report did not remove the other one.
+  - **Honest limits, in the code and here**: (1) the list is read when the section
+    builds, so a report written while Settings is open shows up after leaving the
+    screen and coming back - there is no refresh button, because a "reporting"
+    screen that polls would add a second state machine on top of the engine's and
+    the id is what matters, not the seconds; (2) the newest **20** are shown while
+    the engine keeps all of them; (3) the paste text is composed in Dart from the
+    JSON, so it can drift from the engine's `.txt` - the engine's file stays the
+    canonical artifact, and the UI still never opens it; (4) nothing on this
+    surface delivers a report anywhere, and no report carries a delivery state:
+    that is ز2-د, blocked on **D-023**.
+  - No pipe surface changed (still 65 methods), so `qa/methods.json` and
+    `test/qa_registry_test.dart` needed no new row. Only `qa/ui/fixtures.json`
+    (two reports and one full-report template), `qa/ui/fake_engine.dart`
+    (`crash.list` / `crash.get` / `crash.delete` are now stateful, so a deleted
+    report stays deleted and a malformed id is refused exactly like the
+    dispatcher refuses it) and the ledger moved.
 
 - **ز2, second half (ب) - a runtime that stops answering now files its own hang
   report**

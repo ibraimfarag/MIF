@@ -367,6 +367,47 @@
     "guard.event.dismiss": {
       "dismissals": 5,
       "mute_suggested": true
+    },
+    "crash.list": [
+      {
+        "bug_id": "MICS-20261102-0d9743",
+        "kind": "hang",
+        "created": "2026-11-02T00:15:40Z",
+        "last_seen": "2026-11-02T00:20:11Z",
+        "occurrences": 2,
+        "message": "the engine's task loop stopped making progress: no heartbeat for 20.4 s (deadline 20.0 s), last request: scan.start",
+        "location": null
+      },
+      {
+        "bug_id": "MICS-20261101-a1b2c3",
+        "kind": "unclean-exit",
+        "created": "2026-11-01T22:00:00Z",
+        "last_seen": "2026-11-01T22:00:00Z",
+        "occurrences": 1,
+        "message": "the engine's service run (pid 4242, started 2026-11-01T21:00:00Z) stopped without a clean exit",
+        "location": null
+      }
+    ],
+    "crash.get": {
+      "bug_id": "MICS-20261101-a1b2c3",
+      "kind": "unclean-exit",
+      "created": "2026-11-01T22:00:00Z",
+      "last_seen": "2026-11-01T22:00:00Z",
+      "occurrences": 1,
+      "version": "0.1.0",
+      "message": "the engine's service run (pid 4242, started 2026-11-01T21:00:00Z) stopped without a clean exit",
+      "location": null,
+      "session": {
+        "pid": 4242,
+        "mode": "service",
+        "started": "2026-11-01T21:00:00Z",
+        "version": "0.1.0",
+        "ended": null
+      },
+      "log_tail": [
+        "2026-11-01T21:59:58Z  INFO mics_engine: Processing request: crash.list",
+        "2026-11-01T21:59:59Z  INFO mics_engine::dispatcher: Processing request: sync.now"
+      ]
     }
   }
 }

@@ -21,6 +21,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/features/audit/screens/audit_screen.dart';
@@ -163,5 +164,70 @@ void main() {
         TextDirection.rtl,
         reason: 'an RTL language must lay the tree out right-to-left');
     expect(mounted.container.read(rtlProvider), isTrue);
+  });
+
+  // The bug-id surface (ز2-ج). The id on screen has to be the id the engine
+  // reported - not a string the screen invented - and the text the user copies
+  // has to start with it, because that text is the one thing a user hands to
+  // whoever supports the build.
+  testWidgets('settings: the diagnostics list shows and copies the engine id',
+      (tester) async {
+    final clipboard = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard.add('${(call.arguments as Map)['text']}');
+      }
+      return null;
+    });
+    addTearDown(() =>
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    final mounted = await openScreen(tester, const SettingsScreen());
+    final engine = mounted.engine;
+    const id = 'MICS-20261102-0d9743';
+
+    // The list came from the engine's `crash.list`, and both of its reports are
+    // on screen (the newest first, as the engine orders them). The section sits
+    // below the fold, so the taps scroll to it first.
+    expect(engine.called('crash.list'), isTrue,
+        reason: 'Diagnostics never asked the engine for its reports');
+    await tester.ensureVisible(find.text(id));
+    await settle(tester);
+    expect(find.text(id), findsOneWidget,
+        reason: 'the report the engine listed is not on screen');
+    expect(find.text('MICS-20261101-a1b2c3'), findsOneWidget,
+        reason: 'the second report the engine listed is not on screen');
+
+    // Opening a row is `crash.get`, for that row's id.
+    await tester.tap(find.text(id));
+    await settle(tester);
+    expect(engine.lastParams('crash.get'), {'bug_id': id},
+        reason: 'opening a report did not ask for that report');
+    expect(find.textContaining('last request: scan.start'), findsWidgets,
+        reason: 'the opened report does not say what happened');
+
+    // Copying puts the paste text on the clipboard, bug id first.
+    await tester.ensureVisible(find.byTooltip('Copy report'));
+    await tester.tap(find.byTooltip('Copy report'));
+    await settle(tester);
+    expect(clipboard, isNotEmpty, reason: 'copy never reached the clipboard');
+    expect(clipboard.last.startsWith(id), isTrue,
+        reason: 'the pasted text must start with the bug id, got:\n'
+            '${clipboard.last}');
+    expect(clipboard.last, contains('engine log lines'),
+        reason: 'the pasted text dropped the log tail the report carries');
+
+    // Deleting asks the engine for that id, and the row goes away because the
+    // list was re-read, not because the screen hid it.
+    await tester.ensureVisible(find.byTooltip('Delete report'));
+    await tester.tap(find.byTooltip('Delete report'));
+    await settle(tester);
+    expect(engine.lastParams('crash.delete'), {'bug_id': id});
+    expect(find.text(id), findsNothing,
+        reason: 'the deleted report is still on screen');
+    expect(find.text('MICS-20261101-a1b2c3'), findsOneWidget,
+        reason: 'deleting one report removed another');
   });
 }
