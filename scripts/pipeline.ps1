@@ -181,7 +181,7 @@ $steps = @(
             }
             dart run qa\contract.dart --engine $exe
         }
-        What = 'All 62 JSON-RPC methods answer, or refuse, as documented'
+        What = 'Every registered JSON-RPC method answers, or refuses, as documented'
     },
     @{
         Id   = 'app.build'

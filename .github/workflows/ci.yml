@@ -40,11 +40,16 @@ jobs:
         shell: pwsh
         run: ./scripts/pipeline.ps1 -Tier full
 
+      # The measured half of QA next to the committed report: the contract run's
+      # own JSON and the step report, so a reviewer sees what executed.
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mics-windows
           path: |
+            qa/report.md
+            qa/report.html
+            build/qa-contract.json
             build/windows/x64/runner/Release/
             engine/target/release/mics-engine.exe
             build/pipeline-full.json

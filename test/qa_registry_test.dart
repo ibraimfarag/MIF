@@ -4,10 +4,11 @@
 // here would never be tested, which is the one failure this file exists to make
 // impossible.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import '../qa/registry.dart';
 
 const _classes = {'pure', 'read', 'sandbox', 'mutating', 'network', 'desktop'};
 const _shapes = {'string', 'object', 'array', 'error', 'any'};
@@ -17,13 +18,9 @@ const _shapes = {'string', 'object', 'array', 'error', 'any'};
 const _neverHappyPath = {'mutating', 'network', 'desktop'};
 
 void main() {
-  final registryFile = File('qa/methods.json');
-  final registry =
-      jsonDecode(registryFile.readAsStringSync()) as Map<String, dynamic>;
-  final rows = (registry['methods'] as List)
-      .map((e) => (e as Map).cast<String, dynamic>())
-      .toList();
-  final dispatched = _dispatchedMethods(registry['engine'] as String);
+  final registry = readJsonMap(methodsPath);
+  final rows = methodRows(methodsPath);
+  final dispatched = dispatchedMethods(registry['engine'] as String);
 
   test('the registry parses and has rows', () {
     expect(rows, isNotEmpty);
@@ -179,15 +176,4 @@ void _assertNoPlaceholderEscapes(String method, String field, Object? value) {
       _assertNoPlaceholderEscapes(method, '$field[$i]', value[i]);
     }
   }
-}
-
-/// The method names the engine actually dispatches, read out of the source.
-///
-/// Matching on the arm indentation (twelve spaces) is what keeps handler-internal
-/// `match` arms from being counted: they sit deeper. If the dispatcher is ever
-/// reformatted, this fails loudly instead of quietly matching fewer arms.
-Set<String> _dispatchedMethods(String dispatcherPath) {
-  final source = File(dispatcherPath).readAsStringSync();
-  final arm = RegExp(r'^ {12}"([a-z0-9_.]+)" =>', multiLine: true);
-  return arm.allMatches(source).map((m) => m.group(1)!).toSet();
 }

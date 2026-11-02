@@ -49,8 +49,9 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: د5 — the QA report and the coverage gates** (ز2-أ, ز2-ب, ز2-ج, ز3, ط1 and
-> ط3 are done and proved: a panic and a killed run each become one
+> **next: ج2 — the signed SHA-256 manifest and the start-up self-check** (ز2-أ,
+> ز2-ب, ز2-ج, ز3, ط1, ط3 and د5 are done and proved: a panic and a killed run each
+> become one
 > `MICS-<date>-<hash>` report with a JSON+text bundle under `<data dir>\crashes\`,
 > readable over `crash.list`/`crash.get`; a `std::thread` watchdog — started with
 > the session — files a `hang` report naming the stuck duration and the last
@@ -63,13 +64,15 @@
 > hits to 0) and the remaining fingerprints are a written, ratcheted allowance;
 > and `-Tier release` now refuses a package whose bytes carry an account name, a
 > fingerprint above that allowance, or a binary that lost its CFG table — the last
-> one caught a real regression on 2026-11-02, the day it was introduced).
+> one caught a real regression on 2026-11-02, the day it was introduced; and every
+> QA surface now has a committed report — `qa/report.md` and its HTML twin, built
+> from the registries and refused by the fast tier the moment it drifts).
 > 111 engine tests, contract 78 cases / 0 failed, 120 Dart tests, shell ledger 21
 > controls). The rest of the track is cut
 > into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
 > endpoint and is the only blocked slice besides ط2 (which sits on ج2's signed
-> manifest). The user
+> manifest, so it lands right after the next slice). The user
 > approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
@@ -99,13 +102,14 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **د5**: تقرير `qa/report.html` + `.md` من JSON العقد، وبوابات التغطية، وفشل CI
-> لما ميزة تبقى غير مسجّلة. خطوة واحدة بس، كوميت واحد، وشغّل
-> `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **ج2**: مانيفست SHA-256 موقّع لكل الملفات المشحونة + فحص ذاتي عند التشغيل +
+> بانر «نسخة غير رسمية» لو الملفات اتغيّرت (وده اللي بيفتح ط2 لاحقًا). خطوة
+> واحدة بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**د5 - the QA report and the coverage gates** as one commit-sized slice, and
-stop for review.
+**ج2 - the signed SHA-256 manifest of the shipped files, the start-up self-check
+and the "unofficial build" banner** as one commit-sized slice, and stop for
+review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -336,8 +340,8 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز2-ج**~~ | ~~**The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls~~ — **done** | measured 2026-11-02: 114 Dart tests (+4), the ledger gained exactly the four Diagnostics controls and nothing else, and the id on screen is the id sent to `crash.get`/`crash.delete` and the id the pasted text starts with |
 | ~~**ز3**~~ | ~~In-app notification cards in the window's bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash card carries the bug id~~ — **done** | measured 2026-11-02: 111 engine tests (+5), 115 Dart tests (+1) and exactly two new controls in the shell ledger; the card measures `right = 1682` in LTR and `left = 18` in RTL inside the 1700-wide window |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
-| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) — **ط1 and ط3 done 2026-11-02**, tamper tests left | next: after د5 |
-| **د5** | Coverage gates, `qa/report`, docs | last |
+| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) — **ط1 and ط3 done 2026-11-02**, tamper tests left | next: after ج2 |
+| ~~**د5**~~ | ~~Coverage gates, `qa/report`, docs~~ — **done** (2026-11-02): `qa/report.md` + `qa/report.html` are committed, built from the registries by `qa/report.dart`, and byte-gated by `test/qa_report_test.dart` in the fast tier | measured on the registries: 65 methods / 65 dispatched, 98 controls over 13 screens + the shell, 2 languages / 38 packs, 9 shipped binaries with a reason each, 97 declared Dart cases in 21 files, 111 declared engine cases in 14 modules, 9 pipeline steps across 3 tiers |
 
 ### 0.3c How each remaining slice is done (so a new session can start cold)
 
@@ -354,7 +358,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ط1** fingerprint~~ — **done** (2026-11-02) | The Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` (in `make-release.ps1` and the `engine.build` step), and the shipped engine went from **1238** hits of the account name to **0**. `scripts/verify-opsec.ps1` counts the markers and compares them with `qa/opsec-baseline.json`: a forbidden string (the profile path and its leaf, computed on the machine running the probe) must be absent, a counted marker (`flutter`/`dart`/`cargo`/`rustc`/`pubspec`) may only fall, a binary missing from the baseline fails until a human adds it with a reason, and an entry with no reason fails. `test/opsec_baseline_test.dart` guards the file in the fast tier. Run by `make-release.ps1` on the staging folder, so a leaking build is never packaged. |
 | ~~**ط3** wiring~~ — **done** (2026-11-02) | `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` - the packaged artifact, not the build folder - so `-Tier release` refuses a package that names the build account or grew a counted fingerprint. `verify-tamper.ps1` joins it with ط2. |
 | **ط2** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; sits on **ج2**'s signed manifest, so it lands after ج2. |
-| **د5** report | `qa/report.html` + `.md` from the contract JSON, coverage gates, and CI fails when a feature is not registered. |
+| ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
@@ -584,6 +588,45 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **د5 - the QA report and the coverage gates**
+  - `qa/report.md` + `qa/report.html` are committed, generated by
+    `qa/report.dart` from the committed registries only: no clock, no machine
+    path, no run timing, no hash. That is what lets `test/qa_report_test.dart`
+    compare both files byte for byte and fail the fast tier (and so CI, which runs
+    the fast tier inside `-Tier full`) when the surface moved and the report did
+    not - the same ratchet `qa/ui/ledger.json` applies to controls.
+  - `qa/registry.dart` is the one reader for the registries (`methods.json`, the
+    UI ledger, `fixtures.json`, the opsec baseline, and the dispatcher's match
+    table); `test/qa_registry_test.dart` was moved onto it, so the report and the
+    registry gate cannot disagree about what "registered" means.
+  - The gates the report states, and where each is enforced: the dispatcher and
+    `qa/methods.json` (65 = 65) by the registry test; every language directory
+    listed under `assets:` in `pubspec.yaml` by the report test; every `skip`
+    reason at least 20 characters by the report test (a reason exists to be read,
+    so "n/a" is not one); the surface not degenerate (floors on methods, controls,
+    screens, languages, test files, shipped files, pipeline steps) by the report
+    test; and no machine value in either file (no `C:\`, no account name, ASCII
+    only) by the report test.
+  - Measured 2026-11-02 from the registries: **65** methods, all 65 dispatched,
+    **65** declared cases and **15** classified not to run with a reason each;
+    **98** controls over **13** screens + the shell; **2** languages, **38** packs;
+    **9** shipped binaries (**1339** `cargo`+`rustc` hits in the engine, the rest
+    framework strings); **97** declared Dart cases in **21** files and **111**
+    declared engine cases in **14** modules (the same 111 the run reports); **9**
+    pipeline steps across 3 tiers. Negative controls, both run: appending a line to
+    `qa/report.md` fails with `qa/report.md is stale ... read the diff`, and
+    setting one `skip` reason to `n/a` fails with `canary.deploy: the recorded
+    reason is too short to say why this method is not exercised here`.
+  - Honest limits, written into the files: the counts are declarations, so a test
+    that failed still counts as declared - the gates on results are
+    `engine.contract` and the two test steps; the parsed pipeline table is a regex
+    over `scripts/pipeline.ps1`, so a reformat changes the report (loudly, via the
+    staleness gate) rather than drifting silently; and coverage of a registry is
+    not correctness of the product.
+  - Also fixed: `engine.contract`'s description in `scripts/pipeline.ps1` said
+    "All 62 JSON-RPC methods", which the report showed was stale (65); it now says
+    "Every registered method", so it cannot rot again.
 
 - **ط3 - the opsec probe runs from the release tier**
   - `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`:

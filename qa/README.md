@@ -14,6 +14,11 @@ Three files:
 | `contract.dart` | The harness: starts a real `mics-engine` in a throw-away sandbox, runs every row, writes `build/qa-contract.json`. |
 | `support/pipe.dart`, `support/engine_host.dart` | A JSON-RPC client with a deadline, and the isolated engine process. |
 
+`registry.dart` is where the committed registries are read (`methods.json`, the
+UI ledger, the opsec baseline, and the dispatcher's match table). The report and
+`test/qa_registry_test.dart` both go through it, so "registered" has one
+definition.
+
 The fourth thing is `test/qa_registry_test.dart`, which fails if `methods.json`
 and the dispatcher's match table ever disagree — so a method cannot ship
 untested, and a row cannot outlive its method.
@@ -51,6 +56,34 @@ change. It does not prove a button does the right thing on a real machine
 (`engine.contract` and the manual runs are what carry that), and it deliberately
 normalises to English between taps so labels are comparable — RTL is covered by
 `test/i18n_parity_test.dart` and `test/dark_contrast_audit_test.dart`, not here.
+
+## The report: `report.md` and `report.html`
+
+The registries above describe a surface; the report is what a human reads to see
+it, and what the build refuses to let drift. Both files are **committed**, built
+by `qa/report.dart` from committed inputs only — no clock, no machine path, no run
+timing, no hash — which is what makes a byte-for-byte comparison possible:
+
+```powershell
+# regenerate, then read the diff (the same ratchet as qa/ui/ledger.json)
+$env:QA_REPORT_WRITE = "1"; dart run qa\report.dart
+
+# check mode: exits 1 and names the stale file
+dart run qa\report.dart
+```
+
+`test/qa_report_test.dart` runs the same comparison in the fast tier, so a method,
+screen, control, language, shipped file, test file or pipeline step that lands
+without the report lands with a red build. It also holds the other claims: the
+surface is not degenerate (a parse that silently stopped matching would be small
+and tidy and wrong), every language directory is listed under `assets:` in
+`pubspec.yaml`, every `skip` reason is at least 20 characters, and the report
+names no machine (no user path, no account name, ASCII only).
+
+What it is not: a run. The numbers are declarations in committed files, so a test
+that failed still counts as declared. What actually executed, and how long each
+step took, is in `build/qa-contract.json` and `build/pipeline-<tier>.json`; CI
+uploads both next to this report.
 
 ## Running it
 
