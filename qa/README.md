@@ -114,7 +114,12 @@ compares the result with this file:
 
 `-Measure` prints the table and the JSON to paste in, and writes nothing:
 raising a count is a decision a human records. `make-release.ps1` runs the probe
-against the staging folder, and `test/opsec_baseline_test.dart` keeps the file
+against the staging folder - so a leaking build is never published - and
+`-Tier release` runs it against `dist\MICS-portable` (ط3). `scripts/engine-rustflags.ps1`
+is the other half: it appends the remap to the engine's own rustflags, because
+`CARGO_ENCODED_RUSTFLAGS` replaces `.cargo\config.toml` rather than adding to it,
+and doing that by hand cost the engine its CFG table on 2026-11-02.
+`test/opsec_baseline_test.dart` keeps the file
 honest (reasons present, markers equal to the probe's own list, no user path).
 The `cargo`/`rustc` rows are what is left after ط1's
 `--remap-path-prefix=$env:USERPROFILE=/build`.

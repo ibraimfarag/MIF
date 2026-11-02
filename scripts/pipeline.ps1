@@ -14,8 +14,10 @@
       fast     what must be green before every commit (the four checks).
       full     fast + the release builds, so packaging is never the first place
                a compile error appears.
-      release  full + the artifact verifiers (hardening, release, installer,
-               opsec, tamper, reliability). Needs a signed/dist artifact.
+      release  full + the artifact verifiers, one per slice as they land
+               (today: opsec; hardening and release already run inside
+               make-release.ps1 / verify-release.ps1). Needs a packaged
+               `dist` artifact.
 
     Every step is one command with one working directory, and a failure stops the
     run immediately: the report names the step that failed instead of hiding it
@@ -187,6 +189,20 @@ $steps = @(
         Dir  = $repo
         Run  = { flutter build windows --release }
         What = 'Release build of the Windows app'
+    },
+    @{
+        Id   = 'opsec.verify'
+        Tier = 'release'
+        Dir  = $repo
+        Run  = {
+            # The shipped bytes, not the build flags: does the package name the
+            # account that built it, and did any counted fingerprint grow past
+            # `qa\opsec-baseline.json`? It reads `dist\MICS-portable`, the folder
+            # `make-release.ps1` assembles (and gates on the same probe), so this
+            # verifies the artifact - package first, then `-Tier release`.
+            powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-opsec.ps1')
+        }
+        What = 'The packaged files carry no build fingerprint the baseline forbids'
     }
 )
 
