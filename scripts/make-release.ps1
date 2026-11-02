@@ -165,11 +165,13 @@ if (-not $SkipBuild) {
     # fingerprint slice): rustc records the source directory of every dependency,
     # which by default is `%USERPROFILE%\.cargo\registry\src\...`, so the release
     # binary carried the account name 1238 times. The remap rewrites that prefix
-    # while compiling. `CARGO_ENCODED_RUSTFLAGS`, not `RUSTFLAGS`: it is split on
-    # the unit separator, so a profile path containing a space cannot break the
-    # flag. `scripts\verify-opsec.ps1` reads the result and refuses to publish a
-    # package that still names the account.
-    $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$($env:USERPROFILE)=/build"
+    # while compiling. It has to be *appended* to the crate's own flags, because
+    # `CARGO_ENCODED_RUSTFLAGS` overrides `.cargo\config.toml` instead of adding
+    # to it - setting the remap alone cost the engine its CFG table, which the
+    # hardening gate below refused on 2026-11-02 (`engine-rustflags.ps1` reads the
+    # config, so it stays the one place the flags are written down).
+    . (Join-Path $PSScriptRoot "engine-rustflags.ps1")
+    $env:CARGO_ENCODED_RUSTFLAGS = Get-EngineRustFlags -Repo $root
     & cargo build --release
     $cargoExit = $LASTEXITCODE
   } finally {

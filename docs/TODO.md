@@ -50,19 +50,19 @@
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
 > **next: ط3 — the ratchet in the release tier** (ز2-أ, ز2-ب, ز2-ج, ز3 and ط1 are
-> done and proved: a panic and a killed run each become one `MICS-<date>-<hash>`
-> report with a JSON+text bundle under `<data dir>\crashes\`, readable over
-> `crash.list`/`crash.get`; a `std::thread` watchdog — started with the session —
-> files a `hang` report naming the stuck duration and the last request when the
-> runtime's heartbeat stops; Settings → Diagnostics lists those reports, shows the
-> id and the readable message, copies the paste text whose first line is the id,
-> and deletes one; the alert gate has a second destination, in-app cards in the
-> window's bottom corner — every severity including LOW, the crash card carrying
-> its bug id, right in LTR and left in RTL; and the shipped engine no longer names
-> the account that built it: `--remap-path-prefix` took the 1238 hits to 0, and
-> `scripts/verify-opsec.ps1` + `qa/opsec-baseline.json` ratchet the five counted
-> markers from a real measurement. 111 engine tests, contract 78 cases / 0 failed,
-> 120 Dart tests, shell ledger 21 controls). The rest of the track is cut
+> done and proved: a panic and a killed run each become one
+> `MICS-<date>-<hash>` report with a JSON+text bundle under `<data dir>\crashes\`,
+> readable over `crash.list`/`crash.get`; a `std::thread` watchdog — started with
+> the session — files a `hang` report naming the stuck duration and the last
+> request when the runtime's heartbeat stops; Settings → Diagnostics lists those
+> reports, shows the id and the readable message, copies the paste text whose
+> first line is the id, and deletes one; the alert gate has a second destination,
+> in-app cards in the window's bottom corner — every severity including LOW, the
+> crash card carrying its bug id, right in LTR and left in RTL; and the shipped
+> engine no longer names the account that built it: `--remap-path-prefix` took the
+> 1238 hits to 0, and `scripts/verify-opsec.ps1` + `qa/opsec-baseline.json` ratchet
+> the five counted markers from a real measurement. 111 engine tests, contract 78
+> cases / 0 failed, 120 Dart tests, shell ledger 21 controls). The rest of the track is cut
 > into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
 > endpoint and is the only blocked slice besides ط2 (which sits on ج2's signed
@@ -580,6 +580,29 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **fix - the path remap replaced the engine's own rustflags instead of adding to them**
+  - ط1 set `CARGO_ENCODED_RUSTFLAGS` to `--remap-path-prefix=...` and nothing else.
+    That variable (like `RUSTFLAGS`) **overrides** `engine\.cargo\config.toml`
+    rather than adding to it, so `-C control-flow-guard=yes` (ج1, D-021) stopped
+    being passed and the release engine came out without a CFG table. The fast tier
+    cannot see this: only the release lane reads the PE.
+  - Caught the day it was introduced, by the gate that exists for exactly this:
+    `make-release.ps1` refused to package the build -
+    `mics-engine.exe (23,898,624 bytes) DllCharacteristics 0x8160` (no GUARD_CF)
+    and `GuardFlags 0x00000100` (no function table, no longjump table), while
+    `mics_app.exe` in the same staging folder still measured `0xC160`.
+  - `scripts\engine-rustflags.ps1` reads `engine\.cargo\config.toml` the way cargo
+    reads it (host target section first, then `[build]`; a multi-line array is
+    fine; a config it cannot parse throws instead of building quietly), appends the
+    remap, and hands back a unit-separator-joined string. `make-release.ps1` and
+    the `engine.build` step both call it, so the flag list stays in one file.
+  - Measured 2026-11-02: `powershell -File scripts\engine-rustflags.ps1` prints
+    `-C | control-flow-guard=yes | --remap-path-prefix=<profile>=/build`; the
+    rebuilt engine measures `DllCharacteristics 0xC160` with
+    `GuardFlags 0x00017500` (CF_INSTRUMENTED + function table + longjump table),
+    keeps **0** hits for the account name, and the counted rows did not move
+    (1242 `cargo`, 97 `rustc`), so the baseline needed no rewrite.
 
 - **ط1 - the shipped engine no longer names the account that built it**
   - `rustc` records the source directory of every crate it compiles, so the

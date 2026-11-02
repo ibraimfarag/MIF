@@ -135,9 +135,13 @@ $steps = @(
             # A release build that is meant to be shipped must not name this
             # machine's user. rustc records the source directory of every
             # dependency, which by default is `%USERPROFILE%\.cargo\registry\...`;
-            # the remap rewrites that prefix, so `-Tier full` builds the same
-            # clean binary `make-release.ps1` packages.
-            $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$($env:USERPROFILE)=/build"
+            # `engine-rustflags.ps1` appends the remap to the crate's own flags,
+            # because `CARGO_ENCODED_RUSTFLAGS` overrides `.cargo\config.toml`
+            # rather than adding to it (remapping by hand cost the engine its CFG
+            # table, caught by the hardening gate on 2026-11-02). So `-Tier full`
+            # builds the same clean binary `make-release.ps1` packages.
+            . (Join-Path $repo 'scripts\engine-rustflags.ps1')
+            $env:CARGO_ENCODED_RUSTFLAGS = Get-EngineRustFlags -Repo $repo
             cargo build --release
         }
         What = 'Release build of the engine'
