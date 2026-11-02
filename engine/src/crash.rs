@@ -1,11 +1,16 @@
 //! Crash reporting: detect it, name it, write it down (ز2).
 //!
-//! Nothing in this module sends anything anywhere. One JSON bundle and one
-//! readable text file per distinct failure are written under
+//! Nothing in this module sends anything off the machine. One JSON bundle and
+//! one readable text file per distinct failure are written under
 //! `<data dir>\crashes\`, and the UI reads them over the pipe
 //! (`crash.list` / `crash.get` / `crash.delete`). Delivery off the machine is a
 //! separate step and needs **D-023** (`AGENTS.md` rule 8), so there is no URL,
 //! no socket and no HTTP client in this file on purpose.
+//!
+//! The one thing that leaves the module is an in-app card: filing a report hands
+//! the bug id to [`crate::notify::alert`] (D-024), so a user who is looking at
+//! the app learns that the engine wrote one. That card never leaves the app
+//! either, and it is best effort — the panic path may not outlive the abort.
 //!
 //! What is detected here:
 //!
@@ -250,6 +255,10 @@ fn note_keyed(
     let json = serde_json::to_string_pretty(&report).ok()?;
     std::fs::write(dir.join(format!("{bug_id}.json")), json).ok()?;
     std::fs::write(dir.join(format!("{bug_id}.txt")), render(&report)).ok()?;
+    // The files are the record; the card is how a user who is looking at the
+    // app finds out (D-024). It is raised after both files are on disk, so a
+    // card can never point at a report that is not there.
+    crate::notify::alert::report_filed(&bug_id, kind, message);
     Some(bug_id)
 }
 

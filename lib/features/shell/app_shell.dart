@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/core/notify/alert_cards.dart';
 import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
+import 'package:mics_app/models/alert_card.dart';
 import 'package:mics_app/providers/providers.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -70,31 +72,166 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
     return Directionality(
       textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.background,
-                Color.lerp(AppColors.background, AppColors.cyan, 0.03)!,
+        body: Stack(
+          children: [
+            Positioned.fill(child: _chrome(engineState, selectedIndex)),
+            // The in-app alert cards (D-024) sit in the bottom corner: `end` is
+            // the right in LTR and the left in RTL, and it comes from the
+            // Directionality above — which is `rtlProvider`, never a language
+            // name.
+            const PositionedDirectional(
+              end: 18,
+              bottom: 18,
+              child: _AlertCards(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chrome(EngineState engineState, int selectedIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.background,
+            Color.lerp(AppColors.background, AppColors.cyan, 0.03)!,
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          _TitleBar(engineState: engineState),
+          Expanded(
+            child: Row(
+              children: [
+                _BrandRail(selectedIndex: selectedIndex),
+                VerticalDivider(width: 1, color: AppColors.border),
+                Expanded(child: widget.child),
               ],
             ),
           ),
-          child: Column(
-            children: [
-              _TitleBar(engineState: engineState),
-              Expanded(
-                child: Row(
-                  children: [
-                    _BrandRail(selectedIndex: selectedIndex),
-                    VerticalDivider(width: 1, color: AppColors.border),
-                    Expanded(child: widget.child),
-                  ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------- in-app alert cards (D-024) ----------------
+
+/// The cards the engine's gate decided to surface in the app window.
+///
+/// The engine decides and words them (`notify/alert.rs`); this paints them in
+/// the bottom corner, closes them and opens the screen that explains one. The
+/// stack is a widget and not an `OverlayEntry` on purpose: it is part of the
+/// shell, so the UI sweep in `qa/ui` sees it like any other control.
+class _AlertCards extends ConsumerWidget {
+  const _AlertCards();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cards = ref.watch(alertCardsProvider);
+    if (cards.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      key: const ValueKey('alert-cards'),
+      width: 340,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final card in cards)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _AlertCardTile(card: card),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlertCardTile extends ConsumerWidget {
+  const _AlertCardTile({required this.card});
+
+  final AlertCard card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = card.severityColor;
+    final bugId = card.bugId;
+    return Material(
+      color: AppColors.surface,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(card.icon, size: 16, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: InkWell(
+                onTap: () => context.go(card.route),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.title,
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (bugId != null) ...[
+                        const SizedBox(height: 4),
+                        // The bug id is the one thing a user reads out to
+                        // whoever supports the build, so it is monospaced and
+                        // selectable.
+                        SelectableText(
+                          bugId,
+                          style: AppTheme.mono(size: 11, color: AppColors.text),
+                        ),
+                      ],
+                      const SizedBox(height: 3),
+                      Text(
+                        card.body,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: AppColors.muted, fontSize: 11),
+                      ),
+                      if (card.kind == 'crash') ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr('card.crashNotSent'),
+                          style:
+                              TextStyle(color: AppColors.muted, fontSize: 10),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+            IconButton(
+              tooltip: context.tr('card.dismiss'),
+              onPressed: () =>
+                  ref.read(alertCardsProvider.notifier).dismiss(card),
+              icon: const Icon(Icons.close, size: 14),
+              color: AppColors.muted,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ),
       ),
     );

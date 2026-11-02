@@ -244,6 +244,16 @@ async fn handle_client(stream: NamedPipeServer) -> Result<()> {
 
     // Forward engine push traffic (guard events, job progress) to this client.
     let mut events = crate::jobs::subscribe();
+    // A card raised while nobody was connected waited for this moment: the
+    // `unclean-exit` report is filed while the engine is still starting, before
+    // any client could be attached (D-024). Subscribing first means a card
+    // raised from here on is delivered live and never parked twice.
+    for card in crate::notify::alert::take_pending() {
+        let _ = out_tx.send(crate::jobs::envelope(
+            crate::notify::alert::CARD_METHOD,
+            card,
+        ));
+    }
     let notify_tx = out_tx.clone();
     let notify_task = tokio::spawn(async move {
         loop {

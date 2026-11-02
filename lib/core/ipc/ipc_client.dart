@@ -28,12 +28,18 @@ class EngineIpc {
   final _eventController = StreamController<Map<String, dynamic>>.broadcast();
   final _progressController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _alertController = StreamController<Map<String, dynamic>>.broadcast();
 
   /// Engine-pushed events (guard/canary/job_finished).
   Stream<Map<String, dynamic>> get eventStream => _eventController.stream;
 
   /// Engine-pushed scan progress notifications.
   Stream<Map<String, dynamic>> get progressStream => _progressController.stream;
+
+  /// In-app alert cards the engine's gate decided to surface (D-024). A
+  /// separate stream on purpose: these are cards, not guard events, and the
+  /// Guard screen must not grow a row for each one.
+  Stream<Map<String, dynamic>> get alertStream => _alertController.stream;
 
   Timer? _restartTimer;
   Timer? _heartbeat;
@@ -156,6 +162,11 @@ class EngineIpc {
         if (!_progressController.isClosed) _progressController.add(params);
         return;
       }
+      if (id == null && msg['method'] == 'alert') {
+        final params = (msg['params'] as Map?)?.cast<String, dynamic>() ?? {};
+        if (!_alertController.isClosed) _alertController.add(params);
+        return;
+      }
       if (id is int && _pending.containsKey(id)) {
         final completer = _pending.remove(id)!;
         final error = msg['error'];
@@ -260,6 +271,7 @@ class EngineIpc {
     _statusController.close();
     _eventController.close();
     _progressController.close();
+    _alertController.close();
   }
 }
 

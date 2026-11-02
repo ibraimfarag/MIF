@@ -223,7 +223,7 @@ product trusts the label.
 | AP-6 | "hide from the scanner" | Acknowledged: user-mode, hash-IOC + YARA only — no unpacking, emulation, memory scanning. A custom packer wins round one; the guard's behavioural rules are round two | `scanner/`, F-9 |
 | AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the copy says "modified" and never claims otherwise | `guard/canary.rs` (F-4, copy fixed) |
 | AP-8 | "starve the engine with a hung tool" | Every external tool call has a deadline through one choke point, enforced by a source-scanning test | `platform/windows/process.rs`, `every_spawn_site_enforces_its_deadline` |
-| AP-9 | "forge a card to trigger a Quarantine click" | The card is display only; the action id is validated when the engine handles it | `notify/`, D-013 |
+| AP-9 | "forge a card to trigger a Quarantine click" | The card is display only; the action id is validated when the engine handles it. The in-app card (D-024) is forged the same way a desktop card is — through the AUMID or the pipe — and it is display only too: its tap opens a screen, it never performs an action | `notify/`, D-013, D-024 |
 | AP-10 | "read the engine's traffic as another local user" | Was possible through the default `WD`/`AN` read ACEs; **closed** by the explicit pipe ACL below | B2, F-1 (fixed) |
 | AP-11 | "redirect traffic through the managed hosts section" | Reversible, audited, shape-validated — but any interactive user may ask (B3) | `PRIVILEGED-OPS.md`, F-2 |
 | AP-12 | "kill the engine and stay quiet" | Same-token code can kill it; there is no self-defense or watchdog. The helper service survives, and the UI reconnects and reports the gap | F-8 |

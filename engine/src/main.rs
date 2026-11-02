@@ -248,6 +248,15 @@ async fn run() -> Result<()> {
             });
             // Job progress / completion notifications share the same stdout.
             let mut notifs = jobs::subscribe();
+            // Cards raised before this client existed (a report filed at
+            // startup, D-024) are replayed first; subscribing first keeps a
+            // later card from being both live and replayed.
+            for card in notify::alert::take_pending() {
+                println!(
+                    "{}",
+                    jobs::envelope(notify::alert::CARD_METHOD, card)
+                );
+            }
             tokio::spawn(async move {
                 while let Ok(msg) = notifs.recv().await {
                     println!("{msg}");

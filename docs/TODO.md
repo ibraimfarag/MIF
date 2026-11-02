@@ -49,16 +49,18 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ز3 — the in-app notification cards** (ز2-أ, ز2-ب and ز2-ج are done and
+> **next: ط1 — the fingerprint sweep** (ز2-أ, ز2-ب, ز2-ج and ز3 are done and
 > proved: a panic and a killed run each become one `MICS-<date>-<hash>` report with
 > a JSON+text bundle under `<data dir>\crashes\`, readable over
 > `crash.list`/`crash.get`; a `std::thread` watchdog — started with the session —
 > files a `hang` report naming the stuck duration and the last request when the
-> runtime's heartbeat stops; and Settings → Diagnostics lists those reports,
-> shows the id and the readable message, copies the paste text whose first line is
-> the id, and deletes one. 106 engine tests, contract 78 cases / 0 failed, 114
-> Dart tests). The rest of the track is cut into commit-sized slices in §0.3b, and
-> §0.3c says what each one has to prove.
+> runtime's heartbeat stops; Settings → Diagnostics lists those reports, shows the
+> id and the readable message, copies the paste text whose first line is the id,
+> and deletes one; and the alert gate has a second destination, in-app cards in the
+> window's bottom corner — every severity including LOW, the crash card carrying
+> its bug id, right in LTR and left in RTL. 111 engine tests, contract 78 cases / 0
+> failed, 115 Dart tests, shell ledger 21 controls). The rest of the track is cut
+> into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
 > endpoint and is the only blocked slice. The user
 > approved the
@@ -90,13 +92,12 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ز3**: كروت الإشعارات جوه التطبيق (الركن تحت، يمين في LTR وشمال في RTL،
-> مربوطة بـ alert gate الموجود، وكارت الانهيار بيحمل الـ bug id). خطوة واحدة بس،
-> كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **ط1**: خطوة البصمة (fingerprint sweep) — `--remap-path-prefix` يشيل مسار مستخدم
+> البيلد، وقائمة سماح مكتوب سبب كل مدخل فيها، وتست بتمنع زيادة أي عدد. خطوة واحدة
+> بس، كوميت واحد، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ز3 - the in-app notification cards** as one commit-sized slice, and stop for
-review.
+**ط1 - the fingerprint sweep** as one commit-sized slice, and stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
@@ -325,9 +326,9 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز2-أ**~~ | ~~Crash capture: session marker, panic hook, `MICS-<date>-<hash>` bug id, JSON + text bundle under `<data dir>\crashes\`, `crash.list` / `crash.get` / `crash.delete`~~ — **done** | measured 2026-11-01: 100 engine tests, contract 78 cases / 0 failed, a killed engine is reported once with its pid |
 | ~~**ز2-ب**~~ | ~~**Hang detector**: a watchdog thread the runtime cannot block names a hang (`hang` report from the engine itself, so nothing off the machine and no UI filesystem access). Details and the honest limits are in §0.3c~~ — **done** | measured 2026-11-02: 106 engine tests (+6), one report per frozen heartbeat with the stuck time and the last request, no false report from a runtime that keeps beating |
 | ~~**ز2-ج**~~ | ~~**The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls~~ — **done** | measured 2026-11-02: 114 Dart tests (+4), the ledger gained exactly the four Diagnostics controls and nothing else, and the id on screen is the id sent to `crash.get`/`crash.delete` and the id the pasted text starts with |
+| ~~**ز3**~~ | ~~In-app notification cards in the window's bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash card carries the bug id~~ — **done** | measured 2026-11-02: 111 engine tests (+5), 115 Dart tests (+1) and exactly two new controls in the shell ledger; the card measures `right = 1682` in LTR and `left = 18` in RTL inside the 1700-wide window |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
-| **ز3** | In-app notification cards, bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash cards show the bug id from ز2-ج | next |
-| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | after ز3 |
+| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) | next |
 | **د5** | Coverage gates, `qa/report`, docs | last |
 
 ### 0.3c How each remaining slice is done (so a new session can start cold)
@@ -341,7 +342,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ز2-ب** hang detector~~ — **done** (2026-11-02) | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
 | ~~**ز2-ج** bug-id surface~~ — **done** (2026-11-02) | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
 | **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |
-| **ز3** cards | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says whether it was delivered. Until **ز2-د** lands no report carries a delivery state at all (the ز2-ج Done entry says why), so the card may only say delivery is off - it must not invent a field. |
+| ~~**ز3** cards~~ — **done** (2026-11-02) | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says delivery is off (no report has a delivery state until ز2-د, D-024). The engine pushes the card as its own `alert` notification, parks it when no UI is attached, and the shell paints it as a widget the sweep can tap. |
 | **ط1** fingerprint | `--remap-path-prefix` removes the build user's home path, the counts for `flutter`/`dart`/`cargo`/`rustc` are recorded in an allowlist with a written reason per entry, and a ratchet test fails when a count rises. |
 | **ط2 / ط3** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; `verify-opsec.ps1` + `verify-tamper.ps1` run under `-Tier release`. |
 | **د5** report | `qa/report.html` + `.md` from the contract JSON, coverage gates, and CI fails when a feature is not registered. |
@@ -574,6 +575,71 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ز3 - the alert gate has a second destination: in-app cards in the window**
+  - `engine/src/notify/alert.rs` keeps D-013's desktop policy untouched and adds
+    `decide_in_app(severity, dnd)`: **every severity reaches the app**, `low`
+    included, DND is the only switch that silences it (below CRITICAL), and
+    `toast_enabled` is not consulted at all because it is the *desktop's* switch.
+    Producers were already calling `alert::*`, so no call site grew a policy — they
+    only pass a class now (`guard`, `canary`, `scan`, `quarantine`, `protection`,
+    `crash`) and the UI uses it to pick the icon and the screen a tap opens.
+  - A card leaves the gate as a JSON-RPC **push** named `alert` —
+    `{kind, severity, title, body, bug_id?, report_kind?}` — through the same
+    `jobs::notify` channel as `event`/`progress`, so both transports (pipe and
+    stdio) carry it with no new request method: `qa/methods.json` stays at **65**
+    rows and `test/qa_registry_test.dart` needed nothing.
+  - `crash.rs::note_keyed` raises a card for every report it writes (panic, unclean
+    exit, hang) **after** both files are on disk, carrying the bug id as its own
+    field and the report kind for the icon. That is how a user who is looking at the
+    window learns a bundle exists; ز2-ج's Diagnostics list is still where it is read.
+  - A card raised before a UI exists is **parked, not lost**: `jobs::has_subscribers()`
+    is false while the engine is starting, so the `unclean-exit` report filed at
+    startup waits in a queue capped at **5** (oldest dropped) and is handed to the
+    first transport that subscribes (`pipe.rs::handle_client`, and the stdio loop in
+    `main.rs`). Subscribe-then-drain, so a card is never delivered twice.
+  - The UI side: `ipc_client.dart` grew an `alertStream` (a third branch in the
+    demux, next to `event` and `progress`), `lib/models/alert_card.dart` reads the
+    push, `lib/core/notify/alert_cards.dart` holds at most **3** cards (newest first,
+    one card per bug id) and drops the oldest, and `AppShell` paints them in a
+    `PositionedDirectional(end, bottom)` inside its `Stack` - so `end` is the right
+    corner in LTR and the left in RTL, from `rtlProvider`, with no language name in
+    sight. Each card: icon by class, severity colour from the palette (the contrast
+    audit measures it), the bug id in mono when there is one, a body clipped to three
+    lines, a line saying **delivery is off** on a crash card, a close button, and a
+    tappable body that opens the screen explaining that class (`crash` → Settings).
+    Nothing auto-hides: the Guard screen, the incident list and `crash.list` are the
+    record, the corner is a nudge.
+  - Measured 2026-11-02: **111 engine tests** (was 106: five for the in-app policy,
+    the waiting list and the card shape), **115 Dart tests** (was 114: the new shell
+    behaviour test), `clippy -D warnings` clean, `flutter analyze` clean, and the four
+    checks green through `scripts\pipeline.ps1 -Tier fast` (**128 s**). The shell
+    ledger gained **exactly two** controls - `InkWell(🧯 MI CS — the engine filed a
+    crash report)` and `IconButton(Dismiss notification)` - and no other entry moved.
+  - The behaviour test is the receipt for the two things the slice promises: after
+    the fake files a report the card is on screen with its bug id, its box measures
+    `right = 1682` (1700 − 18) in LTR and `left = 18` in RTL, and closing it removes
+    both the box and the id. The sweep also taps the card body, which navigates to
+    the stub `/settings` route and comes back - so the ledger proves it is a real
+    control, not decoration.
+  - End to end on a real engine, isolated (`MICS_DATA_DIR` under `%TEMP%`,
+    `MICS_NO_SINGLETON`, `MICS_NO_GUARD`), with a session marker left behind by a run
+    that never said goodbye: `mics-engine serve` filed `MICS-20261102-e09798` while
+    starting - before any client could exist - and the first line on its stdout was
+    `{"jsonrpc":"2.0","method":"alert","params":{...,"bug_id":"MICS-20261102-e09798",
+    "report_kind":"unclean-exit"}}`, i.e. the parked card delivered on connect. The
+    title came out Arabic (المحرك سجّل تقرير انهيار) because the isolated data dir has
+    no settings document and `ar` is the shipped default - the copy follows
+    `settings.lang`, not the build.
+  - **Honest limits, in the code and here**: (1) the panic path's card is best
+    effort - the process is aborting, and the bundle on disk, not the card, is the
+    record there; (2) a card says nothing about delivery because nothing is
+    delivered - that is ز2-د (D-023), and D-024 fixes that no card may invent a
+    delivery state; (3) `notify.test` (the Settings button) still proves the desktop
+    card only, because routing it through the gate would change what that method
+    answers, which is its own slice; (4) up to three cards are visible and older ones
+    are dropped, so a flood of LOW events shows the newest three - the guard list
+    keeps all 100.
 
 - **ز2, third slice (ج) - the bug id now has a surface a user can act on**
   - `lib/models/crash_models.dart` reads the two shapes the engine sends

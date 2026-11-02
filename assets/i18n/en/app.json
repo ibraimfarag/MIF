@@ -1,5 +1,7 @@
 ﻿{
   "app.name": "MI CS",
   "app.tagline": "Smart. Transparent. Open-source defense.",
-  "shell.theme": "Theme"
+  "shell.theme": "Theme",
+  "card.dismiss": "Dismiss notification",
+  "card.crashNotSent": "Not sent anywhere — delivery is off"
 }

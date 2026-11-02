@@ -452,6 +452,71 @@ adding it in both languages (the alert tests pin every key the producers use);
 `flutter test` stay green; and a release is only "alerting" once
 `scripts/verify-toast.ps1` reports PASS against the **deployed** binary.
 
+**D-024 adds a second destination, not a second policy.** The rules above still govern
+the desktop card; D-024 turns "LOW stays in the app" into a surface (an in-app card in
+the window's bottom corner) and fixes what `toast_enabled` and do-not-disturb mean for
+it. One gate, two destinations.
+
+## D-024 — In-app alert cards: a second destination of the same gate, not a second policy
+
+**Status:** accepted (2026-11-02)
+
+**Context.** D-013 ended the policy with "LOW stays in the app", but there was no "app"
+to stay in: every consumer of the engine's push stream either stored the event (the
+Guard screen's list, the incident log) or played a sound, and nothing ever put anything
+in front of the user. The desktop card was also the *only* surface, so a user who
+switched desktop notifications off said "do not interrupt me" and lost the alerts
+entirely, while a LOW event — a rule the user wrote, a process the guard caught but did
+not consider dangerous — had nowhere to land at all.
+
+**Decision.** The gate in `engine/src/notify/alert.rs` gains a second destination.
+D-013's policy for the desktop is untouched.
+
+1. **One gate, two destinations.** A producer still calls `alert::*` and nothing else.
+   The gate decides the desktop card (`decide`, exactly as D-013 fixed it) and the
+   in-app card (`decide_in_app`) from the same inputs.
+2. **`toast_enabled` is the desktop's switch, not the app's.** Turning desktop
+   notifications off silences Windows toasts and nothing else. The in-app cards keep
+   coming, which is what makes the switch usable instead of a way to go blind.
+3. **Do-not-disturb is the only switch that silences the app**, and it means the same
+   thing on both surfaces: CRITICAL passes, everything below it waits. An event with no
+   severity is a producer bug, never a card.
+4. **LOW reaches the app.** That is what "stays in the app" meant; the desktop still
+   refuses it, because a card above the taskbar for every LOW event is a log file.
+5. **The engine decides and words the card**, as in D-013: `settings.lang` picks the
+   copy and the card arrives as a JSON-RPC push named `alert`
+   (`{kind, severity, title, body, bug_id?, report_kind?}`) on the same pipe. The UI
+   never reads the settings to decide whether to show a card — it paints what arrives.
+6. **A card raised before a UI exists is kept, not lost.** With no transport subscribed
+   the engine parks cards in a short queue (`PENDING_CAP = 5`, oldest dropped) and
+   hands them to the first client that connects: the `unclean-exit` report is filed
+   while the engine is still starting, seconds before the window attaches to the pipe.
+   A card is a nudge, not a record, which is why the queue is short.
+7. **A filed crash report raises a card carrying its bug id** (ز2-ج gave the id a
+   surface; this is how a user learns one exists). The id travels as its own field, and
+   the card says delivery is off, because it is: no report has a delivery state until
+   ز2-د (D-023). The panic path's card is best effort — the engine is aborting — and the
+   bundle on disk, not the card, is the record there.
+8. **The card lives in the shell, not in an overlay.** It is a widget in `AppShell`'s
+   `Stack`, so it exists on every screen, the UI sweep in `qa/ui` sees and taps it like
+   any other control, and the ledger fails if it (or its close button) disappears. It
+   sits in the bottom corner — right in LTR, left in RTL, from `rtlProvider` — never
+   auto-hides, closes on its own button, and its body opens the screen that explains
+   that class of alert. At most three are visible and the newest wins, because the
+   record is elsewhere: the Guard screen, the incident list, `crash.list`.
+
+**Why.** "Anything that happens should put a card above the taskbar" was D-013's
+request; this is the same request for a user who is looking at the window, and it
+answers the contradiction D-013 left behind — LOW had no destination. The alternative
+(the UI watching `eventStream` and deciding for itself) would have created a second
+policy with its own idea of DND, which is exactly what D-013 forbids.
+
+**Commits us to.** A new alert producer calls `alert::*` and lets the gate choose the
+destinations; `settings.lang` stays the only source of card copy, in both languages
+(`every_copy_key_exists_in_both_languages` pins it); the `alert` method is a *push*, so
+it is not a `qa/methods.json` row (that registry is request methods and stays at 65);
+and `flutter test` keeps the shell ledger honest.
+
 ## D-014 — A section re-check merges into the last full audit; the engine owns the score
 
 **Context.** `audit.run` can run named `params.sections` (7 ms for one check

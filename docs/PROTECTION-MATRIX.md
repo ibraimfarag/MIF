@@ -215,9 +215,13 @@ success (register, MED).
 Cards (AUMID `MICS`, D-013), Markdown reports in `Documents\MICS-Reports`, the JSONL
 event stream over the pipe, the SQLite history, and the helper's own audit trail
 (`%PROGRAMDATA%\MICS\logs\priv.log`: intent and outcome, never the payload). Cards
-follow one policy — CRITICAL/HIGH/MEDIUM become cards, LOW stays in the app,
+follow one policy — CRITICAL/HIGH/MEDIUM become desktop cards, LOW stays in the app,
 do-not-disturb keeps only CRITICAL, and a switch turns them off — so "no card" is
-never proof that nothing happened.
+never proof that nothing happened. Since D-024 the app window is a destination of its
+own: every severity gets a card in its bottom corner (LOW included), the same
+do-not-disturb rule applies, the desktop switch does not touch them, and a crash report
+raises one carrying its bug id. The in-app card is display too, and it is bounded (three
+at a time) — the Guard screen, the incident list and `crash.list` are the record.
 
 Two honest limits: a card is display, not authority (any same-token process can
 raise one under our AUMID), and everything above is stored where a local

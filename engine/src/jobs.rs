@@ -27,16 +27,32 @@ pub fn subscribe() -> broadcast::Receiver<String> {
     events().subscribe()
 }
 
-/// Sends one JSON-RPC notification (`method` + `params`) to every client.
-pub fn notify(method: &str, params: serde_json::Value) {
-    let payload = json!({
+/// True while at least one transport is listening.
+///
+/// `notify` drops what nobody hears — which is fine for job progress — so a
+/// producer whose message has to wait until someone is there (the in-app alert
+/// cards) asks first and parks the message if the answer is no.
+pub fn has_subscribers() -> bool {
+    events().receiver_count() > 0
+}
+
+/// The JSON-RPC notification envelope [`notify`] sends.
+///
+/// A transport that has to replay a message it parked earlier builds exactly
+/// the same line through here, so there is one shape and not two.
+pub fn envelope(method: &str, params: serde_json::Value) -> String {
+    json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": params,
     })
-    .to_string();
+    .to_string()
+}
+
+/// Sends one JSON-RPC notification (`method` + `params`) to every client.
+pub fn notify(method: &str, params: serde_json::Value) {
     // No subscribers (CLI mode, or UI closed) is not an error.
-    let _ = events().send(payload);
+    let _ = events().send(envelope(method, params));
 }
 
 /// Scan progress, per spec section 5 (`progress` notifications).

@@ -52,6 +52,7 @@ class FakeEngine extends EngineIpc {
 
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   final _progress = StreamController<Map<String, dynamic>>.broadcast();
+  final _alerts = StreamController<Map<String, dynamic>>.broadcast();
 
   String _lang = 'en';
   final Map<String, Map<String, dynamic>> _jobs = {};
@@ -63,6 +64,9 @@ class FakeEngine extends EngineIpc {
 
   @override
   Stream<Map<String, dynamic>> get progressStream => _progress.stream;
+
+  @override
+  Stream<Map<String, dynamic>> get alertStream => _alerts.stream;
 
   @override
   EngineState get state => EngineState.running;
@@ -80,6 +84,7 @@ class FakeEngine extends EngineIpc {
   void dispose() {
     _events.close();
     _progress.close();
+    _alerts.close();
   }
 
   /// Pushes an engine notification into the screen, the way the real pipe does:
@@ -88,6 +93,31 @@ class FakeEngine extends EngineIpc {
   void emitEvent(Map<String, dynamic> params) => _events.add(params);
 
   void emitProgress(Map<String, dynamic> params) => _progress.add(params);
+
+  /// Pushes one in-app alert card, the way the engine's gate does (D-024).
+  /// The shell paints these in the window's bottom corner.
+  void emitAlert(Map<String, dynamic> card) => _alerts.add(card);
+
+  /// The card the engine raises when it files a crash report: the bug id as its
+  /// own field, and the title in the fake's current language, exactly like the
+  /// engine's copy table (`notify/alert.rs`).
+  void fileCrashReport({
+    String bugId = 'MICS-20261102-0d9743',
+    String reportKind = 'hang',
+    String message =
+        'the engine stopped making progress: no heartbeat for 8 s',
+  }) {
+    emitAlert({
+      'kind': 'crash',
+      'severity': 'critical',
+      'title': _lang == 'ar'
+          ? '🧯 MI CS — المحرك سجّل تقرير انهيار'
+          : '🧯 MI CS — the engine filed a crash report',
+      'body': message,
+      'bug_id': bugId,
+      'report_kind': reportKind,
+    });
+  }
 
   /// The steady state of a machine that has been running for a while: one
   /// guard alert in the last few minutes, so a screen that only shows pushed
