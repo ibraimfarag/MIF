@@ -32,7 +32,7 @@
 > pipe ACLs measured and eight residual risks filed**, and **the engine pipe now
 > refuses every caller but its owner, SYSTEM and administrators** (F-1 closed,
 > D-015) and **`docs/PROTECTION-MATRIX.md` says per layer what detects, what
-> blocks and what is missed** (with the starter-pack and no-scheduler limits
+> blocks and what is missed** (with the starter-pack and no-real-time-watch limits
 > written down instead of implied) and **the light-mode palette measured against
 > WCAG 2.2 and then fixed** (أ2: 36 pairs, 25 failing · أ3: 29 pairs, **29
 > passing**, every ratio pinned by a test — `docs/CONTRAST.md`) and **the AUMID is
@@ -127,33 +127,31 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **نص الواجهة من و1**: مفتاح الجدولة في الإعدادات (كل كم ساعة + الفولدر) مع
-> مفاتيح الترجمة عربي/إنجليزي، وتحديث `qa/report.md` بعدد عناصر التحكم الجديد —
-> بعدها خُد **و3** (استبدال `netsh` بـ FirewallAPI COM) ثم **و4** (صفوف LOW
-> القابلة للتنفيذ) ثم **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط). و**د3** مستنية
+> **و3**: استبدال نداء `netsh` في الجدار بواجهة **FirewallAPI COM** جوه المحرك،
+> مع اختبارات ونفس السلوك القابل للرجوع — بعدها **و4** (صفوف LOW القابلة للتنفيذ)
+> ثم **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط، وقول كده بصراحة). و**د3** مستنية
 > كليكة UAC منك; متكتبش أرقام من غير قياس. وشغّل `scripts\pipeline.ps1 -Tier
 > fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, then take
-**the UI half of و1** — the schedule control in Settings (every how many hours, and
-which folder) with its Arabic/English copy, and `qa/report.md` regenerated for the
-new control count — then **و3** (replace the `netsh` firewall call with the
-FirewallAPI COM interface), **و4** (the executable LOW register rows) and **ب2** (the
-ARM64 leg: built and compile-verified only, and say so). **د3** waits for one UAC
-click from the user: it is the E2E run on the built per-machine installer, which
-installs the product *and* the helper and then removes both from Apps & features;
-this session measured what it could instead (`scripts\verify-scan-schedule.ps1`) and
-invented nothing. Run `scripts\pipeline.ps1 -Tier fast` before every commit and stop
-for review after each one.
+**و3** — replace the `netsh` firewall call with the **FirewallAPI COM** interface
+inside the engine, with tests and the same reversible behaviour — then **و4** (the
+executable LOW register rows) and **ب2** (the ARM64 leg: built and compile-verified
+only, and say so). **د3** waits for one UAC click from the user: it is the E2E run on
+the built per-machine installer, which installs the product *and* the helper and then
+removes both from Apps & features; the autonomous half of it that could be written
+without the click has been written, and nothing was invented. Run
+`scripts\pipeline.ps1 -Tier fast` before every commit and stop for review after each
+one.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
 **ج2, ط2, ج3 and ب4 are done (2026-11-03)** — the package describes itself inside the
 engine's signature, the engine reports `status.integrity`, `scripts\verify-tamper.ps1`
 proves a tampered copy is refused by the gate and reported by the app, the README says
 exactly that, and the installer now creates and removes the privileged helper inside
-its own single UAC prompt (D-026) — and **و1's engine half is in** (D-027: the scan
-schedule, opt-in and report-only, proved by `scripts\verify-scan-schedule.ps1`).
-What is left is **و1's control in Settings**, **د3**, the register (§7) and the
+its own single UAC prompt (D-026) — and **و1 is done too** (D-027, both commits: the
+engine schedules the scan, Settings has the switch, `scripts\verify-scan-schedule.ps1`
+proves it). What is left is **و3**, **و4**, **ب2**, **د3**, the register (§7) and the
 things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
@@ -299,8 +297,8 @@ below remain the per-phase detail it was built from, with the step IDs the ROADM
 uses. The chosen order is:
 
 > **ج1** build hardening → **ب3** installer → **ب4** helper fold-in → **ج2** signed
-> manifest → **د1 + د2** QA → **هـ1 + و1** → **ب2 / د3 / د4** → **ب5 → ب6** once the
-> certificate exists.
+> manifest → **د1 + د2** QA → **هـ1 + و1** *(و1 done)* → **ب2 / د3 / د4** → **و3 + و4**
+> → **ب5 → ب6** once the certificate exists.
 
 Every row is one commit-sized step unless it says otherwise; **§0.5 carries the
 order the user picked (small → medium → large), and it is finished**
@@ -354,9 +352,9 @@ order the user picked (small → medium → large), and it is finished**
 
 `docs/TODO.md` §7 carries 19 open rows (2 HIGH, 5 MED, 12 LOW — the dark-mode row
 closed in small step 4). The MED ones
-worth pulling forward once the phases above allow it: **no scheduled scan and no
-real-time file watching**, the canary checker being poll-based, and the firewall
-going through `netsh` instead of FirewallAPI COM.
+worth pulling forward once the phases above allow it: **no real-time file watching**
+(the scheduled half landed with و1, D-027), the canary checker being poll-based, and
+the firewall going through `netsh` instead of FirewallAPI COM.
 The HIGH ones are the installer and the incomplete package when `rules\` is dropped by
 hand — both are ب's job.
 
@@ -492,9 +490,10 @@ what "next" means.
 
 **Medium — a subsystem or a build leg**
 
-- ~~**و1** scheduled scan~~ — **done 2026-11-03** (D-027): opt-in `scan_interval_hours`
-  (0 = off, default), `scan_target` (empty = profile), the engine's own record of the
-  last start, report-only, and `scripts\verify-scan-schedule.ps1` proves all three
+- ~~**و1** scheduled scan~~ — **done 2026-11-03** (D-027, both commits): opt-in
+  `scan_interval_hours` (0 = off, default), `scan_target` (empty = profile), the
+  engine's own record of the last start, report-only, the Settings switch and folder
+  with ar/en copy, and `scripts\verify-scan-schedule.ps1` (18 checks) proves all three
   claims; the register's MED row now points at real-time watching (و2) only
 - **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
 - ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
@@ -505,14 +504,14 @@ what "next" means.
   **done** 2026-11-03 (D-026; the per-machine run is the one item left for a human)
 - **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
 - **هـ1** a default update-manifest URL + signature check
-- the register's open MED rows: Defender tamper protection, scheduled scan +
-  real-time watching, FirewallAPI COM instead of `netsh`, canary read-only
+- the register's open MED rows: Defender tamper protection, real-time watching,
+  FirewallAPI COM instead of `netsh`, canary read-only
 
 **Large — where a human or money is required**
 
 - **د3** E2E against the built installer, **د4** `qa/report.html` + CI gate
 - **ب5** the certificate → **ب6** public release (both need the user)
-- scheduled scanning + real-time file watching as a real subsystem
+- real-time file watching as a real subsystem
 
 ---
 
@@ -640,8 +639,9 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
-- **و1 (engine half) — the engine runs a scan by itself: opt-in, report-only, and it
-  needs nobody watching (D-027)**
+- **و1 — the engine runs a scan by itself, and Settings has the switch: opt-in,
+  report-only, and it needs nobody watching (D-027)** *(two commits: the engine half
+  and the control below)*
   - **What moved.** `scan_interval_hours` (0 = off, and 0 is the default) and
     `scan_target` (empty = the current user's profile folder) joined the settings,
     validated like the rest: 0 or 1..168 hours, and an absolute path or empty. The
@@ -669,10 +669,28 @@ click (P1.5) or a purchased certificate (P4).
     sample on purpose: the first version of the probe planted EICAR, Defender
     quarantined it mid-scan, the engine recorded a skip and the probe was measuring
     the wrong program.
-  - **What is still missing, and said plainly:** the engine half only. The Settings
-    control that turns it on is the next commit, and real-time watching (the other
-    half of the register's MED row) is untouched — a schedule is a moment, not a
-    monitor.
+  - **The control, and the harness fix it forced.** Settings → Protection gained the
+    switch (off / 6 / 12 / 24 / 72 / 168 hours) and the folder field, with Arabic and
+    English copy in the same commit (`settings.scanHours`, `…Hint`, `settings.scanOff`,
+    `settings.scanTarget`, `…Hint`), the typed `AppSettings` view carries
+    `scan_interval_hours`/`scan_target` in both directions, and
+    `test/ui_screens_test.dart` proves the pick reaches the engine
+    (`{'scan_interval_hours': 24}`), that the dropdown keeps the value it stored, and
+    that the folder field is on screen. Adding the section exposed a real hole in the
+    UI sweep: it collected every *mounted* control but tapped the ones below the fold
+    where they were, so the tap missed silently — and the two buttons inside a
+    collapsed report row dropped out of the ledger while the sweep still passed. The
+    harness now brings a control into view before tapping it (`ensureVisible`, ignored
+    when the tree cannot scroll to it) and pages one viewport at a time through a
+    lazily built list until it stops moving, so the ledger covers a long screen instead
+    of its first page. Ledger 98 → 100 controls, and the diff is two pure additions.
+  - **Measured.** 104 declared Dart cases (23 files) with the new behaviour test, the
+    report regenerated (66 methods, 100 controls), `flutter analyze` clean, and the
+    fast tier green in 62 s. Engine: 6 unit tests on `is_due`, 2 on the settings, the
+    new registry row, and the probe above.
+  - **What is still missing, and said plainly:** real-time watching (the other half of
+    the register's MED row) is untouched — a schedule is a moment, not a monitor, and
+    the README and `docs/PROTECTION-MATRIX.md` §2 now say exactly that.
 
 - **ب4 — the installer owns the helper's whole life, so the product asks for UAC once
   (D-026), and a silent install can no longer hang on a dialog**
@@ -1755,7 +1773,7 @@ click (P1.5) or a purchased certificate (P4).
     ends by pointing at the matrix and saying the numbers are the same in both.
   - Re-read for staleness: the only sentence that had drifted was the VirusTotal one,
     already fixed in step 2 (D-019). The rest matches the code — starter pack size
-    (6 guard + 10 YARA), no scheduled scan, polling canaries, `netsh` firewall, no
+    (6 guard + 10 YARA), an opt-in scheduled scan (D-027), polling canaries, `netsh` firewall, no
     ClamAV/CAPA, and §10's evidence table names a real probe for each claim.
 
 - **Small step 6 — the icon pass was already there; it is now verified and recorded**

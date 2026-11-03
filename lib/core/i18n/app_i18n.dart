@@ -159,6 +159,11 @@ class AppSettings {
   /// Desktop notification cards (Windows toasts) for protection events.
   final bool toastEnabled;
   final bool scanQuarantineDefault;
+  /// Hours between automatic scans; 0 disables them (D-027). The engine owns the
+  /// timer; this is the switch the user flips.
+  final int scanIntervalHours;
+  /// Folder that scheduled scan walks; empty = the engine uses the profile.
+  final String scanTarget;
   final List<String> canaryPaths;
 
   const AppSettings({
@@ -180,6 +185,8 @@ class AppSettings {
     this.soundVolume = 70,
     this.toastEnabled = true,
     this.scanQuarantineDefault = true,
+    this.scanIntervalHours = 0,
+    this.scanTarget = '',
     this.canaryPaths = const [],
   });
 
@@ -214,6 +221,8 @@ class AppSettings {
         soundVolume: (j['sound_volume'] as num?)?.toInt() ?? 70,
         toastEnabled: j['toast_enabled'] as bool? ?? true,
         scanQuarantineDefault: j['scan_quarantine_default'] as bool? ?? true,
+        scanIntervalHours: (j['scan_interval_hours'] as num?)?.toInt() ?? 0,
+        scanTarget: j['scan_target'] as String? ?? '',
         canaryPaths: (j['canary_paths'] as List? ?? const [])
             .map((e) => e.toString())
             .toList(),
@@ -239,6 +248,8 @@ class AppSettings {
         'sound_volume': soundVolume,
         'toast_enabled': toastEnabled,
         'scan_quarantine_default': scanQuarantineDefault,
+        'scan_interval_hours': scanIntervalHours,
+        'scan_target': scanTarget,
         'canary_paths': canaryPaths,
       };
 
@@ -378,6 +389,14 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setScanQuarantineDefault(bool enabled) =>
       patch({'scan_quarantine_default': enabled});
+
+  /// 0 is the off switch, and the dropdown's fixed list is the only source of
+  /// values; the clamp is here so a hand-edited value cannot reach the engine.
+  Future<void> setScanHours(int hours) =>
+      patch({'scan_interval_hours': hours == 0 ? 0 : hours.clamp(1, 168)});
+
+  Future<void> setScanTarget(String path) =>
+      patch({'scan_target': path.trim()});
 
   Future<void> setCanaryPaths(List<String> paths) =>
       patch({'canary_paths': paths});

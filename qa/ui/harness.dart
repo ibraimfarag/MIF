@@ -249,16 +249,37 @@ Future<Sweep> sweep(WidgetTester tester, Mounted mounted,
         break;
       }
     }
-    if (next == null) break;
+    if (next == null) {
+      // Everything on this page has been tapped. A `ListView(children: [...])`
+      // mounts only what fits in the viewport, so the sections below the fold
+      // are not "tapped already" - they do not exist yet. Scroll one page and
+      // keep going; when the list stops moving, the sweep is done.
+      if (!await _scrollPage(tester)) break;
+      for (final label in _labels(_collect(tester))) {
+        if (!result.found.contains(label)) result.found.add(label);
+      }
+      continue;
+    }
     final target = targets[labels.indexOf(next)];
     if (!result.found.contains(next)) result.found.add(next);
     tapped.add(next);
 
     try {
-      await tester.tap(
-        find.byElementPredicate((e) => identical(e, target.element)),
-        warnIfMissed: false,
-      );
+      final target0 =
+          find.byElementPredicate((e) => identical(e, target.element));
+      // A control can be mounted and still be off-screen (a list builds a
+      // little past the fold to scroll smoothly). Tapping it there misses, and
+      // a missed tap looks exactly like a control that does nothing - which is
+      // how two buttons inside a collapsed report row disappeared from the
+      // ledger. Bring it into view first; if the tree cannot scroll to it, tap
+      // where it is and let the miss be visible.
+      try {
+        await tester.ensureVisible(target0);
+        await settle(tester);
+      } on Object {
+        // Not scrollable to (an overlay, a menu item): tap as found.
+      }
+      await tester.tap(target0, warnIfMissed: false);
       await settle(tester);
       result.tapped.add(next);
     } on Object catch (error) {
@@ -283,6 +304,36 @@ Future<void> _keepEnglish(WidgetTester tester, Mounted mounted) async {
   if (settings == null || settings.lang == AppLang.en) return;
   await mounted.container.read(settingsProvider.notifier).setLang(AppLang.en);
   await settle(tester);
+}
+
+/// Reveals the next page of a lazily built list and says whether anything moved.
+///
+/// The sweep used to stop at the fold: `ListView(children: [...])` builds only
+/// the children inside the viewport, so a switch that scrolled out of view was a
+/// switch no sweep would ever tap - and the ledger, whose whole job is to notice
+/// a control appearing or disappearing, quietly stopped listing two of them when
+/// a section above them grew. Dragging one viewport at a time fixes the sweep
+/// rather than the ledger.
+Future<bool> _scrollPage(WidgetTester tester) async {
+  for (final candidate in find.byType(Scrollable).evaluate()) {
+    if (candidate is! StatefulElement) continue;
+    final state = candidate.state;
+    if (state is! ScrollableState) continue;
+    final position = state.position;
+    if (!position.hasContentDimensions) continue;
+    if (position.pixels >= position.maxScrollExtent - 1) continue;
+    final before = position.pixels;
+    await tester.drag(
+      find.byElementPredicate((e) => identical(e, candidate)),
+      const Offset(0, -600),
+      warnIfMissed: false,
+    );
+    await settle(tester);
+    // A horizontal list ignores a vertical drag; only a real move counts, or the
+    // sweep would spin on a nested scrollable it cannot advance.
+    if (state.position.pixels > before) return true;
+  }
+  return false;
 }
 
 void _dismissOverlays(WidgetTester tester) {

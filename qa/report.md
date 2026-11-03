@@ -15,11 +15,11 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
 | Contract cases | 66 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
-| Controls | 98 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
+| Controls | 100 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 23 files | 103 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Dart tests | 23 files | 104 declared cases (a floor: loops add more at run time) | `flutter.test` step |
 | Engine tests | 16 modules | 132 declared cases | `engine.test` step |
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
@@ -130,7 +130,7 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `vuln.scan` | `network` | blocking NVD scan, minutes long |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 
-## The screens: 13 screens and the shell, 98 controls
+## The screens: 13 screens and the shell, 100 controls
 
 The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with `qa/ui/ledger.json`. The ledger is a ratchet in both directions.
 
@@ -145,7 +145,7 @@ The sweep mounts each screen the way the router does, taps every control once ag
 - `screens.network` - 6 controls
 - `screens.reports` - 1 control
 - `screens.scanner` - 9 controls
-- `screens.settings` - 31 controls
+- `screens.settings` - 33 controls
 - `screens.vulns` - 2 controls
 - `shell` - 21 controls (rail, window buttons, command box)
 
@@ -222,12 +222,12 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/settings_integrity_test.dart` | 2 |
 | `test/settings_model_test.dart` | 5 |
 | `test/sound_assets_test.dart` | 2 |
-| `test/ui_screens_test.dart` | 6 |
+| `test/ui_screens_test.dart` | 7 |
 | `test/ui_shell_test.dart` | 3 |
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **103** in 23 files |
+| **total** | **104** in 23 files |
 
 ### Engine: the modules under engine/src with tests
 

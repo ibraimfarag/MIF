@@ -67,10 +67,14 @@ restored or deleted. A scan never stops a process or a file from loading.
   its contents are only seen if they are also on disk somewhere.
 - **Files past the limits.** Larger than 200 MB, or the 50 001st file, are counted
   as skipped and reported as such.
-- **Only what you point it at.** There is no scheduled scan and no real-time file
-  watching: the hash/rule dimensions apply when a scan runs
-  (`docs/TODO.md` register: no scan scheduler yet — the comment in
-  `guard/etw.rs` used to imply otherwise).
+- **Only what you point it at.** A scan is what covers a file, and there are two
+  ways to get one: the button, or the **scheduled scan** (D-027) — opt-in, off by
+  default, every 6..168 h over the folder in `scan_target`, and only while the
+  engine is running (the logon entry keeps it running). A scheduled run is
+  **report-only**: it never quarantines, because nobody chose a file while it was
+  running. There is still **no real-time file watching**, so a file that appears and
+  is deleted between two runs is never seen — that half of the register row is open
+  by decision (و2), not by omission.
 - **The hash dimension is empty by default.** No key-free SHA-256 feed is left
   (abuse.ch wants an Auth-Key), so `ioc_hashes` reports `not_configured` until a URL
   and key are supplied. There is no VirusTotal client (D-019), so a hash is never

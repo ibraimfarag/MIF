@@ -127,6 +127,48 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: notifier.setScanQuarantineDefault,
               ),
               const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(context.tr('settings.scanHours'),
+                          style: TextStyle(color: AppColors.text, fontSize: 13)),
+                      Text(
+                        context.tr('settings.scanHoursHint'),
+                        style: TextStyle(color: AppColors.muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                DropdownButton<int>(
+                  value: const [0, 6, 12, 24, 72, 168]
+                          .contains(s.scanIntervalHours)
+                      ? s.scanIntervalHours
+                      : 0,
+                  dropdownColor: AppColors.surface,
+                  style: TextStyle(color: AppColors.text, fontSize: 12),
+                  items: const [0, 6, 12, 24, 72, 168]
+                      .map((h) => DropdownMenuItem(
+                            value: h,
+                            child: Text(h == 0
+                                ? context.tr('settings.scanOff')
+                                : '$h h'),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) notifier.setScanHours(v);
+                  },
+                ),
+              ]),
+              const SizedBox(height: 8),
+              _TextSetting(
+                label: context.tr('settings.scanTarget'),
+                hint: context.tr('settings.scanTargetHint'),
+                initial: s.scanTarget,
+                onSave: notifier.setScanTarget,
+              ),
+              const SizedBox(height: 8),
               _TextSetting(
                 label: context.tr('settings.canaryPaths'),
                 hint: context.tr('settings.canaryPathsHint'),

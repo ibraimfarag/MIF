@@ -24,7 +24,7 @@ explains, and suggests the next action instead of dumping raw data.
 | Area | What you actually get |
 |---|---|
 | **System audit** | Real checks: Defender status, firewall profiles, RDP, SMBv1, UAC + secure desktop, local administrators, startup entries, non-Microsoft scheduled tasks, hosts file, remote-access tools. Returns a 0–100 score with the highest-impact finding first and a one-click fix where one exists. |
-| **Malware scanner** | Triage-ordered scan (location × extension × size × age): SHA-256 against a local IOC cache first, then YARA rules. Runs as a **durable job** — if the engine restarts mid-scan it resumes at the exact next file, and the UI shows live progress. |
+| **Malware scanner** | Triage-ordered scan (location × extension × size × age): SHA-256 against a local IOC cache first, then YARA rules. Runs as a **durable job** — if the engine restarts mid-scan it resumes at the exact next file, and the UI shows live progress. A **scheduled scan** is one switch away (Settings → Protection): off by default, then every 6/12/24/72/168 hours over the folder you name (empty = your profile folder). It needs the engine running — the logon entry does that — and it is **report-only**: nobody chose a file while it ran, so it records, alerts and leaves the file for you to act on. |
 | **Quarantine** | Detections are encrypted with AES-256-GCM; the master key is protected with DPAPI. Files can be restored or deleted from the app. |
 | **Process guard (L3)** | Watches process creation against Sigma-like JSON rules (`rules/guard/*.json`, hot-reloaded). Alerts, optional kill-tree response, canary (decoy) files that raise a CRITICAL alert when touched, an incident correlator that groups related events into one kill-chain timeline, and a noise learner that offers to mute what you keep dismissing. |
 | **Network monitor** | Live TCP/UDP connections with owning process, plus a firewall manager: default-deny outbound toggle and every rule MI CS creates is prefixed `MICS-`. Country blocking works from a locally synced CIDR list. |
@@ -69,6 +69,12 @@ Honesty is a feature. Today, MI CS does **not**:
 - detect **any writer touch** on a canary file — decoys are monitored by
   mtime/size polling, so a read-only open is not noticed (writes, renames and
   deletes are);
+- watch files **as they change**: a scheduled scan walks the folder you named
+  every few hours (and only while the engine is running — the logon entry keeps it
+  running), so a file that appears and is deleted between two runs is never seen.
+  Continuous watching (`ReadDirectoryChangesW`/USN) is the other half of that
+  layer and is a decision to take, not a detail to slip in
+  (`docs/PROTECTION-MATRIX.md` §2);
 - send anything to **VirusTotal**: there is no client and no key to enter, so no
   file — not even a hash — is ever looked up there. File reputation is local
   (IOC hash cache + YARA) only;
@@ -255,7 +261,8 @@ One screen, eight sections; every field is validated and persisted by the engine
 
 - **Appearance / language** — dark, light, follow system (live), AR/EN.
 - **Protection** — guard autostart, resume interrupted scans, default
-  auto-quarantine, canary paths.
+  auto-quarantine, **scheduled scan** (off / 6 / 12 / 24 / 72 / 168 hours, and the
+  folder it walks — empty means your profile folder), canary paths.
 - **Notifications & sounds** — desktop cards on/off, do-not-disturb, sounds
   on/off, volume, test toast, test sound.
 - **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
@@ -581,7 +588,10 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 **اللي بيعمله فعلاً:** فحص نظام حقيقي (ديفندر، جدار الحماية، RDP، SMBv1، UAC،
 المدراء، بدء التشغيل، المهام المجدولة، ملف hosts) بدرجة من 100 وإصلاح بضغطة واحدة؛
 فحص ملفات مرتّب حسب الخطورة (SHA-256 مقابل كاش IOC ثم قواعد YARA) وبيكمّل لوحده لو
-المحرك اتقفل في النص؛ حجر مشفّر AES-256-GCM بمفتاح محمي بـ DPAPI؛ حارس عمليات
+المحرك اتقفل في النص؛ و**سكان مجدول** بمفتاح واحد في الإعدادات (مقفول افتراضيًا،
+وبعدين كل 6/12/24/72/168 ساعة على الفولدر اللي تسمّيه — فاضي يعني فولدر حسابك)
+بيشتغل والمحرك شغال، وبيكتشف بس من غير حجر لأن محدش اختار ملف وهو شغال؛ حجر مشفّر
+AES-256-GCM بمفتاح محمي بـ DPAPI؛ حارس عمليات
 بقواعد قابلة للتحديث + فخاخ (ملفات طُعم) + قتل شجرة العملية + ربط الحوادث في خط
 زمني واحد؛ مراقبة اتصالات وتحكّم في جدار الحماية؛ حجب دومينات عبر hosts؛ مطابقة
 البرامج المثبّتة بقاعدة NVD؛ تقارير Markdown؛ **كارت إشعار على سطح المكتب لكل
@@ -593,7 +603,10 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 
 **اللي مابيعملهوش (بصراحة):** مفيش درايفر kernel ولا فلترة ترافيك داخلية؛ مفيش
 ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling — يعني قراءة الملف
-للقراءة فقط مش بتتسجّل؛ مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
+للقراءة فقط مش بتتسجّل؛ **مفيش مراقبة ملفات لحظية**: السكان المجدول بيمشي على
+الفولدر كل كام ساعة والمحرك لازم يكون شغال، فملف يظهر ويتشال بين الاتنين مش
+بيتشاف (المراقبة المستمرة `ReadDirectoryChangesW`/USN قرار لسه محتاج يتاخد)؛
+مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
 التحديث لازم يكون موقّع بشهادتنا (`CN=MI CS Code Signing`) وويندوز يثق فيها — بس
 التثبيت على **اسم** الموقّع مش على بصمته (thumbprint)؛ ملفات التنفيذ **غير موقّعة**
 فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة على المثبّت **لسه محتاجة تتجرّب

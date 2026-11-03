@@ -166,6 +166,47 @@ void main() {
     expect(mounted.container.read(rtlProvider), isTrue);
   });
 
+  // The scan schedule (و1, D-027). The engine owns the timer, so the only thing
+  // the UI can get wrong is the write: an interval the engine would refuse, a
+  // dropdown that shows a value it did not store, or a folder that never leaves
+  // the screen. All three are asserted against what the fake engine received.
+  testWidgets('settings: the scheduled-scan dropdown and folder reach the engine',
+      (tester) async {
+    final mounted = await openScreen(tester, const SettingsScreen());
+    final engine = mounted.engine;
+
+    // Off is the default, and the control has to say so.
+    expect(find.text('Scheduled scan'), findsOneWidget,
+        reason: 'the schedule is not in Settings');
+    expect(find.text('Off'), findsOneWidget,
+        reason: 'the dropdown must show the default (off) state');
+
+    await tester.ensureVisible(find.text('Scheduled scan'));
+    await settle(tester);
+    // Two int dropdowns live on this screen (the intel refresh cadence is the
+    // other), so the scan one is found through its own row rather than by index.
+    final scanRow = find
+        .ancestor(of: find.text('Scheduled scan'), matching: find.byType(Row))
+        .first;
+    final scanDropdown =
+        find.descendant(of: scanRow, matching: find.byType(DropdownButton<int>));
+    expect(scanDropdown, findsOneWidget);
+    await tester.tap(scanDropdown);
+    await settle(tester);
+    await tester.tap(find.text('24 h').last);
+    await settle(tester);
+    expect(engine.lastParams('settings.set'), {'scan_interval_hours': 24},
+        reason: 'the chosen interval never reached the engine');
+    expect(find.text('24 h'), findsOneWidget,
+        reason: 'the dropdown did not keep the value it stored');
+
+    // The folder field: empty is what the engine reads as "the profile folder",
+    // so the hint has to be on screen and the field has to exist next to it.
+    expect(find.widgetWithText(TextField, 'Empty = your profile folder'),
+        findsOneWidget,
+        reason: 'the folder field is not on screen');
+  });
+
   // The bug-id surface (ز2-ج). The id on screen has to be the id the engine
   // reported - not a string the screen invented - and the text the user copies
   // has to start with it, because that text is the one thing a user hands to
