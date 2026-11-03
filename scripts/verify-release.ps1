@@ -4,7 +4,7 @@
   extracted copy actually runs (privileged helper, desktop card, rule loading).
 
 .DESCRIPTION
-  `scripts\make-release.ps1` produces `dist\MICS-portable-<version>-x64.zip` and
+  `scripts\make-release.ps1` produces `dist\MICS-portable-<version>-<arch>.zip` and
   `dist\SHA256SUMS`. This probe checks that artifact the way a user would:
 
     1. every SHA256SUMS line matches the file it names;
@@ -21,6 +21,12 @@
        CFG, ASLR/DEP, stripped) and the Dart snapshot is really obfuscated, with
        no symbol table inside the package.
 
+  The architecture comes from the artifact, not from this script: the zip's name
+  and the `VERSION` line inside it both say x64 or arm64, and the PE `Machine` of
+  both binaries has to agree with them (`-Arch` overrides for a renamed file). A
+  package that says one arch and contains the other is refused, which is what
+  makes "this is the ARM64 download" a claim the file supports (D-003).
+
   Everything runs from a temp folder, so this also exercises the release copy from
   a normal-integrity location. No elevation anywhere.
 
@@ -34,6 +40,10 @@
 #>
 param(
   [string]$DistDir = "",
+  # "auto" reads the arch from the zip's name (and the VERSION line inside it);
+  # naming it explicitly is for a renamed download.
+  [ValidateSet("auto", "x64", "arm64")]
+  [string]$Arch = "auto",
   [switch]$SkipToast
 )
 
@@ -97,6 +107,21 @@ if (-not $zipLine -or -not (Test-Path $zipLine)) {
   Write-Output "RESULT: FAIL - SHA256SUMS does not name an existing zip"
   exit 1
 }
+
+# The arch is a property of the artifact: `MICS-portable-<version>-<arch>.zip`.
+# Reading it from the name means the check cannot pass by agreeing with itself.
+$zipLeaf = Split-Path $zipLine -Leaf
+$zipArch = if ($zipLeaf -match "-arm64\.zip$") { "arm64" } elseif ($zipLeaf -match "-x64\.zip$") { "x64" } else { "" }
+if ($Arch -eq "auto") {
+  if (-not $zipArch) {
+    Write-Output "RESULT: FAIL - $zipLeaf does not name an architecture (-x64 or -arm64); pass -Arch to judge it anyway"
+    exit 1
+  }
+  $Arch = $zipArch
+} elseif ($zipArch -and $zipArch -ne $Arch) {
+  Fail "$zipLeaf is named $zipArch but was verified as $Arch"
+}
+Write-Output "arch: $Arch ($zipLeaf)"
 
 Write-Output "2) extracting $(Split-Path $zipLine -Leaf)"
 $work = Join-Path $env:TEMP ("mics-release-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
@@ -245,16 +270,24 @@ try {
   else { Fail "the scan did not use the packaged YARA rules (log line: $yaraLine)" }
 
   $versionFile = Join-Path $work "VERSION"
-  if (Test-Path $versionFile) { Pass "VERSION: $((Get-Content $versionFile -TotalCount 1))" }
+  if (Test-Path $versionFile) {
+    $versionLine = Get-Content $versionFile -TotalCount 1
+    if ($versionLine -match "\(portable, (x64|arm64)\)") {
+      if ($Matches[1] -eq $Arch) { Pass "VERSION: $versionLine" }
+      else { Fail "VERSION says $($Matches[1]) but the package was verified as $Arch ($versionLine)" }
+    } else {
+      Fail "VERSION names no architecture: $versionLine"
+    }
+  }
   else { Fail "the zip has no VERSION file" }
 
   Write-Output "6) hardening of the packaged binaries"
   $hardOut = Join-Path $env:TEMP "rel-hardening.out"
-  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $work > $hardOut 2>&1
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $work -Arch $Arch > $hardOut 2>&1
   $hardExit = $LASTEXITCODE
   Get-Content $hardOut | Where-Object { $_ -match "RESULT|^  - " } | ForEach-Object { "  $_" }
   Remove-Item $hardOut -ErrorAction SilentlyContinue
-  if ($hardExit -eq 0) { Pass "both MI CS binaries are CFG-instrumented, ASLR/DEP-marked and stripped" }
+  if ($hardExit -eq 0) { Pass "both MI CS binaries are CFG-instrumented, ASLR/DEP-marked, stripped and built for $Arch" }
   else { Fail "verify-hardening.ps1 failed on the packaged binaries (exit $hardExit)" }
 
   # Obfuscation is proved by the artifact, not by the command line that made it:

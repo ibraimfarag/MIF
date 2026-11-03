@@ -67,6 +67,34 @@ cannot keep.
 ("Requirements"), and adding an ARM64 build leg to CI when ARM64 hardware or
 runners are available for verification.
 
+**Amendment (2026-11-03, ب2 — the leg is wired, and here is where it stops).**
+The engine half is real: `scripts\build-engine-arm64.ps1` builds
+`aarch64-pc-windows-msvc` (engine **and** test binaries) and
+`verify-hardening.ps1 -Arch arm64` reads the PE back (`machine 0xAA64`, CFG,
+ASLR/DEP, stripped). Three prerequisites are not where a Windows developer would
+look, and that is measured, not assumed: the MSVC ARM64 build tools live in
+**Visual Studio 18 Community** on this machine, while the 2022 Build Tools have
+only x64/x86 toolchains and no `lib\arm64`; `ring` needs a **clang** for its
+assembly and the VS LLVM component ships only `clang-format`/`clang-tidy`, so the
+build uses the **Android NDK's** LLVM (clang 19) as a build-time tool; the
+Windows SDK already has the arm64 import libraries.
+
+Two limits are architectural rather than local: **Flutter has no Windows
+cross-compile flag**, so the ARM64 *app* is produced on an ARM64 host with an SDK
+that has `windows-arm64` artifacts (this SDK's cache holds `windows-x64*` only) —
+therefore a portable ARM64 package still needs that host, while its engine can be
+built anywhere; and the GitHub-hosted **ARM64 Windows runners are offered for
+public repositories**, while this one answers 404 to the public API, so the "when
+runners are available" condition above is not met and no `windows-11-arm` job was
+added (it would queue forever and block the pipeline). The SBOM stays
+architecture-independent on purpose — it describes the dependency set, which is
+shared — and the artifact names its own arch (`-<arch>.zip`, the `VERSION` line,
+and the PE machine that `verify-release.ps1` refuses to disagree with).
+
+Until an ARM64 machine exists, the claim for this leg is **"built and
+compile-verified, never executed"**, and no runtime number is carried across from
+the x64 runs.
+
 ---
 
 ## D-004 — Notification sounds: in-house pack + Windows system sounds

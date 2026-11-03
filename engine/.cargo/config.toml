@@ -1,4 +1,5 @@
-# Build flags that apply to the engine on Windows x64 (ج1, D-021).
+# Build flags that apply to the engine on Windows (ج1, D-021; the ARM64 leg is
+# D-003).
 #
 # Control Flow Guard is a linker feature, but it only produces a function table
 # when the objects are instrumented too, so it is requested from the compiler:
@@ -15,4 +16,13 @@
 #     (no way to run the process under a shadow stack without elevation), and a
 #     promise nobody measured is exactly what this project does not ship.
 [target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "control-flow-guard=yes"]
+
+# The same hardening for the ARM64 leg. It is a separate section because cargo
+# picks rustflags by target triple: without it an ARM64 engine would silently ship
+# without Control Flow Guard and `verify-hardening.ps1` would refuse the package -
+# correct, but a session away from the cause. Whether an ARM64 engine can be
+# produced at all depends on the toolchain, not on this file:
+# `scripts\make-release.ps1 -Arch arm64 -CheckToolchain` reports what is missing.
+[target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "control-flow-guard=yes"]

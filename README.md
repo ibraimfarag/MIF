@@ -11,8 +11,9 @@ explains, and suggests the next action instead of dumping raw data.
 > tests, the portable package and its installer are built and verified, and the
 > package now carries a signed manifest of itself that the app checks at start-up
 > (see *Is this copy the published one?*). What is still missing is public code
-> signing (it needs a certificate to buy), folding the privileged helper's install
-> into the installer, and the ARM64 leg. What is left, with priorities and
+> signing (it needs a certificate to buy) and a download for Windows on ARM (the
+> ARM64 engine builds and is checked, but the app needs an ARM64 build host — see
+> *Requirements*). What is left, with priorities and
 > estimates: [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md).
@@ -139,7 +140,7 @@ flutter test --no-pub tool\write_screenshots_test.dart
 
 | | |
 |---|---|
-| **OS** | Windows 10 21H2+ or Windows 11 (x64). Windows 11 ARM64: planned. 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
+| **OS** | Windows 10 21H2+ or Windows 11 (x64) — that is the only download today. **Windows on ARM**: the engine compiles and links for ARM64 (`scripts\build-engine-arm64.ps1`, artifact checked as a hardened ARM64 PE) but the Flutter app has no Windows ARM64 cross-compile, so an ARM64 download needs an ARM64 build host; until then an ARM64 package does not exist (D-003 appendix). 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
 | **CPU / RAM** | 4 cores / 8 GB. The engine idles at ~11 MB RAM. |
 | **Disk** | ~150 MB for the app + engine, plus whatever the quarantine and intel cache grow to. |
 | **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |
@@ -739,6 +740,7 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 (`MICS-setup-<version>-x64.exe`) من نفس الحزمة، والاتنين متأكَّد منهم بسكريبتات.
 المثبّت بقى هو اللي بيثبّت خدمة المساعدة كمان (ب4) ويشيلها وقت الإزالة، يعني
 المنتج كله بيطلب UAC **مرة واحدة**؛ اللي فاضل: **القياس** على نسخة per-machine
-بكليكة منك، وشهادة توقيع عامة، تشغيل E2E على المثبّت المبني (د3)، ودعم ARM64 —
+بكليكة منك، وشهادة توقيع عامة، وتشغيل E2E على المثبّت المبني (د3)، ونسخة
+Windows على ARM (المحرّك بيتبني ويتفحص، بس التطبيق محتاج جهاز ARM يبنيه) —
 كلها متتبَّعة في [`docs/ROADMAP.md`](docs/ROADMAP.md)
 و[`docs/TODO.md`](docs/TODO.md).

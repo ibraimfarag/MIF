@@ -53,8 +53,10 @@
 > installer) wants one per-machine run; with that click I can measure the whole
 > product as a user meets it, and until then the code is written and said to be
 > unmeasured. ز2-د stays blocked on D-023 and the bridge endpoint; the autonomous
-> alternatives meanwhile are ب2's ARM64 leg (wired and compile-verified, never run —
-> no ARM64 machine here) or a §7 register row.**
+> alternatives meanwhile are هـ1 (the default update-manifest URL + a signature check
+> before applying) or a §7 register row. The ARM64 leg is built and checked but has
+> never been run — there is no ARM64 machine here, and no ARM64 download exists
+> because the Flutter app needs an ARM64 host.**
 > ب4 landed 2026-11-03 (D-026): the installer now creates the privileged helper inside
 > the one UAC prompt it already asks for — by calling the shipped engine's own
 > `install-helper` — and its uninstaller stops and deletes that service again through
@@ -126,30 +128,26 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **و4**: تنفيذ صفوف LOW القابلة للتنفيذ في السجل (واللي بيتقفل بالدليل مش بالكود)،
-> وعلّم **د4** إنها خلصت — بعدها **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط، وقول كده
-> بصراحة) ثم **د3** لو الكليكة وصلت. متكتبش أرقام من غير قياس. وشغّل
+> اقرأ docs/TODO.md §0 (وبالخصوص §0.3c) و docs/ROADMAP.md، وشوف اللي فاضل:
+> **د3** لو الكليكة وصلت (التشغيل E2E على المثبّت per-machine)، وإلا خُد خطوة من
+> اللي فاضل — صف من السجل (§7) أو **هـ1** — واحدة في كل مرة، وكل واحدة بدليل
+> القياس اللي اسمها في الصف. متكتبش أرقام من غير قياس. وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, then take
-**و4** — the executable LOW rows of the register (§7), each with the proof its row
-names. §0.3c now carries و4's own "done means" row: the four code rows are the
-plaintext API keys (DPAPI, with a migration), the blocking `vuln.scan` (one scanning
-path or none), the stale merged-audit sections (show their age), and the guard's cost
-with the shipped pack (re-measure, replace the number); three rows close **by
-evidence** instead of code (AUMID attribution, the portable caller check, and the
-incomplete-package HIGH row — paste the `verify-release.ps1` FAIL); rows needing a
-decision stay open and are named in the commit body. While in there, close **د4**:
-the QA report is generated, byte-compared and uploaded by `.github/workflows/ci.yml`,
-so it is done and only the checkbox is stale.
-Then **ب2** (the ARM64 leg: built and compile-verified only, and say so), and
-**د3** if the UAC click has arrived. **د3** waits for one UAC click from the user: it
-is the E2E run on the built per-machine installer, which installs the product *and*
-the helper and then removes both from Apps & features; the autonomous half of it that
-could be written without the click has been written, and nothing was invented. Run
-`scripts\pipeline.ps1 -Tier fast` before every commit and stop for review after each
-one.
+That means: read §0 (especially §0.3c) and `docs/ROADMAP.md`, then take **د3** if
+the UAC click has arrived — it is the E2E run on the built per-machine installer,
+which installs the product *and* the helper and removes both; the autonomous half
+is already written into `verify-installer.ps1`, and nothing was invented for the
+half that needs the click. Without the click, take one row of the register (§7) or
+**هـ1** (the default update-manifest URL and a signature check before applying),
+one commit at a time, each with the proof its row names.
+**و4, د4 and ب2 are done (2026-11-03)** — see the Done log: the register's
+executable LOW rows closed (keys in `secrets.dat`, one scanning path, audit-section
+ages, guard cost re-measured) plus three rows closed by evidence; the QA report was
+already generated, byte-gated and uploaded, so د4 was only a stale checkbox; and the
+ARM64 leg builds the engine **and its test binaries** for
+`aarch64-pc-windows-msvc`, with the PE read back as a hardened ARM64 image, while
+the Flutter app needs an ARM64 host — **no ARM64 binary has ever been run here**.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
 **ج2, ط2, ج3 and ب4 are done (2026-11-03)** — the package describes itself inside the
@@ -159,8 +157,15 @@ exactly that, and the installer now creates and removes the privileged helper in
 its own single UAC prompt (D-026) — and **و1 (D-027, both commits)** and **و3 (D-028)**
 are done too: the engine schedules the scan and Settings has the switch
 (`scripts\verify-scan-schedule.ps1`), and the firewall now speaks the Windows Firewall
-API instead of `netsh` (`scripts\verify-firewall.ps1`, 23 checks). What is left is
-**و4**, **ب2**, **د3**, the register (§7) and the things that need the user.
+API instead of `netsh` (`scripts\verify-firewall.ps1`, 23 checks). **و4 is done too
+(2026-11-03, five commits)** — the plaintext keys are DPAPI-protected, the blocking
+`vuln.scan` is gone, a merged audit shows each section's age, the guard's cost is
+re-measured with the shipped pack, and the three evidence rows are closed with a probe
+result each — and **د4 is done** (the QA report was generated, byte-gated and uploaded
+all along; only its checkbox was stale), and **ب2 is done as far as this machine
+allows** (the ARM64 engine and its test binaries build and are checked; the app
+needs an ARM64 host and nothing ARM64 was ever run). What is left is
+**د3**, the register (§7) and the things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
@@ -353,7 +358,7 @@ order the user picked (small → medium → large), and it is finished**
 | **د1** | `qa/` harness driving every JSON-RPC method: happy path, invalid params, permission failure, schema |
 | **د2** | Per-screen widget tests |
 | **د3** | E2E run against the built artifact (the installer from ب3) |
-| **د4** | `qa/report.html` + `.md`, and CI fails when a feature is not registered |
+| ~~**د4**~~ | ~~`qa/report.html` + `.md`, and CI fails when a feature is not registered~~ — **done** (the checkbox was the only thing stale): `qa/report.dart` generates both files from the committed registries only, `test/qa_report_test.dart` byte-compares them in the fast tier, and `.github/workflows/ci.yml` runs `-Tier full` and uploads `qa/report.md`, `qa/report.html`, `build/qa-contract.json` and `build/pipeline-full.json` next to the binaries, so a feature that lands without a registry row turns the tier red before CI can pass it |
 
 **هـ — the P3 remainder**
 
@@ -414,8 +419,8 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ط2** tamper~~ — **done 2026-11-03** | `scripts\verify-tamper.ps1` tampers one thing at a time in a private copy under `%TEMP%` and asks both halves - the release gate (must refuse) and the packaged engine, started on a private pipe (must answer `unverified`, name the file in its log and in the card it pushes). Cases: **a byte flipped in each of the nine shipped binaries** (the eight listed ones refused and reported by name; the engine refused by the gate with `HashMismatch`, never run after a code edit), **a same-size swapped DLL** (a system DLL padded to `dartjni.dll`'s exact length, and one of our own plugins cut to it - refused **by hash**, so a signed-but-wrong DLL is no more welcome), **an edited manifest** (one hash zeroed inside the resource: refused, and reported, with the engine `NotSigned` afterwards as D-025 measured), **a repack** (the published document injected into the unsigned release engine: refused and reported), and **a copied install** (accepted while it is byte-identical, reported as soon as one file changes; a copy used as a *client* is the caller rule's business, D-015). The pristine copy is the control. **Measured: 41 checks, 0 failures, 108.5 s**; the release tier gained `tamper.verify` (11 steps across 3 tiers). **It also found a hole**: a stripped Authenticode signature used to pass `verify-manifest.ps1` because only `HashMismatch` failed - the gate now requires the pinned `MI CS Code Signing` and refuses no signer, another subject and a changed byte alike, with the CN in one PowerShell constant (`MicsSignerCn`) pinned to the engine's `EXPECTED_SIGNER_CN` by a Dart test. |
 | ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no  | machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
 
-| **و4** the executable LOW rows | One commit per row group, each closing its register row with the proof that row names. Executable **as code**: (a) the **plaintext `nvd_api_key`/`ioc_feed_key`** in `settings.json` get the same DPAPI protection the vault uses, with a migration for an existing file and a test that what is on disk is not what went in; (b) **`vuln.scan` (the blocking variant) has no progress and no cancel** - it delegates to the job so there is exactly one scanning path, or it is deleted if nothing still calls it (the register says "for probes and scripts", so check first); (c) **a merged audit's non-refreshed sections** - the UI shows the age of each section it did not just re-read, instead of presenting an old section as fresh; (d) **the guard's cost with the shipped pack** - re-measured by `scripts\measure-guard-cpu.ps1` and the number in the register replaced. Closing **by evidence, not code**: the AUMID attribution row (THREAT-MODEL already says a card is UI, not proof of origin), the helper caller check in a portable run (F-2 documents the image-name fallback), and the incomplete-package **HIGH** row (`verify-release.ps1` fails when `rules\` is missing - that FAIL, pasted with its exit code, is the proof). Rows that need **your decision** stay open and are named in the commit body: GeoIP list licensing, the detection pack's content, the thumbprint-vs-CN update pin (D-016), the language-tag policy, and IDS beyond DNS. |
-| **ب2** the ARM64 leg | `engine` builds for `aarch64-pc-windows-msvc` (target available, `make-release.ps1` able to produce the arm64 engine), the Flutter app has a windows-arm64 build path, `verify-hardening.ps1`/`verify-release.ps1` check the **PE machine type** (`ARM64` vs `x64`) instead of assuming x64, and the SBOM/notices say which arch ships. **There is no ARM64 machine here**, so the claim is "built and compile-verified" - the arm64 binaries are never run, no probe result is copied from the x64 run, and the Done log says so in those words. |
+| ~~**و4** the executable LOW rows~~ — **done 2026-11-03, five commits** (a–e in the Done log), each closing its register row with the proof that row names | (a) the API keys left `settings.json` for a DPAPI-protected `secrets.dat` with a one-way migration, proved by five engine tests that search both files for the values that went in; (b) the blocking `vuln.scan` was **deleted** after the callers were checked — the natural-language command bar was the one caller the register did not know about, and its intent now starts the job, so there is exactly one scanning path (65 methods); (c) every audit section carries the time it was collected, a merge keeps the old time for what it did not re-read, and the screen prints "Not re-checked now — read at HH:MM" on those findings and inventory headers (engine + widget test); (d) the guard's cost re-measured with the **shipped** pack: 0.156–0.521 % of one core over four 60 s windows, median 0.417 %, and the old "0.234 % with the starter pack" explanation is written down as refuted. Closing **by evidence**: the incomplete-package HIGH row (a package with `rules\` removed and its sums corrected → `verify-release.ps1` **exit 1**, four FAILs naming the missing packs and the fallback the engine logged), the portable caller check (`verify-helper.ps1` now runs the F-2 layout: non-engine caller refused, `no installer account recorded` logged, the same probe served only with the `MICS_ENGINE_PATH` pin — PASS, 15 checks), and the AUMID attribution row (closed as a documented limit, `THREAT-MODEL` §B10 unchanged). Rows left open **for your decision**: GeoIP list licensing, the detection pack's content, the thumbprint-vs-CN update pin (D-016), the language-tag policy, and IDS beyond DNS. |
+| ~~**ب2** the ARM64 leg~~ — **done 2026-11-03, as far as this machine allows, and it says where it stops** | The engine **builds** for `aarch64-pc-windows-msvc` here and the artifact is checked: `scripts\build-engine-arm64.ps1` (new) resolves the toolchain, builds with the same CFG + path-remap flags as x64, compiles the **test binaries** too (`-WithTests`), and `verify-hardening.ps1 -Arch arm64` reads the PE back — `machine arm64 (0xAA64)`, `GUARD_CF`, `CF_INSTRUMENTED`, `CF_FUNCTION_TABLE_PRESENT`, stripped (engine 19,994,112 bytes). `make-release.ps1` gained `-Arch x64\|arm64` (engine `--target`, `build\windows\<arch>`, `-<arch>.zip`, `VERSION` line, `SHA256SUMS`) and refuses ARM64 with a measured prerequisite list (`-CheckToolchain`, seven rows, **2/7 missing here**). `verify-release.ps1` takes the arch **from the artifact's name and `VERSION` line** and fails a package whose PE does not match; `verify-hardening.ps1` infers or enforces the arch instead of assuming x64. The Flutter half has **no** windows-arm64 path on this machine: `flutter build windows` has no cross-compile flag and the SDK's cache holds `windows-x64*` only, so a portable ARM64 package still needs an ARM64 host (7th prerequisite row). **No ARM64 hardware exists here: nothing produced was ever executed**, no probe result is copied from the x64 run, and the Done log says exactly that. |
 | **د3** E2E on the built installer | The automatable half runs in the probe: a silent `-TestUser` install into `%TEMP%`, the shortcuts' `System.AppUserModel.ID`, the AUMID key, the Apps-&-features entry, the uninstaller removing exactly what it created, and the refusal against a synthetic service key (all in `verify-installer.ps1` today). The per-machine half - **one UAC click from you** - installs for real and asserts: the app + engine + rules land in `%ProgramFiles%`, the shortcuts carry the AUMID, Apps & features has the entry, the **installer** created the helper service (not the app, D-026), `priv.log` has one `phase=start`/`phase=done` pair per operation, and the uninstaller removes all of it *and* the service while the user's own `%LOCALAPPDATA%\MI CS` copy stays untouched. The half that cannot run is skipped with a printed reason, never passed, and no number in the Done log comes from it. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
@@ -533,7 +538,8 @@ what "next" means.
 
 **Large — where a human or money is required**
 
-- **د3** E2E against the built installer, **د4** `qa/report.html` + CI gate
+- ~~**د4** `qa/report.html` + CI gate~~ — **done** (the checkbox was stale; see §0.3)
+- **د3** E2E against the built installer (**needs one UAC click from you**)
 - **ب5** the certificate → **ب6** public release (both need the user)
 - real-time file watching as a real subsystem
 
@@ -663,6 +669,79 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ب2 (f) — the ARM64 leg: the engine builds and is checked, the app cannot be
+  built here, and nothing was run**
+  - **What built.** `scripts\build-engine-arm64.ps1` (new) compiles the engine for
+    `aarch64-pc-windows-msvc` and then reads the PE back, because "cargo finished"
+    and "the file is an ARM64 image" are different claims. Measured on this
+    56-logical-processor x64 machine, with the release flags (`-C
+    control-flow-guard=yes` + the path remap, so the build account does not appear
+    in the binary): `cargo build --release --target aarch64-pc-windows-msvc`
+    finished in **11m 41s** and produced an engine of **19,994,112 bytes**
+    (`sha256 639ed862…`), `machine arm64 (0xAA64)`, `DllCharacteristics 0xC160`
+    (HIGH_ENTROPY_VA|DYNAMICBASE|NXCOMPAT|GUARD_CF), `GuardFlags 0x00017500`
+    (CF_INSTRUMENTED|CF_FUNCTION_TABLE_PRESENT|CF_LONGJUMP_TABLE_PRESENT), no PDB
+    path — and `verify-hardening.ps1 -Arch arm64` returns **RESULT: PASS**. With
+    `-WithTests`, `cargo test --release --no-run --target aarch64-pc-windows-msvc`
+    also **compiles and links the test binaries** (`Finished release profile in
+    15m 20s`, `Executable unittests src\main.rs`,
+    `mics_engine-968c89ed026ea79a.exe`, **25,749,504 bytes**) — the whole tree
+    type-checks and links for ARM64, and not one of those executables was run.
+  - **The three toolchain pieces this machine has in odd places**, all measured
+    rather than assumed: the **MSVC ARM64 build tools** are *not* in the 2022 Build
+    Tools (`VC\Tools\MSVC\14.44.35207\bin\Hostx64` holds only x64 and x86, and its
+    `lib` has no arm64) but *are* in Visual Studio 18 Community
+    (`…\18\Community\VC\Tools\MSVC\14.50.35717\bin\Hostx64\arm64\cl.exe`); the
+    **C compiler** for `ring`'s assembly is not clang-from-VS (that component ships
+    only `clang-format`/`clang-tidy`) and not on PATH, so the build uses the LLVM
+    inside the **Android NDK** (`clang 19.0.1`, AArch64 backend, `llvm-lib.exe`) as
+    a *build-time* tool — no LLVM code is in the output; and the **Windows SDK
+    10.0.26100.0** already carries `um\arm64` and `ucrt\arm64`. The first attempt
+    failed exactly where the row predicted it would, and the failure is the finding:
+    `error: failed to run custom build command for ring v0.17.14` →
+    `failed to find tool "clang"`.
+  - **What cannot be built here, with the measurement.** The Flutter half has no
+    Windows ARM64 path on this machine: `flutter build windows --help` offers no
+    `--target-platform` for Windows, and the SDK's cache holds
+    `windows-x64`, `windows-x64-profile`, `windows-x64-release` and **no**
+    `windows-arm64` — so an ARM64 app needs an ARM64 host and its own SDK download.
+    `make-release.ps1 -CheckToolchain` prints the seven prerequisites and says
+    **NOT READY (2 of 7)**: MSVC ARM64 tools ✔, ARM64 CRT ✔, SDK arm64 libs ✔, Rust
+    target ✔, clang ✔ (the NDK one), Flutter windows-arm64 ✘, ARM64 host ✘ (this
+    host is AMD64). So a portable ARM64 *package* is still not producible here,
+    while its engine is — that is the exact boundary, written in the script's own
+    output and in D-003's addendum.
+  - **What was made arch-aware, so an ARM64 package is verified as one.**
+    `verify-hardening.ps1` gained `-Arch auto|x64|arm64`: it reads the PE `Machine`
+    of every judged binary, lets the first one decide under `auto`, fails a package
+    that mixes arches, and requires `CF_LONGJUMP_TABLE_PRESENT` only on x64 (it is
+    an x64 construct in the linker's terms; the ARM64 build happens to carry it
+    too). `verify-release.ps1` derives the arch from the zip's name **and** the
+    `VERSION` line inside it and refuses a mismatch, then hands `-Arch` to the
+    hardening gate. `make-release.ps1` gained `-Arch`, the `--target` build, the
+    per-arch Flutter folder, `-<arch>.zip`, `PORTABLE, <arch>` in `VERSION`, and
+    `-CheckToolchain`. `engine-rustflags.ps1` now selects the rustflags **by target
+    triple** (and refuses when there is no section, instead of silently building
+    without CFG), and `engine/.cargo/config.toml` gained the
+    `[target.aarch64-pc-windows-msvc]` section with the same
+    `-C control-flow-guard=yes`.
+  - **No ARM64 hardware, so: nothing was run.** Not the engine, not the tests, not
+    the app; no timing, no memory figure and no behaviour is claimed for ARM64, and
+    nothing measured on x64 was copied over. The claim is exactly "compiled and
+    linked for `aarch64-pc-windows-msvc`, and the artifact is a hardened ARM64 PE".
+  - **CI, and why there is no ARM64 job in it yet.** D-003 commits the project to
+    "adding an ARM64 build leg to CI when ARM64 hardware or runners are available".
+    Measured: `https://api.github.com/repos/ibraimfarag/MIF` answers **404**, i.e.
+    the repository is private, and GitHub's ARM64 Windows runners are offered for
+    public repositories — so a `windows-11-arm` job would sit queued forever and
+    block the pipeline it is supposed to extend. The condition in D-003 is therefore
+    not met yet, and the leg lives in `build-engine-arm64.ps1` where a human or a
+    future runner can call it. The SBOM stays arch-independent on purpose: it
+    describes the dependency set, which is the same for both legs, and the artifact
+    itself (`-<arch>.zip`, `VERSION`, PE machine) is what names the arch.
+  - Measured: `-Tier fast` green; the ARM64 numbers above come from the two cargo
+    runs and from `verify-hardening.ps1`'s own output.
 
 - **و4 (e) — the three rows that close by evidence: the incomplete package, the
   portable caller check and the AUMID attribution**

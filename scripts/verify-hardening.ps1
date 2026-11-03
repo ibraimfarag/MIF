@@ -25,8 +25,20 @@
   build folder by `make-release.ps1` (so an unhardened binary is never packaged)
   and against the extracted package by `verify-release.ps1`.
 
-  x64 binaries only. `flutter_windows.dll` is the Flutter engine's own prebuilt
-  file and is not ours to harden, so it is reported but never failed.
+  The PE's `Machine` field is read and reported, and checked against `-Arch`:
+  "hardened as x64" and "hardened as ARM64" are different artifacts, and a package
+  whose name says one arch while its binaries are the other is a broken download
+  either way (D-003). With `-Arch auto` the arch is inferred from the first
+  binary it is given and every other binary must agree - so an ARM64 package is
+  verified as ARM64 the day one exists, without this script assuming x64.
+  `CF_LONGJUMP_TABLE_PRESENT` is required only on x64: it is the EH-continuation
+  table, and the linker writes it for x64 images. (The ARM64 engine built on
+  2026-11-03 carries it too, so this is a deliberate under-claim rather than a
+  guess; demanding it of ARM64 would fail a correctly built image on a toolchain
+  that leaves it out.)
+
+  `flutter_windows.dll` is the Flutter engine's own prebuilt file and is not ours
+  to harden, so it is reported but never failed.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\verify-hardening.ps1 -Path dist\MICS-portable
@@ -39,6 +51,10 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Path,
+  # Which architectural hardening the binaries must show. `auto` reads it from the
+  # first binary and requires the rest to agree.
+  [ValidateSet("auto", "x64", "arm64")]
+  [string]$Arch = "auto",
   # Files that must not be judged: a third-party prebuilt DLL cannot be told to
   # grow CFG, and failing on it would only teach the reader to ignore this probe.
   [string[]]$SkipFile = @("flutter_windows.dll")
@@ -46,6 +62,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $failures = New-Object System.Collections.Generic.List[string]
+
+# IMAGE_FILE_MACHINE_* values these builds can produce. The 32-bit value is here
+# only so a wrong artifact is named instead of "unknown".
+$MACHINE = [ordered]@{
+  "0x8664" = "x64"
+  "0xAA64" = "arm64"
+  "0x014C" = "x86"
+}
 
 # The two bits of a PE that answer "did the toolchain instrument this binary".
 $DLLCHAR = [ordered]@{
@@ -169,7 +193,7 @@ function Get-FlagNames([int]$value, $table) {
   return ($names -join "|")
 }
 
-function Test-OneBinary([string]$file, [bool]$Required) {
+function Test-OneBinary([string]$file, [bool]$Required, [string]$ExpectedArch, [ref]$MachineOut) {
   $leaf = Split-Path $file -Leaf
   Write-Output ("{0} ({1:N0} bytes)" -f $leaf, (Get-Item $file).Length)
   $info = $null
@@ -178,6 +202,10 @@ function Test-OneBinary([string]$file, [bool]$Required) {
     else { Write-Output "  (skipped: $($_.Exception.Message))" }
     return
   }
+
+  $builtFor = if ($MACHINE.Contains($info.Machine)) { $MACHINE[$info.Machine] } else { "unknown" }
+  $MachineOut.Value = $builtFor
+  Write-Output ("  machine            {0} ({1})" -f $builtFor, $info.Machine)
 
   $dll = [int]$info.DllCharacteristics
   Write-Output ("  DllCharacteristics 0x{0:X4}: {1}" -f $dll, (Get-FlagNames $dll $DLLCHAR))
@@ -190,6 +218,9 @@ function Test-OneBinary([string]$file, [bool]$Required) {
 
   if (-not $Required) { return }
 
+  if ($ExpectedArch -and $builtFor -ne $ExpectedArch) {
+    $failures.Add("$leaf`: built for $builtFor ($($info.Machine)) but this package is $ExpectedArch")
+  }
   foreach ($key in $DLLCHAR.Keys) {
     if (-not ($dll -band $DLLCHAR[$key])) { $failures.Add("$leaf`: DllCharacteristics is missing $key") }
   }
@@ -197,10 +228,14 @@ function Test-OneBinary([string]$file, [bool]$Required) {
     $failures.Add("$leaf`: has no load-config GuardFlags - Control Flow Guard is not on")
   } else {
     foreach ($key in $GUARDFLAG.Keys) {
+      # The EH-continuation table is an x64 construct: the linker writes it for
+      # x64 images, and requiring it of ARM64 would fail a good build.
+      if ($key -eq "CF_LONGJUMP_TABLE_PRESENT" -and $builtFor -ne "x64") { continue }
       if (-not ([int]$info.GuardFlags -band $GUARDFLAG[$key])) { $failures.Add("$leaf`: GuardFlags is missing $key") }
     }
   }
   if ($info.PdbPath) { $failures.Add("$leaf`: still points at a PDB ($($info.PdbPath)) - it is not stripped") }
+  return $builtFor
 }
 
 $targets = @()
@@ -218,15 +253,23 @@ if (Test-Path $Path -PathType Container) {
 }
 
 Write-Output "hardening of $Path"
+$expected = if ($Arch -eq "auto") { "" } else { $Arch }
 foreach ($file in $targets) {
   $leaf = Split-Path $file -Leaf
   $required = -not ($SkipFile -contains $leaf)
-  Test-OneBinary $file $required
+  # `auto`: the first binary that must be judged decides the arch, the rest have
+  # to agree - a package mixing two architectures is refused. The arch comes back
+  # through a [ref] because this function's output stream is the report itself.
+  $seen = ""
+  Test-OneBinary $file $required $expected ([ref]$seen)
+  if (-not $expected -and $seen -and $seen -ne "unknown") { $expected = $seen }
   if (-not $required) { Write-Output "  (not judged: third-party prebuilt, see -SkipFile)" }
 }
+if (-not $expected) { $expected = "unknown" }
+Write-Output "arch: $expected"
 
 if ($failures.Count -eq 0) {
-  Write-Output "RESULT: PASS - every MI CS binary is CFG-instrumented, ASLR/DEP-marked and stripped"
+  Write-Output "RESULT: PASS - every MI CS binary is CFG-instrumented, ASLR/DEP-marked, stripped, and built for $expected"
   exit 0
 }
 Write-Output "failures:"

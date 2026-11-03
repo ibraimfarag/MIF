@@ -42,7 +42,11 @@ function Get-EngineRustFlags {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Repo,
-        [string]$Remap = ""
+        [string]$Remap = "",
+        # Which target section to read. The flags are requested per triple because
+        # cargo does the same: building `--target aarch64-pc-windows-msvc` with the
+        # x64 section in force would drop CFG on the ARM64 leg (D-003, D-021).
+        [string]$Target = "x86_64-pc-windows-msvc"
     )
     if (-not $Remap) {
         $Remap = "--remap-path-prefix=$($env:USERPROFILE)=/build"
@@ -87,20 +91,26 @@ function Get-EngineRustFlags {
         }
     }
 
-    # Cargo's own order: a target section wins over `[build]`. On a multi-target
-    # config the host triple wins, so an ARM64 section added later cannot take
-    # over an x64 build.
+    # Cargo's own order: the section for the requested triple wins over `[build]`.
+    # Reading the x64 section for an ARM64 build (or the reverse) is how one leg
+    # silently loses the hardening the other one was measured with.
     $chosen = @()
     foreach ($name in $sections.Keys) {
-        if ($name -like '*x86_64-pc-windows-msvc*') { $chosen = $sections[$name]; break }
+        if ($name -like "*$Target*") { $chosen = $sections[$name]; break }
     }
     if ($chosen.Count -eq 0 -and $sections.Contains('build')) { $chosen = $sections['build'] }
+    if ($chosen.Count -eq 0) {
+        throw "no rustflags for $Target in $config - the build would silently skip Control Flow Guard (D-021)"
+    }
 
     return (@($chosen) + $Remap -join [char]0x1f)
 }
 
 # Run the file directly to see what a build would use.
 if ($MyInvocation.InvocationName -ne '.') {
-    $encoded = Get-EngineRustFlags -Repo (Split-Path $PSScriptRoot -Parent)
-    Write-Output ($encoded -replace [char]0x1f, ' | ')
+    $arch = if ($args -contains 'arm64') { 'aarch64-pc-windows-msvc' }
+            elseif ($args -contains 'x64') { 'x86_64-pc-windows-msvc' }
+            else { 'x86_64-pc-windows-msvc' }
+    $encoded = Get-EngineRustFlags -Repo (Split-Path $PSScriptRoot -Parent) -Target $arch
+    Write-Output ("[{0}] {1}" -f $arch, ($encoded -replace [char]0x1f, ' | '))
 }
