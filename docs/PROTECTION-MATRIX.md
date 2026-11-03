@@ -32,7 +32,7 @@ so they keep their own names. This sheet's section numbers (§2 scanner, §3 net
 |---|---|---|---|---|---|
 | L4 scanner | on-demand static analysis of files | engine job | no | known hashes (IOC feed) + YARA rules, over the tree you point it at | only through quarantine (the file is moved); never pre-execution |
 | L2 IDS | DNS-name sinkhole in the hosts file | helper applies, every app consumes | yes (helper) | nothing — it is a pure block | listed domains resolve to `0.0.0.0` |
-| L1 firewall | `netsh advfirewall` rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
+| L1 firewall | Windows Firewall API (`INetFwPolicy2`) rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
 | L3 guard | process-start rules (ETW, or a 2 s poll unelevated) | engine | ETW yes, poll no | process starts matching JSON rules (image, parent, command line) | kills the process tree for rules marked `kill` — after the start |
 | L3 canaries | decoy files | engine poll | no | decoys whose mtime/size changed | nothing |
 | L3 correlator + noise learner | analysis over guard events | engine | no | kill-chain grouping; mute suggestions for events you keep dismissing | nothing |
@@ -101,12 +101,18 @@ helper (threat model F-2).
 
 ### 3.2 Firewall (`firewall/mod.rs`)
 
-**Sees.** Rules and profiles through `netsh advfirewall` (20 s deadline per call).
+**Sees.** Rules and profiles through the Windows Firewall API (`INetFwPolicy2`,
+`INetFwRules`, `INetFwRule`) — typed properties, not console text, so there is no
+locale or output-format dependency left in the path (D-028). `scripts\verify-firewall.ps1`
+compares what the engine reads with what `Get-NetFirewallProfile` and
+`Get-NetFirewallRule` report on the same machine.
 **Blocks.** The outbound default-deny toggle for all three profiles, individual
 `MICS-*` allow/block rules (program, port, remote IP), and one
 `MICS-BLOCK-<CC>` rule built from an installed `<CC>.cidr` country list. The
 `MICS-` prefix is owned by the code, so listing and removal never touch rules it did
-not create, and every action is reversible through the helper.
+not create, and every action is reversible through the helper. Every rule carries an
+explicit all-profiles mask and the "MI CS" group, so it appears (and can be removed)
+in the Windows UI as well as in this app.
 
 **Misses.** Granularity is IP/port/program: no payload inspection, no reputation, no
 per-domain rules (that is the hosts layer's job), and no protection against a rule

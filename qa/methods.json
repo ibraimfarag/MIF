@@ -69,19 +69,19 @@
       "class": "read",
       "params": null,
       "expect": "array",
-      "note": "Reads the firewall rules through netsh."
+      "note": "Reads the firewall rules through the Windows Firewall API (D-028)."
     },
     {
       "method": "fw.rules.add",
       "class": "mutating",
       "missing": true,
-      "note": "No params means no rule object: refused before netsh runs."
+      "note": "No params means no rule object: refused before Windows is touched."
     },
     {
       "method": "fw.rules.remove",
       "class": "mutating",
       "missing": true,
-      "note": "Refused without a name, before netsh runs."
+      "note": "Refused without a name, before Windows is touched."
     },
     {
       "method": "fw.default_deny.status",
@@ -94,7 +94,7 @@
       "method": "fw.country.block",
       "class": "mutating",
       "missing": true,
-      "note": "Refused without a country code, before netsh runs."
+      "note": "Refused without a country code, before Windows is touched."
     },
     {
       "method": "job.list",

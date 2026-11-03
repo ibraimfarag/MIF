@@ -526,7 +526,7 @@ mod tests {
             }
             .validate()
             .is_err(),
-            "a direction netsh does not accept must never reach netsh"
+            "a direction the firewall API does not accept must never reach it"
         );
         assert!(
             Op::FirewallAddRule {
@@ -696,32 +696,88 @@ mod tests {
         );
     }
 
-    /// The policy is read from the line `netsh show allprofiles` really prints,
-    /// and the inbound half is preserved: the old code passed `AllowInbound` on
-    /// every write, so switching Default-Deny *off* would have opened inbound —
-    /// and it read `show <profile> state`, which has no policy line at all, so
-    /// the switch could never show as on.
+    /// The firewall is driven through the COM API now, so what used to be a
+    /// parser for `netsh`'s English text is a translation into the typed values
+    /// the API takes: the words the UI and the request payload use on one side,
+    /// the protocol numbers and direction enums Windows enforces on the other.
+    /// `Any` stays the word the screens have always shown for an unset field.
     #[test]
-    fn the_firewall_policy_is_read_from_one_netsh_dump() {
-        use crate::firewall::{inbound_of, outbound_is_blocked, parse_policies};
-        let dump = "\r\nDomain Profile Settings: \r\n\
-                    ----------------------------------------------------------------------\r\n\
-                    State                                 ON\r\n\
-                    Firewall Policy                       BlockInbound,AllowOutbound\r\n\
-                    \r\nPrivate Profile Settings: \r\n\
-                    ----------------------------------------------------------------------\r\n\
-                    State                                 ON\r\n\
-                    Firewall Policy                       BlockInbound,BlockOutbound\r\n\
-                    Ok.\r\n";
-        let policies = parse_policies(dump);
-        assert_eq!(policies.len(), 2);
-        assert_eq!(inbound_of(&policies, "domainprofile"), "BlockInbound");
-        assert!(!outbound_is_blocked(&policies, "domainprofile"));
-        assert!(outbound_is_blocked(&policies, "privateprofile"));
-        // A profile netsh did not mention is "not on" — never a panic, never a guess.
-        assert!(!outbound_is_blocked(&policies, "publicprofile"));
-        assert_eq!(inbound_of(&policies, "publicprofile"), "BlockInbound");
-        assert!(parse_policies("State                                 ON").is_empty());
+    fn the_firewall_speaks_the_api_s_own_language() {
+        use crate::firewall::{
+            action_name, action_of, direction_name, direction_of, or_any, protocol_of,
+        };
+        use windows::Win32::NetworkManagement::WindowsFirewall::{
+            NET_FW_ACTION_ALLOW, NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY, NET_FW_IP_PROTOCOL_TCP,
+            NET_FW_IP_PROTOCOL_UDP, NET_FW_RULE_DIR_IN, NET_FW_RULE_DIR_OUT,
+        };
+
+        // Directions and actions: the payload's words in, the shown word out.
+        assert_eq!(direction_of("out"), Some(NET_FW_RULE_DIR_OUT));
+        assert_eq!(direction_of(" In "), Some(NET_FW_RULE_DIR_IN));
+        assert_eq!(direction_of("both"), None, "the API has no `both`");
+        assert_eq!(direction_name(NET_FW_RULE_DIR_OUT), "Out");
+        assert_eq!(direction_name(NET_FW_RULE_DIR_IN), "In");
+        assert_eq!(action_of("block"), Some(NET_FW_ACTION_BLOCK));
+        assert_eq!(action_of("Allow"), Some(NET_FW_ACTION_ALLOW));
+        assert_eq!(action_of("drop"), None);
+        assert_eq!(action_name(NET_FW_ACTION_BLOCK), "Block");
+        assert_eq!(action_name(NET_FW_ACTION_ALLOW), "Allow");
+
+        // Protocols: the words `netsh` took, plus the numbers the API also
+        // accepts, and nothing that is not a protocol at all.
+        assert_eq!(protocol_of("any").map(|p| p.0), Some(NET_FW_IP_PROTOCOL_ANY.0));
+        assert_eq!(protocol_of("TCP").map(|p| p.0), Some(NET_FW_IP_PROTOCOL_TCP.0));
+        assert_eq!(protocol_of("udp").map(|p| p.0), Some(NET_FW_IP_PROTOCOL_UDP.0));
+        assert_eq!(protocol_of("6").map(|p| p.0), Some(NET_FW_IP_PROTOCOL_TCP.0));
+        assert_eq!(protocol_of("47").map(|p| p.0), Some(47), "GRE is a real protocol");
+        assert_eq!(protocol_of("tcp/udp"), None);
+        assert_eq!(protocol_of("999"), None, "a byte holds a protocol number");
+
+        // One state, one spelling: `netsh` printed `Any`, the API returns an
+        // empty address string or `*`, and the screens show `Any`.
+        assert_eq!(or_any(""), "Any");
+        assert_eq!(or_any("*"), "Any");
+        assert_eq!(or_any(" 10.0.0.0/8,192.168.0.0/16 "), "10.0.0.0/8,192.168.0.0/16");
+    }
+
+    /// A port rule without a protocol is refused before it reaches Windows -
+    /// which would answer with a bare `E_INVALIDARG` - and a rule without a
+    /// profile is *not* what the API's defaults would give (no profile at all,
+    /// so a rule that never fires), which is why the code sets the mask.
+    #[test]
+    fn a_port_rule_needs_a_protocol_and_every_rule_gets_every_profile() {
+        use crate::firewall::{add_rule_now, AddRuleRequest};
+
+        let port_rule = |protocol: Option<&str>| AddRuleRequest {
+            name: "verify-port".into(),
+            direction: "out".into(),
+            action: "block".into(),
+            protocol: protocol.map(String::from),
+            remote_ip: None,
+            local_port: Some("4444".into()),
+            remote_port: None,
+            program: None,
+        };
+        let refused = add_rule_now(&port_rule(None)).expect_err("no protocol, no port rule");
+        let message = format!("{refused:#}");
+        assert!(
+            message.contains("protocol") && message.contains("tcp"),
+            "the refusal names the missing piece and the fix: {message}"
+        );
+
+        // The protocol is translated before anything is created, so a bad word
+        // is also a refusal the caller can act on rather than an HRESULT.
+        let mistyped = add_rule_now(&port_rule(Some("tcp/udp"))).expect_err("not a protocol");
+        assert!(
+            format!("{mistyped:#}").contains("tcp/udp"),
+            "the refusal quotes what it did not understand"
+        );
+
+        use windows::Win32::NetworkManagement::WindowsFirewall::NET_FW_PROFILE2_ALL;
+        assert_eq!(
+            NET_FW_PROFILE2_ALL.0, 0x7FFF_FFFF,
+            "the mask the code sets on every rule is `all profiles`"
+        );
     }
 
     /// Compiles each script with `[scriptblock]::Create` in one PowerShell

@@ -127,20 +127,17 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **و3**: استبدال نداء `netsh` في الجدار بواجهة **FirewallAPI COM** جوه المحرك،
-> مع اختبارات ونفس السلوك القابل للرجوع — بعدها **و4** (صفوف LOW القابلة للتنفيذ)
-> ثم **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط، وقول كده بصراحة). و**د3** مستنية
-> كليكة UAC منك; متكتبش أرقام من غير قياس. وشغّل `scripts\pipeline.ps1 -Tier
-> fast` قبل الكوميت.
+> **و4**: تنفيذ صفوف LOW القابلة للتنفيذ في السجل — بعدها **ب2** (رجل ARM64
+> بناءً وتحقق ترجمة فقط، وقول كده بصراحة) ثم **د3** لو الكليكة وصلت. متكتبش أرقام
+> من غير قياس. وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, then take
-**و3** — replace the `netsh` firewall call with the **FirewallAPI COM** interface
-inside the engine, with tests and the same reversible behaviour — then **و4** (the
-executable LOW register rows) and **ب2** (the ARM64 leg: built and compile-verified
-only, and say so). **د3** waits for one UAC click from the user: it is the E2E run on
-the built per-machine installer, which installs the product *and* the helper and then
-removes both from Apps & features; the autonomous half of it that could be written
-without the click has been written, and nothing was invented. Run
+**و4** — the executable LOW rows of the register (§7), each with the proof its row
+names — then **ب2** (the ARM64 leg: built and compile-verified only, and say so), and
+**د3** if the UAC click has arrived. **د3** waits for one UAC click from the user: it
+is the E2E run on the built per-machine installer, which installs the product *and*
+the helper and then removes both from Apps & features; the autonomous half of it that
+could be written without the click has been written, and nothing was invented. Run
 `scripts\pipeline.ps1 -Tier fast` before every commit and stop for review after each
 one.
 §0.3c says what "done" means for every remaining slice, so a new session does not
@@ -149,10 +146,11 @@ have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
 engine's signature, the engine reports `status.integrity`, `scripts\verify-tamper.ps1`
 proves a tampered copy is refused by the gate and reported by the app, the README says
 exactly that, and the installer now creates and removes the privileged helper inside
-its own single UAC prompt (D-026) — and **و1 is done too** (D-027, both commits: the
-engine schedules the scan, Settings has the switch, `scripts\verify-scan-schedule.ps1`
-proves it). What is left is **و3**, **و4**, **ب2**, **د3**, the register (§7) and the
-things that need the user.
+its own single UAC prompt (D-026) — and **و1 (D-027, both commits)** and **و3 (D-028)**
+are done too: the engine schedules the scan and Settings has the switch
+(`scripts\verify-scan-schedule.ps1`), and the firewall now speaks the Windows Firewall
+API instead of `netsh` (`scripts\verify-firewall.ps1`, 23 checks). What is left is
+**و4**, **ب2**, **د3**, the register (§7) and the things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
@@ -350,11 +348,11 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries 19 open rows (2 HIGH, 5 MED, 12 LOW — the dark-mode row
-closed in small step 4). The MED ones
+`docs/TODO.md` §7 carries 18 open rows (2 HIGH, 4 MED, 12 LOW — the dark-mode row
+closed in small step 4, the `netsh` firewall row closed by و3/D-028). The MED ones
 worth pulling forward once the phases above allow it: **no real-time file watching**
 (the scheduled half landed with و1, D-027), the canary checker being poll-based, and
-the firewall going through `netsh` instead of FirewallAPI COM.
+Defender tamper protection.
 The HIGH ones are the installer and the incomplete package when `rules\` is dropped by
 hand — both are ب's job.
 
@@ -495,6 +493,12 @@ what "next" means.
   engine's own record of the last start, report-only, the Settings switch and folder
   with ar/en copy, and `scripts\verify-scan-schedule.ps1` (18 checks) proves all three
   claims; the register's MED row now points at real-time watching (و2) only
+- ~~**و3** `netsh` → FirewallAPI COM~~ — **done 2026-11-03** (D-028): the firewall is
+  `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, same public shape and same
+  helper payloads, every rule carries an explicit all-profiles mask and the "MI CS"
+  group, and `scripts\verify-firewall.ps1` (23 checks) proves the reads match Windows
+  and a created rule is the rule Windows enforces — with a fake `netsh` on PATH to
+  prove the dependency is gone
 - **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
 - ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
   `--obfuscate --split-debug-info`)~~ — **done** (D-021), with the numbers in §0.3
@@ -505,7 +509,7 @@ what "next" means.
 - **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
 - **هـ1** a default update-manifest URL + signature check
 - the register's open MED rows: Defender tamper protection, real-time watching,
-  FirewallAPI COM instead of `netsh`, canary read-only
+  canary read-only
 
 **Large — where a human or money is required**
 
@@ -599,7 +603,8 @@ not implemented yet, see D-008).
 | `scripts\check-helper-ownership.ps1` | Whether the installed `MICSHelper` service points at one install folder: prints `RESULT: SAFE` / `OWNED` / `UNKNOWN` and exits 0 / 2 / 1. The uninstaller asks it before deleting anything, so a service is never left aiming at a deleted `mics-engine.exe`; read-only, no elevation |
 | `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, both halves of the AUMID the toast source needs (the registry key, and the shortcuts' `System.AppUserModel.ID` written by `register-aumid.ps1` through `IPropertyStore`), an Apps-&-features entry whose uninstaller refuses to remove a copy the privileged helper still points at, and an upgrade that reuses the previous install location instead of asking twice |
 | `scripts\verify-installer.ps1` | The installer's promises, measured on a real install: a silent per-user install into `%TEMP%`, the app, engine and rule packs landing, both shortcuts' `System.AppUserModel.ID`, the AUMID key and Apps-&-features entry pointing at that copy, `Get-StartApps` filing "MI CS" under `MICS` with nothing under the exe path, the checker's answers, the uninstaller removing all of it while the machine's helper and the user's own copy stay untouched, and the refusal (error level 5, everything left in place) against a synthetic service key. Exports and re-imports the AUMID key, deletes everything it created, no elevation, ~2 min |
-| `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted EICAR string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
+| `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted ransom-note string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
+| `scripts\verify-firewall.ps1` | The firewall is Windows' API, not `netsh` (D-028), measured against this machine: a fake `netsh.exe` is put first on the engine's PATH (and a direct `netsh` is shown to stop working under it, so the trap is proved to be a trap); `fw.default_deny.status` and `fw.rules.list` are compared with `Get-NetFirewallProfile`/`Get-NetFirewallRule -PolicyStore ActiveStore` field by field; one rule is created through the engine, read back from Windows with the exact direction, action, port, program, profile and group that were asked for, then removed and Windows is asked again. A profile policy is never flipped: a default-deny toggle would cut the network of whatever else is running. Writes go through the running `MICSHelper` (or need an elevated shell - the probe records a skip, never a pass). Cleans up after a failed run; ~8 s |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -638,6 +643,56 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **و3 — the firewall speaks Windows' own API instead of parsing `netsh` (D-028)**
+  - **What moved.** `engine\src\firewall\mod.rs` went from shelling out to
+    `netsh advfirewall` (a 20 s deadline on a child process, and every read parsed
+    out of English console text) to `INetFwPolicy2` / `INetFwRules` / `INetFwRule`
+    in-process, through the `windows` crate the engine already depended on — two
+    features added (`Win32_System_Ole`, `Win32_System_Variant`), no new dependency.
+    The public shape is unchanged (`set_default_deny_now`, `add_rule_now`,
+    `remove_rule_now`, `list_rules`, `block_country`), so the helper's op set, its
+    audit trail and its refusals are untouched: an elevated process calls the API
+    directly, an unelevated one still goes through the helper (D-007).
+  - **What is genuinely better, not just newer.** Values are typed, so the words are
+    ours: `Any` is now a deliberate normalisation of `""`/`*`, and
+    `In`/`Out`/`Allow`/`Block` come from the enums. Every rule sets an explicit
+    all-profiles mask (`NET_FW_PROFILE2_ALL`) because the API's default is *no*
+    profile — a rule that exists and never fires — and a group ("MI CS") so our
+    rules appear as one block in the Windows UI, which `netsh` never did. A rule
+    that names a port without a protocol is refused with a sentence that says what
+    to add, at both boundaries: the helper payload's `validate()` and the API path.
+  - **The two traps, both measured the hard way.** (1) *Field order in the guard
+    struct is load-bearing*: Rust drops fields in declaration order, and releasing a
+    policy interface after `CoUninitialize` on that thread is an access violation —
+    `0xc0000005` in the drop, on **every** `fw.rules.list`, which is what the first
+    live run did. The interface is now declared before the apartment guard. (2) The
+    rule enumerator hands out `VT_DISPATCH` variants, not `VT_UNKNOWN` (measured:
+    `vt = 9`), so `as_rule` converts through `IDispatch` and keeps the `IUnknown`
+    path as a fallback; the first version asked for `IUnknown` and got
+    `TYPE_E_TYPEMISMATCH` for every rule.
+  - **Proved by the new probe.** `scripts\verify-firewall.ps1` — 23 checks, 0
+    skipped, 0 failures, 8.7 s against the shipped release engine: a fake `netsh.exe` first on
+    PATH (with a control check that a direct `netsh` stops working under it, so the
+    trap is proved to be a trap), the policy and the rule list compared field by
+    field with `Get-NetFirewallProfile` and `Get-NetFirewallRule -PolicyStore
+    ActiveStore`, one rule created through the engine and read back from Windows with
+    the exact direction, action, port, program, profile and group, then removed and
+    asked for again (gone, and a second removal is a no-op). It cleans up after a
+    failed run and never touches a profile policy.
+  - **What it deliberately does not claim.** The default-deny *write* is not
+    exercised: flipping a machine's outbound policy — even for a second — would cut
+    the network of whatever else is running, so the probe reads it and compares it
+    with Windows instead. And a country-sized `RemoteAddresses` string has no
+    documented ceiling and was not measured (the probe has privilege through the
+    helper but will not spend it on a guess): `block_country` still sends one rule
+    per country, and the register says so.
+  - **Measured.** 133 engine tests green (the `netsh`-dump parser test is replaced by
+    two API tests: the word/number translation, and the port-without-protocol
+    refusal), `cargo clippy --release -- -D warnings` clean, the full fast tier green.
+    The trap that took the longest was not the API: it was that `target\debug\
+    mics-engine.exe` is a *different artifact* from what `cargo test` builds, so the
+    first "still crashing" run was measuring a stale binary.
 
 - **و1 — the engine runs a scan by itself, and Settings has the switch: opt-in,
   report-only, and it needs nobody watching (D-027)** *(two commits: the engine half
@@ -3524,9 +3579,9 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
-| MED | Firewall uses `netsh`, not FirewallAPI COM | `firewall/mod.rs` |
-| LOW | The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** (`scripts\measure-guard-cpu.ps1`) *with one inert rule in force*; with the shipped starter pack the earlier runs measured 0.234 % — the difference is one-time startup matching, and it is not re-measured per rule pack | `guard/mod.rs`, `platform/windows/pids.rs` |
+| MED | ~~**Firewall uses `netsh`, not FirewallAPI COM**~~ — closed by **و3** (2026-11-03, D-028): the engine speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, so there is no child process to hang, no English console text to parse and no locale to depend on. `scripts\verify-firewall.ps1` (23 checks) compares the reads with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, creates and removes one real rule, and proves the `netsh` dependency is gone by putting a fake `netsh.exe` first on PATH. **What stays open**: a country-sized `RemoteAddresses` string has no documented ceiling and was not measured, so `block_country` still sends one rule per country | `firewall/mod.rs`, PROTECTION-MATRIX §3.2 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
+| LOW | The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** (`scripts\measure-guard-cpu.ps1`) *with one inert rule in force*; with the shipped starter pack the earlier runs measured 0.234 % — the difference is one-time startup matching, and it is not re-measured per rule pack | `guard/mod.rs`, `platform/windows/pids.rs` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory. Documented in `THREAT-MODEL.md` F-2 (small step 8), where the pipe ACL is named as what still keeps other users out | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |

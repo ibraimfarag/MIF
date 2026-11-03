@@ -1,20 +1,22 @@
 //! Running an external Windows tool with a deadline.
 //!
-//! Every command the engine spawns is someone else's code: `netsh` talking to a
-//! firewall service that is restarting, PowerShell waiting on a prompt nobody
-//! answers, `reg.exe` behind an antivirus filter, a scanner that never returns.
-//! Without a deadline the caller's thread waits forever and the UI sits on a
-//! spinner with no way out.
+//! Every command the engine spawns is someone else's code: PowerShell waiting on
+//! a prompt nobody answers, `reg.exe` behind an antivirus filter, `taskkill`
+//! against a process that is already gone, a scanner that never returns. Without
+//! a deadline the caller's thread waits forever and the UI sits on a spinner with
+//! no way out. (The firewall used to be in this list and is not any more: it
+//! speaks the Windows Firewall API in-process, D-028.)
 //!
 //! Two things this module gets right that a naive `output()` does not:
 //!
 //! 1. **A deadline.** The child is killed and the call fails with a message that
 //!    names the operation, instead of blocking a request thread.
-//! 2. **Draining while waiting.** `netsh advfirewall show rule verbose` prints far
-//!    more than a pipe buffer (64 KiB). Polling `try_wait` without reading the
-//!    pipes makes the child block on write and never exit, so a "timeout" would
-//!    fire on a process that was about to finish. The readers here run on their
-//!    own threads and collect everything.
+//! 2. **Draining while waiting.** A tool can print far more than a pipe buffer
+//!    (64 KiB) - `reg query` over a large key, a PowerShell snapshot of every
+//!    service. Polling `try_wait` without reading the pipes makes the child block
+//!    on write and never exit, so a "timeout" would fire on a process that was
+//!    about to finish. The readers here run on their own threads and collect
+//!    everything.
 //!
 //! Call sites do not build a `Command` themselves: they describe the call as a
 //! [`ToolCall`] (program, arguments, operation name, deadline) and run it. That
@@ -111,7 +113,7 @@ impl ToolCall {
 
 /// Runs `program args` and waits at most `timeout` for it.
 ///
-/// `what` names the operation in the timeout error (`"netsh (firewall)"`), so the
+/// `what` names the operation in the timeout error (`"reg.exe (snapshot)"`), so the
 /// log and the UI say which step hung instead of a bare "timed out".
 fn spawn_with_deadline(
     program: &str,

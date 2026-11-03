@@ -1,12 +1,47 @@
-use anyhow::Result;
+//! Real Windows Firewall management through the documented COM API
+//! (`INetFwPolicy2` / `INetFwRules` / `INetFwRule`) - the same surface Windows'
+//! own `wf.msc` drives. This replaces `netsh advfirewall` (register §7, MED):
+//! the engine used to parse an external tool's localized English text, wait on a
+//! child process that could hang, and depend on a binary that is not ours.
+//! Every read below is a property and every write is one COM call with a typed
+//! argument, so "what the UI shows" and "what Windows enforces" are the same
+//! object instead of a line of console output.
+//!
+//! Every rule the engine creates is prefixed `MICS-` **and** grouped under
+//! "MI CS", so list/remove never touch rules it doesn't own and the Windows
+//! firewall UI shows what we added as one block.
+
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::info;
+use windows::core::{BSTR, Error, Interface, IUnknown};
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, RPC_E_CHANGED_MODE, VARIANT_BOOL};
+use windows::Win32::NetworkManagement::WindowsFirewall::{
+    INetFwPolicy2, INetFwRule, INetFwRules, NetFwPolicy2, NetFwRule, NET_FW_ACTION,
+    NET_FW_ACTION_ALLOW, NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL, NET_FW_IP_PROTOCOL_ANY,
+    NET_FW_IP_PROTOCOL_TCP, NET_FW_IP_PROTOCOL_UDP, NET_FW_PROFILE2_DOMAIN, NET_FW_PROFILE2_PRIVATE,
+    NET_FW_PROFILE2_PUBLIC, NET_FW_PROFILE2_ALL, NET_FW_PROFILE_TYPE2, NET_FW_RULE_DIR_IN,
+    NET_FW_RULE_DIR_OUT, NET_FW_RULE_DIRECTION,
+};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoUninitialize, IDispatch, CLSCTX_INPROC_SERVER,
+    COINIT_MULTITHREADED,
+};
+use windows::Win32::System::Ole::IEnumVARIANT;
+use windows::Win32::System::Variant::VARIANT;
 
-/// Real Windows Firewall management via `netsh advfirewall` — the engine's
-/// supported path for whitelist commands. Every rule the engine creates is
-/// prefixed `MICS-` so list/remove never touch rules it doesn't own.
+/// Every rule the engine creates starts with this, so list and remove only ever
+/// see MI CS' own rules.
 pub const RULE_PREFIX: &str = "MICS-";
+
+/// The group Windows shows in `wf.msc` for the rules above. Setting it is new
+/// with this API: `netsh` left our rules ungrouped in the list.
+pub const RULE_GROUP: &str = "MI CS";
+
+/// Written into each rule's description so a person reading `wf.msc` knows where
+/// it came from, and so a support question has a name to search the docs for.
+const RULE_DESCRIPTION: &str = "Created by MI CS from Settings > Network";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FirewallRule {
@@ -22,34 +57,153 @@ pub struct FirewallRule {
     pub remote_port: String,
 }
 
-/// How long one `netsh` call may take. The firewall service can restart or get
-/// stuck; a request thread must not wait for it forever.
-const NETSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+/// The three profiles Windows keeps independent policies for. Default-Deny is
+/// only honest when all three agree, so every read and write walks this list.
+const PROFILES: [(NET_FW_PROFILE_TYPE2, &str); 3] = [
+    (NET_FW_PROFILE2_DOMAIN, "Domain"),
+    (NET_FW_PROFILE2_PRIVATE, "Private"),
+    (NET_FW_PROFILE2_PUBLIC, "Public"),
+];
 
-fn run_netsh(args: &[&str]) -> Result<String> {
-    run_netsh_plain(args)
-}
-
-fn run_netsh_plain(args: &[&str]) -> Result<String> {
-    let mut full = vec!["advfirewall"];
-    full.extend_from_slice(args);
-    // Deadline + background readers: `show rule verbose` prints far more than a
-    // pipe buffer, so waiting without draining would time out a healthy netsh.
-    let out = crate::platform::windows::process::ToolCall::new(
-        "netsh (firewall)",
-        "netsh",
-        NETSH_TIMEOUT,
-    )
-    .args(&full)
-    .run()?;
-    let text = out.text;
-    if !out.success && !text.contains("Ok.") && !text.contains("OK") {
-        anyhow::bail!("netsh failed: {}", text.trim());
+/// `netsh` printed the word `Any` for an unset address or port; the API returns
+/// an empty string (addresses) or `*` (any). The screens have always shown
+/// `Any`, so the value keeps that spelling instead of leaking two forms of the
+/// same state into the UI.
+pub(crate) fn or_any(value: &str) -> String {
+    match value.trim() {
+        "" | "*" => "Any".to_string(),
+        other => other.to_string(),
     }
-    Ok(text)
 }
 
-/// True when the current process can run `netsh` writes itself.
+/// Direction as the screens and the request payload spell it (`in` / `out`).
+pub(crate) fn direction_of(word: &str) -> Option<NET_FW_RULE_DIRECTION> {
+    match word.trim().to_ascii_lowercase().as_str() {
+        "in" | "inbound" => Some(NET_FW_RULE_DIR_IN),
+        "out" | "outbound" => Some(NET_FW_RULE_DIR_OUT),
+        _ => None,
+    }
+}
+
+/// The word the rules list shows. `netsh` printed `In` / `Out`.
+pub(crate) fn direction_name(direction: NET_FW_RULE_DIRECTION) -> &'static str {
+    if direction == NET_FW_RULE_DIR_OUT {
+        "Out"
+    } else if direction == NET_FW_RULE_DIR_IN {
+        "In"
+    } else {
+        "Unknown"
+    }
+}
+
+/// Action as a request spells it (`allow` / `block`).
+pub(crate) fn action_of(word: &str) -> Option<NET_FW_ACTION> {
+    match word.trim().to_ascii_lowercase().as_str() {
+        "allow" | "permit" => Some(NET_FW_ACTION_ALLOW),
+        "block" | "deny" => Some(NET_FW_ACTION_BLOCK),
+        _ => None,
+    }
+}
+
+/// The word the rules list shows. `netsh` printed `Allow` / `Block`.
+pub(crate) fn action_name(action: NET_FW_ACTION) -> &'static str {
+    if action == NET_FW_ACTION_BLOCK {
+        "Block"
+    } else if action == NET_FW_ACTION_ALLOW {
+        "Allow"
+    } else {
+        "Unknown"
+    }
+}
+
+/// The IP protocol number the API wants. `netsh` took the word; the API takes
+/// the number, so the translation lives here and nowhere else.
+pub(crate) fn protocol_of(word: &str) -> Option<NET_FW_IP_PROTOCOL> {
+    match word.trim().to_ascii_lowercase().as_str() {
+        "any" => Some(NET_FW_IP_PROTOCOL_ANY),
+        "tcp" | "6" => Some(NET_FW_IP_PROTOCOL_TCP),
+        "udp" | "17" => Some(NET_FW_IP_PROTOCOL_UDP),
+        other => other
+            .parse::<i32>()
+            .ok()
+            .filter(|n| (0..=255).contains(n))
+            .map(NET_FW_IP_PROTOCOL),
+    }
+}
+
+/// COM has to be started on the thread that uses it. `CoInitializeEx` says
+/// `RPC_E_CHANGED_MODE` when the thread already lives in another apartment
+/// (the UI thread of the app does), and that is not a failure: the firewall
+/// interfaces work from either. Only a call *we* started is balanced by a
+/// `CoUninitialize`, so nothing here can unbalance somebody else's apartment.
+struct Apartment {
+    ours: bool,
+}
+
+impl Apartment {
+    fn enter() -> Result<Self> {
+        // `S_FALSE` (already started on this thread) is a success and still owes
+        // one `CoUninitialize`; `RPC_E_CHANGED_MODE` means somebody else owns
+        // the apartment, and then the balance is theirs, not ours.
+        let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        if hr.is_ok() {
+            return Ok(Self { ours: true });
+        }
+        if hr == RPC_E_CHANGED_MODE {
+            return Ok(Self { ours: false });
+        }
+        Err(anyhow::anyhow!(
+            "COM could not be started: {}",
+            Error::from_hresult(hr)
+        ))
+    }
+}
+
+impl Drop for Apartment {
+    fn drop(&mut self) {
+        if self.ours {
+            unsafe { CoUninitialize() };
+        }
+    }
+}
+
+/// One open handle on the firewall policy, with the apartment kept alive for as
+/// long as the interface is used.
+///
+/// **Field order is load-bearing.** Rust drops fields in declaration order, and
+/// releasing a COM interface *after* `CoUninitialize` on that thread is an
+/// access violation (measured: `0xc0000005` in the drop, on every call through
+/// `list_rules`). The interface is declared first so it is released first, and
+/// the apartment - declared last - goes away only once nothing is left to
+/// release.
+struct Firewall {
+    policy: INetFwPolicy2,
+    _apartment: Apartment,
+}
+
+impl Firewall {
+    fn open() -> Result<Self> {
+        let apartment = Apartment::enter()?;
+        // SAFETY: `NetFwPolicy2` is the documented class id for the policy
+        // object; the interface is released by `Drop` like any other COM ref.
+        let policy: INetFwPolicy2 =
+            unsafe { CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER) }.context(
+                "the Windows Firewall API is not reachable (is the Windows Defender Firewall \
+                 service stopped?)",
+            )?;
+        Ok(Self {
+            policy,
+            _apartment: apartment,
+        })
+    }
+
+    fn rules(&self) -> Result<INetFwRules> {
+        // SAFETY: a plain property call on a live interface.
+        unsafe { self.policy.Rules() }.context("the firewall refused to hand over its rule list")
+    }
+}
+
+/// True when the current process can change the firewall itself.
 ///
 /// When it cannot, the operation goes to the privileged helper (D-007) instead
 /// of asking Windows for a fresh UAC prompt per call.
@@ -57,90 +211,25 @@ fn elevated() -> bool {
     crate::platform::windows::elevation::is_elevated()
 }
 
-/// The three profiles Windows keeps independent policies for. Default-Deny is
-/// only honest when all three agree, so every read and write walks this list.
-const PROFILES: [&str; 3] = ["domainprofile", "privateprofile", "publicprofile"];
-
-/// Every profile's policy, from **one** `show allprofiles` call.
-///
-/// This is the only spelling that answers the question: `netsh advfirewall show
-/// <profile> state` prints the on/off state and *not* the policy line, which is
-/// why the Default-Deny switch used to read "off" no matter what was set.
-fn read_policies() -> Result<Vec<(String, String)>> {
-    let text = run_netsh(&["show", "allprofiles"])?;
-    let found = parse_policies(&text);
-    for profile in PROFILES {
-        if !found.iter().any(|(p, _)| p == profile) {
-            anyhow::bail!(
-                "netsh did not report a firewall policy for {profile}: {}",
-                text.trim()
-            );
-        }
-    }
-    Ok(found)
-}
-
-/// Pulls `("domainprofile", "BlockInbound,AllowOutbound")` out of a
-/// `show allprofiles` dump. Pure, so the shape is pinned by a test instead of by
-/// whatever netsh prints on the machine that happens to run the suite.
-pub(crate) fn parse_policies(text: &str) -> Vec<(String, String)> {
-    let mut profile = String::new();
-    let mut found = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if let Some(head) = line.strip_suffix(" Profile Settings:") {
-            profile = format!("{}profile", head.to_ascii_lowercase());
-            continue;
-        }
-        if let Some(value) = line.strip_prefix("Firewall Policy") {
-            let value = value.trim();
-            if !profile.is_empty() && value.contains(',') {
-                found.push((profile.clone(), value.to_string()));
-            }
-        }
-    }
-    found
-}
-
-/// The inbound half of a profile's policy — preserved on every write, because
-/// flipping the *outbound* policy is the whole request and Windows' own default
-/// (`BlockInbound`) must survive both directions.
-pub(crate) fn inbound_of<'a>(policies: &'a [(String, String)], profile: &str) -> &'a str {
-    policies
-        .iter()
-        .find(|(p, _)| p == profile)
-        .and_then(|(_, v)| v.split(',').next())
-        .map(str::trim)
-        .unwrap_or("BlockInbound")
-}
-
-pub(crate) fn outbound_is_blocked(policies: &[(String, String)], profile: &str) -> bool {
-    policies
-        .iter()
-        .find(|(p, _)| p == profile)
-        .and_then(|(_, v)| v.split(',').nth(1))
-        .map(|o| o.trim().eq_ignore_ascii_case("BlockOutbound"))
-        .unwrap_or(false)
-}
-
-/// Default-Deny Outbound per profile. Elevation is the caller's business — this
+/// Default-Deny Outbound per profile. Elevation is the caller's business - this
 /// is the body the helper runs.
 ///
-/// `netsh` takes the pair as **one** comma-separated argument, inbound first
-/// (`BlockInbound,AllowOutbound`). Passing the halves as two arguments is what
-/// "The number of arguments provided is not valid" was: the toggle never worked.
+/// Only the outbound half moves: inbound is a separate property
+/// (`DefaultInboundAction`) and Windows' own `BlockInbound` must survive both
+/// directions.
 pub fn set_default_deny_now(enabled: bool) -> Result<()> {
-    let outbound = if enabled { "BlockOutbound" } else { "AllowOutbound" };
-    info!("Setting the default outbound policy -> {outbound} (inbound left as it is)");
-    let policies = read_policies()?;
-    for profile in PROFILES {
-        let inbound = inbound_of(&policies, profile);
-        run_netsh(&[
-            "set",
-            profile,
-            "firewallpolicy",
-            &format!("{inbound},{outbound}"),
-        ])?;
+    let action = if enabled {
+        NET_FW_ACTION_BLOCK
+    } else {
+        NET_FW_ACTION_ALLOW
+    };
+    let firewall = Firewall::open()?;
+    info!("Setting the default outbound policy -> {}", action_name(action));
+    for (profile, name) in PROFILES {
+        // SAFETY: typed property write on a live interface.
+        unsafe { firewall.policy.put_DefaultOutboundAction(profile, action) }.with_context(|| {
+            format!("the {name} profile refused the new outbound policy")
+        })?;
     }
     Ok(())
 }
@@ -148,46 +237,148 @@ pub fn set_default_deny_now(enabled: bool) -> Result<()> {
 /// Creates one `MICS-`-prefixed rule. Shared by the engine and the helper.
 pub fn add_rule_now(req: &AddRuleRequest) -> Result<String> {
     let name = format!("{}{}", RULE_PREFIX, req.name);
-    let mut args = vec![
-        "firewall".to_string(),
-        "add".to_string(),
-        "rule".to_string(),
-        format!("name={name}"),
-        format!("dir={}", req.direction),
-        format!("action={}", req.action),
-        "enable=yes".to_string(),
-    ];
-    if let Some(p) = &req.program {
-        args.push(format!("program={p}"));
+    let direction = direction_of(&req.direction).with_context(|| {
+        format!(
+            "`{}` is not a firewall direction (use `in` or `out`)",
+            req.direction
+        )
+    })?;
+    let action = action_of(&req.action).with_context(|| {
+        format!(
+            "`{}` is not a firewall action (use `allow` or `block`)",
+            req.action
+        )
+    })?;
+    // Windows rejects a port on the `any` protocol with a bare E_INVALIDARG, so
+    // say what is wrong while the request is still in our hands. (`netsh` said
+    // "The number of arguments provided is not valid" for the same mistake.)
+    if (req.local_port.is_some() || req.remote_port.is_some()) && req.protocol.is_none() {
+        anyhow::bail!(
+            "a rule that names a port also needs `protocol` (`tcp` or `udp`) - Windows has no \
+             port rule on the `any` protocol"
+        );
     }
-    if let Some(p) = &req.local_port {
-        args.push(format!("localport={p}"));
+    let protocol = match &req.protocol {
+        Some(word) => Some(protocol_of(word).with_context(|| {
+            format!("`{word}` is not an IP protocol (use `any`, `tcp`, `udp` or a number)")
+        })?),
+        None => None,
+    };
+
+    let firewall = Firewall::open()?;
+    let rules = firewall.rules()?;
+    // SAFETY: `NetFwRule` is the documented class id for one rule object; every
+    // property below is set before the object is added to the collection.
+    let rule: INetFwRule = unsafe { CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER) }
+        .context("the firewall refused to create a rule object")?;
+    let bstr = |value: &str| BSTR::from(value);
+    unsafe {
+        rule.SetName(&bstr(&name))
+            .context("the rule name was refused")?;
+        rule.SetDescription(&bstr(RULE_DESCRIPTION))?;
+        rule.SetGrouping(&bstr(RULE_GROUP))?;
+        rule.SetDirection(direction)?;
+        rule.SetAction(action)?;
+        rule.SetEnabled(VARIANT_BOOL::from(true))?;
+        // "Any profile", the same reach `netsh` gave a rule it was not told a
+        // profile for - except the API's default is *no* profile at all, so
+        // leaving this out would create a rule that never fires.
+        rule.SetProfiles(NET_FW_PROFILE2_ALL.0)?;
+        if let Some(program) = &req.program {
+            rule.SetApplicationName(&bstr(program)).with_context(|| {
+                format!("`{program}` was refused as the program of the rule")
+            })?;
+        }
+        if let Some(protocol) = protocol {
+            rule.SetProtocol(protocol.0)?;
+        }
+        if let Some(ports) = &req.local_port {
+            rule.SetLocalPorts(&bstr(ports))?;
+        }
+        if let Some(ports) = &req.remote_port {
+            rule.SetRemotePorts(&bstr(ports))?;
+        }
+        if let Some(addresses) = &req.remote_ip {
+            rule.SetRemoteAddresses(&bstr(addresses))?;
+        }
+        rules
+            .Add(&rule)
+            .with_context(|| format!("the firewall refused to add the rule {name}"))?;
     }
-    if let Some(p) = &req.remote_port {
-        args.push(format!("remoteport={p}"));
-    }
-    if let Some(p) = &req.remote_ip {
-        args.push(format!("remoteip={p}"));
-    }
-    if let Some(p) = &req.protocol {
-        args.push(format!("protocol={p}"));
-    }
-    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    run_netsh(&arg_refs)?;
-    info!("Created firewall rule {name}");
+    info!("Created firewall rule {name} through the firewall API");
     Ok(name)
 }
 
 /// Removes one `MICS-` rule (the prefix is optional in the argument).
+///
+/// Removing a rule that is already gone is a success, not an error: the caller
+/// asked for it to not be there, and `block_country` removes before it adds.
 pub fn remove_rule_now(name: &str) -> Result<()> {
-    let name = name
-        .strip_prefix(RULE_PREFIX)
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| name.to_string());
+    let name = name.strip_prefix(RULE_PREFIX).unwrap_or(name);
     let full = format!("{}{}", RULE_PREFIX, name);
-    let _ = run_netsh(&["firewall", "delete", "rule", &format!("name={full}")])?;
-    info!("Removed firewall rule {full}");
-    Ok(())
+    let firewall = Firewall::open()?;
+    let rules = firewall.rules()?;
+    // SAFETY: a collection call with an owned string.
+    match unsafe { rules.Remove(&BSTR::from(full.as_str())) } {
+        Ok(()) => {
+            info!("Removed firewall rule {full}");
+            Ok(())
+        }
+        Err(e) if is_missing(&e) => {
+            info!("Firewall rule {full} was already gone");
+            Ok(())
+        }
+        Err(e) => Err(anyhow::anyhow!(
+            "the firewall refused to remove {full}: {e}"
+        )),
+    }
+}
+
+/// `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)` - the rule was not there. Windows
+/// returns `S_OK` for that case in most builds; this covers the ones that do not.
+fn is_missing(e: &windows::core::Error) -> bool {
+    let low_word = (e.code().0 as u32) & 0xFFFF;
+    low_word == ERROR_FILE_NOT_FOUND.0
+}
+
+/// Turns one `VARIANT` from the rule enumerator into a rule we own.
+///
+/// The firewall hands out an `IDispatch` (measured: `vt = 9`); the uniform
+/// `IUnknown` path is kept for a Windows that hands out `VT_UNKNOWN` instead.
+/// Either way the interface is cloned before the `VARIANT` is dropped, so no
+/// reference is released twice.
+fn as_rule(item: &VARIANT) -> Result<INetFwRule> {
+    let not_a_rule = "the firewall's rule list contained something that is not a rule";
+    if let Ok(dispatch) = IDispatch::try_from(item) {
+        return dispatch.cast().context(not_a_rule);
+    }
+    let unknown = IUnknown::try_from(item).context(not_a_rule)?;
+    unknown.cast().context(not_a_rule)
+}
+
+/// Walks a COM collection. `INetFwRules` has no indexer, so the only way to see
+/// every rule is its enumerator; the `VARIANT`s it hands out own one reference
+/// each, which `as_rule` turns into an owned interface.
+fn enumerate(rules: &INetFwRules) -> Result<Vec<INetFwRule>> {
+    let mut found = Vec::new();
+    // SAFETY: a property call on a live collection interface.
+    let unknown = unsafe { rules._NewEnum() }
+        .context("the firewall refused to enumerate its rules")?;
+    let enumerator: IEnumVARIANT = unknown
+        .cast()
+        .context("the firewall's rule list is not an enumerator")?;
+    loop {
+        let mut item = [VARIANT::default(); 1];
+        let mut fetched = 0u32;
+        // SAFETY: one-element buffer, length passed by the binding.
+        let hr = unsafe { enumerator.Next(&mut item, &mut fetched) };
+        // S_FALSE (not an error) is the end of the list; a real error stops too.
+        if hr.is_err() || fetched == 0 {
+            break;
+        }
+        found.push(as_rule(&item[0])?);
+    }
+    Ok(found)
 }
 
 pub struct FirewallManager;
@@ -205,56 +396,46 @@ impl FirewallManager {
     /// True only when **every** profile blocks outbound, so a half-changed
     /// firewall cannot show up as "on".
     pub async fn is_default_deny_enabled() -> Result<bool> {
-        let policies = read_policies()?;
-        Ok(PROFILES
-            .iter()
-            .all(|profile| outbound_is_blocked(&policies, profile)))
+        let firewall = Firewall::open()?;
+        for (profile, name) in PROFILES {
+            // SAFETY: typed property read on a live interface.
+            let action = unsafe { firewall.policy.get_DefaultOutboundAction(profile) }
+                .with_context(|| format!("the {name} profile's outbound policy could not be read"))?;
+            if action != NET_FW_ACTION_BLOCK {
+                info!("the {name} profile still allows outbound traffic");
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// Reads every firewall rule owned by MI CS (MICS-* prefix).
     pub async fn list_rules() -> Result<Vec<FirewallRule>> {
-        let text = run_netsh(&["firewall", "show", "rule", "name=all", "verbose"])?;
-        let mut rules = Vec::new();
-        let mut current: Option<FirewallRule> = None;
-
-        for raw in text.lines() {
-            let line = raw.trim();
-            if let Some(rest) = line.strip_prefix("Rule Name:") {
-                if let Some(r) = current.take()
-                    && r.name.starts_with(RULE_PREFIX) {
-                        rules.push(r);
-                    }
-                current = Some(FirewallRule {
-                    name: rest.trim().to_string(),
-                    enabled: false,
-                    direction: String::new(),
-                    action: String::new(),
-                    remote_ip: String::new(),
-                    local_port: String::new(),
-                    remote_port: String::new(),
+        let firewall = Firewall::open()?;
+        let rules = firewall.rules()?;
+        let mut found = Vec::new();
+        for rule in enumerate(&rules)? {
+            // SAFETY: property reads on a rule object the enumerator owns.
+            unsafe {
+                let name = rule.Name()?.to_string();
+                if !name.starts_with(RULE_PREFIX) {
+                    continue;
+                }
+                found.push(FirewallRule {
+                    name,
+                    enabled: rule.Enabled()?.as_bool(),
+                    direction: direction_name(rule.Direction()?).to_string(),
+                    action: action_name(rule.Action()?).to_string(),
+                    remote_ip: or_any(&rule.RemoteAddresses()?.to_string()),
+                    local_port: or_any(&rule.LocalPorts()?.to_string()),
+                    remote_port: or_any(&rule.RemotePorts()?.to_string()),
                 });
-                continue;
-            }
-            let Some(r) = current.as_mut() else { continue };
-            if let Some(v) = line.strip_prefix("Enabled:") {
-                r.enabled = v.trim().eq_ignore_ascii_case("yes");
-            } else if let Some(v) = line.strip_prefix("Direction:") {
-                r.direction = v.trim().to_string();
-            } else if let Some(v) = line.strip_prefix("Action:") {
-                r.action = v.trim().to_string();
-            } else if let Some(v) = line.strip_prefix("LocalPort:") {
-                r.local_port = v.trim().to_string();
-            } else if let Some(v) = line.strip_prefix("RemotePort:") {
-                r.remote_port = v.trim().to_string();
-            } else if let Some(v) = line.strip_prefix("RemoteIP:") {
-                r.remote_ip = v.trim().to_string();
             }
         }
-        if let Some(r) = current.take()
-            && r.name.starts_with(RULE_PREFIX) {
-                rules.push(r);
-            }
-        Ok(rules)
+        // The enumerator's order is Windows' business; the screens sort by name
+        // so two reads of an unchanged firewall look the same.
+        found.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(found)
     }
 
     pub async fn add_rule(req: &AddRuleRequest) -> Result<String> {
@@ -303,14 +484,17 @@ impl FirewallManager {
         }
         let name = format!("BLOCK-{cc}");
         let _ = Self::remove_rule(&name).await;
-        // netsh accepts a comma-separated remoteip set; keep batches conservative.
-        let joined = cidrs.join(",");
+        // One comma-separated address set, exactly as `netsh` received it.
+        // Windows documents no ceiling for `RemoteAddresses` and MI CS has not
+        // measured what a country-sized list does to the call (changing the
+        // firewall needs administrator rights), so this stays one rule instead
+        // of guessing a chunk size - the open question is in the register (§7).
         let req = AddRuleRequest {
             name,
             direction: "out".into(),
             action: "block".into(),
             protocol: Some("any".into()),
-            remote_ip: Some(joined),
+            remote_ip: Some(cidrs.join(",")),
             local_port: None,
             remote_port: None,
             program: None,

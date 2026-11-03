@@ -244,7 +244,7 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 
 | Layer | Implemented as | Protects against | Does not cover |
 |---|---|---|---|
-| **L1 Network Gate** | Windows Firewall management (`netsh`): default-deny outbound, `MICS-*` rules, per-country CIDR blocking | Unwanted outbound traffic and known-bad ranges, once rules exist | No deep packet inspection — it is policy, not an inline filter |
+| **L1 Network Gate** | Windows Firewall through its own API: default-deny outbound, `MICS-*` rules, per-country CIDR blocking | Unwanted outbound traffic and known-bad ranges, once rules exist | No deep packet inspection — it is policy, not an inline filter |
 | **L2 Attack Radar** | Managed hosts-file domain blocklist + GeoIP tables from synced blocklists | Name resolution to known malicious/tracking domains, for every app | Raw-IP traffic, DoH inside apps, no packet inspection |
 | **L3 Response** | Process guard (2 s poll unelevated, kernel ETW when elevated), Sigma-like rules, kill-tree, canaries, incident correlator | Suspicious process creation, persistence attempts, ransomware-style decoy touches | Not a kernel driver; an attacker who is already admin is out of scope |
 | **L4 File Engines** | Triage scanner: SHA-256 vs local IOC cache, then YARA rules | Known-bad files by hash and by pattern | No ClamAV signatures, no CAPA, no unpacking |
@@ -440,11 +440,15 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-hardening.ps1 -Path dist
 # The package describes itself, and a tampered copy is refused and reported
 powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1
+
+# The firewall goes through Windows' own API: reads match Windows, a created rule
+# is the rule Windows enforces, and a fake netsh on PATH proves the dependency is gone
+powershell -ExecutionPolicy Bypass -File scripts\verify-firewall.ps1
 ```
 
 Test hooks exist so an isolated engine can be run without touching production
 code: `MICS_DATA_DIR`, `MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`,
-`MICS_NO_AUTO_RESUME`, `MICS_ENGINE_PATH`, `MICS_HELPER_PIPE`,
+`MICS_NO_AUTO_RESUME`, `MICS_NO_SCAN_SCHEDULE`, `MICS_ENGINE_PATH`, `MICS_HELPER_PIPE`,
 `MICS_HELPER_LOG`.
 
 **Contrast is measured, not eyeballed.** `test/light_contrast_audit_test.dart` and

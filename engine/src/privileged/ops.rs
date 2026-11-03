@@ -110,6 +110,22 @@ impl Op {
                 if !matches!(rule.action.as_str(), "allow" | "block") {
                     bail!("firewall rule action must be \"allow\" or \"block\"");
                 }
+                // The payload is the *last* place both sides agree on, so a
+                // request that cannot become a rule is refused here rather than
+                // inside the helper: Windows takes a port only on tcp/udp, and
+                // it answers a port on `any` with a bare E_INVALIDARG.
+                if let Some(protocol) = &rule.protocol
+                    && crate::firewall::protocol_of(protocol).is_none()
+                {
+                    bail!(
+                        "firewall rule protocol must be \"any\", \"tcp\", \"udp\" or a number, \
+                         not {protocol:?}"
+                    );
+                }
+                if rule.protocol.is_none() && (rule.local_port.is_some() || rule.remote_port.is_some())
+                {
+                    bail!("a firewall rule that names a port also needs a protocol (tcp or udp)");
+                }
                 Ok(())
             }
             Op::FirewallRemoveRule { name } => {

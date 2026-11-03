@@ -1217,3 +1217,53 @@ three claims (off means off; due means a scan starts over the configured folder 
 finds the planted EICAR string; the file is still there afterwards). What it does
 **not** close is the half of the register row about watching: a scheduled scan is a
 moment, not a monitor, and `و2` stays open with its CPU-cost decision.
+
+## D-028 — The firewall is driven through Windows' own API, not `netsh`
+
+**Status:** decided (2026-11-03); implemented in `engine\src\firewall\mod.rs`, proved
+by `scripts\verify-firewall.ps1` (23 checks).
+
+**Context.** Every firewall change went through `netsh advfirewall` and every read
+came back as English console text the engine parsed — with a 20 s deadline per call,
+because a child process can hang and the firewall service can restart. The register's
+MED row named it: *"Firewall uses `netsh`, not FirewallAPI COM"*. The cost was never
+one specific bug (there were two: a policy argument shape that made Default-Deny
+impossible to turn on, and a `show rule verbose` dump large enough to fill a pipe);
+it was that a security control's truth lived in a stranger's formatting, in whatever
+locale that stranger was set to.
+
+**Decision.** The engine speaks `INetFwPolicy2` / `INetFwRules` / `INetFwRule` — the
+same COM surface `wf.msc` drives — through the `windows` crate the engine already
+depended on. Three properties make this a replacement rather than a rewrite:
+
+* **The public shape is unchanged.** `set_default_deny_now`, `add_rule_now`,
+  `remove_rule_now`, `list_rules`, `block_country` keep their signatures and their
+  privilege split: an elevated process calls them directly, an unelevated one goes to
+  the helper (D-007) over the same `Op` payloads, so the helper's protocol, its audit
+  trail and its refusals are untouched.
+* **Values are typed, so the words are ours.** The `Any` that `netsh` printed is now a
+  deliberate normalisation of `""`/`*` → `Any`, and `In`/`Out`/`Allow`/`Block` come
+  from the enums instead of being matched in the output. A rule that names a port but
+  no protocol is refused with a sentence that says what to add (`netsh` answered "The
+  number of arguments provided is not valid" for the same mistake).
+* **Every rule covers every profile, explicitly.** `INetFwRule::Profiles` defaults to
+  *no* profile — a rule that exists and never fires. The mask is set to
+  `NET_FW_PROFILE2_ALL` for all of them, and each rule is grouped under "MI CS" so the
+  Windows UI shows what we added as one block (`netsh` left them ungrouped).
+
+**What this cost, and the two traps that cost the most.** One COM apartment per call,
+opened and closed around the interfaces — and *field order in the guard struct is
+load-bearing*: Rust drops fields in declaration order, and releasing a policy
+interface after `CoUninitialize` on that thread is an access violation (`0xc0000005`
+in the drop, measured on every `fw.rules.list`). The interface is declared before the
+apartment guard for that reason. The other trap: `INetFwRules::_NewEnum` hands out
+`VT_DISPATCH` variants, not `VT_UNKNOWN` (measured: `vt = 9`), so the enumeration
+converts through `IDispatch` and keeps the `IUnknown` path as a fallback.
+
+**What this does not claim.** The probe never flips a profile policy — a default-deny
+toggle would cut the network of whatever else is running, so
+`set_default_deny_outbound` is read and compared with `Get-NetFirewallProfile`, not
+written. A country-sized `RemoteAddresses` string has no documented ceiling and was
+not measured (changing the firewall needs administrator rights, which the probe has
+through the helper but chooses not to spend on a guess): it stays one rule per
+country, exactly as before, and the open question is in the register.
