@@ -368,14 +368,17 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries 19 open rows (2 HIGH, 4 MED, 13 LOW — the dark-mode row
-closed in small step 4, the `netsh` firewall row closed by و3/D-028; recounted from
-the table itself on 2026-11-03). The MED ones
+`docs/TODO.md` §7 carries **12 open rows (1 HIGH, 4 MED, 7 LOW)** out of 22 —
+recounted from the table itself on 2026-11-03, after و4 closed six of them (the
+incomplete package, the merged-audit ages, the blocking `vuln.scan`, the plaintext
+keys, the guard cost, the portable caller check, the AUMID attribution) and the
+dark-mode and `netsh` firewall rows closed earlier. The MED ones
 worth pulling forward once the phases above allow it: **no real-time file watching**
 (the scheduled half landed with و1, D-027), the canary checker being poll-based, and
 Defender tamper protection.
-The HIGH ones are the installer and the incomplete package when `rules\` is dropped by
-hand — both are ب's job.
+The HIGH one left is the signing certificate and a published download (ب5 → ب6); the
+incomplete-package HIGH row is **closed** — `verify-release.ps1` refuses a package
+whose `rules\` went missing, measured with exit code 1.
 
 **Blocked on the user (listed in §0.2, do not plan around them):** a real signing
 certificate (ب5), and the three-operation helper acceptance in §0.2 — its install
