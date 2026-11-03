@@ -25,10 +25,17 @@ gating the release on what the file says rather than on the build flags.
 
 The installer is **finished and measured** (ب3 steps 1–3, 2026-11-01): it installs
 and removes the whole product, tags both shortcuts' `System.AppUserModel.ID` through
-`IPropertyStore`, refuses to remove a copy its privileged helper still points at, and
-`scripts\verify-installer.ps1` proves all of it end to end in about two minutes.
-What is left is **release engineering (ب4, د3), the §7 register, and the two things
-that need a human** (one UAC-acceptance session and a signing certificate).
+`IPropertyStore`, and `scripts\verify-installer.ps1` proves all of it end to end in
+about two minutes. **ب4 landed 2026-11-03 (D-026)** and made it one prompt: the same
+elevated run now creates the privileged helper — through the shipped engine's own
+`install-helper` — and the uninstaller stops and deletes that service again, only
+after proving its binPath is the folder being removed and only the service name that
+`HELPER_SVC_KEY` names. The run also fixed a defect it uncovered: the refusal dialogs
+awaited a click even under `/S`, so the documented exit level 5 never arrived for a
+scripted uninstall (measured at 532 s on the pre-change build too) — both are now
+`${IfNot} ${Silent}` and the verifier's 141 s run proves it.
+What is left is **د3**, the §7 register, and the two things that need a human
+(one per-machine UAC-acceptance session and a signing certificate).
 
 The integrity manifest is **done end to end** (ج2, both commits, and ط2, 2026-11-03,
 D-025 and its three amendments): `make-release.ps1` signs every staged file except the
@@ -40,8 +47,8 @@ document at start-up, re-hashes the folder it runs from, classifies its own
 signature (ours and trusted / ours with a root this Windows has not trusted yet /
 anything else) and answers `status.integrity` — `ok`, `untrusted-certificate` or
 `unverified`, which Settings → About renders as one green line, one neutral line or
-the notice, with a card naming the files that moved. The next slice on this lane is
-**ط2**, the tamper tests, which sit on exactly this manifest.
+the notice, with a card naming the files that moved. **ط2 landed on top of it** — see
+below — and the lane is closed.
 
 **ط2, the tamper tests, landed the same day** (`scripts\verify-tamper.ps1`, also the
 `tamper.verify` release step): one thing is tampered with at a time in a private copy
@@ -106,7 +113,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 |---|---|--:|--:|---|
 | ~~**ج1**~~ | ~~**Build hardening**: Rust LTO/strip/`panic=abort`, PE mitigations, Dart `--obfuscate --split-debug-info`~~ — **done** (D-021): CFG on both binaries (measured from the PE, and it was absent before), engine 35.7 → 24.0 MB, obfuscated Dart with symbols kept out of the package, and `verify-hardening.ps1` gating the release | ✅ | 2–3 h | Landed 2026-10-31; the installer now packs hardened binaries. |
 | ~~**ب3**~~ | ~~**NSIS installer**: engine + `rules` + offline intel, shortcuts, AUMID, one UAC, uninstaller, upgrade path, `scripts\verify-installer.ps1`~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` produce `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB, NSIS 3.11); the per-user variant installs 70 files with the hardened, signed engine (`E64A6FDE...`, `Valid`) and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore` (`Get-StartApps` shows no exe-path entry); the uninstaller refuses a copy the helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s, restoring the machine afterwards | ✅ | — | Left for a human: one **per-machine** run (one UAC click, §0.2). |
-| **ب4** | Fold the privileged-helper install into the installer (removes the separate UAC step) | 🟠 | 1–2 h | After ب3. |
+| ~~**ب4**~~ | ~~Fold the privileged-helper install into the installer (removes the separate UAC step)~~ — **done 2026-11-03 (D-026)**: the per-machine section runs the shipped engine's own `install-helper` under the installer's elevation, so one prompt installs the product *and* the service (a failure warns and leaves the app's repair path), and the uninstaller asks `check-helper-ownership.ps1 -Remove` to stop and delete exactly the service whose binPath is `$INSTDIR`, scoped to `HELPER_SVC_KEY`'s leaf so a probe cannot touch a real one; refusal with error level 5 is kept for the cases it cannot remove. Both variants compile and `verify-installer.ps1` passes end to end in **141 s** — which also proved a defect: the refusal dialogs blocked `/S` forever (532 s on the pre-change build too), so the documented exit code was never reachable without a click; they are now `${IfNot} ${Silent}`. Left for a human: the same one **per-machine** run | ✅ | 1–2 h | After ب3. |
 | ~~**ج2**~~ | ~~**Signed SHA-256 manifest** of shipped files + startup self-check + "unofficial build" banner~~ — **done 2026-11-03, both commits** | ✅ | 3–5 h | Closes F-11's detection half; reuses the local self-signed certificate. **Design settled 2026-11-03 (D-025) and amended twice the same day**: the manifest is an `RT_RCDATA` resource inside `mics-engine.exe`, so its authenticity is the engine's existing Authenticode signature and `EXPECTED_SIGNER_CN` pin. **The producer**: `make-release.ps1` signs every staged file except the engine, builds the manifest from those final bytes, injects it, signs the engine once (injecting into an already-signed PE breaks it for signtool, `0x800700C1`, measured), and `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes the 68 files it lists — plus a `manifest.verify` release-tier step. **The reader**: `engine\src\selfcheck.rs` re-reads the resource at start-up, re-hashes the folder it runs from, and separates "our certificate, this Windows has not trusted the root yet" (`CERT_E_UNTRUSTEDROOT` + the embedded signer read without a chain) from "the bytes changed" (`TRUST_E_BAD_DIGEST`, which must never be quiet); `status.integrity` answers `ok` / `untrusted-certificate` / `unverified`, Settings → About shows one line or the notice, and only a copy that *carries* a disagreeing manifest raises a card. |
 | ~~**د0**~~ | ~~**Pipeline entry point**: `scripts/pipeline.ps1` with tiers, fail-fast, a JSON report, and the CI workflow calling it instead of repeating the four checks~~ — **done** (ز0, 2026-11-01): `fast` = the four checks (measured 16.3 + 13.8 + 7.4 + 2.4 s), `full` adds both release builds and the engine smoke, `release` is where the artifact verifiers land; CI caches `engine/target` and uploads the report | ✅ | — | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | ~~**د1**~~ | ~~`qa/` contract harness: every method × (happy path, invalid params, unknown method, result schema), registry generated from `dispatcher.rs` and freshness-checked~~ — **done** (2026-11-01): `qa/methods.json` documents all **62** methods, `qa/contract.dart` runs the surface against a real engine in a `%TEMP%` sandbox (**64 cases, 0 failed, 15 classified not-to-run with a reason, 18.4 s** on the release binary), and `test/qa_registry_test.dart` fails if the registry and the dispatcher's match table ever disagree | ✅ | — | `qa/README.md` carries the rules; `engine.contract` is a `full`-tier pipeline step, so CI runs it. |
@@ -131,7 +138,8 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 ## 3. The order to work in
 
 **The approved track (2026-11-01) runs first, one commit per step:**
-**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** *(done 2026-11-03)* → **ج3** *(done 2026-11-03)* → the release lane: **ب4** (fold the helper install into the installer) and **د3** (E2E on the built installer), which each need one UAC click from a human, then **هـ1 + و1**.
+**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** *(done 2026-11-03)* → **ج3** *(done 2026-11-03)* → the release lane: **ب4** *(done 2026-11-03)* and **د3**
+(E2E on the built installer), which needs one UAC click from a human, then **هـ1 + و1**.
 It is what the user picked over the release lane; the list below is the release lane
 the project returns to afterwards.
 
@@ -144,7 +152,10 @@ the project returns to afterwards.
 2. ~~**ب3 installer**~~ — **done** (steps 1–3): the project goes from a ZIP to a
    product with hardened binaries, tagged shortcuts, a guarded uninstaller and a
    script that proves all of it. Left for a human: one per-machine run.
-3. **ب4 helper fold-in** — removes the extra UAC step.
+3. ~~**ب4 helper fold-in**~~ — **done 2026-11-03** (D-026): the installer creates the
+   privileged helper inside its one prompt and removes it on uninstall, so an installed
+   copy never asks for administrator rights twice — see the installer note at the top of
+   this file. Left for a human: the same per-machine run.
 4. ~~**ج2 signed manifest + self-check**~~ — **done 2026-11-03** (both commits): the
    package describes itself inside the engine's own signature, the engine checks that
    at start-up and Settings → About answers with one line — see the phase note at the

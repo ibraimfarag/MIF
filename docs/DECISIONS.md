@@ -1114,3 +1114,57 @@ trusted the self-signed certificate yet — are accepted, mirroring
 PowerShell, `$script:MicsSignerCn` in `scripts\manifest-resource.ps1`, and
 `test\package_integrity_test.dart` reads `EXPECTED_SIGNER_CN` out of
 `signature.rs` and fails if the two spellings drift apart.
+
+---
+
+## D-026 — The installer owns the privileged helper's whole life, so the product asks for UAC once
+
+**Status:** decided (2026-11-03); implemented in `installer\mics.nsi` and
+`scripts\check-helper-ownership.ps1`.
+
+**Context.** D-007 buys elevation with one prompt through the `MICSHelper` service,
+and D-022 made the installer deliberately *not* create it: the product asked once to
+install itself, then again at the first fix that needs administrator rights, when
+`Settings -> Engine` ran the engine's elevated `install-helper`. Two prompts for one
+program is the exact cost D-007 exists to avoid, and the second one arrives at the
+worst possible moment — in the middle of the job the user is trying to finish. ب4 is
+D-022's own footnote ("the privileged helper stays the app's job (ب4 folds it in)").
+
+**Decision.** On a per-machine install the installer creates the service, and on
+uninstall it removes it:
+
+* **Install** runs the shipped engine's own `install-helper` — the same command the
+  app's button runs — with the elevation the installer already holds. The service
+  definition (`sc create` with the quoted binPath and the `helper-service` argument,
+  the description, the start type) therefore stays in exactly one place,
+  `engine\src\privileged\service.rs`; NSIS never spells it out a second time. A
+  failure is reported and **not fatal**: the install completes, the details pane says
+  the service was not created, and the app's repair path (one prompt, later) is
+  exactly what a portable copy has always had.
+* **Uninstall** asks `scripts\check-helper-ownership.ps1 -Remove`: the same check that
+  already refuses to delete a folder the helper points at now stops and deletes the
+  service **when, and only when, its binPath points at `$INSTDIR`**. The `sc` calls are
+  scoped to the service name derived from the key that was read (`HELPER_SVC_KEY`'s
+  leaf), so a verification build pointed at a synthetic key cannot delete the machine's
+  real `MICSHelper` — and an unelevated caller cannot either, which is what keeps the
+  refusal path measurable.
+* **It still refuses when it cannot.** An uninstaller started without administrator
+  rights, a service it may not delete, a definition it cannot read: nothing is removed,
+  the error level is 5, and the message names `Settings -> Engine -> Remove helper` as
+  the manual way out. Install and uninstall are symmetric: whatever this installer
+  created it takes away, and whatever it did not, it leaves alone.
+* **Portable copies are unchanged.** Nothing creates the service for them, so D-007's
+  one-prompt path through the app is still how they get one, and the uninstaller's
+  refusal still protects a copy the helper points at.
+
+**What this costs.** The installer now owns state, which D-022 deliberately avoided:
+one entry under `HKLM\SYSTEM\CurrentControlSet\Services`. That widening is paid for
+with rule 6's reversibility: `install-helper` stops and deletes any previous definition
+before creating its own, so an upgrade or a repair converges on the current `$INSTDIR`
+instead of leaving a second service; the uninstaller deletes the service before it
+deletes a single file; and neither touches the audit trail in `%PROGRAMDATA%\MICS`.
+The per-machine path still needs one human UAC click to be *measured* — compiling both
+variants and running the per-user one end to end prove the script and the per-user
+path, not the boxing of a real service — so `scripts\verify-installer.ps1` keeps
+measuring what it can, and the per-machine run stays the documented manual step, as
+D-022 says about itself.

@@ -92,14 +92,19 @@ work — so a crash mid-op still leaves the intent on disk (`security` rule 6 in
 
 ## Install, upgrade, remove
 
-`install-helper` (elevated, started by the engine with one UAC prompt on the
-first privileged operation) — a CLI **subcommand**, and the engine passes exactly
+`install-helper` has two callers and they are the same command: the app's
+`Settings -> Engine -> Install helper` on a portable copy (elevated, started by the
+engine with one UAC prompt on the first privileged operation), and — since ب4/D-026 —
+the **installer itself**, which already holds the elevation and runs the same
+subcommand while it installs, so an installed copy never sees a second prompt. It is a
+CLI **subcommand**, and both callers pass exactly
 this spelling: as `--install-helper` clap refuses the argument and exits 2 before
 the child can log anything, which is what the first shipped build did:
 
 1. `sc stop` + `sc delete` any previous definition, so an upgraded exe path and
    the current description replace the old service instead of leaving a stale
-   one behind.
+   one behind. That is also what makes the installer's call idempotent across
+   upgrades and repairs.
 2. `sc create MICSHelper binPath="<current exe>" helper-service start= auto
    obj= LocalSystem` — the service points at the same executable that needs the
    work, so there is nothing extra to ship. The body is the `helper-service`
@@ -110,8 +115,14 @@ the child can log anything, which is what the first shipped build did:
    the helper actually answers: "sc said Ok" is not the same as "the engine can
    use it".
 
-`uninstall-helper` stops and deletes the service, treating `1060` (service does
-not exist) as already done.
+`uninstall-helper` stops and deletes `MICSHelper`, treating `1060` (service does
+not exist) as already done. Removal has a second shape for the installer, because the
+installer is what created the service (D-026): its uninstaller asks
+`scripts\check-helper-ownership.ps1 -Remove`, which deletes only after proving the
+service's `binPath` points at the folder being removed, and only the service named by
+the `ServiceKey` it read. Without elevation, or when the definition is not this copy's,
+it answers `OWNED`/`UNKNOWN` instead and the uninstaller refuses with error level 5:
+nothing is touched and the message points at the app's own button.
 
 The service body is `StartServiceCtrlDispatcherW` → `service_main`:
 `SERVICE_START_PENDING` → audit note → `SERVICE_RUNNING` with `STOP|SHUTDOWN`

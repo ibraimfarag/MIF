@@ -4,9 +4,15 @@
 ; AUMID the toast identity needs — both halves of it: the registry key, and the
 ; shortcut's System.AppUserModel.ID, which is a Shell property IPropertyStore
 ; writes (scripts\register-aumid.ps1) and NSIS cannot. An entry in Apps & features
-; removes the lot again, and the uninstaller refuses to take apart a copy the
-; privileged helper still points at, because that service is the app's to create
-; and remove (D-022). Folding the helper's *install* into this installer is ب4.
+; removes the lot again.
+;
+; ب4 (D-026) moved one more thing in here: on a per-machine install this elevated
+; run also installs the privileged helper — by calling the shipped engine's own
+; `install-helper`, so the service definition stays in the engine — and on uninstall
+; it stops and deletes the service it created, through
+; scripts\check-helper-ownership.ps1 -Remove, whose removal is scoped to the name in
+; HELPER_SVC_KEY. The product therefore asks for UAC once, at install, and never
+; again; a portable copy still installs the helper from the app, as D-007 describes.
 ;
 ; Everything is driven by defines the build script passes in:
 ;   /DVERSION=0.1.0 /DSRCDIR=<package> /DSCRIPTDIR=<repo scripts> /DOUTFILE=<exe>
@@ -179,6 +185,27 @@ Section "MI CS" SecMain
     WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" 51200
   !endif
 
+  ; The privileged helper, installed by the same prompt that installed the product
+  ; (ب4/D-026). The engine's `install-helper` is the one place that knows the
+  ; service definition (`sc create` with the quoted binPath and the helper-service
+  ; argument), so the installer calls it instead of repeating it — the app's
+  ; Settings -> Engine button remains as the repair path. A per-user build cannot
+  ; own a LocalSystem service, so this is per-machine only.
+  ;
+  ; A failure is reported, not fatal: an install that cannot create the service
+  ; still gives the user a working app (it asks once, later, the way a portable
+  ; copy does) and aborting would take the product away over it.
+  !ifndef TESTUSER
+    DetailPrint "Installing the privileged helper (this is the only prompt MI CS needs)..."
+    nsExec::ExecToLog '"$INSTDIR\mics-engine.exe" install-helper'
+    Pop $2
+    ${If} $2 == "0"
+      DetailPrint "The privileged helper is installed and running: no later action will ask for administrator rights."
+    ${Else}
+      DetailPrint "WARNING: the privileged helper was not installed (exit $2) - MI CS will ask once the first time you use a fix that needs administrator rights, and Settings -> Engine can install or repair it."
+    ${EndIf}
+  !endif
+
   ; The app's own state directory: the engine creates it on first run. Tell the
   ; user where the audit trail lives, because that is the product's evidence.
   DetailPrint "State and audit trail: %PROGRAMDATA%\MICS (helper) and %LOCALAPPDATA%\MICS (this user)"
@@ -187,35 +214,58 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext ${SHELL_CONTEXT}
 
-  ; Refuse before anything is touched when the privileged helper still points at
-  ; this copy: the service would be left aimed at a deleted mics-engine.exe, and
-  ; removing a service this installer never created is the app's job (D-022), not
-  ; ours. The answer comes from the shipped, separately measurable checker rather
-  ; than a second copy of the comparison. The MessageBox is what a user sees; the
-  ; error level is set for a scripted caller, which has to run the uninstaller the
-  ; documented way to read it at all (NSIS copies an uninstaller to %TEMP% and
-  ; runs it from there, so a plain `uninstall.exe /S` always answers 0 - appendix
-  ; D.1): `uninstall.exe /S _?=$INSTDIR` answers 5 when this refusal fires (the
-  ; switch must be last - anywhere else NSIS swallows the rest of the command line
-  ; into $INSTDIR, which was measured: the result was a "successful" uninstall
-  ; that took the shortcuts and the registry entry and left the files).
+  ; The privileged helper, and this is the half ب4 added. This installer created
+  ; the service (the app creates it on a portable copy), so it is this installer's
+  ; to take away: the checker is asked again with -Remove, which stops and deletes
+  ; the service named by HELPER_SVC_KEY, and only when its binPath points at
+  ; $INSTDIR. The same elevated run that installed the product removes it, so an
+  ; uninstall is one prompt and never leaves a LocalSystem service aimed at a
+  ; deleted mics-engine.exe.
+  ;
+  ; It can still refuse - an unelevated uninstaller, a service another account
+  ; owns, a delete the SCM did not accept - and then nothing is removed and the
+  ; message says to use the app's own button (which is also what a portable copy
+  ; needs). The MessageBox is what an interactive user sees, and it is guarded by
+  ; ${IfNot} ${Silent} because a dialog in a silent run waits for a click nobody is
+  ; there to make: measured, the refusal dialog stayed open under /S and the exit
+  ; code below never arrived, which made "the uninstaller refuses with 5" a claim
+  ; only a human could cash. The error level is the answer a scripted caller asks
+  ; for, and reading it has a documented form of its own (NSIS copies an uninstaller
+  ; to %TEMP% and runs it from there, so a plain `uninstall.exe /S` always answers 0
+  ; - appendix D.1):
+  ; `uninstall.exe /S _?=$INSTDIR` answers 5 when a refusal fires (the switch must
+  ; be last - anywhere else NSIS swallows the rest of the command line into
+  ; $INSTDIR, which was measured: the result was a "successful" uninstall that
+  ; took the shortcuts and the registry entry and left the files).
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File "${SCRIPTDIR}\check-helper-ownership.ps1"
   nsExec::ExecToLog '"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\check-helper-ownership.ps1" -InstallDir "$INSTDIR" -ServiceKey "${HELPER_SVC_KEY}"'
   Pop $0
   ; 2 means the helper points here, 1 that the key could not be read, anything
-  ; else that the check itself did not run. All three refuse, but only the first
-  ; is fixed by pressing the app's button, so the message says which one it was.
+  ; else that the check itself did not run. Only the first can be fixed here.
   ${If} $0 == "2"
-    DetailPrint "uninstall refused: the privileged helper still points at $INSTDIR"
-    SetErrorLevel 5
-    MessageBox MB_OK|MB_ICONSTOP "MI CS cannot be uninstalled while its privileged helper still points at this copy.$\r$\n$\r$\nOpen MI CS, go to Settings -> Engine and remove the helper, then run this uninstaller again.$\r$\n$\r$\nNothing has been removed."
-    Abort
+    nsExec::ExecToLog '"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\check-helper-ownership.ps1" -InstallDir "$INSTDIR" -ServiceKey "${HELPER_SVC_KEY}" -Remove'
+    Pop $3
+    ${If} $3 == "0"
+      DetailPrint "The privileged helper was stopped and removed with this copy."
+    ${Else}
+      DetailPrint "uninstall refused: the privileged helper could not be removed (exit $3)"
+      SetErrorLevel 5
+      ; No dialog when the run is silent: it would block a scripted uninstall
+      ; forever (measured - the refusal dialog stayed open under /S and the exit
+      ; code never arrived), and the error level is the answer a caller asked for.
+      ${IfNot} ${Silent}
+        MessageBox MB_OK|MB_ICONSTOP "MI CS could not remove its privileged helper, so nothing has been removed.$\r$\n$\r$\nOpen MI CS, go to Settings -> Engine and remove the helper, then run this uninstaller again."
+      ${EndIf}
+      Abort
+    ${EndIf}
   ${ElseIf} $0 != "0"
     DetailPrint "uninstall refused: the helper check did not answer definitively (exit $0)"
     SetErrorLevel 5
-    MessageBox MB_OK|MB_ICONSTOP "MI CS could not confirm that no privileged helper points at this copy, so nothing has been removed.$\r$\n$\r$\nIf MI CS is installed, open it, go to Settings -> Engine and remove the helper, then run this uninstaller again. If this is a portable copy that never installed the helper, run the uninstaller again from an account where Windows PowerShell works."
+    ${IfNot} ${Silent}
+      MessageBox MB_OK|MB_ICONSTOP "MI CS could not confirm that no privileged helper points at this copy, so nothing has been removed.$\r$\n$\r$\nIf MI CS is installed, open it, go to Settings -> Engine and remove the helper, then run this uninstaller again. If this is a portable copy that never installed the helper, run the uninstaller again from an account where Windows PowerShell works."
+    ${EndIf}
     Abort
   ${EndIf}
 

@@ -49,13 +49,23 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: the release lane, and both halves of it need you at the machine — ب4
-> (fold the helper install into the installer) and د3 (E2E on the built installer)
-> each want one UAC click; with that click I can measure them, without it I can
-> only write the code and say so. ز2-د stays blocked on D-023 and the bridge
-> endpoint; the autonomous alternative meanwhile is ب2's ARM64 leg (wired and
-> compile-verified, never run — no ARM64 machine here) or a §7 register row.**
-> ج3 landed 2026-11-03: the README now says what MI CS does and does not do, with
+> **next: the last release-lane item needs you at the machine — د3 (E2E on the built
+> installer) wants one per-machine run; with that click I can measure the whole
+> product as a user meets it, and until then the code is written and said to be
+> unmeasured. ز2-د stays blocked on D-023 and the bridge endpoint; the autonomous
+> alternatives meanwhile are ب2's ARM64 leg (wired and compile-verified, never run —
+> no ARM64 machine here) or a §7 register row.**
+> ب4 landed 2026-11-03 (D-026): the installer now creates the privileged helper inside
+> the one UAC prompt it already asks for — by calling the shipped engine's own
+> `install-helper` — and its uninstaller stops and deletes that service again through
+> `check-helper-ownership.ps1 -Remove`, scoped to the service name in
+> `HELPER_SVC_KEY` so a probe can never delete a real one. Both variants compile,
+> `verify-installer.ps1` passes end to end in 141 s, and the run turned up a real
+> defect: the refusal dialogs were **not** silent-mode aware, so an uninstaller run
+> with `/S` (which is how the verifier, and any script, runs it) hung on a MessageBox
+> forever and the documented exit code 5 never arrived — measured at 532 s before the
+> dialog was killed, now guarded by `${IfNot} ${Silent}`. ج3 landed 2026-11-03: the
+> README now says what MI CS does and does not do, with
 > the manifest, the start-up self-check and their honest limits in it, and every
 > number in it is one the pipeline measured. ط2 landed 2026-11-03
 > (`scripts\verify-tamper.ps1`: a byte flip per shipped binary, a same-size swapped
@@ -117,22 +127,27 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ب4**: ضمّ تثبيت خدمة المساعدة جوّه المثبّت عشان تبقى ضغطة UAC واحدة بدل
-> اتنين — ولو ينفع نعمل الكليكة على الجهاز هنقيس الفرق قبل/بعد بـ
-> `scripts\verify-installer.ps1`؛ ولو مفيش كليكة، اكتب الكود وقول بصراحة إن
-> القياس لسه محتاجها. وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **د3**: تشغيل E2E على المثبّت المبني — تثبيت per-machine بكليكة UAC واحدة،
+> نجرّب فيها إن البرنامج والخدمة المساعدة اتثبّتوا مع بعض، وإن الواجهة بتشتغل
+> والكارت بيطلع، وبعدين إزالة من «التطبيقات والمزايا» تختفي معاها الخدمة كمان؛
+> وقيّد القياس في `scripts\verify-installer.ps1` والـ docs. لو مفيش كليكة، قول
+> بصراحة إن ده هو اللي مستنيك ومتكتبش أرقام من غير قياس.
+> وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ب4 - fold the privileged helper's install into the installer** so the product asks
-for UAC once instead of twice, prove it with `scripts\verify-installer.ps1` (and say
-plainly if the per-machine run still needs a human click) — and stop for review.
+**د3 - the end-to-end run on the built per-machine installer**: one UAC click that
+installs the product *and* the helper, proves the app runs and a card appears, then
+removes both from Apps & features, recording the measurement in
+`scripts\verify-installer.ps1` and the docs (and saying plainly, rather than
+inventing numbers, if the click is not available) — and stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
-**ج2, ط2 and ج3 are done (2026-11-03)** — the package describes itself inside the
+**ج2, ط2, ج3 and ب4 are done (2026-11-03)** — the package describes itself inside the
 engine's signature, the engine reports `status.integrity`, `scripts\verify-tamper.ps1`
-proves a tampered copy is refused by the gate and reported by the app, and the
-README says exactly that. What is left is the release-engineering lane (**ب4**,
-**د3**), the register (§7) and the things that need the user.
+proves a tampered copy is refused by the gate and reported by the app, the README says
+exactly that, and the installer now creates and removes the privileged helper inside
+its own single UAC prompt (D-026). What is left is **د3**, the register (§7) and the
+things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
@@ -301,7 +316,7 @@ order the user picked (small → medium → large), and it is finished**
 | ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | ~~**ب3**~~ | ~~NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB); the per-user variant installs 70 files and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore`; the uninstaller refuses a copy its helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s. Left for a human: one **per-machine** run (one UAC click) | done |
-| **ب4** | Fold the privileged-helper install into the installer (replaces the separate UAC step) | no |
+| ~~**ب4**~~ | ~~Fold the privileged-helper install into the installer (replaces the separate UAC step)~~ — **done** (2026-11-03, D-026): the per-machine section runs the shipped engine's own `install-helper` under the installer's elevation, so one prompt installs the product *and* the service, and the uninstaller asks `check-helper-ownership.ps1 -Remove` to stop and delete exactly the service whose binPath points at `$INSTDIR` (scoped to `HELPER_SVC_KEY`'s leaf, so a probe cannot touch the real `MICSHelper`); both variants compile and `verify-installer.ps1` passes end to end. Left for a human: the same one **per-machine** run | done |
 | **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
 
@@ -473,8 +488,10 @@ what "next" means.
 - **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
 - ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
   `--obfuscate --split-debug-info`)~~ — **done** (D-021), with the numbers in §0.3
-- **ج2** signed manifest + startup self-check + "unofficial build" banner
-- **ب4** the helper install folded into the installer (removes the UAC step)
+- ~~**ج2** signed manifest + startup self-check + "unofficial build" banner~~ —
+  **done** 2026-11-03 (D-025, with ط2's tamper probe)
+- ~~**ب4** the helper install folded into the installer (removes the UAC step)~~ —
+  **done** 2026-11-03 (D-026; the per-machine run is the one item left for a human)
 - **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
 - **هـ1** a default update-manifest URL + signature check
 - the register's open MED rows: Defender tamper protection, scheduled scan +
@@ -609,6 +626,47 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ب4 — the installer owns the helper's whole life, so the product asks for UAC once
+  (D-026), and a silent install can no longer hang on a dialog**
+  - **What moved.** D-022 kept the installer out of the service on purpose: the
+    product asked once to install itself, then again at the first fix that needs
+    administrator rights. The per-machine section now runs the shipped engine's own
+    `install-helper` under the elevation the installer already holds — the *same*
+    command the app's button runs, so the service definition (quoted binPath, the
+    `helper-service` argument, description, start type) still lives only in
+    `engine\src\privileged\service.rs` — and reports a failure instead of aborting:
+    an install that cannot create the service still gives a working app that asks
+    once, later, exactly like a portable copy.
+  - **The other half, because install and uninstall must be symmetric.**
+    `check-helper-ownership.ps1` gained `-Remove`: it deletes only after proving the
+    service's `binPath` points at `$INSTDIR`, it stops and deletes only the service
+    named by the `-ServiceKey` it read (so a probe aimed at a synthetic key cannot
+    touch the real `MICSHelper`), it needs elevation, and if the SCM does not drop
+    the key it answers `OWNED` again. The uninstaller calls it when the checker first
+    says `OWNED`, proceeds on `0`, and still refuses with error level 5 when the
+    removal cannot happen — naming `Settings → Engine → Remove helper` as the manual
+    way out. Whatever the installer created it takes away; whatever it did not, it
+    leaves alone. Portable copies are untouched: nothing creates the service for
+    them, so D-007's one-prompt path through the app is still how they get one.
+  - **The defect the run turned up.** The refusal dialog was not silent-mode aware, so
+    `uninstall.exe /S _?=$INSTDIR` — the form the verifier uses, and the only one that
+    reports an error level at all — sat on a MessageBox forever and the documented
+    exit code 5 never arrived. Measured twice: 532 s until the dialog was killed, and
+    the *pre-change* build compiled from `HEAD` behaved identically, so this was not
+    new: the "refuses with 5" claim had never been true without a human clicking OK.
+    Both MessageBoxes are now `${IfNot} ${Silent}` (the error level is the answer a
+    scripted caller asked for), and the assertion is real.
+  - **Measured.** Both variants compile (per-machine and `-TestUser`), and
+    `scripts\verify-installer.ps1` passes end to end in **141 s** — install, AUMID on
+    both shortcuts, the checker's three answers, a clean uninstall, and the refusal
+    with exit 5 which now arrives without a click. The one thing left for a human is
+    the per-machine run itself: compiling `RequestExecutionLevel admin` and boxing a
+    real `sc create` is not something an agent here can do.
+  - `installer\mics.nsi`, `scripts\check-helper-ownership.ps1`,
+    `scripts\verify-installer.ps1` (its header and part 4), `docs\DECISIONS.md`
+    (D-026), `docs\PRIVILEGED-OPS.md`, `README.md` (install, uninstall, requirements,
+    status — both halves), `docs\TODO.md`, `docs\ROADMAP.md`.
 
 - **ج3 — the README now says what MI CS does and does not do, and every number in it
   was measured**

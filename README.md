@@ -148,7 +148,11 @@ one UAC prompt. It installs for every user under `%ProgramFiles%\MI CS`, creates
 Start-Menu entry, the desktop icon, the Apps & features entry and the AUMID Windows
 labels notification cards with — the registry key *and* the shortcut's
 `System.AppUserModel.ID`, so the Shell files the app under `MI CS` rather than under
-the exe path. `Uninstall MI CS` removes the lot.
+the exe path. That one prompt also installs the **privileged helper** (the engine's
+own `install-helper`, so the service definition lives in one place), which is why a
+fix that needs administrator rights never asks a second time; if the service cannot
+be created the install still completes, says so in its details, and the app asks once
+later instead. `Uninstall MI CS` removes the lot — the helper included.
 
 **Portable.** Nothing registered, nothing to uninstall: take
 `MICS-portable-<version>-x64.zip`, or the already-unpacked `dist\MICS-portable`
@@ -192,16 +196,20 @@ The engine log says which rule file it loaded (`rules\yara\starter.yar` and
 `rules\guard\starter.json` next to the binaries, hot-reloaded): if it ever says
 "built-in starter pack" instead, the copy is incomplete — `rules\` is missing.
 
-**Uninstall:** quit MI CS from the tray and remove the helper
-(`Settings → Engine → Remove helper`, one prompt) **first** — the uninstaller never
-creates or deletes that service, and it refuses to remove a copy the helper still
-points at (it says so and changes nothing). Then remove the program: installed copies
-go through `Uninstall MI CS` (Start Menu) or Apps & features, portable copies are
-just the folder. Either way the data folder below stays until you delete it yourself.
-The only other registry entries MI CS creates are the installer's own (shortcuts,
-the AUMID, the Apps & features entry — all removed with the program) and an optional
-`HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed by the same
-screen.
+**Uninstall:** remove the program — installed copies go through `Uninstall MI CS`
+(Start Menu) or Apps & features, portable copies are just the folder. The installed
+one does the helper for you: the same elevated run that created `MICSHelper` stops and
+deletes it, and only after checking that the service really is *this* copy's (`sc`
+delete is scoped to the service name the installer recorded, so a helper pointing at
+another copy is left alone). If it cannot — an uninstall started without
+administrator rights, a helper definition it cannot read — **nothing is removed** and
+it tells you to use `Settings → Engine → Remove helper` (one prompt) first, then run
+it again. On a portable copy that step is yours either way, because nothing there
+installed the service. Either way the data folder below stays until you delete it
+yourself. The only other registry entries MI CS creates are the installer's own
+(shortcuts, the AUMID, the Apps & features entry — all removed with the program) and
+an optional `HKCU\...\Run` value (`Settings → Engine → Start with Windows`), removed
+by the same screen.
 
 ## Where your data lives
 
@@ -588,8 +596,9 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 للقراءة فقط مش بتتسجّل؛ مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
 التحديث لازم يكون موقّع بشهادتنا (`CN=MI CS Code Signing`) وويندوز يثق فيها — بس
 التثبيت على **اسم** الموقّع مش على بصمته (thumbprint)؛ ملفات التنفيذ **غير موقّعة**
-فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة اللي بتثبّت خدمة المساعدة لسه
-محتاجة تتجرّب بإيدك (الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم).
+فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة على المثبّت **لسه محتاجة تتجرّب
+بإيدك** على نسخة per-machine — الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم
+من غير صلاحيات، والكليكة نفسها هي اللي مقياسها مستنيك.
 **النسخة بتتحقق من نفسها:** الحزمة فيها بيان SHA-256 لكل **68** ملف من ملفاتها،
 والبيان ده محقون **جوّه `mics-engine.exe`** قبل ما المحرك يتوقّع هو نفسه، يعني
 مصداقية البيان هي مصداقية التوقيع اللي فوقه. المحرك أول ما يقوم بيقرا البيان من
@@ -614,8 +623,9 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 **المتطلبات:** ويندوز 10 (21H2+) أو 11، 64-bit. معالج 4 أنوية و8 جيجا رام
 (المحرك بيستهلك ~11 ميجا في الخمول) وحوالي 150 ميجا مساحة. التطبيق بيفتح
 **من غير صلاحيات مدير**، وأول إصلاح إداري بيطلب ضغطة UAC **مرة واحدة** لتثبيت
-خدمة المساعدة وبعدها مفيش أي طلب تاني، والنت مش مطلوبة غير للتحديثات — الفحص
-والحماية والحجر والتقوية كلهم شغالين أوفلاين.
+خدمة المساعدة وبعدها مفيش أي طلب تاني (ولنسخة المثبّت: الضغطة الوحيدة هي اللي
+بتثبّت البرنامج — التثبيت بيجيب الخدمة معاه والإزالة بتشيلها معاها)، والنت مش
+مطلوبة غير للتحديثات — الفحص والحماية والحجر والتقوية كلهم شغالين أوفلاين.
 
 **الخصوصية:** مفيش أي تتبّع ولا حسابات. كل حاجة محلية في SQLite، ومفيش حاجة بتطلع
 من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات، NVD، أو LM Studio محلي).
@@ -707,7 +717,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة
 بتتحقق من نفسها بالبيان الموقّع اللي جوّه المحرك. النسخة بتطلع ZIP ومثبّت
 (`MICS-setup-<version>-x64.exe`) من نفس الحزمة، والاتنين متأكَّد منهم بسكريبتات.
-اللي فاضل: **ضغطة UAC واحدة** بتثبّت خدمة المساعدة (كل اللي تحتها متأكَّد منه)،
-ضم تثبيت المساعدة جوه المثبّت (ب4)، شهادة توقيع عامة، تشغيل E2E على المثبّت
-المبني (د3)، ودعم ARM64 — كلها متتبَّعة في [`docs/ROADMAP.md`](docs/ROADMAP.md)
+المثبّت بقى هو اللي بيثبّت خدمة المساعدة كمان (ب4) ويشيلها وقت الإزالة، يعني
+المنتج كله بيطلب UAC **مرة واحدة**؛ اللي فاضل: **القياس** على نسخة per-machine
+بكليكة منك، وشهادة توقيع عامة، تشغيل E2E على المثبّت المبني (د3)، ودعم ARM64 —
+كلها متتبَّعة في [`docs/ROADMAP.md`](docs/ROADMAP.md)
 و[`docs/TODO.md`](docs/TODO.md).

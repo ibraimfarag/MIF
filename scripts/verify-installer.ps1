@@ -28,13 +28,18 @@
        features entry are gone, while the machine's helper definition and state and
        the user's own copy are exactly as they were.
     4. refusal: a second build compiled with -HelperServiceKey against a synthetic
-       HKCU key whose ImagePath names that copy. The uninstaller refuses - error
-       level 5, read the documented way (`uninstall.exe /S _?=$INSTDIR`, the switch
-       last) - and leaves the program, the uninstaller, both shortcuts and the Apps &
+       HKCU key whose ImagePath names that copy. Since B4 the uninstaller tries to
+       *remove* the service first, and this one it cannot: the key's leaf is not a
+       real service name, so the delete fails and the run refuses - error level 5,
+       read the documented way (`uninstall.exe /S _?=$INSTDIR`, the switch last) -
+       and leaves the program, the uninstaller, both shortcuts and the Apps &
        features entry in place; once the key is gone the same uninstaller exits 0 and
        removes everything. A plain `uninstall.exe /S` answers 0 no matter what, which
        the script asserts too: NSIS copies an uninstaller to %TEMP% and runs it from
-       there (manual, appendix D.1).
+       there (manual, appendix D.1). This part also proves the refusal dialogs stay
+       out of a silent run: they used to wait for a click nobody was there to make and
+       the exit code never arrived (measured - the run sat on it for 532 s until the
+       dialog was killed), so both MessageBoxes are guarded by `${IfNot} ${Silent}`.
 
   It restores what it touched: the machine's AUMID key is exported first and
   re-imported in a finally block, and every folder, key and shortcut the run created
