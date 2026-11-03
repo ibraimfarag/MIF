@@ -19,6 +19,7 @@ mod llm;
 mod notify;
 mod privileged;
 mod reports;
+mod secrets;
 mod settings;
 mod smart;
 mod update;

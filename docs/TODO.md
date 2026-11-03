@@ -662,6 +662,37 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **و4 (a) — the two API keys leave `settings.json` and get DPAPI, with a migration**
+  - **What moved.** `nvd_api_key` and `ioc_feed_key` were the only credentials in
+    the settings document, which is the one file every backup, every shared folder
+    and every pasted log snippet carries. They now live in
+    `<data dir>\secrets.dat`: a four-byte `MS1\0` header plus
+    `CryptProtectData` (machine scope) of a tiny JSON document — the same
+    primitive the quarantine master key already uses. `settings.json` holds
+    neither field, and the write order is deliberate: secrets first, document
+    second, both atomic, so a crash between them cannot lose a credential.
+  - **The migration is one-way and idempotent.** A file an older build wrote is
+    read, the plaintext keys are moved into the protected store and the document
+    is rewritten without them, once; a second start finds nothing to move. A
+    plaintext value never overwrites a protected one (that path drops the stale
+    copy instead), and a *failed* rewrite leaves the plaintext in place so the next
+    start retries rather than losing the key — which is exactly the bug the first
+    version of the test caught.
+  - **`settings.get` still returns the values**: the UI prefills the two inputs and
+    it is the same interactive user, so this commit changes what is at rest, not
+    the RPC contract. The environment hooks (`NVD_API_KEY`,
+    `MICS_IOC_FEED_KEY`) still win, as everywhere else.
+  - **Proved by five tests** (`engine/src/secrets.rs`): the protected file is not
+    what went in (both values absent from both files, and a damaged blob refuses
+    to decode), a written document reads back both keys, a legacy plaintext file
+    is migrated, cleaned and re-read as the same answer, a protected value survives
+    a stale plaintext one, and a foreign file is treated as "no keys" instead of
+    being decrypted. **Honest limit**: machine-scope DPAPI binds the blob to the
+    computer, not the user, so another local account can still ask Windows to
+    decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy.
+  - Measured: `-Tier fast` green in 156.1 s, engine tests 133 → **138** (5 new),
+    QA report regenerated (17 modules, 138 declared engine cases).
+
 - **و3 — the firewall speaks Windows' own API instead of parsing `netsh` (D-028)**
   - **What moved.** `engine\src\firewall\mod.rs` went from shelling out to
     `netsh advfirewall` (a 20 s deadline on a child process, and every read parsed
@@ -3605,7 +3636,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
 | LOW | **A language folder that `pubspec.yaml` does not declare renders every key raw, silently**: the pack loader swallows a failed asset read on purpose ("a module that has not been translated yet must not break the app"), so nothing logs or fails when a whole language is missing from the asset list. `test/lang_registry_test.dart` now fails instead, and the app itself gates its first frame on the settings *and* the packs (`lib/main.dart`), so this cannot reach a user who is running a correct build | `pubspec.yaml`, `test/lang_registry_test.dart`, `lib/main.dart` |
 | LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
-| LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
+| ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the reproducible-build note | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
 

@@ -12,7 +12,7 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
 /// How many hours between automatic intel syncs (clamped on save).
@@ -46,13 +46,17 @@ pub struct Settings {
     /// Automatic intel refresh cadence (hours).
     pub sync_interval_hours: u32,
     /// NVD API key (optional; raises the public rate limit).
+    ///
+    /// **Never written to `settings.json`**: [`crate::secrets`] keeps it in the
+    /// DPAPI-protected `secrets.dat` beside the document (و4). The field is here
+    /// because `settings.get` returns it to the UI that owns the input.
     pub nvd_api_key: String,
     /// Custom sha256 hash-feed URL for `ioc_hashes`; empty = not configured
     /// (abuse.ch's public exports now need an Auth-Key). Env
     /// `MICS_IOC_FEED_URL` still overrides it.
     pub ioc_feed_url: String,
     /// Auth-Key sent to that feed (abuse.ch style header); env
-    /// `MICS_IOC_FEED_KEY` overrides it.
+    /// `MICS_IOC_FEED_KEY` overrides it. Protected on disk like `nvd_api_key`.
     pub ioc_feed_key: String,
     /// LM Studio base URL (OpenAI-compatible), e.g. http://127.0.0.1:1234.
     pub lm_url: String,
@@ -283,17 +287,25 @@ impl Settings {
         BASE_DIR.get_or_init(resolve_base_dir).clone()
     }
 
-    pub fn path() -> PathBuf {
-        Self::base_dir().join("settings.json")
-    }
-
     /// Reads the file; a missing or corrupt file falls back to defaults (and
     /// never blocks the engine from starting). A URL that the RPC patch would
     /// refuse is cleared here too, so a hand-edited `http://` feed cannot be used
     /// just because it arrived through the file instead of the UI (F-3).
+    ///
+    /// The API keys are not in this document any more: they come from the
+    /// DPAPI-protected `secrets.dat` ([`crate::secrets`]), and a file written by
+    /// an older build — with `nvd_api_key`/`ioc_feed_key` in it — is migrated on
+    /// the way through and rewritten without them. That is the one write a *read*
+    /// may perform, and it happens once.
     pub fn load() -> Self {
-        let path = Self::path();
-        match std::fs::read_to_string(&path) {
+        Self::read_from(&Self::base_dir())
+    }
+
+    /// [`Settings::load`] for an explicit directory (tests, and the migration's
+    /// own proof, which must not touch the machine's real data directory).
+    pub(crate) fn read_from(dir: &Path) -> Self {
+        let path = dir.join("settings.json");
+        let mut s = match std::fs::read_to_string(&path) {
             Ok(text) => match serde_json::from_str::<Settings>(&text) {
                 Ok(mut s) => {
                     for (key, value) in [
@@ -314,15 +326,58 @@ impl Settings {
                 }
             },
             Err(_) => Settings::default(),
+        };
+
+        // Credentials never live in this document. `had_plaintext` is separate
+        // from what moved: if an earlier migration saved the secrets and then
+        // failed to rewrite the document, the keys are already safe on disk and
+        // nothing "moves" this time - but the plaintext copy still has to go.
+        let mut secrets = crate::secrets::load_from(dir);
+        let had_plaintext = !s.nvd_api_key.is_empty() || !s.ioc_feed_key.is_empty();
+        let moved = secrets.absorb_legacy(&mut s);
+        s.nvd_api_key = secrets.nvd_api_key.clone();
+        s.ioc_feed_key = secrets.ioc_feed_key.clone();
+        if had_plaintext {
+            tracing::info!(
+                "moving {moved} API key(s) out of settings.json into the DPAPI-protected {}",
+                crate::secrets::FILE_NAME
+            );
+            if let Err(e) = s.write_to(dir) {
+                tracing::warn!(
+                    "settings.json still holds the API keys ({e:#}) — this run uses them, \
+                     and the next start retries the migration"
+                );
+            }
         }
+        s
     }
 
     pub fn save(&self) -> Result<()> {
-        let dir = Self::base_dir();
-        std::fs::create_dir_all(&dir).context("create MICS data dir")?;
-        let path = Self::path();
+        self.write_to(&Self::base_dir())
+    }
+
+    /// Writes `dir\settings.json` (and the protected secrets that belong with it).
+    ///
+    /// Order matters: the secrets file is written and flushed **first**, so a
+    /// crash between the two writes can lose the document's other fields but
+    /// never a credential. The two key fields are stripped from the JSON.
+    pub(crate) fn write_to(&self, dir: &Path) -> Result<()> {
+        std::fs::create_dir_all(dir).context("create MICS data dir")?;
+        crate::secrets::save_to(
+            dir,
+            &crate::secrets::Secrets {
+                nvd_api_key: self.nvd_api_key.clone(),
+                ioc_feed_key: self.ioc_feed_key.clone(),
+            },
+        )?;
+        let path = dir.join("settings.json");
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_string_pretty(self)?).context("write settings")?;
+        let mut doc = serde_json::to_value(self)?;
+        if let Some(obj) = doc.as_object_mut() {
+            obj.remove("nvd_api_key");
+            obj.remove("ioc_feed_key");
+        }
+        std::fs::write(&tmp, serde_json::to_string_pretty(&doc)?).context("write settings")?;
         // Atomic replace: a crash mid-write must never leave a truncated file.
         std::fs::rename(&tmp, &path).context("replace settings.json")?;
         Ok(())

@@ -400,6 +400,16 @@ instead of inventing its own summary. Exploit status is data, not decoration:
 `Vulnerability` carries `known_exploited`/`kev_due` and the UI shows a KEV badge,
 because a CVSS score alone cannot say which of two 8.8s is being exploited today.
 
+**Amendment (و4, 2026-11-03).** The two keys are no longer stored in the settings
+document. `nvd_api_key` and `ioc_feed_key` live in `<data dir>\secrets.dat`,
+DPAPI-protected at machine scope (the primitive the quarantine master key uses —
+the same threat decision, F-6) behind a `MS1\0` header, written before the
+document and replaced atomically; `settings.json` carries neither field, and a
+file an older build wrote is migrated on the next start, once. `settings.get`
+still returns the values (the UI prefills the inputs and it is the same
+interactive user), so this changes what is at rest, not the RPC contract. The
+environment hooks keep winning, as they always have.
+
 ---
 
 ## D-013 — Desktop alert cards: one policy gate, engine-side, verified by Windows' own record
