@@ -57,6 +57,13 @@ const ENUM_CHUNK: usize = 2048;
 /// desktop in notifications.
 const LIVE_ALERTS: usize = 3;
 
+/// Where the schedule remembers its last start (`meta` table, not settings).
+const META_LAST_SCHEDULED: &str = "scan.last_scheduled";
+
+/// How often the schedule looks at the clock. A scan interval is measured in
+/// hours, so a few minutes of jitter costs nothing and saves a timer per second.
+const SCHEDULE_TICK: std::time::Duration = std::time::Duration::from_secs(300);
+
 pub fn starter_rules_source() -> String {
     // Prefer rules/ next to the exe (packaged layout), then the dev repo.
     for base in [
@@ -145,6 +152,161 @@ pub fn start_scan(
 
     spawn_job_thread(job_id.clone(), root, quarantine, rt);
     Ok(job_id)
+}
+
+// ---- the scan schedule (D-027) ----
+//
+// A scan that runs whether or not the scan screen is open. It is the user's
+// switch (`scan_interval_hours`, 0 = off), the engine has to be running for it -
+// the logon entry's `--service`, or the app - and it never quarantines: nobody
+// chose a file while it was running, so findings are reported and left where
+// they are for the user to act on.
+
+/// What the schedule looks like right now, for `scan.schedule` and the UI.
+#[derive(Debug, Serialize)]
+pub struct ScheduleStatus {
+    /// `scan_interval_hours > 0`.
+    pub enabled: bool,
+    pub interval_hours: u32,
+    /// The folder it would walk; `None` when the profile folder cannot be found
+    /// either (an engine run without a user profile, e.g. a service account).
+    pub target: Option<String>,
+    /// Unix seconds of the last scheduled start, `None` = never.
+    pub last_started: Option<i64>,
+    /// Unix seconds the next one is due; `None` when the schedule is off.
+    pub next_due: Option<i64>,
+}
+
+/// Whether one is due. Pure so the rule is testable without a clock or a disk:
+/// an interval of 0 is off, "never ran" is due, a recorded start in the future
+/// (a clock that moved backwards) is due, and otherwise the interval decides.
+fn is_due(last: Option<i64>, now: i64, hours: u32) -> bool {
+    if hours == 0 {
+        return false;
+    }
+    match last {
+        None => true,
+        Some(t) if t > now => true,
+        Some(t) => now.saturating_sub(t) >= i64::from(hours) * 3_600,
+    }
+}
+
+/// The folder a scheduled scan walks: the configured one, else the profile.
+fn schedule_target(configured: &str) -> Option<PathBuf> {
+    let trimmed = configured.trim();
+    if !trimmed.is_empty() {
+        return Some(PathBuf::from(trimmed));
+    }
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+}
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+pub fn schedule_status() -> ScheduleStatus {
+    let settings = crate::settings::current();
+    let hours = settings.scan_interval_hours;
+    let last = Storage::open()
+        .ok()
+        .and_then(|s| s.meta_get(META_LAST_SCHEDULED).ok().flatten())
+        .and_then(|v| v.parse::<i64>().ok());
+    let next_due = if hours == 0 {
+        None
+    } else {
+        Some(match last {
+            Some(t) => t + i64::from(hours) * 3_600,
+            None => now_unix(),
+        })
+    };
+    ScheduleStatus {
+        enabled: hours > 0,
+        interval_hours: hours,
+        target: schedule_target(&settings.scan_target).map(|p| p.to_string_lossy().into_owned()),
+        last_started: last,
+        next_due,
+    }
+}
+
+/// Starts the timer that runs the scan when it falls due.
+///
+/// Every tick either starts one scan or does nothing: a job already running
+/// means "try again next tick" (not a failure to record), and an attempt that
+/// could not start - a path that is gone, a scan already running elsewhere -
+/// still records the attempt, so a broken target is one log line per interval
+/// instead of one every five minutes.
+pub fn start_schedule(rt: tokio::runtime::Handle) {
+    if std::env::var("MICS_NO_SCAN_SCHEDULE").is_ok() {
+        return;
+    }
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(SCHEDULE_TICK);
+        loop {
+            ticker.tick().await;
+            tick_once(&rt);
+        }
+    });
+}
+
+/// One look at the clock. Returns the job id when it started a scan, which is
+/// what the tests assert on.
+pub(crate) fn tick_once(rt: &tokio::runtime::Handle) -> Option<String> {
+    let settings = crate::settings::current();
+    let hours = settings.scan_interval_hours;
+    if hours == 0 {
+        return None;
+    }
+    let storage = match Storage::open() {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("scheduled scan: cannot open the state database: {e:#}");
+            return None;
+        }
+    };
+    let last = storage
+        .meta_get(META_LAST_SCHEDULED)
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok());
+    let now = now_unix();
+    if !is_due(last, now, hours) {
+        return None;
+    }
+    if crate::jobs::active_count() > 0 {
+        // A scan is already running (the user's, or a previous scheduled one):
+        // not due yet as far as the record is concerned, and not an error.
+        return None;
+    }
+    let target = match schedule_target(&settings.scan_target) {
+        Some(p) => p,
+        None => {
+            tracing::warn!("scheduled scan: no profile folder to scan; set scan_target");
+            let _ = storage.meta_set(META_LAST_SCHEDULED, &now.to_string());
+            return None;
+        }
+    };
+    let _ = storage.meta_set(META_LAST_SCHEDULED, &now.to_string());
+    match start_scan(target.clone(), false, rt.clone()) {
+        Ok(job_id) => {
+            tracing::info!(
+                "scheduled scan started: job {job_id} over {} (every {hours} h, report only)",
+                target.display()
+            );
+            Some(job_id)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "scheduled scan over {} did not start: {e:#}",
+                target.display()
+            );
+            None
+        }
+    }
 }
 
 fn run_job(
@@ -490,4 +652,62 @@ pub fn run_scan(root: &Path, quarantine: bool) -> Result<ScanReport> {
         .context("run_scan needs a tokio runtime")?;
     let id = start_scan(root.to_path_buf(), quarantine, rt)?;
     await_report(&id)
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+
+    #[test]
+    fn an_interval_of_zero_is_off() {
+        assert!(!is_due(None, 1_000, 0));
+        assert!(!is_due(Some(0), 1_000_000, 0));
+    }
+
+    #[test]
+    fn a_scan_that_never_ran_is_due() {
+        assert!(is_due(None, 1_000, 1));
+        assert!(is_due(None, 1_000, 168));
+    }
+
+    #[test]
+    fn the_interval_decides_after_that() {
+        let hour = 3_600;
+        // 6 h interval, last run 5 h 59 min ago: not yet.
+        assert!(!is_due(Some(0), 6 * hour - 60, 6));
+        // Exactly the interval, and past it: due.
+        assert!(is_due(Some(0), 6 * hour, 6));
+        assert!(is_due(Some(0), 30 * hour, 6));
+        // One hour is the shortest interval the settings allow.
+        assert!(!is_due(Some(0), hour - 1, 1));
+        assert!(is_due(Some(0), hour, 1));
+    }
+
+    #[test]
+    fn a_clock_that_went_backwards_runs_instead_of_waiting() {
+        // The recorded start is in the future (a timezone jump, a restored
+        // image): waiting would mean never running again, so it runs.
+        assert!(is_due(Some(9_999), 1_000, 6));
+    }
+
+    #[test]
+    fn the_target_is_the_configured_folder_then_the_profile() {
+        let explicit = schedule_target(r"C:\Windows");
+        assert_eq!(explicit, Some(PathBuf::from(r"C:\Windows")));
+        // Whitespace is not a path.
+        let blank = schedule_target("   ");
+        assert_eq!(blank, schedule_target(""));
+    }
+
+    #[test]
+    fn the_status_serializes_the_shapes_the_ui_reads() {
+        let status = schedule_status();
+        let json = serde_json::to_value(&status).expect("serializes");
+        for key in ["enabled", "interval_hours", "target", "last_started", "next_due"] {
+            assert!(json.get(key).is_some(), "{key} must be present");
+        }
+        // The default is off, so the UI can say so without a special case.
+        assert!(!status.enabled);
+        assert!(status.next_due.is_none());
+    }
 }

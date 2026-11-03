@@ -127,26 +127,33 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **د3**: تشغيل E2E على المثبّت المبني — تثبيت per-machine بكليكة UAC واحدة،
-> نجرّب فيها إن البرنامج والخدمة المساعدة اتثبّتوا مع بعض، وإن الواجهة بتشتغل
-> والكارت بيطلع، وبعدين إزالة من «التطبيقات والمزايا» تختفي معاها الخدمة كمان؛
-> وقيّد القياس في `scripts\verify-installer.ps1` والـ docs. لو مفيش كليكة، قول
-> بصراحة إن ده هو اللي مستنيك ومتكتبش أرقام من غير قياس.
-> وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **نص الواجهة من و1**: مفتاح الجدولة في الإعدادات (كل كم ساعة + الفولدر) مع
+> مفاتيح الترجمة عربي/إنجليزي، وتحديث `qa/report.md` بعدد عناصر التحكم الجديد —
+> بعدها خُد **و3** (استبدال `netsh` بـ FirewallAPI COM) ثم **و4** (صفوف LOW
+> القابلة للتنفيذ) ثم **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط). و**د3** مستنية
+> كليكة UAC منك; متكتبش أرقام من غير قياس. وشغّل `scripts\pipeline.ps1 -Tier
+> fast` قبل الكوميت.
 
-That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**د3 - the end-to-end run on the built per-machine installer**: one UAC click that
-installs the product *and* the helper, proves the app runs and a card appears, then
-removes both from Apps & features, recording the measurement in
-`scripts\verify-installer.ps1` and the docs (and saying plainly, rather than
-inventing numbers, if the click is not available) — and stop for review.
+That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, then take
+**the UI half of و1** — the schedule control in Settings (every how many hours, and
+which folder) with its Arabic/English copy, and `qa/report.md` regenerated for the
+new control count — then **و3** (replace the `netsh` firewall call with the
+FirewallAPI COM interface), **و4** (the executable LOW register rows) and **ب2** (the
+ARM64 leg: built and compile-verified only, and say so). **د3** waits for one UAC
+click from the user: it is the E2E run on the built per-machine installer, which
+installs the product *and* the helper and then removes both from Apps & features;
+this session measured what it could instead (`scripts\verify-scan-schedule.ps1`) and
+invented nothing. Run `scripts\pipeline.ps1 -Tier fast` before every commit and stop
+for review after each one.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
 **ج2, ط2, ج3 and ب4 are done (2026-11-03)** — the package describes itself inside the
 engine's signature, the engine reports `status.integrity`, `scripts\verify-tamper.ps1`
 proves a tampered copy is refused by the gate and reported by the app, the README says
 exactly that, and the installer now creates and removes the privileged helper inside
-its own single UAC prompt (D-026). What is left is **د3**, the register (§7) and the
+its own single UAC prompt (D-026) — and **و1's engine half is in** (D-027: the scan
+schedule, opt-in and report-only, proved by `scripts\verify-scan-schedule.ps1`).
+What is left is **و1's control in Settings**, **د3**, the register (§7) and the
 things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
@@ -485,6 +492,10 @@ what "next" means.
 
 **Medium — a subsystem or a build leg**
 
+- ~~**و1** scheduled scan~~ — **done 2026-11-03** (D-027): opt-in `scan_interval_hours`
+  (0 = off, default), `scan_target` (empty = profile), the engine's own record of the
+  last start, report-only, and `scripts\verify-scan-schedule.ps1` proves all three
+  claims; the register's MED row now points at real-time watching (و2) only
 - **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
 - ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
   `--obfuscate --split-debug-info`)~~ — **done** (D-021), with the numbers in §0.3
@@ -557,6 +568,7 @@ cargo build --release
 | `MICS_NO_SINGLETON=1` | Allow an engine next to the real one (with `MICS_PIPE_NAME`) |
 | `MICS_NO_GUARD=1` | Do not arm the guard in service mode (tests: no canary files) |
 | `MICS_NO_AUTO_RESUME=1` | Do not resume interrupted jobs at startup |
+| `MICS_NO_SCAN_SCHEDULE=1` | Do not start the scan timer (D-027); the setting is off by default anyway, so this is for a probe that must not double up |
 | `PROGRAMDATA` | Relocate all state (`mics.db`, `logs/`, `Quarantine/`) — used by tests |
 | `MICS_ENGINE_PATH` | Force the UI to use a specific engine binary |
 
@@ -588,6 +600,7 @@ not implemented yet, see D-008).
 | `scripts\check-helper-ownership.ps1` | Whether the installed `MICSHelper` service points at one install folder: prints `RESULT: SAFE` / `OWNED` / `UNKNOWN` and exits 0 / 2 / 1. The uninstaller asks it before deleting anything, so a service is never left aiming at a deleted `mics-engine.exe`; read-only, no elevation |
 | `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, both halves of the AUMID the toast source needs (the registry key, and the shortcuts' `System.AppUserModel.ID` written by `register-aumid.ps1` through `IPropertyStore`), an Apps-&-features entry whose uninstaller refuses to remove a copy the privileged helper still points at, and an upgrade that reuses the previous install location instead of asking twice |
 | `scripts\verify-installer.ps1` | The installer's promises, measured on a real install: a silent per-user install into `%TEMP%`, the app, engine and rule packs landing, both shortcuts' `System.AppUserModel.ID`, the AUMID key and Apps-&-features entry pointing at that copy, `Get-StartApps` filing "MI CS" under `MICS` with nothing under the exe path, the checker's answers, the uninstaller removing all of it while the machine's helper and the user's own copy stay untouched, and the refusal (error level 5, everything left in place) against a synthetic service key. Exports and re-imports the AUMID key, deletes everything it created, no elevation, ~2 min |
+| `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted EICAR string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -626,6 +639,40 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **و1 (engine half) — the engine runs a scan by itself: opt-in, report-only, and it
+  needs nobody watching (D-027)**
+  - **What moved.** `scan_interval_hours` (0 = off, and 0 is the default) and
+    `scan_target` (empty = the current user's profile folder) joined the settings,
+    validated like the rest: 0 or 1..168 hours, and an absolute path or empty. The
+    engine starts a timer in both long-lived modes (`--serve` and `--service`, so a
+    closed window does not stop it) that looks at the clock every five minutes, and
+    when the interval has passed since the last start it calls the same `start_scan`
+    the UI calls — with `quarantine: false`, because nobody chose a file while it was
+    running: findings are recorded, alerted and left in place for the user to act on.
+  - **The engine remembers what it did, in the state database rather than in
+    `settings.json`**: a new `meta` table (`scan.last_scheduled`) answers "when did I
+    last start one", so an engine restart does not scan again, a fresh install scans
+    at the first tick instead of waiting a whole interval, and a clock that moved
+    backwards counts as due instead of never running again. `scan.schedule` exposes
+    the whole picture (enabled, interval, target, last start, next due) for the UI and
+    for the QA harness, and `MICS_NO_SCAN_SCHEDULE=1` is the test hook.
+  - **Proved, not assumed.** `is_due` is a pure function with unit tests (off, never
+    ran, exactly the interval, one second short, and a future timestamp), the settings
+    validation has its own, and `scripts\verify-scan-schedule.ps1` drives a real
+    release engine over its own pipe and an isolated data directory: with the schedule
+    off nothing starts and the answer says so; with an interval and a configured
+    folder the first tick starts a scan by itself, the job's root is that folder, it
+    examines the planted file and records the finding as `yara:Ransom_Note_Names`; and
+    the file is **still there** afterwards. 18 checks, 0 failures, 11.6 s, no
+    elevation. The fixture is a ransom-note-shaped text file rather than an EICAR
+    sample on purpose: the first version of the probe planted EICAR, Defender
+    quarantined it mid-scan, the engine recorded a skip and the probe was measuring
+    the wrong program.
+  - **What is still missing, and said plainly:** the engine half only. The Settings
+    control that turns it on is the next commit, and real-time watching (the other
+    half of the register's MED row) is untouched — a schedule is a moment, not a
+    monitor.
 
 - **ب4 — the installer owns the helper's whole life, so the product asks for UAC once
   (D-026), and a silent install can no longer hang on a dialog**
@@ -3454,7 +3501,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
 | LOW | A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS" (the threat model already says a card is UI, not proof) | `notify/toast.rs`, THREAT-MODEL §B10 |
-| MED | **No scheduled scan and no real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection at all (Windows Defender is the real-time layer, and the audit says so loudly when it is off) | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
+| MED | **No real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection between runs (Windows Defender is the real-time layer, and the audit says so loudly when it is off). **The scheduled half is done** (و1, 2026-11-03, D-027): the engine runs a scan by itself every `scan_interval_hours` (opt-in, off by default) over `scan_target`, report-only, and `scripts\verify-scan-schedule.ps1` proves it starts, finds, and leaves the file in place — but a schedule is a moment, not a monitor: what changed *between* two runs is still only seen by Defender | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |

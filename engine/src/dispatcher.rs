@@ -314,6 +314,7 @@ impl Dispatcher {
                     }
                 }
             }
+            "scan.schedule" => Some(json!(crate::scanner::schedule_status())),
             "scan.start" => {
                 info!("Starting scan job of {:?}", req.params);
                 let root = req

@@ -1168,3 +1168,52 @@ variants and running the per-user one end to end prove the script and the per-us
 path, not the boxing of a real service — so `scripts\verify-installer.ps1` keeps
 measuring what it can, and the per-machine run stays the documented manual step, as
 D-022 says about itself.
+
+---
+
+## D-027 — A scheduled scan is opt-in, report-only, and needs the engine running
+
+**Status:** decided (2026-11-03); implemented in `engine\src\scanner\mod.rs`
+(`start_schedule`, `scan.schedule`) and `engine\src\settings.rs`.
+
+**Context.** The register's MED row was blunt: the hash and YARA dimensions only
+apply *while a scan job is running*, so a machine nobody scans has no file-level
+detection at all — Windows Defender is the real-time layer, and the audit says so
+loudly when it is off. The cheapest honest half of that row is a scan that starts
+itself; the expensive half (real-time watching, و2) is an architecture decision and
+is not in this entry.
+
+**Decision.** The engine owns a scan schedule, and it is three small facts:
+
+* **`scan_interval_hours` — 0 disables it, and 0 is the default.** A scanning program
+  that starts walking a disk the first time it is installed, on a schedule nobody
+  chose, is a surprise, not a feature. The settings validation accepts 0 (off) or
+  1..168 hours, and the UI offers a short list.
+* **`scan_target` — empty means the current user's profile folder.** It is validated
+  as an absolute path (the engine's working directory is not the user's idea of
+  "here") but not for existence, because a folder on a stick that is usually plugged
+  in must not make the setting unwritable; a target that is missing when the scan
+  falls due records the attempt and tries again next interval, one log line per
+  interval instead of one per tick.
+* **The engine records when it last started one** (`meta['scan.last_scheduled']` in
+  the state database, not in `settings.json`: settings are the user's, this is the
+  engine's memory). An engine restart therefore does not re-scan, a fresh install
+  scans at the first tick instead of waiting an interval, and a clock that moved
+  backwards counts as due — the alternative is never running again.
+* **It is report-only: a scheduled scan never quarantines.** Nobody chose a file
+  while it was running, so moving one would be the program deciding for an absent
+  user. Findings land in the job, in the audit trail and in the alert path exactly as
+  a manual scan's do — the user decides what to remove, and the app shows it.
+* **It needs the engine running**: the logon entry's `--service` mode (D-007's
+  `service.install`) or the app itself. When neither is running, nothing scans, and
+  that is stated wherever the feature is described rather than implied away.
+  `MICS_NO_SCAN_SCHEDULE=1` is the test hook that keeps a probe deterministic.
+
+**What this costs.** One timer that wakes every five minutes (a scan interval is
+measured in hours, so the jitter is free), one row in the `meta` table, and the
+tick's own logic — `is_due` is a pure function with unit tests, and
+`scripts\verify-scan-schedule.ps1` drives a real engine over its own pipe to prove the
+three claims (off means off; due means a scan starts over the configured folder and
+finds the planted EICAR string; the file is still there afterwards). What it does
+**not** close is the half of the register row about watching: a scheduled scan is a
+moment, not a monitor, and `و2` stays open with its CPU-cost decision.

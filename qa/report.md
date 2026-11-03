@@ -12,19 +12,19 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 65 rows in `qa/methods.json` | 65 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 65 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 66 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 98 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 23 files | 103 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 15 modules | 124 declared cases | `engine.test` step |
+| Engine tests | 16 modules | 132 declared cases | `engine.test` step |
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 65 methods
+## The pipe: 66 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
@@ -34,7 +34,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `mutating` | 21 | 12 | 9 |
 | `network` | 5 | 0 | 5 |
 | `pure` | 6 | 6 | 0 |
-| `read` | 22 | 22 | 0 |
+| `read` | 23 | 23 | 0 |
 | `sandbox` | 10 | 10 | 0 |
 
 ### Every method
@@ -92,6 +92,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `quarantine.list` | `read` | 1 |  |
 | `quarantine.restore` | `mutating` | 2 |  |
 | `report.export` | `sandbox` | 1 |  |
+| `scan.schedule` | `read` | 1 |  |
 | `scan.start` | `sandbox` | 1 |  |
 | `scan.stop` | `pure` | 1 |  |
 | `service.install` | `mutating` | 0 | yes |
@@ -243,11 +244,12 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/platform/windows/process.rs` | 4 |
 | `engine/src/platform/windows/signature.rs` | 7 |
 | `engine/src/platform/windows/timing.rs` | 1 |
+| `engine/src/scanner/mod.rs` | 6 |
 | `engine/src/selfcheck.rs` | 10 |
-| `engine/src/settings.rs` | 6 |
+| `engine/src/settings.rs` | 8 |
 | `engine/src/tests.rs` | 47 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **124** in 15 modules |
+| **total** | **132** in 16 modules |
 
 ## What runs where
 

@@ -238,6 +238,9 @@ async fn run() -> Result<()> {
             watchdog::start_session();
             tracing::info!("Starting engine in --serve mode (stdio)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
+            // The scan schedule (D-027): off unless the user set an interval, and
+            // started here so it works with the window closed too.
+            scanner::start_schedule(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
             // Forward guard events as JSON-RPC notifications on stdout.
             let mut events = guard::subscribe_events();
@@ -302,6 +305,9 @@ async fn run() -> Result<()> {
             watchdog::start_session();
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
+            // Same schedule as `serve`: this is the mode that keeps running after
+            // the window is closed, so it is the one that makes D-027 true.
+            scanner::start_schedule(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
             // 24/7 protection: with the service running, the guard is armed
             // even when the UI is closed (unless the user turned it off, or a

@@ -19,6 +19,12 @@ use std::sync::{OnceLock, RwLock};
 pub const MIN_SYNC_HOURS: u32 = 1;
 pub const MAX_SYNC_HOURS: u32 = 168;
 
+/// A scheduled scan that asks for the shortest interval this allows: the tick is
+/// a few minutes long, so anything below an hour would just re-run immediately.
+pub const MIN_SCAN_HOURS: u32 = 1;
+/// A week. Past that the schedule is indistinguishable from "off".
+pub const MAX_SCAN_HOURS: u32 = 168;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -65,6 +71,15 @@ pub struct Settings {
     pub toast_enabled: bool,
     /// Auto-quarantine detections by default on the scan screen.
     pub scan_quarantine_default: bool,
+    /// Hours between automatic scans; **0 disables them** (the default: a scan
+    /// that starts by itself is something the user turns on, D-027).
+    ///
+    /// The engine has to be running - `--service` from the logon entry, or the
+    /// app itself - and the scan is report-only: a scheduled run never
+    /// quarantines, because nobody chose a file while it was running.
+    pub scan_interval_hours: u32,
+    /// Folder that scan walks; empty = the current user's profile folder.
+    pub scan_target: String,
     /// Extra canary paths; empty = engine defaults.
     pub canary_paths: Vec<String>,
 }
@@ -90,6 +105,8 @@ impl Default for Settings {
             sound_volume: 70,
             toast_enabled: true,
             scan_quarantine_default: true,
+            scan_interval_hours: 0,
+            scan_target: String::new(),
             canary_paths: Vec::new(),
         }
     }
@@ -172,6 +189,26 @@ impl Settings {
                 }
                 "scan_quarantine_default" => {
                     self.scan_quarantine_default = boolean(value, key)?
+                }
+                "scan_interval_hours" => {
+                    let v = value
+                        .as_u64()
+                        .with_context(|| format!("{key} must be a number"))?;
+                    if v > MAX_SCAN_HOURS as u64 {
+                        bail!("scan_interval_hours must be 0 (off) or {MIN_SCAN_HOURS}..{MAX_SCAN_HOURS}");
+                    }
+                    if v != 0 && v < MIN_SCAN_HOURS as u64 {
+                        bail!("scan_interval_hours must be 0 (off) or {MIN_SCAN_HOURS}..{MAX_SCAN_HOURS}");
+                    }
+                    self.scan_interval_hours = v as u32;
+                }
+                "scan_target" => {
+                    let v = string(value, key)?;
+                    let v = v.trim().to_string();
+                    if !v.is_empty() && !std::path::Path::new(&v).is_absolute() {
+                        bail!("scan_target must be an absolute path, or empty for the profile folder");
+                    }
+                    self.scan_target = v;
                 }
                 "toast_enabled" => self.toast_enabled = boolean(value, key)?,
                 "canary_paths" => {
@@ -614,6 +651,36 @@ mod tests {
         assert_eq!(s.theme, "dark");
         assert_eq!(s.sync_interval_hours, 6);
         assert!(s.guard_autostart);
+    }
+
+    #[test]
+    fn the_scan_schedule_is_off_until_the_user_turns_it_on() {
+        let mut s = Settings::default();
+        assert_eq!(s.scan_interval_hours, 0, "a scan that starts itself is opt-in");
+        assert_eq!(s.scan_target, "", "empty means the profile folder");
+
+        // 0 is the off switch, not a rejection; a week is the ceiling.
+        s.apply_patch(&json!({ "scan_interval_hours": 24 })).unwrap();
+        assert_eq!(s.scan_interval_hours, 24);
+        s.apply_patch(&json!({ "scan_interval_hours": 0 })).unwrap();
+        assert_eq!(s.scan_interval_hours, 0);
+        assert!(s.apply_patch(&json!({ "scan_interval_hours": 169 })).is_err());
+        assert!(s.apply_patch(&json!({ "scan_interval_hours": -1 })).is_err());
+        assert!(s.apply_patch(&json!({ "scan_interval_hours": "24" })).is_err());
+    }
+
+    #[test]
+    fn the_scan_target_must_be_absolute_or_empty() {
+        let mut s = Settings::default();
+        s.apply_patch(&json!({ "scan_target": r"C:\Users" })).unwrap();
+        assert_eq!(s.scan_target, r"C:\Users");
+        // Optimistic about paths that do not exist yet (a stick comes back), but
+        // not about relative ones: the engine's working directory is not the
+        // user's idea of "here".
+        s.apply_patch(&json!({ "scan_target": "D:\\backup\\" })).unwrap();
+        assert!(s.apply_patch(&json!({ "scan_target": "backup" })).is_err());
+        s.apply_patch(&json!({ "scan_target": "   " })).unwrap();
+        assert_eq!(s.scan_target, "");
     }
 
     #[test]

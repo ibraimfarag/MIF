@@ -125,6 +125,14 @@
       "note": "Runs before any scan starts: with a job active the answer is the 'another job is running' error instead, so the case that can be pinned is the unknown id."
     },
     {
+      "method": "scan.schedule",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "want": { "enabled": "false" },
+      "note": "The scan schedule (D-027): enabled, interval_hours, target, last_started and next_due. Off by default in the isolated settings file, so the pinned case is the off state; the timer itself is proven by the engine's own unit tests and by `scripts\\verify-scan-schedule.ps1`."
+    },
+    {
       "method": "scan.start",
       "class": "sandbox",
       "params": { "path": "@sandbox/empty", "quarantine": false },

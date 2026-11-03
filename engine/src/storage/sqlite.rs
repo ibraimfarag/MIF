@@ -160,6 +160,10 @@ impl Storage {
                 seq INTEGER,
                 payload TEXT,
                 PRIMARY KEY (job_id, seq)
+             );
+             CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
              );",
         )
         .context("init schema")?;
@@ -361,6 +365,36 @@ impl Storage {
             )
             .ok();
         Ok(value)
+    }
+
+    // ---- engine state (not settings) ----
+
+    /// Reads a scheduler value the engine has to remember between runs.
+    ///
+    /// This is deliberately *not* where user settings live (those are
+    /// `settings.json`, which the user may edit by hand): it is the engine's own
+    /// memory of what it already did - first use is the last scheduled scan, so
+    /// an engine restart does not start one, and a machine that never ran one
+    /// does not wait a whole interval first.
+    pub fn meta_get(&self, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT value FROM meta WHERE key = ?1")?;
+        let mut rows = stmt.query([key])?;
+        if let Some(r) = rows.next()? {
+            return Ok(Some(r.get(0)?));
+        }
+        Ok(None)
+    }
+
+    /// Writes one of those values (insert or replace).
+    pub fn meta_set(&self, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        )?;
+        Ok(())
     }
 
     // ---- IOC hashes ----

@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>65 rows in <code>qa&#47;methods.json</code></td>
-      <td>65 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>66 rows in <code>qa&#47;methods.json</code></td>
+      <td>66 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>65 declared in the registry, 15 classified not to run</td>
+      <td>66 declared in the registry, 15 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -87,8 +87,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Engine tests</td>
-      <td>15 modules</td>
-      <td>124 declared cases</td>
+      <td>16 modules</td>
+      <td>132 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 65 methods</h2>
+<h2>The pipe: 66 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -141,8 +141,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>read</code></td>
-      <td class="num">22</td>
-      <td class="num">22</td>
+      <td class="num">23</td>
+      <td class="num">23</td>
       <td class="num">0</td>
     </tr>
     <tr>
@@ -465,6 +465,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>report.export</code></td>
       <td><code>sandbox</code></td>
+      <td class="num">1</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><code>scan.schedule</code></td>
+      <td><code>read</code></td>
       <td class="num">1</td>
       <td></td>
     </tr>
@@ -1020,12 +1026,16 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>1</td>
     </tr>
     <tr>
+      <td><code>engine&#47;src&#47;scanner&#47;mod.rs</code></td>
+      <td>6</td>
+    </tr>
+    <tr>
       <td><code>engine&#47;src&#47;selfcheck.rs</code></td>
       <td>10</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;settings.rs</code></td>
-      <td>6</td>
+      <td>8</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;tests.rs</code></td>
@@ -1037,7 +1047,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**124** in 15 modules</td>
+      <td>**132** in 16 modules</td>
     </tr>
   </tbody>
 </table>
