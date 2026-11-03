@@ -1,6 +1,6 @@
 {
   "artifact": "dist/MICS-portable",
-  "measured": "2026-11-02",
+  "measured": "2026-11-03",
   "definition": "case-insensitive substring count over the whole file, decoded as ISO-8859-1 (one byte, one character)",
   "policy": {
     "forbidden": "the profile path of the account that runs the probe, and its leaf directory: zero hits, always - the probe computes it, this file never stores it",
@@ -63,6 +63,14 @@
         "cargo": {
           "count": 1242,
           "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it."
+        },
+        "dart": {
+          "count": 1,
+          "reason": "the package manifest names dartjni.dll among the files it lists, so the substring appears once: that is a shipped file name, not the Dart VM living in this binary."
+        },
+        "flutter": {
+          "count": 55,
+          "reason": "the manifest names every shipped file and 54 of them sit under data\\flutter_assets\\, with flutter_windows.dll making 55: these are the paths the start-up self-check hashes, not the toolchain that built the engine."
         },
         "rustc": {
           "count": 97,

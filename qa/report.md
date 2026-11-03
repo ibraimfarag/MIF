@@ -18,9 +18,10 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Controls | 98 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
+| Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 21 files | 97 declared cases (a floor: loops add more at run time) | `flutter.test` step |
 | Engine tests | 14 modules | 111 declared cases | `engine.test` step |
-| Pipeline steps | 9 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
+| Pipeline steps | 10 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
 ## The pipe: 65 methods
@@ -166,7 +167,7 @@ Five markers are counted, case-insensitively, over the ISO-8859-1 bytes of every
 | `dartjni.dll` | 0 | 101 | 0 | 0 | 0 | 101 |
 | `data\app.so` | 50 | 66 | 0 | 0 | 1 | 117 |
 | `flutter_windows.dll` | 1891 | 748 | 0 | 0 | 0 | 2639 |
-| `mics-engine.exe` | 0 | 0 | 1242 | 97 | 0 | 1339 |
+| `mics-engine.exe` | 55 | 1 | 1242 | 97 | 0 | 1395 |
 | `mics_app.exe` | 39 | 0 | 0 | 0 | 0 | 39 |
 | `screen_retriever_windows_plugin.dll` | 97 | 0 | 0 | 0 | 0 | 97 |
 | `tray_manager_plugin.dll` | 60 | 0 | 0 | 0 | 0 | 60 |
@@ -185,6 +186,8 @@ This is the allowlist: the reason column is what separates a measured fingerprin
 | `data\app.so` | `pubspec` | the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine. |
 | `flutter_windows.dll` | `flutter` | the prebuilt Flutter engine is a third-party binary we do not compile; its strings are the framework's own and name no account. |
 | `flutter_windows.dll` | `dart` | the Dart VM inside that engine names itself; removing it would mean rebuilding Flutter from source. |
+| `mics-engine.exe` | `flutter` | the manifest names every shipped file and 54 of them sit under data\flutter_assets\, with flutter_windows.dll making 55: these are the paths the start-up self-check hashes, not the toolchain that built the engine. |
+| `mics-engine.exe` | `dart` | the package manifest names dartjni.dll among the files it lists, so the substring appears once: that is a shipped file name, not the Dart VM living in this binary. |
 | `mics-engine.exe` | `cargo` | rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. |
 | `mics-engine.exe` | `rustc` | the engine's panic, version and RUST_BACKTRACE strings name the compiler that produced them; none of them carries a path. |
 | `mics_app.exe` | `flutter` | the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger). |
@@ -258,6 +261,7 @@ Parsed from `scripts/pipeline.ps1`, so this table cannot drift from the script a
 | `full` | `engine.contract` | Every registered JSON-RPC method answers, or refuses, as documented |
 | `full` | `app.build` | Release build of the Windows app |
 | `release` | `opsec.verify` | The packaged files carry no build fingerprint the baseline forbids |
+| `release` | `manifest.verify` | The packaged engine carries a manifest that describes the package |
 
 ## What this report does not claim
 

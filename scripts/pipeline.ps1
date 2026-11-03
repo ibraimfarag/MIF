@@ -15,9 +15,9 @@
       full     fast + the release builds, so packaging is never the first place
                a compile error appears.
       release  full + the artifact verifiers, one per slice as they land
-               (today: opsec; hardening and release already run inside
-               make-release.ps1 / verify-release.ps1). Needs a packaged
-               `dist` artifact.
+               (today: opsec and the package manifest; hardening and release
+               already run inside make-release.ps1 / verify-release.ps1). Needs a
+               packaged `dist` artifact.
 
     Every step is one command with one working directory, and a failure stops the
     run immediately: the report names the step that failed instead of hiding it
@@ -203,6 +203,20 @@ $steps = @(
             powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-opsec.ps1')
         }
         What = 'The packaged files carry no build fingerprint the baseline forbids'
+    },
+    @{
+        Id   = 'manifest.verify'
+        Tier = 'release'
+        Dir  = $repo
+        Run  = {
+            # The package's own description of itself (c2/D-025): the manifest is an
+            # RT_RCDATA resource inside `mics-engine.exe`, and this reads it back
+            # out of the packaged engine and re-hashes every file it lists. A
+            # package that no longer matches what its signed manifest says - a
+            # changed file, a swapped DLL, a re-packed folder - fails here.
+            powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-manifest.ps1')
+        }
+        What = 'The packaged engine carries a manifest that describes the package'
     }
 )
 

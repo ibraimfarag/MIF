@@ -74,6 +74,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>scripts&#47;verify-opsec.ps1</code>, <code>test&#47;opsec_baseline_test.dart</code></td>
     </tr>
     <tr>
+      <td>Integrity manifest</td>
+      <td>1 <code>MICS_MANIFEST</code> resource in the packaged engine</td>
+      <td>every file it lists is re-hashed out of the package, and the engine signature covers the document</td>
+      <td><code>scripts&#47;verify-manifest.ps1</code>, <code>manifest.verify</code></td>
+    </tr>
+    <tr>
       <td>Dart tests</td>
       <td>21 files</td>
       <td>97 declared cases (a floor: loops add more at run time)</td>
@@ -87,7 +93,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Pipeline steps</td>
-      <td>9 across 3 tiers</td>
+      <td>10 across 3 tiers</td>
       <td>the same script a human runs and CI runs</td>
       <td><code>scripts&#47;pipeline.ps1</code>, <code>.github&#47;workflows&#47;ci.yml</code></td>
     </tr>
@@ -724,12 +730,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>mics-engine.exe</code></td>
-      <td class="num">0</td>
-      <td class="num">0</td>
+      <td class="num">55</td>
+      <td class="num">1</td>
       <td class="num">1242</td>
       <td class="num">97</td>
       <td class="num">0</td>
-      <td class="num">1339</td>
+      <td class="num">1395</td>
     </tr>
     <tr>
       <td><code>mics_app.exe</code></td>
@@ -812,6 +818,16 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>flutter_windows.dll</code></td>
       <td><code>dart</code></td>
       <td>the Dart VM inside that engine names itself; removing it would mean rebuilding Flutter from source.</td>
+    </tr>
+    <tr>
+      <td><code>mics-engine.exe</code></td>
+      <td><code>flutter</code></td>
+      <td>the manifest names every shipped file and 54 of them sit under data\flutter_assets\, with flutter_windows.dll making 55: these are the paths the start-up self-check hashes, not the toolchain that built the engine.</td>
+    </tr>
+    <tr>
+      <td><code>mics-engine.exe</code></td>
+      <td><code>dart</code></td>
+      <td>the package manifest names dartjni.dll among the files it lists, so the substring appears once: that is a shipped file name, not the Dart VM living in this binary.</td>
     </tr>
     <tr>
       <td><code>mics-engine.exe</code></td>
@@ -1066,6 +1082,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>release</code></td>
       <td><code>opsec.verify</code></td>
       <td>The packaged files carry no build fingerprint the baseline forbids</td>
+    </tr>
+    <tr>
+      <td><code>release</code></td>
+      <td><code>manifest.verify</code></td>
+      <td>The packaged engine carries a manifest that describes the package</td>
     </tr>
   </tbody>
 </table>

@@ -41,6 +41,7 @@ const namedFiles = <String>[
   'qa/ui/ledger.dart',
   'qa/ui/ledger.json',
   'scripts/pipeline.ps1',
+  'scripts/verify-manifest.ps1',
   'scripts/verify-opsec.ps1',
   'test/i18n_parity_test.dart',
   'test/lang_registry_test.dart',
@@ -282,6 +283,12 @@ QaReport buildReport() {
           '${shipped.length} binaries in `qa/opsec-baseline.json`',
           'every count carries a written reason, and may only fall',
           '`scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart`',
+        ],
+        [
+          'Integrity manifest',
+          '1 `MICS_MANIFEST` resource in the packaged engine',
+          'every file it lists is re-hashed out of the package, and the engine signature covers the document',
+          '`scripts/verify-manifest.ps1`, `manifest.verify`',
         ],
         [
           'Dart tests',

@@ -1043,3 +1043,17 @@ one consequence instead of waving it through — the manifest names every shippe
 file, so `data\flutter_assets\...` enters the engine's strings and its `flutter`
 count in `qa\opsec-baseline.json` **rises** with a written reason, which also
 means the QA report is regenerated in that commit.
+
+**Amendment (2026-11-03, the producer commit).** Point 4's order moved one step
+because the resource API cannot do what that order assumed: `BeginUpdateResource` /
+`EndUpdateResource` rewrites the PE and leaves the certificate table that was
+already embedded inconsistent with the new layout, so `signtool` then refuses the
+file (`SignedCode::Sign returned error: 0x800700C1`, measured on the staged
+engine on 2026-11-03; injecting into a *never-signed* engine and signing it
+afterwards is accepted). The engine is therefore signed **once, after** the
+injection: `make-release.ps1` signs every staged binary except the engine
+(`sign.ps1 -Except`), builds the manifest from those signed bytes, injects it, and
+then signs the engine (`sign.ps1 -Only`). Both properties point 4 wanted survive,
+and `verify-manifest.ps1` proves the pair on the staged package: the manifest
+covers the signatures of every file it lists, and the engine's signature covers
+the manifest bytes.

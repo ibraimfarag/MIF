@@ -16,10 +16,15 @@
     4. refuses to continue if any required file is missing, so a half-built folder
        is never published - and refuses an app that was not built obfuscated or
        binaries whose PE is not hardened (`verify-hardening.ps1`, g1/D-021);
-    5. writes `VERSION` (version, build time, engine hash, rule count, what was
+    5. signs the staged binaries when asked - the engine last, because its
+       signature has to cover the package manifest - builds that manifest from the
+       final bytes, injects it into `mics-engine.exe` as the `MICS_MANIFEST`
+       resource, signs the engine, and proves the staged package is the one its
+       manifest describes (`verify-manifest.ps1`, c2/D-025);
+    6. writes `VERSION` (version, build time, engine hash, rule count, what was
        hardened);
-    6. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
-    7. writes `dist\SHA256SUMS` for the zip, the engine, the app, the rules and the
+    7. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
+    8. writes `dist\SHA256SUMS` for the zip, the engine, the app, the rules and the
        inventory.
 
   The Dart symbol table produced by `--obfuscate` goes to
@@ -284,16 +289,21 @@ if ($opsecExit -ne 0) {
   exit 1
 }
 
+$signArgs = @()
 if ($Sign -or $PfxPath) {
-  Write-Host "signing the staged binaries..."
-  $signArgs = @()
+  # The engine is left out of this pass on purpose: its signature has to cover the
+  # manifest resource, and Windows' resource API cannot rewrite an already-signed
+  # PE - the file keeps a certificate table that no longer matches its layout, and
+  # signtool then refuses it (0x800700C1, measured 2026-11-03). So the engine is
+  # signed once, after the injection below.
+  Write-Host "signing the staged binaries (the engine waits for its manifest)..."
   if ($PfxPath) { $signArgs = @("-PfxPath", (Resolve-Path $PfxPath).Path, "-PfxPassword", $PfxPassword) }
   else { $signArgs = @("-SelfSigned") }
   $stopPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
     & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "sign.ps1") `
-      @signArgs -BuildDir $staging
+      @signArgs -BuildDir $staging -Except "mics-engine.exe"
     $signExit = $LASTEXITCODE
   } finally {
     $ErrorActionPreference = $stopPreference
@@ -303,6 +313,75 @@ if ($Sign -or $PfxPath) {
     Write-Output "RESULT: FAIL - signing failed; nothing was published"
     exit 1
   }
+}
+
+# ------------------------------------------------- the package's own manifest
+# Every shipped file, described by the package itself (c2, D-025). The document is
+# built from the bytes as they are now - after signing, so the hashes cover the
+# signatures - and injected into the staged engine as the MICS_MANIFEST resource.
+# The engine is not in its own manifest: its integrity is its signature, which
+# `platform\windows\signature.rs` pins to the release certificate's common name.
+# Writing a resource rewrites the PE, so the engine is signed right after; then the
+# resource is read back out of the staged package and every file it lists is
+# re-hashed, so a package that does not describe itself never leaves here.
+. (Join-Path $PSScriptRoot "manifest-resource.ps1")
+Write-Host "building the package manifest..."
+$manifestFiles = Get-MicsManifestFiles -Path $staging
+$manifestJson = New-MicsManifestJson -Files $manifestFiles -Version $Version
+Write-MicsManifestResource -Exe (Join-Path $staging "mics-engine.exe") -Json $manifestJson
+Write-Host ("  manifest : format 1, {0} file(s), {1} byte(s), in mics-engine.exe as MICS_MANIFEST" -f $manifestFiles.Count, $manifestJson.Length)
+
+if ($Sign -or $PfxPath) {
+  Write-Host "signing the engine (its signature covers the injected manifest)..."
+  $stopPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "sign.ps1") `
+      @signArgs -BuildDir $staging -Only "mics-engine.exe"
+    $resignExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $stopPreference
+  }
+  if ($resignExit -ne 0) {
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Output "RESULT: FAIL - signing the engine after the manifest injection failed; nothing was published"
+    exit 1
+  }
+}
+
+# The manifest names `data\flutter_assets\...` and `dartjni.dll`, so the engine's
+# counted strings rise by exactly those names. The probe above ran where D-025
+# records the order (before signing); this second call reads the bytes the
+# manifest just changed, so a package the release tier would refuse cannot be
+# staged here either. `qa\opsec-baseline.json` carries the written reason.
+Write-Host "re-checking the staged binaries after the manifest injection..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-opsec.ps1") -Path $staging
+  $opsecFinalExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($opsecFinalExit -ne 0) {
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output "RESULT: FAIL - the manifest changed the staged fingerprints and the baseline does not allow it"
+  exit 1
+}
+
+Write-Host "verifying the package's manifest describes the package..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-manifest.ps1") -Path $staging
+  $manifestExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($manifestExit -ne 0) {
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output "RESULT: FAIL - the staged package does not match its own manifest; nothing was published"
+  exit 1
 }
 
 $engine = Join-Path $staging "mics-engine.exe"
@@ -399,7 +478,8 @@ Write-Output ("  engine : {0}" -f $engineHash)
 Write-Output "  rules  : $ruleCount file(s)"
 Write-Output "  hardened: CFG + ASLR/DEP + stripped (checked from the PE, not the flags)"
 Write-Output ("  symbols: {0}  (kept out of the package on purpose)" -f $symbolsDir)
-Write-Output "  engine name: $engineName"
+Write-Output ("  engine name: {0}" -f $engineName)
+Write-Output ("  manifest: {0} file(s) described by the MICS_MANIFEST resource in the engine" -f $manifestFiles.Count)
 if ($signature -eq "Valid") {
   Write-Output "  signed : $signature - $signer"
 } else {
@@ -408,4 +488,5 @@ if ($signature -eq "Valid") {
   Write-Output "           (re-run with -Sign to sign it with a certificate trusted on this machine)"
 }
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
+Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1"
 Write-Output "RESULT: PASS"

@@ -7,6 +7,12 @@
 #   Production (OV/EV certificate):
 #     powershell -File scripts\sign.ps1 -PfxPath "cert.pfx" -PfxPassword "..."
 #
+#   One file only (what make-release.ps1 does after it injects the manifest into
+#   the engine, because writing a resource invalidates that engine's signature):
+#     powershell -File scripts\sign.ps1 -SelfSigned -BuildDir <staging> -Only mics-engine.exe
+#   and everything except one, for the pass before that injection:
+#     powershell -File scripts\sign.ps1 -SelfSigned -BuildDir <staging> -Except mics-engine.exe
+#
 # Signs: mics_app.exe, mics-engine.exe, flutter_windows.dll and any plugin DLLs
 # next to the runner, with publisher identity "Mourad Ibrahim (MI CS)".
 #
@@ -21,7 +27,16 @@ param(
     [string]$PfxPath,
     [string]$PfxPassword,
     [string]$BuildDir = "dist\MICS-portable",
-    [string]$Publisher = "Mourad Ibrahim (MI CS)"
+    [string]$Publisher = "Mourad Ibrahim (MI CS)",
+    # File names (leaves, not paths) to sign. Empty means everything signable in
+    # BuildDir. make-release.ps1 uses this to sign the engine once the manifest
+    # resource is in place, without touching the other files, whose hashes that
+    # manifest already records.
+    [string[]]$Only = @(),
+    # File names (leaves, not paths) to leave alone. The engine is signed only
+    # after the manifest resource is written into it, because that write leaves a
+    # PE signtool will not accept a signature for (see the filter below).
+    [string[]]$Except = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,6 +92,28 @@ $targets = @(
     "$BuildDir\mics-engine.exe"
 ) + (Get-ChildItem $BuildDir -Filter "*.dll" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 
+# `-Only` narrows the list to the leaves it names and `-Except` drops the leaves it
+# names. Both are filters, never additions: a file that is not a signable target in
+# BuildDir stays unsignable, and a name that matches nothing is an error rather
+# than a silent no-op.
+#
+# make-release.ps1 uses the pair to sign every file except the engine, inject the
+# manifest resource, and only then sign the engine: Windows' resource API rewrites
+# the PE, and a PE it rewrote no longer carries a usable certificate table, so
+# signtool refuses an already-signed file (0x800700C1, measured 2026-11-03).
+if ($Only.Count -gt 0) {
+    $targets = @($targets | Where-Object { $Only -contains (Split-Path $_ -Leaf) })
+    if ($targets.Count -eq 0) {
+        throw "-Only matched nothing signable in ${BuildDir}: $($Only -join ', ')"
+    }
+}
+if ($Except.Count -gt 0) {
+    $targets = @($targets | Where-Object { $Except -notcontains (Split-Path $_ -Leaf) })
+    if ($targets.Count -eq 0) {
+        throw "-Except left nothing signable in ${BuildDir}"
+    }
+}
+
 foreach ($file in $targets) {
     if (-not (Test-Path $file)) { continue }
     Write-Host "Signing $(Split-Path $file -Leaf) ..."
@@ -100,4 +137,4 @@ if ($failed -gt 0) {
     Write-Output "RESULT: FAIL - $failed file(s) did not verify; SmartScreen will still warn"
     exit 1
 }
-Write-Output "RESULT: PASS - every binary is signed and verifies on this machine"
+Write-Output "RESULT: PASS - $($targets.Count) selected binary(ies), every one signed and verifying on this machine"

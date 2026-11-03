@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-01 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> Last updated: 2026-11-03 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
@@ -49,7 +49,8 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ج2 — the signed SHA-256 manifest and the start-up self-check** (ز2-أ,
+> **next: ج2 commit 2 — the reader (`status.integrity` + the About notice); commit
+> 1, the producer, landed 2026-11-03** (ز2-أ,
 > ز2-ب, ز2-ج, ز3, ط1, ط3 and د5 are done and proved: a panic and a killed run each
 > become one
 > `MICS-<date>-<hash>` report with a JSON+text bundle under `<data dir>\crashes\`,
@@ -294,7 +295,7 @@ order the user picked (small → medium → large), and it is finished**
 | Step | What | Needs you |
 |---|---|---|
 | ~~**ج1**~~ | ~~Build hardening~~ — **done**: Control Flow Guard on both binaries (read back from the PE: `GUARD_CF` + a real guard function table), the engine built with `lto="fat"`/`codegen-units=1`/`panic=abort`/`strip=symbols` (**35.7 → 24.0 MB**), the Dart release obfuscated with its symbol table kept out of the package, and a release gate that refuses an unhardened or unobfuscated build (D-021) | measured 2026-10-31 |
-| **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner — design settled 2026-11-03 (**D-025**): the manifest is an `RT_RCDATA` resource inside `mics-engine.exe`, built after signing and injected before the engine is signed again; two commits (producer + `verify-manifest.ps1`, then the reader + About notice) | no |
+| **ج2** | Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner — design settled 2026-11-03 (**D-025**) and **amended the same day**: the manifest is an `RT_RCDATA` resource inside `mics-engine.exe`, built after signing and injected before the engine's single signature. **Commit 1 (the producer) landed 2026-11-03** — `make-release.ps1` signs every staged file except the engine, builds `MICS_MANIFEST` from those final bytes, injects it, signs the engine, and `scripts\verify-manifest.ps1` re-reads it out of the staged package and re-hashes every listed file. **Left: commit 2 (the reader: `status.integrity` + the About notice)** | no |
 | **ج3** | Deliberate README rewrite ("what it does / does not do") once the above is real | no |
 
 **د — P6 QA**
@@ -360,7 +361,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ز3** cards~~ — **done** (2026-11-02) | Bottom corner: right in LTR, left in RTL (read `rtlProvider`, never a language name), fed by the existing `alert.rs` gate; a crash card carries the bug id and says delivery is off (no report has a delivery state until ز2-د, D-024). The engine pushes the card as its own `alert` notification, parks it when no UI is attached, and the shell paints it as a widget the sweep can tap. |
 | ~~**ط1** fingerprint~~ — **done** (2026-11-02) | The Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` (in `make-release.ps1` and the `engine.build` step), and the shipped engine went from **1238** hits of the account name to **0**. `scripts/verify-opsec.ps1` counts the markers and compares them with `qa/opsec-baseline.json`: a forbidden string (the profile path and its leaf, computed on the machine running the probe) must be absent, a counted marker (`flutter`/`dart`/`cargo`/`rustc`/`pubspec`) may only fall, a binary missing from the baseline fails until a human adds it with a reason, and an entry with no reason fails. `test/opsec_baseline_test.dart` guards the file in the fast tier. Run by `make-release.ps1` on the staging folder, so a leaking build is never packaged. |
 | ~~**ط3** wiring~~ — **done** (2026-11-02) | `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` - the packaged artifact, not the build folder - so `-Tier release` refuses a package that names the build account or grew a counted fingerprint. `verify-tamper.ps1` joins it with ط2. |
-| **ج2** manifest + self-check | **Two commits; design settled 2026-11-03 (`D-025`), so a new session can start cold.** Commit 1 (producer): `make-release.ps1` signs every PE, then builds `MICS_MANIFEST` (`format`, `version`, `files[{path, bytes, sha256}]`, sorted by path) from those final bytes, injects it as an `RT_RCDATA` resource into the staged `mics-engine.exe`, signs the engine again, and `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes every listed file — a package whose manifest does not describe it never leaves the staging folder. Commit 2 (consumer): the engine reads its own resource, verifies its own signature through `platform\windows\signature.rs`, hashes the listed files, and reports `integrity` in `status` as `ok` / `untrusted-certificate` (our CN, chain untrusted: one neutral line in About, no banner) / `unverified` (About notice plus an alert card naming what failed). The engine is not in its own manifest; its integrity is the signature. Measured, not assumed: the manifest's file names enter the engine's strings, so its `flutter` count rises by one per `data\flutter_assets\...` path — a written reason in `qa\opsec-baseline.json`, and the QA report regenerated in the same commit. |
+| **ج2** manifest + self-check | **Commit 1 (the producer) landed 2026-11-03; commit 2 (the reader) is next — the design is `D-025` plus its 2026-11-03 amendment.** Commit 1: `make-release.ps1` signs every staged file except the engine, builds `MICS_MANIFEST` (`format`, `version`, `files[{path, bytes, sha256}]`, sorted by path) from those final bytes, injects it as an `RT_RCDATA` resource into the staged `mics-engine.exe`, and signs the engine **once, after** the injection — an injection into an already-signed engine cannot be signed again (`0x800700C1`, measured; the amendment in `D-025` records it). `scripts\manifest-resource.ps1` is the one place the format lives (build, inject, read, validate: ordinal order, no duplicates, no `..` path); `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes every listed file, so a package whose manifest does not describe it never leaves the staging folder, and `manifest.verify` runs it from `-Tier release` too. Commit 2 (consumer): the engine reads its own resource, verifies its own signature through `platform\windows\signature.rs`, hashes the listed files, and reports `integrity` in `status` as `ok` / `untrusted-certificate` (our CN, chain untrusted: one neutral line in About, no banner) / `unverified` (About notice plus an alert card naming what failed). The engine is not in its own manifest; its integrity is the signature. Measured, not assumed: the manifest's file names enter the engine's strings, so its `flutter` count rose 0 → 55 and its `dart` count 0 → 1 — a written reason per row in `qa\opsec-baseline.json`, and the QA report regenerated in the same commit. |
 | **ط2** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; sits on **ج2**'s signed manifest, so it lands after ج2. |
 | ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
 
@@ -546,8 +547,9 @@ not implemented yet, see D-008).
 | `mics-engine.exe helper-status --json` | The status chain the UI renders (`installed/running/state/reachable/version/elevated/pipe`) |
 | `mics-engine.exe helper-console` | Serves the privileged protocol in the foreground on `MICS_HELPER_PIPE` without the SCM (diagnostics, `verify-helper.ps1`) |
 | `scripts\verify-hardening.ps1` | The binaries are hardened as claimed, read out of the **PE** rather than from the build flags: `DllCharacteristics` (`GUARD_CF`, `DYNAMICBASE`, `NXCOMPAT`, `HIGH_ENTROPY_VA`), the load-config `GuardFlags` (`CF_INSTRUMENTED`, `CF_FUNCTION_TABLE_PRESENT`, `CF_LONGJUMP_TABLE_PRESENT`), the CET marker when present, and a debug directory with no PDB. Pass a folder (judges `mics_app.exe` + `mics-engine.exe`, reports `flutter_windows.dll` but never fails on it) or a single file; `make-release.ps1` refuses to package what it fails |
-| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app + `sbom.cdx.json` + `THIRD-PARTY-NOTICES`), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder, refuses to start when the committed inventory no longer describes the lockfiles, refuses an un-obfuscated app or an unhardened binary, and swaps the folder by renaming the old one aside instead of deleting it |
+| `scripts\make-release.ps1` | Builds the published artifact: clean `dist\MICS-portable` (engine + `rules` + app + `sbom.cdx.json` + `THIRD-PARTY-NOTICES`), `VERSION`, `MICS-portable-<version>-x64.zip`, `dist\SHA256SUMS`; fails instead of shipping an incomplete folder, refuses to start when the committed inventory no longer describes the lockfiles, refuses an un-obfuscated app or an unhardened binary, swaps the folder by renaming the old one aside instead of deleting it, and — after signing — builds the `MICS_MANIFEST` document from the final bytes, injects it into the staged engine, signs the engine and refuses to publish a package `verify-manifest.ps1` does not accept |
 | `scripts\verify-release.ps1` | The artifact is what it claims: every checksum matches, the zip has every required file and exactly 2 rule packs (no `rules\rules`), the inventory parses and names a license for every component, the notices report a clean audit, the **extracted** copy answers the helper protocol, puts a real card on the desktop, loads its own `rules\guard` + `rules\yara` rather than the built-in fallback, and its binaries pass `verify-hardening.ps1` while `data\app.so` carries no Dart class names and no symbol table ships in the zip |
+| `scripts\verify-manifest.ps1` | The package describes itself: reads the `MICS_MANIFEST` resource back out of the packaged `mics-engine.exe` (through `scripts\manifest-resource.ps1`, the one place the format lives), validates the envelope (format `1`, a version, sorted duplicate-free relative paths, nothing that walks out of the package), re-hashes every file it lists, and fails on a missing file, a size or hash mismatch, or an engine whose signature broke after signing (`HashMismatch`). It prints what the package carries that the document does not list, which is `VERSION` by design. `-Measure` prints the document instead of the verdict. `make-release.ps1` runs it on the staging folder, and `-Tier release` runs it on `dist\MICS-portable` (`manifest.verify`) |
 | `dart run tool\sbom.dart` | What is inside the package, generated from what is pinned: `sbom.cdx.json` (CycloneDX 1.6) + `THIRD-PARTY-NOTICES` from `cargo metadata`/`Cargo.lock`, `pubspec.lock`/`dart pub deps --json`, the Flutter SDK's `LICENSE` and the two shipped fonts. `--check` exits 1 and prints `RESULT: FAIL` instead of writing when the committed pair is stale (`--verbose` lists what is excluded, and which components ship no text of their own); `make-release.ps1` runs it before it builds and `test\sbom_test.dart` re-derives the same inventory from the lockfiles |
 | `cargo run --example toast_probe` | Which WinRT step of the toast path fails, with the HRESULT (diagnoses "no card at all") |
 | `scripts\make-installer.ps1` | Wraps the assembled package in the NSIS installer: re-runs `verify-hardening.ps1` on the binaries first (an installer can never ship what the ZIP gate refused), finds NSIS without needing it on `PATH`, and prints the exe, its SHA-256 and the scope. `-TestUser` builds the same script as a per-user, no-UAC variant, which is how the install/uninstall path gets verified without a human clicking a prompt; `-HelperServiceKey` (verification only) points the uninstaller's helper check at another registry key, so the refusal path can be measured without touching a real service |
@@ -588,10 +590,61 @@ click (P1.5) or a purchased certificate (P4).
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) and the cost question is answered (ب1b, `docs\COST.md`) — left = steps **ب2–ب6** in §0.3 |
-| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = signed manifest + self-check banner (**ج2**) and the README rewrite (**ج3**); build hardening (**ج1**) landed with the PE measured |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **partly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; left = the manifest's reader and the self-check banner (**ج2** commit 2 — its producer landed 2026-11-03 in `make-release.ps1` + `verify-manifest.ps1`) and the README rewrite (**ج3**); build hardening (**ج1**) landed with the PE measured |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ج2 commit 1 of 2 — the producer: a manifest the package carries about itself**
+  - `scripts\manifest-resource.ps1` is the one place the format lives: it lists a
+    folder's files (relative path, bytes, SHA-256), sorts them ordinally, builds the
+    `{"format":1,"version":...,"files":[{"path","bytes","sha256"}]}` document,
+    injects it into an exe as the `RT_RCDATA` resource `MICS_MANIFEST` and reads it
+    back. The engine is never listed in its own manifest — its integrity is its
+    signature (D-025 point 3) — and a path that walks out of the package (`..`, a
+    leading separator) is refused on the write **and** the read side, so neither can
+    hash outside the package. The same file validates on read: envelope `format: 1`,
+    a version, a sorted duplicate-free list, a whole byte count and a 64-hex digest.
+  - `make-release.ps1` runs it after signing: every staged binary except the engine
+    is signed (`sign.ps1 -Except`), the manifest is built from those final bytes,
+    injected, the engine is signed (`sign.ps1 -Only`), and the resource is read back
+    out of the staged package and every file it lists re-hashed — a package that
+    does not describe itself never leaves the staging folder. A second
+    `verify-opsec.ps1` call after the injection catches the strings the manifest
+    adds, and `manifest.verify` runs the same probe from `-Tier release` against
+    `dist\MICS-portable`.
+  - **Measured, and it moved one step of the order D-025 recorded**: injecting into
+    an already-signed engine and signing it again fails — Windows' resource API
+    leaves the certificate table inconsistent with the rewritten PE and signtool
+    refuses the file (`SignedCode::Sign returned error: 0x800700C1`), where the same
+    injection into a never-signed engine is then signed `Valid`. So the engine is
+    signed **once, after** the injection; D-025 carries a dated amendment and both
+    properties it wanted (the manifest covers the signatures of every file it lists,
+    the engine's signature covers the manifest bytes) are re-proved by
+    `verify-manifest.ps1` on the staged package.
+  - Measured on the built package (2026-11-03, `make-release.ps1 -Sign` end to end):
+    the staged manifest describes **68 file(s)** — everything except
+    `mics-engine.exe`; `VERSION` is written after it by design and is printed as
+    "not listed" — and `verify-manifest.ps1` re-hashed all 68 out of the package and
+    found every one matching, with the engine's signature `Valid`. Both negative
+    controls, run by hand on a copy: one flipped byte of `data\app.so` fails with
+    that file's sha256 named, and an engine with no injected resource is refused
+    ("carries no MICS_MANIFEST resource").
+  - The manifest's own file names enter the engine's strings, measured rather than
+    waved through: `flutter` **0 → 55** (54 `data\flutter_assets\...` paths plus
+    `flutter_windows.dll`) and `dart` **0 → 1** (`dartjni.dll`), each with a written
+    reason in `qa\opsec-baseline.json`, and `qa/report.md` / `qa/report.html` were
+    regenerated in this commit (they also gained the "Integrity manifest" gate row
+    and the tenth pipeline step).
+  - The four checks are green through `scripts\pipeline.ps1 -Tier fast`
+    (flutter.analyze 53.3 s, flutter.test 46.5 s, engine.test 185.3 s,
+    engine.clippy 117.8 s = **402.9 s**; the Rust half was the cold
+    `%TEMP%\mics-target`, so that is the slow case, not the usual one), and
+    `-Tier release -Only '*.verify'` passes both artifact verifiers on
+    `dist\MICS-portable`: `opsec.verify` 3.4 s and **`manifest.verify` 2.6 s** on
+    the published folder.
+  - Left for commit 2: the reader — `status.integrity` in three states (`ok`,
+    `untrusted-certificate`, `unverified`) and the About notice/banner.
 
 - **د5 - the QA report and the coverage gates**
   - `qa/report.md` + `qa/report.html` are committed, generated by
@@ -3167,7 +3220,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
 | LOW | `nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json` (any local user or admin can read them); the `vt_api_key` half of this row went with D-019 | `settings.rs`, THREAT-MODEL F-5 |
 | LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
-| LOW | **No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself* (the obfuscation half of this row closed in ج1/D-021: both binaries are CFG-instrumented and stripped, the Dart snapshot is obfuscated, and `verify-hardening.ps1` fails the release when that stops being true). `THREAT-MODEL.md` F-11 says what carries the security instead; the manifest + self-check banner is ج2 | P5, THREAT-MODEL F-11 |
+| LOW | **No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself* (the obfuscation half of this row closed in ج1/D-021: both binaries are CFG-instrumented and stripped, the Dart snapshot is obfuscated, and `verify-hardening.ps1` fails the release when that stops being true). `THREAT-MODEL.md` F-11 says what carries the security instead; the manifest's producer landed 2026-11-03 (ج2 commit 1: `make-release.ps1` injects `MICS_MANIFEST` and `verify-manifest.ps1` proves the package matches it), so what is left of ج2 is the engine's own self-check and its notice | P5, THREAT-MODEL F-11 |
 
 ## Icon sizes required for the application
 
@@ -3464,6 +3517,23 @@ settings and read environment variables only.
     back unchanged. The same trap applies to any file we read, edit and re-validate
     (the `.ps1` files in this repo already have a BOM of their own, for the opposite
     reason: PS 5.1 decodes without one as ANSI).
+
+26. **Windows' resource API and Authenticode signatures do not mix: writing a
+    resource into an already-signed PE leaves the file unsignable.** `BeginUpdateResource`
+    / `EndUpdateResource` rewrites the image but keeps the embedded certificate
+    table, so the result no longer parses as a signed image; `signtool` refuses it
+    with `SignedCode::Sign returned error: 0x800700C1` (`ERROR_BAD_EXE_FORMAT`) and
+    `Get-AuthenticodeSignature` reports `NotSigned` on the wrecked file, so nothing
+    warns you until signing fails. Measured 2026-11-03 on `mics-engine.exe` (24 MB,
+    CFG + LTO + stripped): the identical injection into a *never-signed* copy,
+    signed afterwards, is `Valid`. That is why `make-release.ps1` signs everything
+    **except** the engine (`sign.ps1 -Except`), injects the `MICS_MANIFEST` resource
+    and signs the engine once (`sign.ps1 -Only`), and why `D-025` carries an
+    amendment. Two related facts for the next reader of a PE resource:
+    `LoadLibraryEx` with `LOAD_LIBRARY_AS_DATAFILE` (0x2) reads a resource without
+    running anything or loading dependencies, and `FindResource` wants the
+    `MAKEINTRESOURCE` integer for `RT_RCDATA` (10) but a wide string for the
+    resource name (`scripts\manifest-resource.ps1`).
 
 ---
 

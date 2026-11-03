@@ -152,6 +152,19 @@ against the staging folder - so a leaking build is never published - and
 is the other half: it appends the remap to the engine's own rustflags, because
 `CARGO_ENCODED_RUSTFLAGS` replaces `.cargo\config.toml` rather than adding to it,
 and doing that by hand cost the engine its CFG table on 2026-11-02.
+
+The manifest's own names are part of that measurement: the injected document lists
+every shipped file, so `data\flutter_assets\...` and `dartjni.dll` enter the
+engine's strings and its `flutter` / `dart` rows carry the written reason for it.
+
+## The integrity manifest: `MICS_MANIFEST`
+
+Not a file under `qa/`, but a surface the report carries a row for: the package's
+SHA-256 manifest is an `RT_RCDATA` resource inside the shipped `mics-engine.exe`
+(D-025), so its authenticity is that engine's Authenticode signature and no loose
+document can be edited. `scripts/verify-manifest.ps1` is the proving half - it
+re-reads the resource out of the package and re-hashes every file the document
+lists - and it is also the `manifest.verify` step of `-Tier release`.
 `test/opsec_baseline_test.dart` keeps the file
 honest (reasons present, markers equal to the probe's own list, no user path).
 The `cargo`/`rustc` rows are what is left after ط1's
