@@ -6,6 +6,7 @@ mod dispatcher;
 mod firewall;
 mod vulns;
 mod scanner;
+mod selfcheck;
 mod sync;
 mod benchmark;
 #[cfg(test)]
@@ -209,6 +210,15 @@ async fn run() -> Result<()> {
              folder. MICS_ALLOW_LOW_INTEGRITY=1 runs anyway, for a diagnostic probe."
         );
     }
+
+    // The package's own integrity (ج2, D-025): the manifest injected into this
+    // image, the files beside it and our own signature, settled once here and
+    // cached for `status`. Only the modes that serve a UI announce a failure —
+    // a one-shot CLI probe is not the place to interrupt anybody.
+    selfcheck::start(matches!(
+        &cli.command,
+        Some(Commands::Serve) | Some(Commands::Service)
+    ));
 
     match cli.command {
         Some(Commands::Serve) => {

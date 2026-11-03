@@ -240,7 +240,7 @@ product trusts the label.
 | F-8 | No self-defense: same-token code can kill the engine, replace binaries, edit `rules\`, or point the engine at another data dir through its environment | Stopping a same-token attacker requires kernel callbacks or a second service — A-9 territory | Run the engine under a watchdog service and verify the package's signature before loading rules |
 | F-9 | No memory scanning, no unpacking/emulation, no AMSI, no pre-execution blocking (no minifilter) | Usermode-only and driver-free is a product decision (no driver install, no BSOD risk) | Documented in `PROTECTION-MATRIX.md`; the guard's behaviour rules are the compensating control |
 | F-10 | A local admin can turn everything off and delete the evidence | Unavoidable without kernel enforcement | Ship the audit trail to a location the admin cannot reach (a real solution is an external log sink — out of scope) |
-| F-11 | **A repackaged `mics_app.exe`/`mics-engine.exe` cannot be told apart from the published one *by the app itself***. The symbol gap this row used to describe is closed (ج1, D-021): both binaries are Control-Flow-Guard instrumented, LTO'd with one codegen unit, stripped of symbols and PDB paths, and the Dart release is obfuscated — so the shipped artifact no longer names its own classes and functions. What remains is that nothing on the user's disk says "these bytes are the ones that were published" | Obfuscation does not stop a determined reverse engineer and would hide the code from exactly the auditors this project wants looking at it — which is why it is a speed bump here and not a security claim. Repackaging is answered independently of the binaries: the pipe ACL (F-1), the update payload's embedded signature (F-3, D-016), and the fact that a copy the user runs is a copy they chose to trust | P5 **ج2** (still open): ship a **signed integrity manifest** plus a start-up self-check banner that says out loud when the files do not match it, and a reproducible-build note so a third party can rebuild and compare |
+| F-11 | **A repackaged `mics_app.exe`/`mics-engine.exe` cannot be told apart from the published one *by the app itself***. The symbol gap this row used to describe is closed (ج1, D-021): both binaries are Control-Flow-Guard instrumented, LTO'd with one codegen unit, stripped of symbols and PDB paths, and the Dart release is obfuscated — so the shipped artifact no longer names its own classes and functions. What remains is that nothing on the user's disk says "these bytes are the ones that were published" | Obfuscation does not stop a determined reverse engineer and would hide the code from exactly the auditors this project wants looking at it — which is why it is a speed bump here and not a security claim. Repackaging is answered independently of the binaries: the pipe ACL (F-1), the update payload's embedded signature (F-3, D-016), and the fact that a copy the user runs is a copy they chose to trust. The manifest (D-025) narrows it to *silent* edits: the published copy now carries a SHA-256 document of itself inside the engine's own signature, and a start-up check reports any file that no longer matches it | P5 **ج2** — the **detection** half landed 2026-11-03: `make-release.ps1` injects a SHA-256 manifest of every shipped file into the signed engine (`MICS_MANIFEST`), the engine re-reads the resource and re-hashes the folder it runs from at start-up, and `status.integrity` answers `ok` / `untrusted-certificate` / `unverified`, with the line in Settings → About and a card naming the files that moved when the document disagrees. Still open: a **reproducible-build note** so a third party can rebuild and compare, and the honest residual that a from-source rebuild re-signed with another key is indistinguishable to any local check (its own manifest matches its own bytes) |
 
 **Closed since this document was written.** F-1: the engine pipe now carries an
 explicit, protected ACL naming the engine's user, `SYSTEM` and administrators. Two
@@ -271,6 +271,27 @@ absent before ج1), the engine is LTO'd, `panic=abort` and stripped, and the Dar
 snapshot is obfuscated with its symbol table kept out of the package (D-021).
 What F-11 still carries is repackaging: nothing on disk tells the app its own
 bytes are the published ones.
+**F-11's repackaging half (2026-11-03, ج2/D-025)**: the release now carries a
+manifest of itself, and the app does read it. `scripts\make-release.ps1` builds
+`MICS_MANIFEST` — every shipped file with its size and SHA-256 — from the final
+bytes, injects it into `mics-engine.exe` as an `RT_RCDATA` resource, and signs the
+engine, so the document's authenticity is *that signature* and the
+`MI CS Code Signing` pin; a loose `.json` beside the binaries would have been
+editable by whoever repackaged the folder. At start-up the engine reads the
+resource out of its own image (`LOAD_LIBRARY_AS_DATAFILE`, nothing executes),
+refuses a document that is not the shape this build writes, re-hashes every file
+it lists against the folder the engine runs from, and classifies its own
+signature — three states, because two would be dishonest: ours with a chain this
+Windows trusts, ours with a root it has **not** trusted yet (the self-signed
+situation D-002 records: a quiet line in About, no banner), and anything else.
+`unverified` puts the notice in Settings → About and raises a card naming the
+first files that moved; it is also where a replaced binary, a swapped DLL or an
+edited rule pack lands. `scripts\verify-manifest.ps1` proves the published folder
+against the document (`-Tier release` refuses one it fails). What this does
+**not** cover, and the register row above keeps: a repackager who rebuilds from
+source produces a package whose manifest matches their own bytes and can sign it
+with their own certificate — no local check can tell that from us. The
+reproducible-build note that would let a third party compare is not written yet.
 
 ## 7. What is proven, and how
 
@@ -282,6 +303,7 @@ bytes are the published ones.
 | The engine pipe refuses everyone but its owner, SYSTEM and administrators | the two `pipe::tests` above (the DACL is read back with `GetSecurityInfo`) |
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release is complete and signed | `scripts/verify-release.ps1` + `scripts/sign.ps1` |
+| The package is the one that was published, or the app says so | `scripts\verify-manifest.ps1` re-reads `MICS_MANIFEST` out of `dist\MICS-portable` and re-hashes all **68** listed files (`RESULT: PASS`); the engine answers `status.integrity` from the same document at start-up (`ok` on the published copy, logged as `68 file(s) hash as the manifest says`), and **one byte flipped in `data\app.so`** of a copy turns that answer into `unverified`, names the file in the log and puts the card in Windows' notification history — read back with `scripts\verify-toast.ps1` after clearing it |
 | The two pipe ACLs are what this file says | `scripts/verify-pipe-acl.ps1` — both pipes, real `service` and `helper-console` processes on private names, 18 checks, `RESULT: PASS` |
 | The guard's cost | `scripts/measure-guard-cpu.ps1` — **0.156 % of one core = 0.0028 % of this 56-thread machine** (guard on minus `MICS_NO_GUARD=1`), down from 1.56 % and 3.52 % in two steps; `mics-engine benchmark` says `budget_ok: true` on the stated basis (share of all logical processors) |
 

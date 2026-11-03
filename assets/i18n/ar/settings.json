@@ -62,5 +62,8 @@
     "diagnostics.copied":  "التقرير اتنسخ — الـ bug id في أول سطر",
     "diagnostics.delete":  "امسح التقرير",
     "diagnostics.deleted":  "التقرير اتمسح",
-    "diagnostics.seen":  "اتكرر {count} مرة"
+    "diagnostics.seen":  "اتكرر {count} مرة",
+    "settings.integrityOk":  "التوقيع بتاع MI CS، والملفات كلها مطابقة للمانيفست.",
+    "settings.integrityUntrusted":  "التوقيع بتاع MI CS والملفات مطابقة، بس الويندوز لسه مش واثق في شهادة التوقيع (نسخة موقّعة ذاتيًا).",
+    "settings.integrityUnverified":  "دي مش النسخة اللي اتنشرت: المانيفست الموقّع اللي جوّا المحرك مش مطابق للملفات دي. نزّل MI CS تاني من المصدر الرسمي."
 }

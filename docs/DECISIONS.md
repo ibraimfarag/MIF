@@ -1057,3 +1057,40 @@ then signs the engine (`sign.ps1 -Only`). Both properties point 4 wanted survive
 and `verify-manifest.ps1` proves the pair on the staged package: the manifest
 covers the signatures of every file it lists, and the engine's signature covers
 the manifest bytes.
+
+**Amendment (2026-11-03, the reader commit).** Three things point 5 could only
+settle once it was code, and one surface it did not name:
+
+1. **"Our certificate, not trusted yet" has to be read without a chain.** A failed
+   `WinVerifyTrust` returns no provider state at all, so the two "not trusted"
+   cases are indistinguishable through it. `signature::embedded_signer_name` reads
+   the signer certificate straight out of the PKCS#7 blob instead
+   (`CryptQueryObject` → `CryptMsgGetParam` → `CertFindCertificateInStore` →
+   `CertGetNameStringW`), and `Trust::UntrustedRoot` is returned **only** when the
+   status is exactly `CERT_E_UNTRUSTEDROOT` *and* that certificate is ours. This is
+   the amendment that matters: a changed byte reports `TRUST_E_BAD_DIGEST` and
+   leaves our certificate in the file, so treating "the status was negative but the
+   certificate is ours" as the quiet state would have made a patched engine
+   `untrusted-certificate` — silence, for exactly the attack F-11 is about.
+2. **The card is gated on the document being there; the About line is not.** Point
+   5 says `unverified` raises a card, and a development build has no resource and
+   is therefore `unverified`: as written, every `flutter run` would raise "these
+   files are not the published build" — true, and noise aimed at the people
+   building it. A card is a nudge, not a record, so it fires only when the copy
+   *carries* a document that disagrees; Settings → About says `unverified` in both
+   cases (the log line always does), so a repackager who strips the resource loses
+   the nudge and not the notice.
+3. **The verdict is computed once, at start-up, and cached in the process.** The
+   manifest is ~10 KB and the folder ~30 MB: `status` answers the UI's 15 s
+   heartbeat, and re-hashing a package per beat is not a self-check, it is a tax.
+4. **One more surface than point 5 named.** About shows a line in *all three*
+   states — green for `ok`, muted for `untrusted-certificate`, the notice for
+   `unverified` — because "is this copy the published one?" is the question that
+   screen is open to answer, and an empty answer there is a missed one. Only
+   `unverified` is a banner.
+
+Also decided by the same commit, at the format level: Rust validates the document's
+envelope, its duplicates, its escaping paths and its 64-hex hashes, but **not** its
+sort order. Sorting is the producer's contract and `verify-manifest.ps1` enforces
+it; refusing a package the release gate accepted over a UTF-16-versus-byte
+collation difference would be a worse failure than the ordering was there for.

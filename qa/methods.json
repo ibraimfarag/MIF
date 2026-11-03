@@ -23,7 +23,7 @@
       "class": "pure",
       "params": null,
       "expect": "object",
-      "note": "Build version, platform and pid."
+      "note": "Build version, platform, pid, and the package's own integrity verdict (`ok` / `untrusted-certificate` / `unverified`, D-025)."
     },
     {
       "method": "audit.run",

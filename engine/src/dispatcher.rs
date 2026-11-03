@@ -91,11 +91,15 @@ impl Dispatcher {
                 // The real build, not a literal: the version comes from the crate
                 // and the platform names the architecture, which is the first
                 // thing to check when someone reports an ARM64 or x64 problem.
+                // `integrity` is D-025's third answer: what this copy's own signed
+                // manifest says about the files next to the engine — read from a
+                // cache, so a heartbeat never re-hashes the package.
                 Some(json!({
                     "state": "running",
                     "version": env!("CARGO_PKG_VERSION"),
                     "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
                     "pid": std::process::id(),
+                    "integrity": crate::selfcheck::state().state.as_str(),
                 }))
             }
             "audit.run" => {

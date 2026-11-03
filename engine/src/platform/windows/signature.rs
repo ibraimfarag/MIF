@@ -10,13 +10,22 @@
 //! locally and can be re-issued, and the certificate's subject is the part a
 //! buyer/user can read in Explorer. The trade-off is written down in D-016 — a
 //! thumbprint pin would also have to be updated by the release script.
+//!
+//! [`Trust`] is the same question asked with the answer ج2 needs (D-025): a
+//! package that is ours but signed with a certificate this Windows has not
+//! trusted *yet* is not the same thing as a package somebody edited, and
+//! [`embedded_signer_name`] is what tells the two apart.
 
 use anyhow::{bail, Result};
 use std::os::windows::ffi::OsStrExt;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HANDLE, HWND};
+use windows::Win32::Foundation::{CERT_E_UNTRUSTEDROOT, HANDLE, HWND};
 use windows::Win32::Security::Cryptography::{
-    CertGetNameStringW, CERT_NAME_SIMPLE_DISPLAY_TYPE,
+    CertCloseStore, CertFindCertificateInStore, CertFreeCertificateContext, CertGetNameStringW,
+    CryptMsgClose, CryptMsgGetParam, CryptQueryObject, CERT_FIND_SUBJECT_CERT, CERT_INFO,
+    CERT_NAME_SIMPLE_DISPLAY_TYPE, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+    CERT_QUERY_FORMAT_FLAG_BINARY, CERT_QUERY_OBJECT_FILE, CMSG_SIGNER_INFO,
+    CMSG_SIGNER_INFO_PARAM, HCERTSTORE, PKCS_7_ASN_ENCODING, X509_ASN_ENCODING,
 };
 use windows::Win32::Security::WinTrust::{
     WinVerifyTrustEx, WTHelperGetProvSignerFromChain, WTHelperProvDataFromStateData,
@@ -38,6 +47,14 @@ pub const EXPECTED_SIGNER_CN: &str = "MI CS Code Signing";
 /// A missing file is an error, not `None`: the caller asked about a file it
 /// intended to use, and silently treating "gone" as "unsigned" would hide a race.
 pub fn signer_name(path: &std::path::Path) -> Result<Option<String>> {
+    let (status, name) = verify(path)?;
+    Ok(if status == TRUST_OK { name } else { None })
+}
+
+/// `WinVerifyTrust` and, on success, the signer's display name: the raw pair the
+/// public answers are built from. The status is kept because a refusal has
+/// several meanings and D-025 has to tell two of them apart.
+fn verify(path: &std::path::Path) -> Result<(i32, Option<String>)> {
     let wide: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -78,7 +95,7 @@ pub fn signer_name(path: &std::path::Path) -> Result<Option<String>> {
     // SAFETY: same arguments as above; the close action only releases that state.
     let _ = unsafe { WinVerifyTrustEx(HWND::default(), &mut action, &mut data) };
 
-    Ok(name)
+    Ok((status, name))
 }
 
 /// Reads the signer certificate's display name out of a verify state handle.
@@ -136,6 +153,175 @@ pub fn require_signed_by(path: &std::path::Path, expected_cn: &str) -> Result<()
             path.display()
         ),
     }
+}
+
+/// What ج2 needs to know about a shipped file, in D-025's terms.
+///
+/// `signer_name` answers "may I trust this?" with one bit, which is right for the
+/// update path and wrong for the package's self-check: on a machine that has not
+/// trusted the release certificate yet (the self-signed situation D-002 records),
+/// the honest answer is *not* "this file is not ours" but "this file is ours and
+/// this Windows does not know the certificate". The third state exists so that
+/// distinction can be shown to the user instead of being flattened away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Trust {
+    /// A chain Windows trusts, ending at our own certificate.
+    Ours,
+    /// Our certificate is embedded and the signature verifies, but this Windows
+    /// does not trust its root. Nothing is wrong with the file.
+    UntrustedRoot,
+    /// No signature, somebody else's, or one that does not verify (a changed
+    /// byte, an expired certificate, a rewritten certificate table).
+    NotOurs,
+}
+
+/// Classifies `path` against the release certificate named by
+/// [`EXPECTED_SIGNER_CN`].
+pub fn trust(path: &std::path::Path) -> Result<Trust> {
+    let (status, name) = verify(path)?;
+    if status == TRUST_OK {
+        return Ok(match name {
+            Some(n) if n.eq_ignore_ascii_case(EXPECTED_SIGNER_CN) => Trust::Ours,
+            _ => Trust::NotOurs,
+        });
+    }
+    // A refused chain is only "our certificate, not trusted here" when Windows
+    // says exactly that *and* the certificate inside the file is ours. Anything
+    // else — a changed byte is `TRUST_E_BAD_DIGEST`, not an untrusted root — is
+    // a signature that no longer covers the file.
+    if status as u32 == CERT_E_UNTRUSTEDROOT.0 as u32
+        && embedded_signer_name(path)
+            .is_some_and(|n| n.eq_ignore_ascii_case(EXPECTED_SIGNER_CN))
+    {
+        return Ok(Trust::UntrustedRoot);
+    }
+    Ok(Trust::NotOurs)
+}
+
+/// The subject display name of the certificate embedded in a file's signature,
+/// read **without** building a chain.
+///
+/// `WinVerifyTrust` cannot answer this: when the chain does not build it returns
+/// a negative status and no provider state, so "our certificate, not trusted
+/// here" and "signed by somebody else" look identical. Reading the signer info
+/// out of the PKCS#7 blob is one extra call and separates them (D-025).
+///
+/// `None` means "no readable signature at all" — an unsigned file, a truncated
+/// certificate table, a file that is not a PE. A missing file is also `None`
+/// here: the caller is classifying bytes it already has to read anyway, and the
+/// hashes it checks are what report a missing file.
+pub fn embedded_signer_name(path: &std::path::Path) -> Option<String> {
+    let wide: Vec<u16> = std::ffi::OsStr::new(path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut store = HCERTSTORE::default();
+    let mut msg: *mut core::ffi::c_void = std::ptr::null_mut();
+    // SAFETY: the path is NUL-terminated and outlives the call; `store` and `msg`
+    // are out-parameters Windows fills in, and both are released below.
+    let opened = unsafe {
+        CryptQueryObject(
+            CERT_QUERY_OBJECT_FILE,
+            wide.as_ptr() as *const core::ffi::c_void,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+            CERT_QUERY_FORMAT_FLAG_BINARY,
+            0,
+            None,
+            None,
+            None,
+            Some(&mut store),
+            Some(&mut msg),
+            None,
+        )
+    };
+    if opened.is_err() || msg.is_null() {
+        return None;
+    }
+    // SAFETY: both handles come from the successful query above and are still
+    // open; the message is non-null.
+    let name = unsafe { signer_name_from_message(store, msg) };
+    // SAFETY: the two handles are released here, once, and are not used again.
+    let _ = unsafe { CryptMsgClose(Some(msg)) };
+    let _ = unsafe { CertCloseStore(Some(store), 0) };
+    name
+}
+
+/// The signer certificate's display name out of a decoded signed message.
+///
+/// # Safety
+/// `store` must be the certificate store and `msg` the signed message of a
+/// successful `CryptQueryObject`, both still open.
+unsafe fn signer_name_from_message(
+    store: HCERTSTORE,
+    msg: *mut core::ffi::c_void,
+) -> Option<String> {
+    // Ask for the size first: the signer info is variable-length (its attributes
+    // are ASN.1 blobs), so it is read into a buffer of exactly that size.
+    let mut size = 0u32;
+    if unsafe { CryptMsgGetParam(msg, CMSG_SIGNER_INFO_PARAM, 0, None, &mut size) }.is_err()
+        || size == 0
+    {
+        return None;
+    }
+    let mut buffer = vec![0u8; size as usize];
+    // SAFETY: the buffer is `size` bytes, which is what the call above measured.
+    let read = unsafe {
+        CryptMsgGetParam(
+            msg,
+            CMSG_SIGNER_INFO_PARAM,
+            0,
+            Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+            &mut size,
+        )
+    };
+    if read.is_err() {
+        return None;
+    }
+    // SAFETY: `CMSG_SIGNER_INFO_PARAM` returns a `CMSG_SIGNER_INFO`, and the
+    // buffer it was written into outlives this borrow.
+    let signer = unsafe { &*(buffer.as_ptr() as *const CMSG_SIGNER_INFO) };
+    // The find key is the issuer + serial pair, not the subject: that is what the
+    // signer info carries, and it is also what makes the lookup work when two
+    // certificates share a subject.
+    let key = CERT_INFO {
+        Issuer: signer.Issuer,
+        SerialNumber: signer.SerialNumber,
+        ..Default::default()
+    };
+    // SAFETY: `key` borrows its blobs from `buffer`, which outlives the call.
+    let cert = unsafe {
+        CertFindCertificateInStore(
+            store,
+            X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+            0,
+            CERT_FIND_SUBJECT_CERT,
+            Some(&key as *const CERT_INFO as *const core::ffi::c_void),
+            None,
+        )
+    };
+    if cert.is_null() {
+        return None;
+    }
+    let mut name_buffer = [0u16; 512];
+    // SAFETY: `cert` is a live context from the call above; the buffer is passed
+    // with its length, as `CertGetNameStringW` documents.
+    let written = unsafe {
+        CertGetNameStringW(
+            cert,
+            CERT_NAME_SIMPLE_DISPLAY_TYPE,
+            0,
+            None,
+            Some(&mut name_buffer),
+        )
+    };
+    // SAFETY: the context was found above and is released once, after the name
+    // has been copied out of it.
+    let _ = unsafe { CertFreeCertificateContext(Some(cert)) };
+    if written == 0 || written == 1 {
+        return None;
+    }
+    let len = (written as usize - 1).min(name_buffer.len());
+    Some(String::from_utf16_lossy(&name_buffer[..len]))
 }
 
 #[cfg(test)]
@@ -233,6 +419,85 @@ mod tests {
             message.contains("MI CS Code Signing"),
             "the refusal must name the actual signer: {message}"
         );
+    }
+
+    #[test]
+    fn an_unsigned_file_has_no_embedded_signer() {
+        let path = temp_path("trust-unsigned");
+        std::fs::write(&path, b"MZ this is not a signed binary").expect("write the fake exe");
+        let name = embedded_signer_name(&path);
+        let verdict = trust(&path).expect("classify the fake exe");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(name.is_none(), "an unsigned file embeds no signer: {name:?}");
+        assert_eq!(verdict, Trust::NotOurs);
+    }
+
+    #[test]
+    fn the_release_binary_names_its_signer_and_is_one_of_the_two_ours() {
+        let Some(release) = signed_release() else {
+            eprintln!("no signed release artifact to test against - skipped");
+            return;
+        };
+        // The embedded certificate is ours whatever this Windows thinks of the
+        // chain, which is what lets the package's self-check stay quiet on a
+        // machine that has not trusted the root yet.
+        assert_eq!(
+            embedded_signer_name(&release).as_deref(),
+            Some(EXPECTED_SIGNER_CN),
+            "the certificate inside a signed release must be the release one"
+        );
+        let verdict = trust(&release).expect("classify the release binary");
+        assert!(
+            matches!(verdict, Trust::Ours | Trust::UntrustedRoot),
+            "a genuine release is never \"not ours\": {verdict:?}"
+        );
+    }
+
+    #[test]
+    fn a_changed_byte_is_not_an_untrusted_certificate() {
+        // The distinction D-025 rests on: a tampered file still carries *our*
+        // certificate, so only the signature check tells it apart from a chain
+        // this Windows has not trusted yet — and only the second may be quiet.
+        let Some(release) = signed_release() else {
+            eprintln!("no signed release artifact to test against - skipped");
+            return;
+        };
+        let copy = temp_path("trust-tampered");
+        std::fs::copy(&release, &copy).expect("copy the release binary");
+        let mut bytes = std::fs::read(&copy).expect("read the copy");
+        let middle = bytes.len() / 2;
+        if let Some(byte) = bytes.get_mut(middle) {
+            *byte = byte.wrapping_add(0x41);
+        }
+        std::fs::write(&copy, &bytes).expect("write the tampered copy");
+
+        let name = embedded_signer_name(&copy);
+        let verdict = trust(&copy).expect("classify the tampered copy");
+        let _ = std::fs::remove_file(&copy);
+
+        assert_eq!(
+            name.as_deref(),
+            Some(EXPECTED_SIGNER_CN),
+            "changing a byte does not touch the certificate table"
+        );
+        assert_eq!(
+            verdict,
+            Trust::NotOurs,
+            "a changed byte breaks the signature, and that is never the quiet state"
+        );
+    }
+
+    /// A unique path under `%TEMP%` for a copy a test writes and removes.
+    fn temp_path(stem: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "mics-{stem}-{}-{}.exe",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0)
+        ))
     }
 
     /// The artifact `scripts/make-release.ps1 -Sign` produces. `dist/` is

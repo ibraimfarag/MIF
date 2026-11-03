@@ -6,6 +6,7 @@ import 'package:mics_app/core/i18n/app_i18n.dart';
 import 'package:mics_app/core/ipc/crash_reports.dart';
 import 'package:mics_app/core/ipc/helper_status.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/core/ipc/package_integrity.dart';
 import 'package:mics_app/core/sync/sync_status.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 import 'package:mics_app/models/crash_models.dart';
@@ -444,6 +445,8 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 4),
               Text('GPL-3.0-or-later · no telemetry · offline-first',
                   style: TextStyle(color: AppColors.muted, fontSize: 10.5)),
+              const SizedBox(height: 8),
+              const _IntegrityLine(),
             ],
           ),
         ],
@@ -463,6 +466,69 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 // ---------------- building blocks ----------------
+
+/// Is this copy the one that was published? (ج2, D-025)
+///
+/// One line, always in the same place: green when the engine proved it, quiet
+/// when the only unknown is whether *this machine* trusts the release
+/// certificate (a self-signed build is not a fault), and the notice when the
+/// engine's own signed manifest disagrees with the files beside it. The alert
+/// card raised at startup says which file moved; this says what to do.
+class _IntegrityLine extends ConsumerWidget {
+  const _IntegrityLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final integrity =
+        ref.watch(packageIntegrityProvider).value ?? PackageIntegrity.unknown;
+    if (!integrity.known) return const SizedBox.shrink();
+
+    late final IconData icon;
+    late final Color color;
+    late final String copy;
+    switch (integrity) {
+      case PackageIntegrity.ok:
+        icon = Icons.verified_user_outlined;
+        color = AppColors.green;
+        copy = context.tr('settings.integrityOk');
+        break;
+      case PackageIntegrity.untrustedCertificate:
+        icon = Icons.gpp_maybe_outlined;
+        color = AppColors.muted;
+        copy = context.tr('settings.integrityUntrusted');
+        break;
+      case PackageIntegrity.unverified:
+      case PackageIntegrity.unknown:
+        icon = Icons.gpp_bad_outlined;
+        color = AppColors.orange;
+        copy = context.tr('settings.integrityUnverified');
+        break;
+    }
+
+    final line = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(copy, style: TextStyle(color: color, fontSize: 10.5)),
+        ),
+      ],
+    );
+    if (!integrity.warns) return line;
+    // The notice wears the error banner's pair - orange on the red 8 % fill -
+    // which is the contrast the audit already measures.
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.4)),
+      ),
+      child: line,
+    );
+  }
+}
 
 /// The privileged helper (D-007): one install press, then every admin operation
 /// — firewall, hosts, hardening — runs without a UAC prompt.

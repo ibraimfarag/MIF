@@ -231,6 +231,23 @@ pub fn protection(action: &str, detail: &str) -> bool {
     )
 }
 
+/// The package's files are not the ones this build shipped with (ج2, D-025).
+///
+/// Raised once at startup, and only for a copy that *carries* a manifest: a
+/// developer build has none, and telling every developer that their own build is
+/// unofficial would be noise rather than a warning. `detail` names what failed,
+/// so the card says which file moved instead of only that something did.
+pub fn package_changed(detail: &str) -> bool {
+    show(
+        "integrity",
+        "high",
+        text("integrity.title"),
+        &format!("{detail} — {}", text("integrity.body")),
+        &[text("guard.action.open")],
+        None,
+    )
+}
+
 /// Routes a guard event: CRITICAL/HIGH/MEDIUM become desktop cards, LOW does
 /// not — and every one of them becomes an in-app card unless DND is on.
 pub fn guard_event(ev: &crate::guard::GuardEvent) {
@@ -318,6 +335,16 @@ const COPY: &[(&str, &str, &str)] = &[
         "🧯 MI CS — the engine filed a crash report",
     ),
     (
+        "integrity.title",
+        "🚨 MI CS — الملفات دي مش النسخة اللي اتنشرت",
+        "🚨 MI CS — these files are not the published build",
+    ),
+    (
+        "integrity.body",
+        "المحرك قرا المانيفست الموقّع بتاعه ولقى فرق. نزّل النسخة من المصدر الرسمي تاني.",
+        "The engine read its own signed manifest and found a difference. Download the build again from the official source.",
+    ),
+    (
         "test.title",
         "🛡️ MI CS — إشعار تجريبي",
         "🛡️ MI CS — test notification",
@@ -394,6 +421,8 @@ mod tests {
             "scan.quarantined.body",
             "protect.blocked.title",
             "crash.card.title",
+            "integrity.title",
+            "integrity.body",
             "test.title",
             "test.body",
         ] {

@@ -165,6 +165,14 @@ SHA-256 manifest is an `RT_RCDATA` resource inside the shipped `mics-engine.exe`
 document can be edited. `scripts/verify-manifest.ps1` is the proving half - it
 re-reads the resource out of the package and re-hashes every file the document
 lists - and it is also the `manifest.verify` step of `-Tier release`.
+
+The app reads the same document about itself: `engine/src/selfcheck.rs` re-hashes
+the folder it runs from at start-up and answers `status.integrity` with `ok`,
+`untrusted-certificate` (our certificate, a root this Windows has not trusted yet)
+or `unverified`, which is what Settings -> About renders and what raises the card
+naming the files that moved. `test/package_integrity_test.dart` reads the three
+words out of that Rust file, so a rename on either side fails the fast tier instead
+of leaving an About line that never appears.
 `test/opsec_baseline_test.dart` keeps the file
 honest (reasons present, markers equal to the probe's own list, no user path).
 The `cargo`/`rustc` rows are what is left after ط1's

@@ -62,5 +62,8 @@
     "diagnostics.copied":  "Report copied — the bug id is the first line",
     "diagnostics.delete":  "Delete report",
     "diagnostics.deleted":  "Report deleted",
-    "diagnostics.seen":  "seen {count} times"
+    "diagnostics.seen":  "seen {count} times",
+    "settings.integrityOk":  "Signed by MI CS, and every file matches the manifest.",
+    "settings.integrityUntrusted":  "Signed by MI CS and every file matches; this Windows does not trust the release certificate yet (self-signed build).",
+    "settings.integrityUnverified":  "Not the published build: the signed manifest inside the engine disagrees with these files. Download MI CS again from the official source."
 }

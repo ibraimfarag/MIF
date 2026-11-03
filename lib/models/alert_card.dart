@@ -20,8 +20,8 @@ class AlertCard {
     this.reportKind,
   });
 
-  /// The producer class: `guard`, `canary`, `scan`, `quarantine`, `protection`
-  /// or `crash`.
+  /// The producer class: `guard`, `canary`, `scan`, `quarantine`, `protection`,
+  /// `crash` or `integrity`.
   final String kind;
 
   /// `critical`, `high`, `medium` or `low` — the engine's own severity.
@@ -66,6 +66,7 @@ class AlertCard {
         'scan' => Icons.bug_report_outlined,
         'quarantine' => Icons.lock_outline,
         'protection' => Icons.shield_outlined,
+        'integrity' => Icons.gpp_bad_outlined,
         _ => Icons.notifications_none,
       };
 
@@ -77,6 +78,8 @@ class AlertCard {
         'quarantine' => '/scanner',
         'protection' => '/hardening',
         'crash' => '/settings',
+        // The manifest verdict is explained in Settings → About (ج2, D-025).
+        'integrity' => '/settings',
         _ => '/guard',
       };
 }
