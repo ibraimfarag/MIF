@@ -100,10 +100,13 @@ Honesty is a feature. Today, MI CS does **not**:
   symbols or PDB paths, the Dart snapshot ships obfuscated (D-021), and
   `scripts\verify-hardening.ps1` reads all of it back out of the PE while the
   release refuses to skip it;
-- claim **idle CPU below the 1 % budget**: the guard loop costs **0.156 % of one
-  core = 0.0028 % of a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on
-  versus `MICS_NO_GUARD=1`), so the budget holds whether it is read per core or per
-  machine — and it did not before: 3.52 % of a core until the poll loop was trimmed,
+- claim **idle CPU below the 1 % budget**: with the shipped six-rule pack actually
+  loaded, the guard loop costs **0.156–0.521 % of one core over four 60 s windows,
+  median 0.417 % = 0.0028–0.0093 % of a 56-thread machine, median 0.0074 %**
+  (`scripts/measure-guard-cpu.ps1 -RealRules`, guard on versus `MICS_NO_GUARD=1`,
+  with the guard-off half below the process timer's resolution), so the budget holds
+  whether it is read per core or per machine — and it did not before: 3.52 % of a
+  core until the poll loop was trimmed,
   and the "2.97 %" quoted earlier came from a benchmark that was mostly measuring its
   own probe (`mics-engine benchmark` now reports its own `GetProcessTimes`, with
   `cpu_percent` and `cpu_percent_of_machine`). RAM is ~12 MB, inside budget.

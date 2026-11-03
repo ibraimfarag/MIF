@@ -257,8 +257,10 @@ both binaries `Valid`).
    card still reached the desktop afterwards (`verify-toast.ps1` PASS). It **moved
    into the installer with ب3 step 2**, which tags both shortcuts it creates.
 4. ~~**Guard CPU**~~ — done, see the log below: 3.52 % → 1.56 % → **0.156 % of one
-   core (0.0028 % of this 56-thread machine)**, now under the `< 1 %` budget under
-   either definition of it.
+   core (0.0028 % of this 56-thread machine)** with one inert rule, now under the
+   `< 1 %` budget under either definition — **re-measured with the shipped pack
+   in و4 (2026-11-03): 0.156–0.521 % of one core over four windows, median
+   0.417 %; §7 carries the configuration.**
 
 **This section is empty now**, and so is the rest of §0.5: **all eight small steps are
 done** (the register keeps only rows that need elevation, money, a signing certificate
@@ -661,6 +663,37 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **و4 (d) — the guard's idle cost re-measured with the shipped pack, and the
+  register's number replaced**
+  - **The stale claim.** The register carried "0.156 % of one core with one inert
+    rule in force; with the shipped starter pack the earlier runs measured
+    0.234 % — the difference is one-time startup matching". Both halves were
+    unverified in the configuration the product ships.
+  - **What was run.** `scripts\measure-guard-cpu.ps1 -RealRules` — the probe that
+    exists for this — four times, 60 s per mode each, on this 56-logical-processor
+    machine, with the release engine copied out of `%TEMP%` (the starter pack's
+    GR-002 kills a script host whose command line contains `\temp\`, so the probe
+    would have killed its own measuring shell). The engine was unelevated, and its
+    own log proves what loaded and what ran: `guard: 6 rule(s) from the built-in
+    starter pack (rules/guard not found)` and
+    `ETW unavailable ... falling back to poll loop` — so the number is the 2 s poll
+    loop with the shipped rules, not the ETW path.
+  - **The measured numbers.** Guard-on minus `MICS_NO_GUARD=1`:
+    **0.156 / 0.521 / 0.339 / 0.495 % of one core (median 0.417 %)** =
+    **0.0028 / 0.0093 / 0.0060 / 0.0088 % of the machine (median 0.0074 %)**. The
+    guard-off half measured 0.000 % in all four windows — below the 15.6 ms process
+    timer resolution, i.e. < 0.03 % of one core. The `< 1 %` budget holds by a wide
+    margin under both readings.
+  - **What the measurement refuted, and it is written down as refuted.** The spread
+    is run-to-run noise on a busy machine, not a rule-count effect: the **lowest
+    shipped-pack window equals the inert-rule figure exactly (0.156 %)**, so
+    "the difference is one-time startup matching" was a story about two numbers that
+    are the same number. The register row, `PROTECTION-MATRIX.md` §8,
+    `THREAT-MODEL.md` §7 and the README's budget claim all carry the range, the
+    median and the configuration instead of one clean-looking figure.
+  - Measured: `-Tier fast` green; the probe's own output (four result tables) is the
+    evidence, and no code changed in this row.
 
 - **و4 (c) — a merged audit now says how old every section it did not re-read is**
   - **The gap.** A fix re-reads one section on top of the last full audit, which is
@@ -3685,7 +3718,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
 | MED | ~~**Firewall uses `netsh`, not FirewallAPI COM**~~ — closed by **و3** (2026-11-03, D-028): the engine speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, so there is no child process to hang, no English console text to parse and no locale to depend on. `scripts\verify-firewall.ps1` (23 checks) compares the reads with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, creates and removes one real rule, and proves the `netsh` dependency is gone by putting a fake `netsh.exe` first on PATH. **What stays open**: a country-sized `RemoteAddresses` string has no documented ceiling and was not measured, so `block_country` still sends one rule per country | `firewall/mod.rs`, PROTECTION-MATRIX §3.2 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
-| LOW | The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** (`scripts\measure-guard-cpu.ps1`) *with one inert rule in force*; with the shipped starter pack the earlier runs measured 0.234 % — the difference is one-time startup matching, and it is not re-measured per rule pack | `guard/mod.rs`, `platform/windows/pids.rs` |
+| ~~LOW~~ | ~~The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** with one inert rule in force; with the shipped starter pack the earlier runs measured 0.234 %~~ — **closed 2026-11-03 (و4)**: re-measured with the **shipped pack** actually loaded (`measure-guard-cpu.ps1 -RealRules`, four 60 s windows, 56 logical cores, guard on minus `MICS_NO_GUARD=1`): **0.156–0.521 % of one core, median 0.417 % = 0.0028–0.0093 % of the machine, median 0.0074 %**. The engine was unelevated, so ETW was denied and the 2 s poll loop is what ran (`on.err` names it); the guard-off half measured 0.000 % in every window — below the 15.6 ms process-timer resolution, i.e. < 0.03 % of one core. The earlier "with the starter pack it is 0.234 %, the difference is one-time startup matching" is **not supported by this measurement**: the lowest shipped-pack window equals the inert-rule number, so the spread is run-to-run noise on a busy 56-thread box, not a rule-count effect. The row's *number* was stale; the `< 1 %` budget holds under either definition | `guard/mod.rs`, `platform/windows/pids.rs`, `scripts/measure-guard-cpu.ps1` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | LOW | **The helper's caller check has nothing to compare against in a portable run**: with no `%PROGRAMDATA%\MICS` there is no recorded install account, so the check falls back to the image name (it logs `no installer account recorded` once). An installed service always has the directory. Documented in `THREAT-MODEL.md` F-2 (small step 8), where the pipe ACL is named as what still keeps other users out | `platform/windows/caller.rs`, `privileged/server.rs`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
