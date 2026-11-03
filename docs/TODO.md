@@ -662,6 +662,30 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **و4 (b) — one scanning path: the blocking `vuln.scan` is gone, and the command
+  bar stops pinning a request for minutes**
+  - **What the register got wrong, found by checking first.** The row said the
+    blocking variant was "kept for probes and scripts", so the slice allowed
+    deleting it. Nothing in the UI called it — but the natural-language command
+    bar did: the `vuln_scan` intent (`ثغرات`/`vulnerab`/`cve`) dispatched
+    `vuln.scan`, and `nl.command` executes the sub-request **inline**, so asking
+    the bar for a vulnerability scan held the pipe for one NVD lookup plus the
+    rate-limit pause per application (the P3e sweep measured the same shape at
+    minutes) with no progress event and no way to cancel.
+  - **What moved.** The intent points at `vuln.scan.start`, which returns a
+    `job_id` at once and reports through `progress`/`job_finished` — the same job
+    the Vulnerability screen starts. With the last caller re-pointed, the
+    blocking method was deleted along with `VulnScanner::scan` (the only thing
+    that used it), its `qa/methods.json` row and its registry entry. There is
+    exactly one scanning path now: the durable, cancellable job.
+  - **Proved by the ratchet that already exists**: `test/qa_registry_test.dart`
+    compares the registry with the dispatcher's match table, so the deleted arm
+    and the deleted row fail the fast tier if only one of them moves; the QA
+    report regenerated to **65 methods** (was 66 after و1), and the release engine
+    rebuilt clean with `cargo build --release`.
+  - Measured: `-Tier fast` green, QA report regenerated (65 methods, 100 controls),
+    no contract case lost (the row was a classified skip, never a run).
+
 - **و4 (a) — the two API keys leave `settings.json` and get DPAPI, with a migration**
   - **What moved.** `nvd_api_key` and `ioc_feed_key` were the only credentials in
     the settings document, which is the one file every backup, every shared folder
@@ -3621,7 +3645,7 @@ signing certificate respectively), so this is the work that is always available.
 | HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
 | LOW | A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age (it re-reads the section it just changed, which is where the staleness would matter) | `traits.rs`, `providers.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
-| LOW | `vuln.scan` (the blocking variant) still exists for probes and scripts; it shares the scanner with the job but has no progress/cancel of its own | `vulns/mod.rs`, `dispatcher.rs` |
+| ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is 65 methods again | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
 | LOW | A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS" (the threat model already says a card is UI, not proof) | `notify/toast.rs`, THREAT-MODEL §B10 |
 | MED | **No real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection between runs (Windows Defender is the real-time layer, and the audit says so loudly when it is off). **The scheduled half is done** (و1, 2026-11-03, D-027): the engine runs a scan by itself every `scan_interval_hours` (opt-in, off by default) over `scan_target`, report-only, and `scripts\verify-scan-schedule.ps1` proves it starts, finds, and leaves the file in place — but a schedule is a moment, not a monitor: what changed *between* two runs is still only seen by Defender | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |

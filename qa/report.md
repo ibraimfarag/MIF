@@ -12,8 +12,8 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 66 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 65 rows in `qa/methods.json` | 65 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 66 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 100 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
@@ -24,7 +24,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 66 methods
+## The pipe: 65 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
@@ -32,7 +32,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 |---|---|---|---|
 | `desktop` | 1 | 0 | 1 |
 | `mutating` | 21 | 12 | 9 |
-| `network` | 5 | 0 | 5 |
+| `network` | 4 | 0 | 4 |
 | `pure` | 6 | 6 | 0 |
 | `read` | 23 | 23 | 0 |
 | `sandbox` | 10 | 10 | 0 |
@@ -105,10 +105,9 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `update.apply` | `sandbox` | 1 |  |
 | `update.check` | `read` | 1 |  |
 | `update.download` | `network` | 0 | yes |
-| `vuln.scan` | `network` | 0 | yes |
 | `vuln.scan.start` | `network` | 0 | yes |
 
-### The 15 methods that are classified not to run
+### The 14 methods that are classified not to run
 
 Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so "n/a" cannot pass as one.
 
@@ -127,7 +126,6 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `service.remove` | `mutating` | deletes the HKCU Run autostart entry |
 | `sync.now` | `network` | fetches the configured intel feeds |
 | `update.download` | `network` | downloads the configured update manifest |
-| `vuln.scan` | `network` | blocking NVD scan, minutes long |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 
 ## The screens: 13 screens and the shell, 100 controls

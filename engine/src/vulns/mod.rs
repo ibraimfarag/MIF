@@ -121,7 +121,8 @@ impl VulnScanner {
     }
 
     /// Applications worth looking up, in inventory order, with the NVD keyword
-    /// and the installed version. Shared by the blocking RPC and the job.
+    /// and the installed version. The job's only entry point: `vuln.scan` (the
+    /// blocking variant) is gone, so there is exactly one scanning path (و4).
     async fn targets(&self, max_apps: usize) -> Result<Vec<(String, String, String)>> {
         let collectors = crate::platform::windows::collectors::WindowsCollectors;
         let inventory = collectors.get_software_inventory().await?;
@@ -204,22 +205,6 @@ impl VulnScanner {
                 }
             }
         }
-    }
-
-    /// Blocking variant (CLI probes, `vuln.scan`). The UI uses `start_scan`,
-    /// which reports progress and can be cancelled.
-    pub async fn scan(&self, max_apps: usize) -> Result<Vec<SoftwareVulns>> {
-        let targets = self.targets(max_apps).await?;
-        let mut tally = ScanTally::default();
-        let mut results = Vec::new();
-        for (i, (name, keyword, version)) in targets.iter().enumerate() {
-            results.push(self.scan_one(name, keyword, version, &mut tally).await);
-            if i + 1 < targets.len() {
-                pause(RATE_LIMIT, None).await;
-            }
-        }
-        self.record_nvd_state(&tally);
-        Ok(results)
     }
 
     /// Records the scan as the `nvd` intel source, so CVE freshness sits next

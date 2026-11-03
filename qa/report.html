@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>66 rows in <code>qa&#47;methods.json</code></td>
-      <td>66 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>65 rows in <code>qa&#47;methods.json</code></td>
+      <td>65 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>66 declared in the registry, 15 classified not to run</td>
+      <td>66 declared in the registry, 14 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 66 methods</h2>
+<h2>The pipe: 65 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -129,9 +129,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>network</code></td>
-      <td class="num">5</td>
+      <td class="num">4</td>
       <td class="num">0</td>
-      <td class="num">5</td>
+      <td class="num">4</td>
     </tr>
     <tr>
       <td><code>pure</code></td>
@@ -547,12 +547,6 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>yes</td>
     </tr>
     <tr>
-      <td><code>vuln.scan</code></td>
-      <td><code>network</code></td>
-      <td class="num">0</td>
-      <td>yes</td>
-    </tr>
-    <tr>
       <td><code>vuln.scan.start</code></td>
       <td><code>network</code></td>
       <td class="num">0</td>
@@ -560,7 +554,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h3>The 15 methods that are classified not to run</h3>
+<h3>The 14 methods that are classified not to run</h3>
 <p>Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so &quot;n&#47;a&quot; cannot pass as one.</p>
 <table>
   <thead><tr>
@@ -633,11 +627,6 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>update.download</code></td>
       <td><code>network</code></td>
       <td>downloads the configured update manifest</td>
-    </tr>
-    <tr>
-      <td><code>vuln.scan</code></td>
-      <td><code>network</code></td>
-      <td>blocking NVD scan, minutes long</td>
     </tr>
     <tr>
       <td><code>vuln.scan.start</code></td>

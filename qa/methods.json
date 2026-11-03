@@ -59,12 +59,6 @@
       "note": "Not run: outbound traffic and a job that outlives the harness."
     },
     {
-      "method": "vuln.scan",
-      "class": "network",
-      "skip": "blocking NVD scan, minutes long",
-      "note": "Kept for probes; the UI uses vuln.scan.start."
-    },
-    {
       "method": "fw.rules.list",
       "class": "read",
       "params": null,

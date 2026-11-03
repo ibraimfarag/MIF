@@ -209,30 +209,6 @@ impl Dispatcher {
                     }
                 }
             }
-            "vuln.scan" => {
-                // Blocking variant, kept for probes and scripts; the UI uses
-                // `vuln.scan.start` so it can show progress and cancel.
-                info!("Running vulnerability scan...");
-                let max_apps = req
-                    .params
-                    .as_ref()
-                    .and_then(|p| p.get("max_apps"))
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(10) as usize;
-                match crate::vulns::VulnScanner::new() {
-                    Ok(scanner) => match scanner.scan(max_apps).await {
-                        Ok(results) => Some(json!(results)),
-                        Err(e) => {
-                            error!("vuln.scan failed: {e:#}");
-                            None
-                        }
-                    },
-                    Err(e) => {
-                        error!("vuln.scan init failed: {e:#}");
-                        None
-                    }
-                }
-            }
             "fw.rules.list" => {
                 match crate::firewall::FirewallManager::list_rules().await {
                     Ok(rules) => Some(json!(rules)),

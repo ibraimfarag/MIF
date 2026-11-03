@@ -56,7 +56,10 @@ pub fn parse_nl(input: &str) -> NlResult {
         (
             "vuln_scan",
             Regex::new(r"(?i)(ثغرات|vulnerab|cve)").unwrap(),
-            "vuln.scan",
+            // The job, not a blocking RPC: the command bar answers at once and
+            // the scan reports through `progress`/`job_finished` like the screen
+            // does (there is exactly one scanning path, و4).
+            "vuln.scan.start",
             serde_json::json!({"max_apps": 10}),
         ),
         (
