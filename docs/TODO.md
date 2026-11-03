@@ -49,13 +49,17 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: ط2 — the tamper tests (a byte flip per binary, a swapped DLL, an edited
-> manifest, a copied install), which sit on ج2's signed manifest; ج2 landed
-> 2026-11-03 in its two commits (the producer: `make-release.ps1` injects
-> `MICS_MANIFEST` from the final bytes and `verify-manifest.ps1` proves the
-> package against it; the reader: the engine re-reads its own resource,
-> re-hashes the files and reports `status.integrity` in three states, with the
-> About line and the card)** (ز2-أ,
+> **next: the release lane — ب4 (fold the helper install into the installer) or ج3
+> (the README rewrite), then د3 (E2E on the built installer); ز2-د stays blocked on
+> D-023 and the bridge endpoint.** ط2 landed 2026-11-03
+> (`scripts\verify-tamper.ps1`: a byte flip per shipped binary, a same-size swapped
+> DLL, an edited manifest, a repack into an unsigned engine and a copied install -
+> each refused by the release gate and reported by the app; 41 checks, 108.5 s, and
+> it found a hole in that gate, recorded below), and ج2 landed the same day in its
+> two commits (the producer: `make-release.ps1` injects `MICS_MANIFEST` from the
+> final bytes and `verify-manifest.ps1` proves the package against it; the reader:
+> the engine re-reads its own resource, re-hashes the files and reports
+> `status.integrity` in three states, with the About line and the card) (ز2-أ,
 > ز2-ب, ز2-ج, ز3, ط1, ط3 and د5 are done and proved: a panic and a killed run each
 > become one
 > `MICS-<date>-<hash>` report with a JSON+text bundle under `<data dir>\crashes\`,
@@ -73,12 +77,11 @@
 > one caught a real regression on 2026-11-02, the day it was introduced; and every
 > QA surface now has a committed report — `qa/report.md` and its HTML twin, built
 > from the registries and refused by the fast tier the moment it drifts).
-> 124 engine tests, contract 78 cases / 0 failed, 132 Dart tests, shell ledger 21
+> 124 engine tests, contract 78 cases / 0 failed, 133 Dart tests, shell ledger 21
 > controls). The rest of the track is cut
 > into commit-sized slices in §0.3b, and §0.3c says what each one has to prove.
 > Delivery off the machine (ز2-د) needs **D-023** + the Open WhatsApp bridge
-> endpoint and is the only blocked slice; **ط2 (tamper) is next**, now that ج2's
-> signed manifest is real. The user
+> endpoint and is the only blocked slice. The user
 > approved the
 > QA/reliability track on 2026-11-01; §0.3b carries it, and
 > `scripts/pipeline.ps1` is where every check now runs, including
@@ -108,22 +111,26 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ج2**: مانيفست SHA-256 موقّع لكل الملفات المشحونة + فحص ذاتي عند التشغيل +
-> بانر «نسخة غير رسمية» لو الملفات اتغيّرت (وده اللي بيفتح ط2 لاحقًا) — التصميم
-> محسوم في `D-025`: المانيفست resource جوّا `mics-engine.exe`، كوميتين (النص
-> المنتج وبعده القارئ)، وشغّل `scripts\pipeline.ps1 -Tier fast` قبل كل كوميت.
+> **ج3**: إعادة كتابة README ("بيعمل إيه / مابيعملش إيه") على أساس اللي بقى
+> حقيقي — المانيفست الموقّع والفحص الذاتي (ج2) واختبارات العبث (ط2) والـ pipeline
+> اللي بيحرس التشغيل — وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ج2 - the signed SHA-256 manifest of the shipped files, the start-up self-check
-and the "unofficial build" banner** — designed in **D-025**, two commits: the
-producer (`make-release.ps1` builds and injects `MICS_MANIFEST`, `verify-manifest.ps1`
-proves it) and the reader (`status.integrity` + the About notice) — and stop for
-review after each.
+**ج3 - the deliberate README rewrite** ("what it does / what it does not do"), now
+that the manifest, the self-check and the tamper tests are real and can be quoted
+with measured numbers — and stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
 have to re-derive it. §0.5 is **finished**; the live work is the
 approved track in §0.3b (pipeline, contract harness,
 UI coverage, the language move, crash reporting, the fingerprint sweep),
-followed by the release-engineering lane. The two things that still need a human are
+followed by the release-engineering lane. **ج2 and ط2 are done (2026-11-03)**: the
+package now describes itself inside the engine's signature, the engine reports
+`status.integrity`, and `scripts\verify-tamper.ps1` proves a tampered copy is refused
+by the gate and reported by the app. What is left on that lane needs work that does
+not fit a docs turn: **ب4** (fold the helper install into the installer) and **د3**
+(E2E on the built installer) both need one UAC click from a human, so they are the
+slices to take when you are at the machine.
+The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
 `AGENTS.md`:
@@ -349,7 +356,7 @@ the release-engineering lane (ب4, ج2, ب5, ب6) and does not replace it.
 | ~~**ز2-ج**~~ | ~~**The bug-id surface**: Settings gets a Diagnostics section that lists reports (`crash.list`), shows the id and the readable message, copies it, and deletes it (`crash.delete`); the fake engine gets fixtures and the UI ledger absorbs the new controls~~ — **done** | measured 2026-11-02: 114 Dart tests (+4), the ledger gained exactly the four Diagnostics controls and nothing else, and the id on screen is the id sent to `crash.get`/`crash.delete` and the id the pasted text starts with |
 | ~~**ز3**~~ | ~~In-app notification cards in the window's bottom corner, right for LTR and left for RTL, fed by the existing alert gate; the crash card carries the bug id~~ — **done** | measured 2026-11-02: 111 engine tests (+5), 115 Dart tests (+1) and exactly two new controls in the shell ledger; the card measures `right = 1682` in LTR and `left = 18` in RTL inside the 1700-wide window |
 | **ز2-د** | **Delivery** (webhook / SMTP / **Open WhatsApp bridge**): blocked on **D-023**, and on the endpoint shape of the Open WhatsApp bridge | blocked on you |
-| **ط** | Fingerprint sweep + tamper tests (the measured baseline and the honest limits are in `docs/ROADMAP.md`) — **ط1 and ط3 done 2026-11-02**; ج2's manifest landed 2026-11-03, so **ط2 (tamper) is the next slice** | next |
+| ~~**ط**~~ | ~~Fingerprint sweep + tamper tests~~ — **done 2026-11-03**: ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package) and **ط2 landed 2026-11-03** (`scripts\verify-tamper.ps1`: a byte flip per shipped binary, a same-size swapped DLL, an edited manifest, a repack into an unsigned engine and a copied install - each refused by the gate and reported by the app; it is also the `tamper.verify` release step) | done |
 | ~~**د5**~~ | ~~Coverage gates, `qa/report`, docs~~ — **done** (2026-11-02): `qa/report.md` + `qa/report.html` are committed, built from the registries by `qa/report.dart`, and byte-gated by `test/qa_report_test.dart` in the fast tier | measured on the registries: 65 methods / 65 dispatched, 98 controls over 13 screens + the shell, 2 languages / 38 packs, 9 shipped binaries with a reason each, 97 declared Dart cases in 21 files, 111 declared engine cases in 14 modules, 9 pipeline steps across 3 tiers |
 
 ### 0.3c How each remaining slice is done (so a new session can start cold)
@@ -367,7 +374,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ط1** fingerprint~~ — **done** (2026-11-02) | The Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` (in `make-release.ps1` and the `engine.build` step), and the shipped engine went from **1238** hits of the account name to **0**. `scripts/verify-opsec.ps1` counts the markers and compares them with `qa/opsec-baseline.json`: a forbidden string (the profile path and its leaf, computed on the machine running the probe) must be absent, a counted marker (`flutter`/`dart`/`cargo`/`rustc`/`pubspec`) may only fall, a binary missing from the baseline fails until a human adds it with a reason, and an entry with no reason fails. `test/opsec_baseline_test.dart` guards the file in the fast tier. Run by `make-release.ps1` on the staging folder, so a leaking build is never packaged. |
 | ~~**ط3** wiring~~ — **done** (2026-11-02) | `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` - the packaged artifact, not the build folder - so `-Tier release` refuses a package that names the build account or grew a counted fingerprint. `verify-tamper.ps1` joins it with ط2. |
 | ~~**ج2** manifest + self-check~~ — **done 2026-11-03, both commits** | **The design is `D-025` plus its two dated amendments.** *The producer*: `make-release.ps1` signs every staged file except the engine, builds `MICS_MANIFEST` (`format`, `version`, `files[{path, bytes, sha256}]`, sorted by path) from those final bytes, injects it as an `RT_RCDATA` resource into the staged `mics-engine.exe`, and signs the engine **once, after** the injection — an injection into an already-signed engine cannot be signed again (`0x800700C1`, measured; the amendment in `D-025` records it). `scripts\manifest-resource.ps1` is the one place the format lives (build, inject, read, validate: ordinal order, no duplicates, no `..` path); `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes every listed file, so a package whose manifest does not describe it never leaves the staging folder, and `manifest.verify` runs it from `-Tier release` too. *The reader*: `engine\src\selfcheck.rs` reads the resource out of its own image with `LOAD_LIBRARY_AS_DATAFILE`, refuses a document that is not the shape this build writes (format, a version, no duplicate, no path that walks out of the package, a 64-hex hash per entry), re-hashes every listed file against the folder it runs from, and classifies its own signature through `platform\windows\signature.rs` — which now separates "our certificate and Windows trusts it" from "our certificate and this Windows has not trusted the root yet" (`CERT_E_UNTRUSTEDROOT` plus the embedded signer read through `CryptQueryObject`) from everything else, because a changed byte reports `TRUST_E_BAD_DIGEST` and must never be the quiet state. `status.integrity` carries `ok` / `untrusted-certificate` / `unverified`; the verdict is computed once at start-up and cached, so the UI's 15 s heartbeat never re-hashes 30 MB. Settings → About shows one green line, one neutral line or the notice, and only `unverified` **with a manifest present** raises the alert card — a developer build has no resource and is not an alarm. The engine is not in its own manifest; its integrity is the signature. Measured, not assumed: the manifest's file names enter the engine's strings, so its `flutter` count rose 0 → 55 and its `dart` count 0 → 1 — a written reason per row in `qa\opsec-baseline.json`, and the QA report regenerated in each commit. |
-| **ط2** tamper | A byte flip per binary, a swapped DLL, an edited manifest and a copied install are each refused or reported; it sits on **ج2**'s signed manifest, which landed 2026-11-03, so it is the next slice. |
+| ~~**ط2** tamper~~ — **done 2026-11-03** | `scripts\verify-tamper.ps1` tampers one thing at a time in a private copy under `%TEMP%` and asks both halves - the release gate (must refuse) and the packaged engine, started on a private pipe (must answer `unverified`, name the file in its log and in the card it pushes). Cases: **a byte flipped in each of the nine shipped binaries** (the eight listed ones refused and reported by name; the engine refused by the gate with `HashMismatch`, never run after a code edit), **a same-size swapped DLL** (a system DLL padded to `dartjni.dll`'s exact length, and one of our own plugins cut to it - refused **by hash**, so a signed-but-wrong DLL is no more welcome), **an edited manifest** (one hash zeroed inside the resource: refused, and reported, with the engine `NotSigned` afterwards as D-025 measured), **a repack** (the published document injected into the unsigned release engine: refused and reported), and **a copied install** (accepted while it is byte-identical, reported as soon as one file changes; a copy used as a *client* is the caller rule's business, D-015). The pristine copy is the control. **Measured: 41 checks, 0 failures, 108.5 s**; the release tier gained `tamper.verify` (11 steps across 3 tiers). **It also found a hole**: a stripped Authenticode signature used to pass `verify-manifest.ps1` because only `HashMismatch` failed - the gate now requires the pinned `MI CS Code Signing` and refuses no signer, another subject and a changed byte alike, with the CN in one PowerShell constant (`MicsSignerCn`) pinned to the engine's `EXPECTED_SIGNER_CN` by a Dart test. |
 | ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
@@ -599,6 +606,73 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ط2 — the tamper tests: nothing gets to lie about these bytes quietly**
+  - `scripts\verify-tamper.ps1` tampers with one thing at a time in a private copy of
+    the published package and asks **both** halves what they think: the release gate
+    (`scripts\verify-manifest.ps1`, run as a child process - its exit code is the
+    verdict) must refuse the copy, and the packaged engine - started from the copy on a
+    private pipe with a private data directory, and **without** the
+    `MICS_ALLOW_LOW_INTEGRITY` hook, because the copy is Medium-integrity under `%TEMP%`
+    (trap 21) - must answer `unverified`, name what changed in its log, and push the
+    card that names it. The published package is the control and must be accepted by
+    both halves: without that, "every tampered copy is refused" would also be true of a
+    probe that refuses everything. **41 checks, 0 failures, 108.5 s**, the release tier
+    gained the `tamper.verify` step (11 steps across 3 tiers now), and
+    `make-release.ps1` runs the same probe as its last gate - a release build that
+    cannot prove the refusal does not publish.
+  - What each case proved, measured on the 2026-11-03 package:
+    - **a byte flipped in each shipped binary** (offset 1024, the length untouched): the
+      eight the manifest lists are each refused by the gate - naming the sha256 on disk
+      and the one the manifest records - and each reported by the app as
+      `unverified - <path>: changed`, with the card naming the file. `mics-engine.exe`
+      is never listed in its own manifest, so a code edit of it is refused by the gate
+      with `HashMismatch`, and the app is not asked to run bytes that were edited in
+      code (case 3 changes the engine's bytes too, in its resource, which is safe to run
+      and still breaks the signature that covered them).
+    - **a same-size swapped DLL**, twice: `System32\version.dll` padded to
+      `dartjni.dll`'s exact 65,592 bytes, and one of our own signed plugins cut to that
+      same length. Both are refused **by hash** (not by size, which is what a careful
+      repackager would defeat) and both are reported as `dartjni.dll: changed`: the
+      manifest covers the DLLs by digest, so a DLL that is signed by us is no more
+      welcome than a foreign one.
+    - **an edited manifest**: one listed file's hash replaced with 64 zeroes inside the
+      resource. The gate refuses it with the file hash *and* the signature it just lost
+      (a resource rewrite leaves the engine `NotSigned`, the measured consequence of
+      `EndUpdateResource` that D-025 recorded), and the app reports it and raises the
+      card.
+    - **a repack**: the published document injected into the *unsigned* release build of
+      the engine, which is what copying the manifest into a rebuild looks like. The gate
+      refuses it ("is not signed by 'MI CS Code Signing' ... no signer") and the app
+      reports it (`the engine is not signed by "MI CS Code Signing"`).
+    - **a copied install**: accepted by both halves - a copy of the published bytes *is*
+      the published bytes, because the manifest is about bytes and not paths - and
+      reported the moment one file in the copy changes. What refuses a copy used as a
+      *client* is the caller rule (D-015, `verify-pipe-acl.ps1` and `caller::tests`), not
+      the manifest, and the probe prints that note instead of claiming the case.
+  - **The probe found a real hole in the gate it was written to test.** Point 4 of
+    `verify-manifest.ps1` only failed on `HashMismatch`, so an engine whose Authenticode
+    signature had been **stripped** while it kept its manifest passed the release gate -
+    measured on a copy: status `NotSigned`, and `RESULT: PASS - all 68 listed file(s)
+    hash as the signed manifest says`. A repackager could therefore publish a re-packed
+    folder with no signature at all and clear the gate, while the app - which asks
+    `signature::trust()` - would report `unverified`: the two halves disagreed about who
+    signs MI CS. The gate now requires the pinned `MI CS Code Signing`, and refuses no
+    signer at all, another subject, and `HashMismatch` alike. The CN lives in one place
+    for PowerShell (`$script:MicsSignerCn` in `scripts\manifest-resource.ps1`) and
+    `test\package_integrity_test.dart` fails if that constant and the engine's
+    `EXPECTED_SIGNER_CN` ever drift apart; D-025 carries the rule in its third
+    amendment.
+  - Docs: `THREAT-MODEL.md` F-11 now says what the tamper probe proves and what it still
+    cannot (a rebuild signed by somebody else stays *visible*, never preventable),
+    `qa/README.md` lists the new release step, and the QA report was regenerated
+    (11 pipeline steps, 103 declared Dart cases).
+  - The four checks are green through `scripts\pipeline.ps1 -Tier fast` (flutter.analyze
+    13.9 s, flutter.test 29.5 s / **133 tests**, engine.test 6.7 s / **124 tests**,
+    engine.clippy 2.0 s = **52.1 s**), and `-Tier release` is green end to end on
+    `dist\MICS-portable` - **11 of 11 steps in 821.9 s**, with the new `tamper.verify`
+    itself at 114.0 s / 41 checks: `opsec.verify`, `manifest.verify` and
+    `tamper.verify` all pass.
 
 - **ج2 commit 2 of 2 — the reader: the app now says whether its own files are the published ones**
   - `engine\src\selfcheck.rs` reads the manifest out of the engine's own image

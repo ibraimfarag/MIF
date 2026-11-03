@@ -48,4 +48,27 @@ void main() {
     expect(PackageIntegrity.unverified.known, isTrue);
     expect(PackageIntegrity.unknown.known, isFalse);
   });
+
+  test('the release gate pins the signer the engine pins', () {
+    // The manifest's authenticity is the engine's own signature, and both halves
+    // check whose it is: the engine at run time (`EXPECTED_SIGNER_CN`) and
+    // `verify-manifest.ps1` before anything ships (`MicsSignerCn`). If those two
+    // spellings drift, the gate could pass a package the app then refuses - so one
+    // is read out of the other's source.
+    final rust =
+        File('engine/src/platform/windows/signature.rs').readAsStringSync();
+    final pinned =
+        RegExp(r'EXPECTED_SIGNER_CN: &str = "([^"]+)"').firstMatch(rust);
+    expect(pinned, isNotNull,
+        reason: 'signature.rs no longer names the signer it expects');
+    final cn = pinned!.group(1)!;
+    expect(File('scripts/manifest-resource.ps1').readAsStringSync(),
+        contains('MicsSignerCn = "$cn"'),
+        reason: 'scripts/manifest-resource.ps1 does not pin "$cn": the release '
+            'gate and the engine disagree about who signs MI CS');
+    expect(File('scripts/verify-manifest.ps1').readAsStringSync(),
+        contains(r'$script:MicsSignerCn'),
+        reason: 'verify-manifest.ps1 spelled the signer out instead of using the '
+            'one constant, so the gate and the engine can drift apart');
+  });
 }

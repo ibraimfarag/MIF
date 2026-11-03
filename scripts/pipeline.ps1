@@ -217,6 +217,21 @@ $steps = @(
             powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-manifest.ps1')
         }
         What = 'The packaged engine carries a manifest that describes the package'
+    },
+    @{
+        Id   = 'tamper.verify'
+        Tier = 'release'
+        Dir  = $repo
+        Run  = {
+            # The adversarial half of the manifest (t2): one thing tampered with at a
+            # time in a private copy - a byte flipped in each shipped binary, a
+            # same-size swapped DLL, an edited manifest, the manifest copied into an
+            # unsigned engine, a copied install - and both halves asked: the gate
+            # above must refuse it and the packaged engine must report it in
+            # `status.integrity`. The published package is the control.
+            powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-tamper.ps1')
+        }
+        What = 'A tampered copy of the package is refused by the gate and reported by the engine'
     }
 )
 

@@ -293,6 +293,20 @@ source produces a package whose manifest matches their own bytes and can sign it
 with their own certificate — no local check can tell that from us. The
 reproducible-build note that would let a third party compare is not written yet.
 
+**How that detection is tested (ط2, 2026-11-03)**: `scripts\verify-tamper.ps1` is the
+adversarial half. It tampers with one thing at a time in a private copy of the
+published package and asks both halves - the release gate, which must refuse the
+copy, and the packaged engine, which must report it in `status.integrity`, name the
+file in its log and push the card that names it. A byte flipped in each of the nine
+shipped binaries, a system DLL padded to a plugin's exact length (so the *hash*,
+not the size, is what catches it), one of our own signed plugins cut to the same
+length, a manifest rewritten with a hash this build never wrote, the published
+manifest injected into an unsigned engine, and a copied install: **41 checks, 0
+failures, 108.5 s**, with the pristine package as the control. The probe also found
+that a **stripped** signature used to pass the gate while the app still reported
+`unverified` - the two halves disagreed about who signs MI CS - and the gate now pins
+`MI CS Code Signing` on both sides of that question.
+
 ## 7. What is proven, and how
 
 | Claim | Proof |
@@ -304,6 +318,7 @@ reproducible-build note that would let a third party compare is not written yet.
 | A card means Windows recorded it | `scripts/verify-toast.ps1` reads the notification history back |
 | A release is complete and signed | `scripts/verify-release.ps1` + `scripts/sign.ps1` |
 | The package is the one that was published, or the app says so | `scripts\verify-manifest.ps1` re-reads `MICS_MANIFEST` out of `dist\MICS-portable` and re-hashes all **68** listed files (`RESULT: PASS`); the engine answers `status.integrity` from the same document at start-up (`ok` on the published copy, logged as `68 file(s) hash as the manifest says`), and **one byte flipped in `data\app.so`** of a copy turns that answer into `unverified`, names the file in the log and puts the card in Windows' notification history — read back with `scripts\verify-toast.ps1` after clearing it |
+| A tampered package is refused *and* reported | `scripts\verify-tamper.ps1` (the `tamper.verify` release step): one thing tampered with at a time in a private copy, both halves asked — a byte flipped in each shipped binary, a same-size swapped DLL, an edited manifest, the manifest copied into an unsigned engine, a copied install. **41 checks, 0 failures, 108.5 s**, with the published package as the control. It found a real gap: an engine whose signature had been stripped passed `verify-manifest.ps1`, which now refuses no signer, another subject and `HashMismatch` alike |
 | The two pipe ACLs are what this file says | `scripts/verify-pipe-acl.ps1` — both pipes, real `service` and `helper-console` processes on private names, 18 checks, `RESULT: PASS` |
 | The guard's cost | `scripts/measure-guard-cpu.ps1` — **0.156 % of one core = 0.0028 % of this 56-thread machine** (guard on minus `MICS_NO_GUARD=1`), down from 1.56 % and 3.52 % in two steps; `mics-engine benchmark` says `budget_ok: true` on the stated basis (share of all logical processors) |
 

@@ -82,7 +82,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td>Dart tests</td>
       <td>23 files</td>
-      <td>102 declared cases (a floor: loops add more at run time)</td>
+      <td>103 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
@@ -93,7 +93,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Pipeline steps</td>
-      <td>10 across 3 tiers</td>
+      <td>11 across 3 tiers</td>
       <td>the same script a human runs and CI runs</td>
       <td><code>scripts&#47;pipeline.ps1</code>, <code>.github&#47;workflows&#47;ci.yml</code></td>
     </tr>
@@ -916,7 +916,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>test&#47;package_integrity_test.dart</code></td>
-      <td>3</td>
+      <td>4</td>
     </tr>
     <tr>
       <td><code>test&#47;qa_registry_test.dart</code></td>
@@ -964,7 +964,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**102** in 23 files</td>
+      <td>**103** in 23 files</td>
     </tr>
   </tbody>
 </table>
@@ -1099,6 +1099,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>release</code></td>
       <td><code>manifest.verify</code></td>
       <td>The packaged engine carries a manifest that describes the package</td>
+    </tr>
+    <tr>
+      <td><code>release</code></td>
+      <td><code>tamper.verify</code></td>
+      <td>A tampered copy of the package is refused by the gate and reported by the engine</td>
     </tr>
   </tbody>
 </table>

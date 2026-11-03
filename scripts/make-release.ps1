@@ -20,7 +20,10 @@
        signature has to cover the package manifest - builds that manifest from the
        final bytes, injects it into `mics-engine.exe` as the `MICS_MANIFEST`
        resource, signs the engine, and proves the staged package is the one its
-       manifest describes (`verify-manifest.ps1`, c2/D-025);
+       manifest describes (`verify-manifest.ps1`, c2/D-025). It then proves the same
+       gate refuses a tampered copy and that the engine reports the tamper
+       (`verify-tamper.ps1`, t2): a flipped byte per shipped binary, a same-size
+       swapped DLL, an edited manifest, the manifest in an unsigned engine;
     6. writes `VERSION` (version, build time, engine hash, rule count, what was
        hardened);
     7. zips the folder to `dist\MICS-portable-<version>-x64.zip`;
@@ -384,6 +387,24 @@ if ($manifestExit -ne 0) {
   exit 1
 }
 
+# The gate above proves the package is the published one; this proves it *refuses*
+# a package that is not, and that the engine says so too (t2). It works on copies
+# under %TEMP%, so the staging folder is untouched.
+Write-Host "verifying that a tampered copy is refused and reported..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-tamper.ps1") -Path $staging
+  $tamperExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($tamperExit -ne 0) {
+  Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Write-Output "RESULT: FAIL - a tampered copy was not refused or not reported; nothing was published"
+  exit 1
+}
+
 $engine = Join-Path $staging "mics-engine.exe"
 $app = Join-Path $staging "mics_app.exe"
 $engineHash = (Get-FileHash $engine -Algorithm SHA256).Hash
@@ -489,4 +510,5 @@ if ($signature -eq "Valid") {
 }
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1"
+Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1"
 Write-Output "RESULT: PASS"

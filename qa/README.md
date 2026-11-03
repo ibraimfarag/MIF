@@ -173,6 +173,16 @@ or `unverified`, which is what Settings -> About renders and what raises the car
 naming the files that moved. `test/package_integrity_test.dart` reads the three
 words out of that Rust file, so a rename on either side fails the fast tier instead
 of leaving an About line that never appears.
+
+`scripts\verify-tamper.ps1` is the adversarial half and the third release-tier step
+(`tamper.verify`): it tampers with one thing at a time in a private copy of the
+package - a byte flipped in each shipped binary, a same-size swapped DLL, an edited
+manifest, the manifest copied into an unsigned engine, a copied install - and
+requires the gate above to refuse each one while the packaged engine reports it in
+`status.integrity` and in the card it pushes. The published package is the control,
+so a probe that simply refused everything would fail. It is also what keeps the
+gate's signer pin honest: an engine whose signature was stripped used to pass the
+gate, and is refused now.
 `test/opsec_baseline_test.dart` keeps the file
 honest (reasons present, markers equal to the probe's own list, no user path).
 The `cargo`/`rustc` rows are what is left after ط1's

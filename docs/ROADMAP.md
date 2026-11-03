@@ -27,11 +27,11 @@ The installer is **finished and measured** (ب3 steps 1–3, 2026-11-01): it ins
 and removes the whole product, tags both shortcuts' `System.AppUserModel.ID` through
 `IPropertyStore`, refuses to remove a copy its privileged helper still points at, and
 `scripts\verify-installer.ps1` proves all of it end to end in about two minutes.
-What is left is **release engineering, integrity, QA, and the two things that need
+What is left is **release engineering and QA, plus the two things that need
 a human** (one UAC-acceptance session and a signing certificate).
 
-The integrity manifest is **done end to end** (ج2, both commits, 2026-11-03, D-025
-and its two amendments): `make-release.ps1` signs every staged file except the
+The integrity manifest is **done end to end** (ج2, both commits, and ط2, 2026-11-03,
+D-025 and its three amendments): `make-release.ps1` signs every staged file except the
 engine, builds `MICS_MANIFEST` from those final bytes, injects it into
 `mics-engine.exe` as an `RT_RCDATA` resource, and signs the engine **once, after**
 the injection; `scripts\verify-manifest.ps1` re-reads the resource out of the
@@ -42,6 +42,19 @@ anything else) and answers `status.integrity` — `ok`, `untrusted-certificate` 
 `unverified`, which Settings → About renders as one green line, one neutral line or
 the notice, with a card naming the files that moved. The next slice on this lane is
 **ط2**, the tamper tests, which sit on exactly this manifest.
+
+**ط2, the tamper tests, landed the same day** (`scripts\verify-tamper.ps1`, also the
+`tamper.verify` release step): one thing is tampered with at a time in a private copy
+of the published package and both halves are asked - a byte flipped in each of the
+nine shipped binaries, a same-size swapped DLL, an edited manifest, the manifest
+copied into an unsigned engine, and a copied install. The gate must refuse each and
+the packaged engine must report each (`unverified`, naming the file in its log and in
+the card), while the pristine package is the control and must pass: **41 checks, 0
+failures, 108.5 s**. The probe also found a hole in the gate it was testing - an
+engine whose signature had been *stripped* passed `verify-manifest.ps1`, because only
+`HashMismatch` failed - so the gate now requires the pinned `MI CS Code Signing`
+signer and the CN lives in one PowerShell constant pinned to the engine's
+`EXPECTED_SIGNER_CN` by a Dart test.
 
 On 2026-11-01 the user approved the QA and reliability track (§3), and eight of its
 slices have landed: the pipeline entry point (ز0), the contract harness over all
@@ -69,7 +82,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 | **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — build hardening landed (ج1, D-021) and the integrity manifest landed end to end (ج2, both commits, 2026-11-03); threat model and protection matrix exist; what is left is the README rewrite (ج3) and F-11's reproducible-build note | 🟠 MED | 2–4 h | nothing |
 | **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), the committed QA report with coverage gates **[done]** (د5), E2E on the built artifact (د3) | **almost done** — ز0, د1, د2 landed 2026-11-01 and د5 landed 2026-11-02; only د3 (E2E on the installer) is left | 🟠 MED | 4–7 h | the system-tier contract runs on this machine, not CI |
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
-| **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **mostly done** — ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package); ج2's manifest landed 2026-11-03, so **ط2 (tamper) is next** | 🟠 MED | 6–10 h | nothing |
+| **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **done** — ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package) and **ط2 landed 2026-11-03** (`scripts\verify-tamper.ps1`, the `tamper.verify` release step), which also closed a hole in the manifest gate it was written to test | ✅ | — | nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **19 open rows** (2 HIGH, 5 MED, 12 LOW) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
 | **P1.5** | helper acceptance: three privileged operations with **zero** prompts | the first attempt (2026-11-01) found **two engine bugs instead of a helper problem** — both fixed that day (netsh policy argument shape, PowerShell quoting in the hardening snapshots); the helper itself was installed, running and reachable | 🔴 **HIGH** — this is the product's core promise | **15 min of your time** | **you** — and MI CS must be started *unelevated* for the helper path to be exercised |
@@ -93,7 +106,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | **ز2** | Crash/hang: session marker, panic/error capture, `MICS-<date>-<hash>` bug id, local bundle, delivery through `mics-engine report` (webhook / SMTP / WhatsApp), dedupe and deadlines — **first half + hang detector done** (ز2-أ 2026-11-01, ز2-ب 2026-11-02): the engine detects a panic and a run that was killed, names it `MICS-<date>-<6 hex>` (hash of the failure, not of the moment, so a repeat is counted instead of re-filed), and writes a JSON bundle plus a readable `.txt` under `<data dir>\crashes\` with the last 60 log lines and any key-shaped values redacted; `crash.list` / `crash.get` / `crash.delete` read them, and the contract harness proves the whole loop across two real processes (kill one engine, start another, one report, right pid). **ز2-ب adds the hang half that only an OS thread can report**: a `std::thread` watchdog started with the session watches a heartbeat the runtime bumps (a 5 s timer task plus every request), and after a 20 s silence files one `hang` report saying how long the runtime was stuck and what the last request was — measured 2026-11-02 with 106 engine tests, including a deliberately frozen heartbeat and a proved absence of false reports; a hang that takes the whole process stays invisible by design. **Left: delivery (ز2-د)** — and **ز2-ج landed 2026-11-02**: Settings → Diagnostics lists those reports (`crash.list`), opens one (`crash.get`), copies the paste text whose **first line is the bug id**, and deletes one (`crash.delete`) by re-reading the list afterwards; measured with 114 Dart tests and exactly four new controls in the committed ledger. Delivery is blocked on **D-023**, and the WhatsApp path is now specified as an Open WhatsApp bridge rather than WhatsApp itself. **Left: delivery only (ز2-د)** | 🟠 | 12–16 h | No third binary (the names are frozen by D-020); nothing in `crash.rs` names a URL. |
 | **ز3** | In-app cards: bottom corner, right for LTR and left for RTL, fed by the existing alert gate (`LOW` finally has the in-app home `alert.rs` already describes) — **done 2026-11-02 (D-024)**: the gate gained `decide_in_app` (every severity, DND the only switch, `toast_enabled` is the desktop's), cards leave as an `alert` push and are parked in a 5-card queue when no UI is attached, the shell paints at most three in a `PositionedDirectional` inside its own `Stack` (measured: `right = 1682` in LTR, `left = 18` in RTL, two new controls in the ledger), and a filed crash report raises a card carrying its bug id and saying delivery is off | 🟡 | 2–3 h | No state a report does not have: until ز2-د lands, a card may only say delivery is off. |
 | ~~**ط1**~~ | ~~Fingerprint sweep + ratchet~~ — **done 2026-11-02**: the Rust build compiles with `--remap-path-prefix=$env:USERPROFILE=/build` in `make-release.ps1` and `engine.build`, so the account name that appeared **1238** times in `mics-engine.exe` is now **0** (and `/build` replaced it in every crate path); `scripts/verify-opsec.ps1` measures the package against `qa/opsec-baseline.json` (9 binaries; totals **2301** `flutter`, **915** `dart`, **1242** `cargo`, **97** `rustc`, **1** `pubspec`, each row with a written reason), fails when a count rises or a binary is unlisted, and runs inside `make-release.ps1`; `test/opsec_baseline_test.dart` keeps the file honest in the fast tier. The framework strings are the allowlist and may only fall. The remap is *appended* to the crate's own flags by `scripts/engine-rustflags.ps1` rather than replacing them (`CARGO_ENCODED_RUSTFLAGS` overrides `.cargo\config.toml`; doing it by hand cost the engine its CFG table, and the hardening gate in `make-release.ps1` caught it the same day). | ✅ | 3–5 h | `scripts/verify-opsec.ps1`, `scripts/engine-rustflags.ps1`, `qa/opsec-baseline.json` |
-| **ط2** | Tamper tests: a byte flip per binary, a swapped DLL, an edited manifest, a copied install — each must be refused or reported | 🟠 | 2–3 h | Sits on ج2's signed manifest. |
+| ~~**ط2**~~ | ~~Tamper tests: a byte flip per binary, a swapped DLL, an edited manifest, a copied install — each must be refused or reported~~ — **done 2026-11-03** | ✅ | 2–3 h | `scripts\verify-tamper.ps1` tampers one thing at a time in a private copy under `%TEMP%` and asks both halves (the release gate must refuse, the packaged engine must answer `unverified`, name the file and push the card); the published package is the control. 41 checks, 0 failures, 108.5 s, and `tamper.verify` is the third release step. It also found that a **stripped signature** used to pass `verify-manifest.ps1`, which now requires the pinned `MI CS Code Signing`. |
 | ~~**ط3**~~ | ~~the `-Tier release` wiring~~ — **done 2026-11-02**: `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` (the packaged artifact, not the build folder); `-Tier release -List` shows it last and `-Tier release -Only opsec.verify` passes on the published package and fails on a stale one. The tier's help text now says the verifiers land one per slice. | ✅ | 1–2 h | `scripts\pipeline.ps1` |
 | **هـ1** | Default update-manifest URL compiled in + signature check on the manifest before applying | 🟡 | 2–3 h | Shares the key handling with ج2. |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, `verify-release.ps1` aware of the arch | 🟡 | 3–5 h | ⚠️ No ARM64 machine here: build + compile-verified only, and say so. |
@@ -107,7 +120,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 ## 3. The order to work in
 
 **The approved track (2026-11-01) runs first, one commit per step:**
-**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** (the tamper tests, now unblocked and next).
+**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** *(done 2026-11-03)* → the release lane: **ج3** (the README rewrite — nothing to elevate), then **ب4** (fold the helper install into the installer) and **د3** (E2E on the built installer), which each need one UAC click from a human.
 It is what the user picked over the release lane; the list below is the release lane
 the project returns to afterwards.
 
@@ -124,9 +137,13 @@ the project returns to afterwards.
 4. ~~**ج2 signed manifest + self-check**~~ — **done 2026-11-03** (both commits): the
    package describes itself inside the engine's own signature, the engine checks that
    at start-up and Settings → About answers with one line — see the phase note at the
-   top of this file.
-5. **د1 + د2 QA** — the biggest real gap: every feature is verified by hand, not by a
-   harness that proves all of them at once.
+   top of this file. **ط2 followed it the same day** (the tamper probe, and the third
+   release-tier step): `scripts\verify-tamper.ps1` proves both halves catch a flipped
+   byte, a same-size swapped DLL, an edited manifest, a repack into an unsigned engine
+   and a copied install — and it found a stripped signature slipping past the gate.
+5. ~~**د1 + د2 QA**~~ — **done 2026-11-01**: the contract harness over every method,
+   every screen and control swept against the same fixtures. What is left of the QA
+   phase is **د3** (item 7).
 6. **هـ1 + و1** — cheap, visible.
 7. **ب2 ARM64, د3, د4** — finish the release and the QA report.
 8. **ب5 → ب6** the moment the certificate exists.

@@ -17,9 +17,14 @@
        sorted, duplicate-free list of relative paths);
     3. every listed file exists, has the recorded byte count and its SHA-256 is
        the recorded one;
-    4. the engine's own signature was not broken after the injection - a
-       `HashMismatch` means the bytes changed after signing, which no package may
-       ship. An unsigned local build is reported, not refused;
+    4. the engine's own signature is the one this project signs with - `Valid`, or
+       an untrusted root with the same subject on a machine that has not trusted
+       the self-signed certificate yet, and always the pinned CN. A `HashMismatch`
+       means the bytes changed after signing, no signer at all means the document
+       has lost its authenticity (someone stripped the signature and kept the
+       manifest), and another subject is another publisher: all three refuse the
+       package. The engine is not in its own manifest, so this signature is the
+       only thing that covers it;
     5. files the package carries that the manifest does not list are printed. That
        is not a failure - `VERSION` is written after the manifest, by design - but
        it is the list a human should read before publishing.
@@ -121,10 +126,21 @@ foreach ($entry in $manifest.Files) {
 }
 
 # The engine is not in its own manifest, so its signature is the only thing that
-# covers it. `HashMismatch` is not the untrusted-certificate case (D-002): it means
-# the file changed after it was signed.
+# covers it. Three ways it can stop being ours, and all three refuse the package:
+# the bytes changed after signing (`HashMismatch`), the signature was stripped or
+# never made (no signer certificate - the manifest then has nothing behind it),
+# or somebody else signed it (the CN pin `signature.rs` enforces at run time).
+$signed_by_us = $false
+if ($signature.SignerCertificate) {
+  $signed_by_us = $signature.SignerCertificate.Subject -like "*CN=$script:MicsSignerCn,*"
+}
 if ($signature.Status -eq "HashMismatch") {
   $failures.Add("mics-engine.exe changed after it was signed (HashMismatch): the manifest it carries is not trustworthy")
+} elseif (-not $signed_by_us) {
+  $failures.Add(("mics-engine.exe is not signed by '{0}' (status {1}{2}): the manifest it carries is not authentic" -f `
+      $script:MicsSignerCn, $signature.Status, $(if ($signer) { ", signer $signer" } else { ", no signer" })))
+} elseif ($signature.Status -ne "Valid" -and $signature.Status -ne "UnknownError") {
+  $failures.Add(("mics-engine.exe signature is {0}: {1}" -f $signature.Status, $signature.StatusMessage))
 }
 
 # Informational: what the package carries that the manifest does not describe.

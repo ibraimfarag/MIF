@@ -1094,3 +1094,23 @@ envelope, its duplicates, its escaping paths and its 64-hex hashes, but **not** 
 sort order. Sorting is the producer's contract and `verify-manifest.ps1` enforces
 it; refusing a package the release gate accepted over a UTF-16-versus-byte
 collation difference would be a worse failure than the ordering was there for.
+
+**Amendment (2026-11-03, the tamper commit).** Point 2 said the manifest's
+authenticity is the engine's Authenticode signature plus the `EXPECTED_SIGNER_CN`
+pin, and only the *engine* enforced it: `verify-manifest.ps1` failed on
+`HashMismatch` and tolerated everything else, including **no signature at all**.
+`scripts\verify-tamper.ps1` measured the consequence — a copy of the package whose
+engine had been stripped (`signtool remove /s`) still reported
+`RESULT: PASS - all 68 listed file(s) hash as the signed manifest says`, so a
+repackaged folder with the document intact and the signature gone could clear the
+release gate while the app, which does ask `signature::trust()`, said `unverified`.
+The gate and the app therefore disagreed about who publishes MI CS, and the
+disagreement was on the permissive side. The rule now holds on both: the packaged
+engine must carry a signature whose subject is the pinned `MI CS Code Signing`
+(no signer, another subject and `HashMismatch` all refuse the package; a
+`Valid` status or an untrusted root with that subject — a machine that has not
+trusted the self-signed certificate yet — are accepted, mirroring
+`Trust::Ours`/`Trust::UntrustedRoot`). The name lives in exactly one place for
+PowerShell, `$script:MicsSignerCn` in `scripts\manifest-resource.ps1`, and
+`test\package_integrity_test.dart` reads `EXPECTED_SIGNER_CN` out of
+`signature.rs` and fails if the two spellings drift apart.

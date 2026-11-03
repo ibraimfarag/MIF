@@ -38,6 +38,12 @@ $script:MicsManifestType = 10
 $script:MicsManifestName = "MICS_MANIFEST"
 $script:MicsManifestFormat = 1
 
+# The signer the manifest's authenticity rests on (D-025 point 2). The engine
+# pins the same name in `EXPECTED_SIGNER_CN`; verify-manifest.ps1 refuses a
+# package whose engine is signed by anybody else, and test/package_integrity_test.dart
+# fails if the two spellings ever drift apart.
+$script:MicsSignerCn = "MI CS Code Signing"
+
 if (-not ("MicsManifest" -as [type])) {
   Add-Type -TypeDefinition @'
 using System;
