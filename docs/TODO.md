@@ -127,13 +127,23 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **و4**: تنفيذ صفوف LOW القابلة للتنفيذ في السجل — بعدها **ب2** (رجل ARM64
-> بناءً وتحقق ترجمة فقط، وقول كده بصراحة) ثم **د3** لو الكليكة وصلت. متكتبش أرقام
-> من غير قياس. وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **و4**: تنفيذ صفوف LOW القابلة للتنفيذ في السجل (واللي بيتقفل بالدليل مش بالكود)،
+> وعلّم **د4** إنها خلصت — بعدها **ب2** (رجل ARM64 بناءً وتحقق ترجمة فقط، وقول كده
+> بصراحة) ثم **د3** لو الكليكة وصلت. متكتبش أرقام من غير قياس. وشغّل
+> `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, then take
 **و4** — the executable LOW rows of the register (§7), each with the proof its row
-names — then **ب2** (the ARM64 leg: built and compile-verified only, and say so), and
+names. §0.3c now carries و4's own "done means" row: the four code rows are the
+plaintext API keys (DPAPI, with a migration), the blocking `vuln.scan` (one scanning
+path or none), the stale merged-audit sections (show their age), and the guard's cost
+with the shipped pack (re-measure, replace the number); three rows close **by
+evidence** instead of code (AUMID attribution, the portable caller check, and the
+incomplete-package HIGH row — paste the `verify-release.ps1` FAIL); rows needing a
+decision stay open and are named in the commit body. While in there, close **د4**:
+the QA report is generated, byte-compared and uploaded by `.github/workflows/ci.yml`,
+so it is done and only the checkbox is stale.
+Then **ب2** (the ARM64 leg: built and compile-verified only, and say so), and
 **د3** if the UAC click has arrived. **د3** waits for one UAC click from the user: it
 is the E2E run on the built per-machine installer, which installs the product *and*
 the helper and then removes both from Apps & features; the autonomous half of it that
@@ -254,10 +264,13 @@ both binaries `Valid`).
 done** (the register keeps only rows that need elevation, money, a signing certificate
 or a decision from you). What is left is no longer "small steps" — it is the release,
 integrity and QA work in **`docs/ROADMAP.md`** (phases, tasks, priorities, estimates
-and the order to work in). Short version: **ب3 installer (done) → ب4 helper
-fold-in → ج2 signed manifest → د1/د2 QA**, with the P1.5 helper acceptance
-(three operations, needs you) and P4 signing (needs the certificate) as the two
-things that cannot move without you.
+and the order to work in). Short version, as of 2026-11-03: **و1 (scheduled scan,
+D-027) and و3 (the firewall speaks the Windows Firewall API, D-028) are done → و4**
+(the executable LOW rows of §7) **→ ب2** (the ARM64 leg, built and compile-verified
+only) **→ د3** (the E2E on the built installer; its automatable half runs today, the
+per-machine half needs one UAC click from you). The two things that cannot move
+without you are P1.5 (the three-operation helper acceptance, §0.2 item 1) and P4
+signing (the certificate, §0.2 item 2).
 
 ### 0.2 Blocked on the user
 
@@ -348,8 +361,9 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries 18 open rows (2 HIGH, 4 MED, 12 LOW — the dark-mode row
-closed in small step 4, the `netsh` firewall row closed by و3/D-028). The MED ones
+`docs/TODO.md` §7 carries 19 open rows (2 HIGH, 4 MED, 13 LOW — the dark-mode row
+closed in small step 4, the `netsh` firewall row closed by و3/D-028; recounted from
+the table itself on 2026-11-03). The MED ones
 worth pulling forward once the phases above allow it: **no real-time file watching**
 (the scheduled half landed with و1, D-027), the canary checker being poll-based, and
 Defender tamper protection.
@@ -396,7 +410,11 @@ what was measured. Do not bundle two slices because one "looks small".
 | ~~**ط3** wiring~~ — **done** (2026-11-02) | `scripts\pipeline.ps1` gained its first `release`-tier step, `opsec.verify`, which runs `verify-opsec.ps1` against `dist\MICS-portable` - the packaged artifact, not the build folder - so `-Tier release` refuses a package that names the build account or grew a counted fingerprint. `verify-tamper.ps1` joins it with ط2. |
 | ~~**ج2** manifest + self-check~~ — **done 2026-11-03, both commits** | **The design is `D-025` plus its two dated amendments.** *The producer*: `make-release.ps1` signs every staged file except the engine, builds `MICS_MANIFEST` (`format`, `version`, `files[{path, bytes, sha256}]`, sorted by path) from those final bytes, injects it as an `RT_RCDATA` resource into the staged `mics-engine.exe`, and signs the engine **once, after** the injection — an injection into an already-signed engine cannot be signed again (`0x800700C1`, measured; the amendment in `D-025` records it). `scripts\manifest-resource.ps1` is the one place the format lives (build, inject, read, validate: ordinal order, no duplicates, no `..` path); `scripts\verify-manifest.ps1` re-reads the resource out of the package and re-hashes every listed file, so a package whose manifest does not describe it never leaves the staging folder, and `manifest.verify` runs it from `-Tier release` too. *The reader*: `engine\src\selfcheck.rs` reads the resource out of its own image with `LOAD_LIBRARY_AS_DATAFILE`, refuses a document that is not the shape this build writes (format, a version, no duplicate, no path that walks out of the package, a 64-hex hash per entry), re-hashes every listed file against the folder it runs from, and classifies its own signature through `platform\windows\signature.rs` — which now separates "our certificate and Windows trusts it" from "our certificate and this Windows has not trusted the root yet" (`CERT_E_UNTRUSTEDROOT` plus the embedded signer read through `CryptQueryObject`) from everything else, because a changed byte reports `TRUST_E_BAD_DIGEST` and must never be the quiet state. `status.integrity` carries `ok` / `untrusted-certificate` / `unverified`; the verdict is computed once at start-up and cached, so the UI's 15 s heartbeat never re-hashes 30 MB. Settings → About shows one green line, one neutral line or the notice, and only `unverified` **with a manifest present** raises the alert card — a developer build has no resource and is not an alarm. The engine is not in its own manifest; its integrity is the signature. Measured, not assumed: the manifest's file names enter the engine's strings, so its `flutter` count rose 0 → 55 and its `dart` count 0 → 1 — a written reason per row in `qa\opsec-baseline.json`, and the QA report regenerated in each commit. |
 | ~~**ط2** tamper~~ — **done 2026-11-03** | `scripts\verify-tamper.ps1` tampers one thing at a time in a private copy under `%TEMP%` and asks both halves - the release gate (must refuse) and the packaged engine, started on a private pipe (must answer `unverified`, name the file in its log and in the card it pushes). Cases: **a byte flipped in each of the nine shipped binaries** (the eight listed ones refused and reported by name; the engine refused by the gate with `HashMismatch`, never run after a code edit), **a same-size swapped DLL** (a system DLL padded to `dartjni.dll`'s exact length, and one of our own plugins cut to it - refused **by hash**, so a signed-but-wrong DLL is no more welcome), **an edited manifest** (one hash zeroed inside the resource: refused, and reported, with the engine `NotSigned` afterwards as D-025 measured), **a repack** (the published document injected into the unsigned release engine: refused and reported), and **a copied install** (accepted while it is byte-identical, reported as soon as one file changes; a copy used as a *client* is the caller rule's business, D-015). The pristine copy is the control. **Measured: 41 checks, 0 failures, 108.5 s**; the release tier gained `tamper.verify` (11 steps across 3 tiers). **It also found a hole**: a stripped Authenticode signature used to pass `verify-manifest.ps1` because only `HashMismatch` failed - the gate now requires the pinned `MI CS Code Signing` and refuses no signer, another subject and a changed byte alike, with the CN in one PowerShell constant (`MicsSignerCn`) pinned to the engine's `EXPECTED_SIGNER_CN` by a Dart test. |
-| ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
+| ~~**د5** report~~ — **done** (2026-11-02) | `qa/report.md` + `qa/report.html`, generated by `qa/report.dart` from the committed registries only (no clock, no  | machine path, no run timing) and byte-compared by `test/qa_report_test.dart`, so a method/screen/control/language/binary/test-file/pipeline-step that lands without the report lands with a red fast tier - the same ratchet as the UI ledger. The gates it carries: the dispatcher and `qa/methods.json` agree; every language directory is listed under `assets:`; every `skip` reason is at least 20 characters; the surface is not degenerate; the report names no machine. What it deliberately is not: a run - `build/qa-contract.json` and `build/pipeline-<tier>.json` stay the measured half, and CI uploads them next to it. |
+
+| **و4** the executable LOW rows | One commit per row group, each closing its register row with the proof that row names. Executable **as code**: (a) the **plaintext `nvd_api_key`/`ioc_feed_key`** in `settings.json` get the same DPAPI protection the vault uses, with a migration for an existing file and a test that what is on disk is not what went in; (b) **`vuln.scan` (the blocking variant) has no progress and no cancel** - it delegates to the job so there is exactly one scanning path, or it is deleted if nothing still calls it (the register says "for probes and scripts", so check first); (c) **a merged audit's non-refreshed sections** - the UI shows the age of each section it did not just re-read, instead of presenting an old section as fresh; (d) **the guard's cost with the shipped pack** - re-measured by `scripts\measure-guard-cpu.ps1` and the number in the register replaced. Closing **by evidence, not code**: the AUMID attribution row (THREAT-MODEL already says a card is UI, not proof of origin), the helper caller check in a portable run (F-2 documents the image-name fallback), and the incomplete-package **HIGH** row (`verify-release.ps1` fails when `rules\` is missing - that FAIL, pasted with its exit code, is the proof). Rows that need **your decision** stay open and are named in the commit body: GeoIP list licensing, the detection pack's content, the thumbprint-vs-CN update pin (D-016), the language-tag policy, and IDS beyond DNS. |
+| **ب2** the ARM64 leg | `engine` builds for `aarch64-pc-windows-msvc` (target available, `make-release.ps1` able to produce the arm64 engine), the Flutter app has a windows-arm64 build path, `verify-hardening.ps1`/`verify-release.ps1` check the **PE machine type** (`ARM64` vs `x64`) instead of assuming x64, and the SBOM/notices say which arch ships. **There is no ARM64 machine here**, so the claim is "built and compile-verified" - the arm64 binaries are never run, no probe result is copied from the x64 run, and the Done log says so in those words. |
+| **د3** E2E on the built installer | The automatable half runs in the probe: a silent `-TestUser` install into `%TEMP%`, the shortcuts' `System.AppUserModel.ID`, the AUMID key, the Apps-&-features entry, the uninstaller removing exactly what it created, and the refusal against a synthetic service key (all in `verify-installer.ps1` today). The per-machine half - **one UAC click from you** - installs for real and asserts: the app + engine + rules land in `%ProgramFiles%`, the shortcuts carry the AUMID, Apps & features has the entry, the **installer** created the helper service (not the app, D-026), `priv.log` has one `phase=start`/`phase=done` pair per operation, and the uninstaller removes all of it *and* the service while the user's own `%LOCALAPPDATA%\MI CS` copy stays untouched. The half that cannot run is skipped with a printed reason, never passed, and no number in the Done log comes from it. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
