@@ -727,10 +727,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>mics-engine.exe</code></td>
       <td class="num">55</td>
       <td class="num">1</td>
-      <td class="num">1242</td>
+      <td class="num">1243</td>
       <td class="num">97</td>
       <td class="num">0</td>
-      <td class="num">1395</td>
+      <td class="num">1396</td>
     </tr>
     <tr>
       <td><code>mics_app.exe</code></td>
@@ -827,7 +827,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>mics-engine.exe</code></td>
       <td><code>cargo</code></td>
-      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it.</td>
+      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -&gt; 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency&#39;s own source layout, not the account that built the file: the forbidden-path check stayed green in the same run.</td>
     </tr>
     <tr>
       <td><code>mics-engine.exe</code></td>

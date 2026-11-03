@@ -166,7 +166,7 @@ Five markers are counted, case-insensitively, over the ISO-8859-1 bytes of every
 | `dartjni.dll` | 0 | 101 | 0 | 0 | 0 | 101 |
 | `data\app.so` | 50 | 66 | 0 | 0 | 1 | 117 |
 | `flutter_windows.dll` | 1891 | 748 | 0 | 0 | 0 | 2639 |
-| `mics-engine.exe` | 55 | 1 | 1242 | 97 | 0 | 1395 |
+| `mics-engine.exe` | 55 | 1 | 1243 | 97 | 0 | 1396 |
 | `mics_app.exe` | 39 | 0 | 0 | 0 | 0 | 39 |
 | `screen_retriever_windows_plugin.dll` | 97 | 0 | 0 | 0 | 0 | 97 |
 | `tray_manager_plugin.dll` | 60 | 0 | 0 | 0 | 0 | 60 |
@@ -187,7 +187,7 @@ This is the allowlist: the reason column is what separates a measured fingerprin
 | `flutter_windows.dll` | `dart` | the Dart VM inside that engine names itself; removing it would mean rebuilding Flutter from source. |
 | `mics-engine.exe` | `flutter` | the manifest names every shipped file and 54 of them sit under data\flutter_assets\, with flutter_windows.dll making 55: these are the paths the start-up self-check hashes, not the toolchain that built the engine. |
 | `mics-engine.exe` | `dart` | the package manifest names dartjni.dll among the files it lists, so the substring appears once: that is a shipped file name, not the Dart VM living in this binary. |
-| `mics-engine.exe` | `cargo` | rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. |
+| `mics-engine.exe` | `cargo` | rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. |
 | `mics-engine.exe` | `rustc` | the engine's panic, version and RUST_BACKTRACE strings name the compiler that produced them; none of them carries a path. |
 | `mics_app.exe` | `flutter` | the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger). |
 | `screen_retriever_windows_plugin.dll` | `flutter` | the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename. |
