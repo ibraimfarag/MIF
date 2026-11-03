@@ -9,12 +9,17 @@
   probe does exactly that:
 
     1. starts `mics-engine.exe helper-console` on a private pipe with a private
-       audit log;
-    2. speaks the real protocol, one connection per request: ping, version, a
+       audit log, in the portable layout: `PROGRAMDATA` points at an empty folder
+       so there is no installer account to compare against, which is the F-2
+       fallback;
+    2. asks from a client that is **not** the engine image first - the helper must
+       refuse it, and must say in its log that the image check is the only check
+       on this machine;
+    3. speaks the real protocol, one connection per request: ping, version, a
        privileged op that must be refused without an elevated token, a hosts
        document without the MI CS marker, a malformed firewall rule and an
        operation that is not in the closed set;
-    3. checks the audit log kept the intent and the outcome but never the payload,
+    4. checks the audit log kept the intent and the outcome but never the payload,
        and that `helper-status` reports the helper as reachable.
 
   Exit code 0 = every expectation held; 1 = something answered differently.
@@ -67,6 +72,24 @@ function Send-Op([string]$json) {
   }
 }
 
+# The helper writes its stderr to this file while it runs, so a plain read fails
+# with a sharing violation. Read it with the sharing the writer allows.
+function Read-HelperLog([string]$path) {
+  if (-not (Test-Path $path)) { return "" }
+  try {
+    $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+      [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+      $reader = New-Object System.IO.StreamReader($stream)
+      return $reader.ReadToEnd()
+    } finally {
+      $stream.Dispose()
+    }
+  } catch {
+    return ""
+  }
+}
+
 function Expect([string]$label, [string]$answer, [string]$mustContain) {
   $ok = $answer -and ($answer -like "*$mustContain*")
   $state = if ($ok) { "PASS" } else { "FAIL" }
@@ -86,11 +109,48 @@ $env:MICS_HELPER_PIPE = $PipeName
 $env:MICS_HELPER_LOG = $log
 $env:MICS_NO_SINGLETON = "1"
 $env:MICS_NO_GUARD = "1"
-# The helper only answers the engine image it serves (F-2). This script speaks the
-# protocol itself, so it names the client it is about to use through the same hook
-# the installer records the engine in - no bypass, just the documented path pin.
-$env:MICS_ENGINE_PATH = (Get-Process -Id $PID).Path
+# The portable layout F-2 describes: an engine with its own data directory while
+# `%PROGRAMDATA%\MICS` - the only record of the account MI CS was installed for -
+# does not exist. The helper must then fall back to the caller's image name, and
+# say so once.
+$portableRoot = Join-Path $env:TEMP ("mics-portable-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+New-Item -ItemType Directory -Force -Path (Join-Path $portableRoot "programdata") | Out-Null
+$env:PROGRAMDATA = Join-Path $portableRoot "programdata"
+$env:MICS_DATA_DIR = Join-Path $portableRoot "data"
+Remove-Item Env:\MICS_ENGINE_PATH -ErrorAction SilentlyContinue
 
+# Phase 1: a helper with no recorded installer account and no path pin. A client
+# that is not the engine image must be refused - and the helper must say why the
+# image check is the only one it has. The helper reads MICS_ENGINE_PATH once, from
+# its own environment, so the pin can only be added by a *new* helper (phase 2).
+Write-Output "portable fallback (no installer account, no path pin):"
+$helper = Start-Process -FilePath $engine -ArgumentList "helper-console" `
+  -PassThru -NoNewWindow -RedirectStandardError $err
+Start-Sleep -Milliseconds $SettleMs
+if ($helper.HasExited) {
+  Write-Output "RESULT: FAIL - the helper exited during startup"
+  if (Test-Path $err) { Get-Content $err | Select-Object -Last 8 }
+  exit 1
+}
+try {
+  # This script is that client: it speaks the protocol itself.
+  Expect "a non-engine caller" (Send-Op '{"op":"ping"}') "only serves the MI CS engine"
+  $helperLog = Read-HelperLog $err
+  if ($helperLog -match "no installer account recorded") {
+    Write-Output "  [PASS] the helper logged the missing record once"
+  } else {
+    $failures.Add("the helper never said it had no installer account to compare (F-2)")
+    Write-Output "  [FAIL] the helper logged the missing record once"
+  }
+} finally {
+  if ($helper -and -not $helper.HasExited) { $helper.Kill(); [void]$helper.WaitForExit(5000) }
+}
+
+# Phase 2: the same helper with the documented path pin (the hook the installer
+# records) naming this script. That is how a differently named client is served -
+# deliberately, not by loosening the check for everyone.
+$env:MICS_ENGINE_PATH = (Get-Process -Id $PID).Path
+$err = Join-Path $env:TEMP ("mics-helper-verify-" + [guid]::NewGuid().ToString("N").Substring(0, 8) + ".err")
 $helper = Start-Process -FilePath $engine -ArgumentList "helper-console" `
   -PassThru -NoNewWindow -RedirectStandardError $err
 Start-Sleep -Milliseconds $SettleMs
@@ -111,7 +171,7 @@ try {
 
   Write-Output "audit log:"
   Start-Sleep -Milliseconds 300
-  $text = if (Test-Path $log) { [System.IO.File]::ReadAllText($log) } else { "" }
+  $text = Read-HelperLog $log
   if ($text -match "phase=start ping") { Write-Output "  [PASS] records the intent" } else { $failures.Add("no phase=start ping in the audit log"); Write-Output "  [FAIL] records the intent" }
   if ($text -match "phase=done ok=true") { Write-Output "  [PASS] records the outcome" } else { $failures.Add("no phase=done ok=true"); Write-Output "  [FAIL] records the outcome" }
   if ($text -match "sha256=") { Write-Output "  [PASS] hashes the payload" } else { $failures.Add("no sha256 in the audit log"); Write-Output "  [FAIL] hashes the payload" }
@@ -134,6 +194,7 @@ try {
 }
 
 Remove-Item $log, $err -ErrorAction SilentlyContinue
+Remove-Item $portableRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 if ($failures.Count -eq 0) {
   Write-Output "RESULT: PASS - the helper protocol, validation, refusals and audit trail hold"
