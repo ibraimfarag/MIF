@@ -49,9 +49,15 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: the release lane — ب4 (fold the helper install into the installer) or ج3
-> (the README rewrite), then د3 (E2E on the built installer); ز2-د stays blocked on
-> D-023 and the bridge endpoint.** ط2 landed 2026-11-03
+> **next: the release lane, and both halves of it need you at the machine — ب4
+> (fold the helper install into the installer) and د3 (E2E on the built installer)
+> each want one UAC click; with that click I can measure them, without it I can
+> only write the code and say so. ز2-د stays blocked on D-023 and the bridge
+> endpoint; the autonomous alternative meanwhile is ب2's ARM64 leg (wired and
+> compile-verified, never run — no ARM64 machine here) or a §7 register row.**
+> ج3 landed 2026-11-03: the README now says what MI CS does and does not do, with
+> the manifest, the start-up self-check and their honest limits in it, and every
+> number in it is one the pipeline measured. ط2 landed 2026-11-03
 > (`scripts\verify-tamper.ps1`: a byte flip per shipped binary, a same-size swapped
 > DLL, an edited manifest, a repack into an unsigned engine and a copied install -
 > each refused by the release gate and reported by the app; 41 checks, 108.5 s, and
@@ -111,25 +117,22 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص §0.3b و§0.3c) و docs/ROADMAP.md، وكمّل بـ
-> **ج3**: إعادة كتابة README ("بيعمل إيه / مابيعملش إيه") على أساس اللي بقى
-> حقيقي — المانيفست الموقّع والفحص الذاتي (ج2) واختبارات العبث (ط2) والـ pipeline
-> اللي بيحرس التشغيل — وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
+> **ب4**: ضمّ تثبيت خدمة المساعدة جوّه المثبّت عشان تبقى ضغطة UAC واحدة بدل
+> اتنين — ولو ينفع نعمل الكليكة على الجهاز هنقيس الفرق قبل/بعد بـ
+> `scripts\verify-installer.ps1`؛ ولو مفيش كليكة، اكتب الكود وقول بصراحة إن
+> القياس لسه محتاجها. وشغّل `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 That means: read §0 (especially §0.3b and §0.3c) and `docs/ROADMAP.md`, take
-**ج3 - the deliberate README rewrite** ("what it does / what it does not do"), now
-that the manifest, the self-check and the tamper tests are real and can be quoted
-with measured numbers — and stop for review.
+**ب4 - fold the privileged helper's install into the installer** so the product asks
+for UAC once instead of twice, prove it with `scripts\verify-installer.ps1` (and say
+plainly if the per-machine run still needs a human click) — and stop for review.
 §0.3c says what "done" means for every remaining slice, so a new session does not
-have to re-derive it. §0.5 is **finished**; the live work is the
-approved track in §0.3b (pipeline, contract harness,
-UI coverage, the language move, crash reporting, the fingerprint sweep),
-followed by the release-engineering lane. **ج2 and ط2 are done (2026-11-03)**: the
-package now describes itself inside the engine's signature, the engine reports
-`status.integrity`, and `scripts\verify-tamper.ps1` proves a tampered copy is refused
-by the gate and reported by the app. What is left on that lane needs work that does
-not fit a docs turn: **ب4** (fold the helper install into the installer) and **د3**
-(E2E on the built installer) both need one UAC click from a human, so they are the
-slices to take when you are at the machine.
+have to re-derive it. §0.5 is **finished** and so are the tracks behind it:
+**ج2, ط2 and ج3 are done (2026-11-03)** — the package describes itself inside the
+engine's signature, the engine reports `status.integrity`, `scripts\verify-tamper.ps1`
+proves a tampered copy is refused by the gate and reported by the app, and the
+README says exactly that. What is left is the release-engineering lane (**ب4**,
+**د3**), the register (§7) and the things that need the user.
 The two things that still need a human are
 the certificate in §0.2 and the three-operation helper acceptance (the service itself
 is installed, running and reachable). The rules that session must keep, all from
@@ -308,7 +311,7 @@ order the user picked (small → medium → large), and it is finished**
 |---|---|---|
 | ~~**ج1**~~ | ~~Build hardening~~ — **done**: Control Flow Guard on both binaries (read back from the PE: `GUARD_CF` + a real guard function table), the engine built with `lto="fat"`/`codegen-units=1`/`panic=abort`/`strip=symbols` (**35.7 → 24.0 MB**), the Dart release obfuscated with its symbol table kept out of the package, and a release gate that refuses an unhardened or unobfuscated build (D-021) | measured 2026-10-31 |
 | ~~**ج2**~~ | ~~Signed SHA-256 manifest of shipped files + startup self-check + "unofficial build" banner~~ — **done 2026-11-03, two commits**, design settled the same day (**D-025** + its two dated amendments): the manifest is an `RT_RCDATA` resource inside `mics-engine.exe`, built after signing and injected before the engine's single signature. **The producer**: `make-release.ps1` signs every staged file except the engine, builds `MICS_MANIFEST` from those final bytes, injects it, signs the engine, and `scripts\verify-manifest.ps1` re-reads it out of the staged package and re-hashes every listed file. **The reader**: `engine\src\selfcheck.rs` reads its own resource at start-up, re-hashes the files beside the image, classifies its own signature (ours and trusted / ours with a root this Windows has not trusted yet / anything else) and reports `status.integrity` — `ok`, `untrusted-certificate` (one neutral line in About, no banner: a self-signed build is not a fault) or `unverified` (the About notice plus a card naming the files that moved) | no |
-| **ج3** | Deliberate README rewrite ("what it does / does not do") once the above is real | no |
+| ~~**ج3**~~ | ~~Deliberate README rewrite ("what it does / does not do") once the above is real~~ — **done 2026-11-03**: the does table gained **"Is this copy the published one?"** (68 files, the document inside the engine's own signature, three verdicts, the About line, the card and the gate), the does-not list replaced the stale "there is still no integrity manifest" bullet with the honest limit (a changed copy is made *visible*, not impossible, and there is no reproducible build yet — F-11), the install steps end with "read the integrity line" plus the headless `verify-manifest.ps1`, **Testing** was rebuilt around `scripts\pipeline.ps1` (4 fast / 4 full / 3 release = 11 steps, 133 Dart, 124 engine, 65 methods / 78 contract cases, the three release gates including the 41 tamper checks), troubleshooting gained a row per verdict, and the Arabic half was brought to the same truth. Every number in it is one the pipeline measured — no new claims | no |
 
 **د — P6 QA**
 
@@ -602,10 +605,50 @@ click (P1.5) or a purchased certificate (P4).
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) and the cost question is answered (ب1b, `docs\COST.md`) — left = steps **ب2–ب6** in §0.3 |
-| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **mostly done**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), and build hardening (**ج1**) landed with the PE measured. Left: the README rewrite (**ج3**) and, from F-11, the reproducible-build note |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **done 2026-11-03**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), **ط2** proved both halves catch a tampered copy, build hardening (**ج1**) landed with the PE measured, and the README now says what it does and does not do (**ج3**). Left: F-11's reproducible-build note, which needs a toolchain decision rather than a slice |
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **ج3 — the README now says what MI CS does and does not do, and every number in it
+  was measured**
+  - The file already had that shape; what made this a rewrite is that half of it had
+    stopped being true. The status box still said packaging and the helper were "in
+    progress" (both are built and verified), and the *does not do* list claimed
+    **"there is still no integrity manifest, so a repackaged copy cannot be told from
+    ours"** — which ج2 and ط2 made false. Recomposed around the pair it is named for:
+    - the *does* table gained a row, **"Is this copy the published one?"**: the **68**
+      files, the document carried **inside the engine's own signature**, the three
+      verdicts (`ok` / `untrusted-certificate` / `unverified`), the About line, the
+      card, and the release gate that refuses a changed folder.
+    - the *does not* list replaced that stale bullet with the honest limit: the
+      manifest makes a changed copy **visible, not impossible** — a rebuild signed
+      with somebody else's certificate is reported as `unverified`, and the app cannot
+      refuse to run because it is the thing running — and there is still no
+      **reproducible build**, so a stranger cannot re-derive our bytes from this
+      source (F-11's open half). The other limits stayed as they were: no kernel
+      driver, no ClamAV/CAPA/Suricata, polling canaries, no VirusTotal, and the update
+      pin is the signer's **name**, not its thumbprint.
+    - **Install and first run** ends with the check a user can actually make: read the
+      integrity line in Settings → About, and the same check headless with
+      `verify-manifest.ps1 -Path <folder>` (which refuses the folder and names the
+      file). **Troubleshooting** gained a row per verdict — `unverified` names the
+      file, says to re-extract and compare with `SHA256SUMS`, and explains why a
+      development build shows it; `untrusted-certificate` is neutral and why (D-002).
+    - **Testing** was rebuilt around the single entry point: `pipeline.ps1` and its
+      three tiers with their real contents (4 fast / 4 full / 3 release = **11**
+      steps, **133** Dart tests, **124** engine tests, **65** methods and **78**
+      contract cases, and the three release gates including the **41** tamper checks),
+      replacing the stale "82 / 72" counts — and every probe it lists now has its
+      command.
+    - The build section says how signing and the manifest interleave (every file
+      first, the engine **last**, so its signature covers the document — D-025), the
+      layout table gained `qa/` and the new probes, and the **Arabic half** mirrors all
+      of it: the self-check paragraph, the honest limits, the pipeline and the counts,
+      and a current-status line that no longer calls the installer "planned".
+  - No code and no new tests: the four checks are unchanged (`-Tier fast` 4/4, 133 /
+    124), and every claim in the README is a number a pipeline step already produces,
+    so a reader can re-run `-Tier release` and get the same sentences back.
 
 - **ط2 — the tamper tests: nothing gets to lie about these bytes quietly**
   - `scripts\verify-tamper.ps1` tampers with one thing at a time in a private copy of
@@ -3310,15 +3353,22 @@ signing certificate respectively), so this is the work that is always available.
 - [x] `docs/PROTECTION-MATRIX.md`: per layer, what is detected/blocked and what is
       not (hosts-based L2, polling canaries, netsh firewall, no ClamAV/CAPA) — done
       and re-verified in small step 7; only its VT sentence needed touching (D-019).
-- [ ] Integrity: signed SHA256 manifest of shipped files, self-check at startup,
-      "unofficial build" banner on mismatch.
+- [x] ~~Integrity: signed SHA256 manifest of shipped files, self-check at startup,
+      "unofficial build" banner on mismatch~~ — done (ج2 + ط2, 2026-11-03): the
+      document rides inside the engine's signature, the engine answers
+      `status.integrity`, About shows the line and the card fires on a mismatch, the
+      release gate refuses a changed folder, and `scripts\verify-tamper.ps1` proves
+      both halves catch it.
 - [x] ~~Build hardening: Dart `--obfuscate --split-debug-info`, Rust LTO/strip/
       `panic=abort`, PE mitigations~~ — done (ج1, D-021): CFG on both binaries,
       LTO/stripped engine, obfuscated Dart, and `scripts\verify-hardening.ps1`
       gates the release on what the PE says.
-- [ ] README rewrite: what it does / **does not do**, requirements (Win10 21H2+/
+- [x] ~~README rewrite: what it does / **does not do**, requirements (Win10 21H2+/
       Win11, x64 or ARM64, 4 cores, 8 GB, ~500 MB, one UAC at install), privacy,
-      data locations, uninstall, screenshots, build instructions, GPL notice.
+      data locations, uninstall, screenshots, build instructions, GPL notice~~ —
+      done (ج3, 2026-11-03): the does/does-not pair now carries the manifest, the
+      start-up self-check and their honest limits, and every number in it is the one
+      the pipeline measured.
 - [ ] Fix L5/assistant wording everywhere (README, About, brief): "event
       correlation + optional local-LLM explanations", command bar is regex.
 

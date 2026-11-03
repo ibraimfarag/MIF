@@ -7,10 +7,13 @@ multi-layer defense wall, malware scanner, real-time process monitor,
 vulnerability scanner and hardening center — with an interface that prioritises,
 explains, and suggests the next action instead of dumping raw data.
 
-> **Status: pre-release.** The features below are implemented and covered by
-> tests, but packaging, code signing and the single-elevation helper are still
-> in progress. What is left, with priorities and estimates:
-> [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
+> **Status: pre-release.** Every feature below is implemented and covered by
+> tests, the portable package and its installer are built and verified, and the
+> package now carries a signed manifest of itself that the app checks at start-up
+> (see *Is this copy the published one?*). What is still missing is public code
+> signing (it needs a certificate to buy), folding the privileged helper's install
+> into the installer, and the ARM64 leg. What is left, with priorities and
+> estimates: [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
@@ -32,6 +35,7 @@ explains, and suggests the next action instead of dumping raw data.
 | **Reports** | One-click Markdown security report (score, findings, startup entries, incident kill-chains) written to `Documents\MICS-Reports\`. |
 | **Notifications** | A desktop card above the taskbar for **every** security event: a file the scanner catches (with a working **Quarantine** button), a suspicious process, a canary touch, or a protection action (default-deny, country block, hosts blocklist update). Cards fire **even when the window is closed**, speak the app language (AR/EN), and follow one policy: CRITICAL/HIGH/MEDIUM become cards, LOW stays in the app, do-not-disturb keeps only CRITICAL, and a switch turns cards off entirely. In-house notification sounds with volume and mute are separate. |
 | **Privileged helper** | Admin work (firewall, hosts file, hardening) goes through one LocalSystem service installed with a **single** UAC prompt instead of one per action. The operation set is closed and documented (`docs/PRIVILEGED-OPS.md`), every call is audited before and after it runs, and an unelevated helper refuses instead of half-applying. |
+| **Is this copy the published one?** | The package describes itself: a SHA-256 manifest of the **68** files it ships is carried **inside `mics-engine.exe`**, written there before the engine gets its own Authenticode signature, so the manifest is only as trustworthy as the signature over it. At start-up the engine re-reads that document out of its own image, re-hashes the folder it runs from, and reports the verdict through `status.integrity`: `ok`, `untrusted-certificate` (our certificate, a root this Windows has not trusted yet) or `unverified`. **Settings → About** shows one line for all three, the log always names the first file that changed, and a card names it when the copy carries a document that disagrees. Delete a byte, swap a DLL, edit the document: the app says which file, and the release gate refuses the folder. |
 | **Languages** | Arabic and English, complete, with full RTL layout. Language packs are per-module files; adding a language is one folder plus one line. |
 
 **Architecture in one line:** a Flutter UI talks JSON-RPC 2.0 over the named pipe
@@ -78,14 +82,18 @@ Honesty is a feature. Today, MI CS does **not**:
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
 - hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
   dialogs. That needs a trusted Authenticode certificate and is planned;
-- pretend the shipped build is **self-verifying**. It *is* hardened now: both
-  binaries carry **Control Flow Guard**, ASLR/DEP/high-entropy VA and no symbols
-  or PDB paths, and the Dart snapshot ships obfuscated (D-021) — all of it read
-  back out of the PE by `scripts\verify-hardening.ps1`, which the release refuses
-  to skip. But there is still no **integrity manifest**, so a repackaged copy
-  cannot be told from ours *by the app itself* — only updates are verified, by the
-  embedded signature above. A signed manifest plus a start-up self-check banner is
-  planned (P5, `docs/THREAT-MODEL.md` F-11);
+- prevent a **repackager who has their own certificate**: the manifest makes a
+  changed copy *visible*, not *impossible*. If somebody rebuilds `mics-engine.exe`,
+  keeps the document in step and signs it with their own certificate, the app says
+  `unverified` and names why — it cannot refuse to run, because MI CS is the thing
+  that would be doing the refusing. The same is true of our own bytes from the
+  other direction: there is no **reproducible build** yet, so a stranger cannot
+  re-derive our binaries from this source and compare them
+  (`docs/THREAT-MODEL.md`, F-11, records that as the open half). What *is* proved:
+  both binaries carry **Control Flow Guard**, ASLR/DEP/high-entropy VA and no
+  symbols or PDB paths, the Dart snapshot ships obfuscated (D-021), and
+  `scripts\verify-hardening.ps1` reads all of it back out of the PE while the
+  release refuses to skip it;
 - claim **idle CPU below the 1 % budget**: the guard loop costs **0.156 % of one
   core = 0.0028 % of a 56-thread machine** (`scripts/measure-guard-cpu.ps1`, guard on
   versus `MICS_NO_GUARD=1`), so the budget holds whether it is read per core or per
@@ -145,7 +153,9 @@ the exe path. `Uninstall MI CS` removes the lot.
 **Portable.** Nothing registered, nothing to uninstall: take
 `MICS-portable-<version>-x64.zip`, or the already-unpacked `dist\MICS-portable`
 folder, and put it anywhere (the installed location, `%LOCALAPPDATA%\MI CS\`, a USB
-stick — not a Low-integrity folder such as a web root, see §8 trap 21).
+stick — not a Low-integrity folder such as a web root: Windows refuses notification
+cards to low-integrity processes, so the app would run and stay quiet; see
+[Troubleshooting](#troubleshooting)).
 `dist\SHA256SUMS` lists the SHA-256 of the zip and of the files inside it, so a
 single extracted file can be checked too. If MI CS is running from the unpacked
 folder, `make-release.ps1` leaves it alone rather than deleting files in use — the
@@ -163,6 +173,20 @@ Then, either way:
 3. The first privileged fix asks once to install the helper
    (`Settings → Engine → Install helper` also does it explicitly); the card then
    shows **ready** and no later action prompts again.
+4. Open **Settings → About** and read the integrity line: on an untouched copy it
+   says the shipped files are the ones the package describes. If it says
+   `unverified` instead, the folder no longer matches the manifest inside
+   `mics-engine.exe` — the same check runs headless, so you can ask it before the
+   app ever starts:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path "C:\path\to\MICS-portable"
+   ```
+
+   It re-reads the manifest out of the engine's image, re-hashes every file it
+   lists, and refuses the folder (exit 1) with the file that changed. It is the
+   same check `make-release.ps1` runs before anything is packaged, and it also
+   refuses an engine whose signature is not ours.
 
 The engine log says which rule file it loaded (`rules\yara\starter.yar` and
 `rules\guard\starter.json` next to the binaries, hot-reloaded): if it ever says
@@ -232,7 +256,9 @@ One screen, eight sections; every field is validated and persisted by the engine
 - **Updates** — manifest URL, stable/beta channel, check, download and install.
 - **Engine** — executable path, connection state, start with Windows, and the
   **privileged helper** card (state, version, install/repair/remove).
-- **About** — version, license, tagline.
+- **About** — version, license, tagline, and the **integrity line**: whether the
+  files next to the engine are the ones this package describes (see the *What MI CS
+  does* table).
 
 ## Building from source
 
@@ -265,7 +291,12 @@ any dependency change. It then assembles into a staging folder, copies
 `engine\rules` next to the binaries (the guard and YARA packs are hot-reloaded
 from there — a package without them silently falls back to the compiled-in pack),
 refuses to continue if anything required is missing, writes `VERSION`, and
-produces `dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. The
+produces `dist\MICS-portable-<version>-x64.zip` plus `dist\SHA256SUMS`. With
+`-Sign` it also builds `MICS_MANIFEST` — the SHA-256 of every staged file — injects
+it into `mics-engine.exe` as a resource, signs the engine **after** that injection
+(so the signature covers the document, D-025), and then re-runs the two probes that
+prove it: `verify-manifest.ps1` (the folder is the one the manifest describes) and
+`verify-tamper.ps1` (a tampered copy is refused and reported). The
 staging build is then swapped into `dist\MICS-portable` — unless MI CS is running
 from that folder, in which case it is left untouched and only the zip is
 refreshed. Add `-SkipBuild` to repackage without rebuilding the app, or
@@ -301,8 +332,10 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign `
   -PfxPath cert.pfx -PfxPassword "***"
 ```
 
-`-Sign` signs `mics_app.exe`, `mics-engine.exe` and the bundled DLLs **before**
-they are hashed and zipped, so `SHA256SUMS` describes the signed files. The
+`-Sign` signs `mics_app.exe` and the bundled DLLs **before** they are hashed and
+zipped, so `SHA256SUMS` describes the signed files — and it signs `mics-engine.exe`
+**last**, after `MICS_MANIFEST` has been injected into it, because the signature has
+to cover the document that describes the package (D-025). The
 self-signed mode creates `CN=MI CS Code Signing` in `Cert:\CurrentUser\My` and
 trusts it in `CurrentUser\Root` + `CurrentUser\TrustedPublisher` (neither needs
 administrator rights), then verifies every file and fails the release if one does
@@ -327,13 +360,43 @@ python tool/make_icons.py logo.png   # adopt new art as the master first
 
 ## Testing
 
+One entry point runs everything, in three tiers, and writes
+`build\pipeline-<tier>.json` with per-step seconds and exit codes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast       # 4 steps, ~1 min
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier full       # + both release builds, the contract harness
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier release    # + the package gates (11 steps in all)
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only flutter.test
+```
+
+**fast** is what runs before every commit: `flutter analyze` (no issues — an info
+is a failure), `flutter test` (**133** tests, including the two contrast audits and
+the i18n parity/lint gates), `cargo test` (**124** tests) and
+`cargo clippy --release -- -D warnings` (clean). **full** adds the release builds
+of the engine and the app, the engine's own benchmark (CPU/RAM budget) and the
+**contract harness**: `dart run qa\contract.dart` drives every one of the **65**
+JSON-RPC methods against a real engine on an isolated pipe — **78** cases, plus the
+methods it must *not* run, each with its reason. **release** runs against
+`dist\MICS-portable`, never the build folder:
+
+- **`opsec.verify`** — no shipped file names the account that built it, and no
+  counted fingerprint grew past `qa/opsec-baseline.json`.
+- **`manifest.verify`** — the folder is the one the manifest inside its own engine
+  describes: it re-reads the resource, re-hashes every listed file, and requires the
+  engine's signature to be ours.
+- **`tamper.verify`** — the adversarial half: a byte flipped in each shipped
+  binary, a same-size swapped DLL, an edited manifest, a repack into an unsigned
+  engine and a copied install, each refused by the gate above and reported by the
+  engine itself (**41** checks, with the untouched package as the control).
+
 ```powershell
 cd engine
-cargo test                                # 82 tests
+cargo test                                # 124 tests
 cargo clippy --release -- -D warnings     # must stay clean
 cd ..
 flutter analyze --no-pub                  # must report no issues
-flutter test --no-pub                     # 72 tests, including both contrast audits
+flutter test --no-pub                     # 133 tests, including both contrast audits
 
 # End-to-end transport check (needs an engine on an isolated pipe)
 $env:MICS_PIPE_NAME   = '\\.\pipe\mics_engine_test'
@@ -347,11 +410,21 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-toast.ps1
 # The privileged helper's protocol, refusals and audit trail - no UAC needed
 powershell -ExecutionPolicy Bypass -File scripts\verify-helper.ps1
 
+# Only the owner, SYSTEM and Administrators can reach the engine's pipe
+powershell -ExecutionPolicy Bypass -File scripts\verify-pipe-acl.ps1
+
 # The published archive: hashes, completeness, and the extracted copy running
 powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1
 
+# The installed copy: shortcuts, uninstaller, and the helper's refusal to orphan
+powershell -ExecutionPolicy Bypass -File scripts\verify-installer.ps1
+
 # The binaries really are hardened (reads the PE: CFG, ASLR/DEP, stripped)
 powershell -ExecutionPolicy Bypass -File scripts\verify-hardening.ps1 -Path dist\MICS-portable
+
+# The package describes itself, and a tampered copy is refused and reported
+powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1
+powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1
 ```
 
 Test hooks exist so an isolated engine can be run without touching production
@@ -426,8 +499,9 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/i18n/<lang>/<module>.json` | Translation packs — one file per module, one folder per language. |
 | `assets/sounds/` | In-house notification cues. |
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
-| `scripts/` | User-facing helpers and acceptance probes: code signing, shortcuts, `verify-toast.ps1`, `verify-helper.ps1`. |
-| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status), `DECISIONS.md` (why things are the way they are), `PRIVILEGED-OPS.md` (the helper's complete operation list). |
+| `scripts/` | User-facing helpers and acceptance probes: code signing, the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
+| `qa/` | The QA registries and the committed report (`report.md` / `report.html`), the JSON-RPC contract harness and the UI fixtures/ledger. |
+| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
@@ -437,6 +511,8 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV/EV certificate; see [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
+| **Settings → About says `unverified`**, or a card says these files are not the published ones | The folder no longer matches the manifest inside `mics-engine.exe`: a shipped file changed (a partial copy, an antivirus shim feeding a modified DLL, a repackaged build). `powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path <folder>` names the file and refuses the folder; re-extract from the zip and check it against `SHA256SUMS`. A copy you *built* yourself has no manifest until `make-release.ps1 -Sign` writes one — which is why a development build shows this line and no card. |
+| **Settings → About says `untrusted-certificate`** | Our certificate is in the engine but this Windows has not been told to trust it (the self-signed release certificate was never installed here, or its root is not trusted yet). This is **not** a mismatch — no file changed — so the line is neutral and no card is raised (D-002). Installing the certificate (`make-release.ps1 -Sign` does it in `CurrentUser\Root`) turns it into `ok`. |
 | No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder — including a web-root tree like `...\server\www\`, where the folder carries a Low Mandatory Level label: move MI CS to a normal folder (`%LOCALAPPDATA%\MI CS` is the tested one), or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine names the reason itself in `notify.test`'s error and in the log. |
 | Engine shows *Engine not found* | `mics-engine.exe` must sit next to `mics_app.exe` (or set `MICS_ENGINE_PATH`). |
 | A scan looks stuck | It is a durable job — watch the progress card. Closing the window does not stop it, and killing the engine is safe: it resumes at the next file. |
@@ -510,13 +586,30 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 **اللي مابيعملهوش (بصراحة):** مفيش درايفر kernel ولا فلترة ترافيك داخلية؛ مفيش
 ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling — يعني قراءة الملف
 للقراءة فقط مش بتتسجّل؛ مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
-التحديثات بتتحقق بـ SHA-256 بس (من غير توقيع رقمي)؛ ملفات التنفيذ **غير موقّعة**
+التحديث لازم يكون موقّع بشهادتنا (`CN=MI CS Code Signing`) وويندوز يثق فيها — بس
+التثبيت على **اسم** الموقّع مش على بصمته (thumbprint)؛ ملفات التنفيذ **غير موقّعة**
 فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة اللي بتثبّت خدمة المساعدة لسه
 محتاجة تتجرّب بإيدك (الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم).
-والنسخة **مش بتتحقق من نفسها**: مفيش بيان سلامة موقّع (integrity manifest)، فأي حد
-يعيد تغليف البرنامج مش هيتكشف من جوه التطبيق — اللي اتعمل إن الملفين بقى عليهم
-Control Flow Guard وASLR/DEP وبدون symbols، وكود Dart متعمّى (obfuscated)، و
-`scripts\verify-hardening.ps1` بيقيس ده من الـ PE وبيوقف النشر لو ناقص.
+**النسخة بتتحقق من نفسها:** الحزمة فيها بيان SHA-256 لكل **68** ملف من ملفاتها،
+والبيان ده محقون **جوّه `mics-engine.exe`** قبل ما المحرك يتوقّع هو نفسه، يعني
+مصداقية البيان هي مصداقية التوقيع اللي فوقه. المحرك أول ما يقوم بيقرا البيان من
+صورته هو، وبيعيد حساب الهاشات لكل الملفات اللي جنبه، وبيبلّغ بالنتيجة من
+`status.integrity`: `ok` (مطابق)، `untrusted-certificate` (شهادتنا موجودة بس
+الويندوز ملسه واثق في الجذر)، أو `unverified` (حاجة اتغيّرت). **الإعدادات ← عن
+البرنامج** بتعرض سطر واحد للحالات التلاتة، واللوج بيسمّي أول ملف اتغيّر، والكارت
+بيسمّيه كمان. وبوابة الإصدار (`scripts\verify-manifest.ps1`) بترفض الفولدر
+المتغيّر قبل النشر، و`scripts\verify-tamper.ps1` بيثبت إن كل حالة عبث — بايت
+متقلّب في أي ملف، DLL متستبدل بنفس الحجم، بيان متعدّل، أو بيان محقون في محرك
+مش بتاعنا — بتترفض وبتتبلّغ (41 فحص، صفر فشل).
+
+**حدود الحكاية دي (بصراحة):** البيان بيخلّي النسخة المتغيّرة **ظاهرة** مش
+**مستحيلة** — اللي يعيد بناء المحرك ويوقّعه بشهادته هو، التطبيق هيقول `unverified`
+وهيسمّي السبب، لكنه مش هيقدر يمنعه إنه يشتغل، لأن MI CS هو اللي بيعمل الفحص.
+وكمان مفيش **بناء قابل لإعادة الإنتاج** لسه، يعني حد برّه مايقدرش يبني نفس
+البايتات من السورس ويقارنها (ده النص المفتوح في F-11 في `docs/THREAT-MODEL.md`).
+اللي **مُثبَت**: الملفين عليهم Control Flow Guard وASLR/DEP وبدون symbols، وكود
+Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس ده من الـ PE
+وبيوقف النشر لو ناقص.
 
 **المتطلبات:** ويندوز 10 (21H2+) أو 11، 64-bit. معالج 4 أنوية و8 جيجا رام
 (المحرك بيستهلك ~11 ميجا في الخمول) وحوالي 150 ميجا مساحة. التطبيق بيفتح
@@ -538,8 +631,13 @@ Control Flow Guard وASLR/DEP وبدون symbols، وكود Dart متعمّى (o
 (Desktop C++)، وبعد البناء انسخ `mics-engine.exe` ومجلد `rules` جنب
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
-**الاختبارات:** `cargo test` (82) و `cargo clippy` نضيف، و`flutter analyze`
-بدون ملاحظات و`flutter test` (72). والتباين اللوني **متقاس مش بالتقدير**: وضعين
+**الاختبارات:** نقطة دخول واحدة بتشغّل كل حاجة على تلات مستويات:
+`scripts\pipeline.ps1 -Tier fast` (4 خطوات، ~دقيقة: `flutter analyze` بدون
+ملاحظات، `flutter test` **133** اختبار، `cargo test` **124** اختبار، و`cargo
+clippy` نضيف)، وبعديه `-Tier full` (بناء النسختين + هارنس العقد اللي بيشغّل كل
+**65** دالة JSON-RPC على محرك حقيقي: **78** حالة) و`-Tier release` (بوابات الحزمة
+المنشورة: `opsec.verify` و`manifest.verify` و`tamper.verify` — 11 خطوة إجمالًا).
+والتباين اللوني **متقاس مش بالتقدير**: وضعين
 فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
 والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
 
@@ -560,7 +658,10 @@ Control Flow Guard وASLR/DEP وبدون symbols، وكود Dart متعمّى (o
 كارت إشعار وصل فعلًا لسطح المكتب، و`scripts\verify-helper.ps1` بيختبر بروتوكول
 خدمة المساعدة ورفضها الآمن من غير أي UAC، و`scripts\verify-release.ps1` بيتأكد إن
 النسخة المنشورة مطابقة للـ SHA256SUMS وكاملة وإن نسختها المستخرجة بتشتغل فعلًا
-وبتحمّل قواعدها من جوه الحزمة نفسها.
+وبتحمّل قواعدها من جوه الحزمة نفسها، و`scripts\verify-manifest.ps1` بيقرا بيان
+الحزمة من جوه المحرك ويعيد حساب هاشات كل ملف فيه (وبيرفض أي محرك مش موقّع بتوقيعنا)،
+و`scripts\verify-tamper.ps1` بيثبت إن كل نسخة متلاعب فيها بتترفض من البوابة
+وبتتبلّغ من المحرك نفسه.
 
 **النسخة الجاهزة:** `scripts\make-release.ps1` بيتأكد الأول إن ملفات الإفصاح عن
 مكونات الطرف التالت (`sbom.cdx.json` بصيغة CycloneDX 1.6 و`THIRD-PARTY-NOTICES`)
@@ -603,7 +704,10 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 `SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
-بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث. اللي
-فاضل: **ضغطة UAC واحدة** بتثبّت خدمة المساعدة (كل اللي تحتها متأكَّد منه)،
-شهادة توقيع، مثبّت رسمي، ودعم ARM64 — كلها متتبَّعة في
-[`docs/TODO.md`](docs/TODO.md).
+بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة
+بتتحقق من نفسها بالبيان الموقّع اللي جوّه المحرك. النسخة بتطلع ZIP ومثبّت
+(`MICS-setup-<version>-x64.exe`) من نفس الحزمة، والاتنين متأكَّد منهم بسكريبتات.
+اللي فاضل: **ضغطة UAC واحدة** بتثبّت خدمة المساعدة (كل اللي تحتها متأكَّد منه)،
+ضم تثبيت المساعدة جوه المثبّت (ب4)، شهادة توقيع عامة، تشغيل E2E على المثبّت
+المبني (د3)، ودعم ARM64 — كلها متتبَّعة في [`docs/ROADMAP.md`](docs/ROADMAP.md)
+و[`docs/TODO.md`](docs/TODO.md).

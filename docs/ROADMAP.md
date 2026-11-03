@@ -27,8 +27,8 @@ The installer is **finished and measured** (ب3 steps 1–3, 2026-11-01): it ins
 and removes the whole product, tags both shortcuts' `System.AppUserModel.ID` through
 `IPropertyStore`, refuses to remove a copy its privileged helper still points at, and
 `scripts\verify-installer.ps1` proves all of it end to end in about two minutes.
-What is left is **release engineering and QA, plus the two things that need
-a human** (one UAC-acceptance session and a signing certificate).
+What is left is **release engineering (ب4, د3), the §7 register, and the two things
+that need a human** (one UAC-acceptance session and a signing certificate).
 
 The integrity manifest is **done end to end** (ج2, both commits, and ط2, 2026-11-03,
 D-025 and its three amendments): `make-release.ps1` signs every staged file except the
@@ -56,6 +56,17 @@ engine whose signature had been *stripped* passed `verify-manifest.ps1`, because
 signer and the CN lives in one PowerShell constant pinned to the engine's
 `EXPECTED_SIGNER_CN` by a Dart test.
 
+**ج3, the README rewrite, closed that lane on the same day.** The file already had a
+"what it does / what it does not do" pair; what it needed was for both halves to stop
+lying. The *does* table gained **"Is this copy the published one?"** (the 68 files, the
+document inside the engine's own signature, the three verdicts, the About line, the
+card and the gate), the *does not* list replaced the stale "there is still no integrity
+manifest" with the real limit — a changed copy is made **visible**, not impossible, a
+rebuild signed by somebody else is reported and not blocked, and there is no
+reproducible build yet — and the install steps, troubleshooting, testing numbers and
+the whole Arabic half were brought to the same measured truth. Every number in it is
+one a pipeline step prints.
+
 On 2026-11-01 the user approved the QA and reliability track (§3), and eight of its
 slices have landed: the pipeline entry point (ز0), the contract harness over all
 **65** JSON-RPC methods (د1), every screen and control swept against the same
@@ -79,7 +90,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
 | **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + local signing work | 🔴 **HIGH** (the register's only HIGH row: "no installer") | 8–16 h | certificate + release hosting: **you**; the rest: nothing |
-| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **partial** — build hardening landed (ج1, D-021) and the integrity manifest landed end to end (ج2, both commits, 2026-11-03); threat model and protection matrix exist; what is left is the README rewrite (ج3) and F-11's reproducible-build note | 🟠 MED | 2–4 h | nothing |
+| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **done** — build hardening (ج1, D-021), the integrity manifest end to end (ج2, 2026-11-03), the tamper proof (ط2, 2026-11-03), the threat model and protection matrix, and the README rewrite (**ج3**, 2026-11-03: "what it does / does not do" now carries the manifest, the self-check and the honest limits); the one thing left is F-11's reproducible-build note | ✅ | — | nothing (the reproducible-build note needs a real toolchain decision, not a slice) |
 | **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), the committed QA report with coverage gates **[done]** (د5), E2E on the built artifact (د3) | **almost done** — ز0, د1, د2 landed 2026-11-01 and د5 landed 2026-11-02; only د3 (E2E on the installer) is left | 🟠 MED | 4–7 h | the system-tier contract runs on this machine, not CI |
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
 | **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **done** — ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package) and **ط2 landed 2026-11-03** (`scripts\verify-tamper.ps1`, the `tamper.verify` release step), which also closed a hole in the manifest gate it was written to test | ✅ | — | nothing |
@@ -120,7 +131,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 ## 3. The order to work in
 
 **The approved track (2026-11-01) runs first, one commit per step:**
-**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** *(done 2026-11-03)* → the release lane: **ج3** (the README rewrite — nothing to elevate), then **ب4** (fold the helper install into the installer) and **د3** (E2E on the built installer), which each need one UAC click from a human.
+**ز0** *(done)* → **د1** *(done)* → **د2** *(done)* → **ز1** *(done)* → **ز2-أ** *(done)* → **ز2-ب** *(done)* → **ز2-ج** *(done)* → **ز2-د** (delivery, blocked on D-023) → **ز3** *(done)* → **ط1** *(done)* → **ط3** *(done)* → **د5** *(done)* → **ج2** *(done 2026-11-03, both commits)* → **ط2** *(done 2026-11-03)* → **ج3** *(done 2026-11-03)* → the release lane: **ب4** (fold the helper install into the installer) and **د3** (E2E on the built installer), which each need one UAC click from a human, then **هـ1 + و1**.
 It is what the user picked over the release lane; the list below is the release lane
 the project returns to afterwards.
 
