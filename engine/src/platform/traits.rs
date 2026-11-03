@@ -200,6 +200,14 @@ pub struct AuditPass {
     /// Inventory lists: `None` when that section did not run in this pass.
     pub startup: Option<Vec<StartupEntry>>,
     pub scheduled_tasks: Option<Vec<ScheduledTaskEntry>>,
+    /// Unix seconds at which each section was collected, by section id.
+    ///
+    /// A merge only re-reads the sections the caller named, so the rest of the
+    /// report is as old as the full audit it came from. Carrying the timestamp
+    /// with the section is what lets the UI show that age instead of presenting
+    /// an old check as a fresh one (`و4`): the alternative - one timestamp for
+    /// the whole report - would be right only for sections that were re-read.
+    pub stamps: std::collections::BTreeMap<String, i64>,
 }
 
 impl AuditPass {
@@ -245,12 +253,36 @@ impl AuditPass {
             .chain(self.startup.is_some().then_some("startup"))
             .chain(self.scheduled_tasks.is_some().then_some("scheduled_tasks"))
             .collect();
+        // A finding carries the id of the section that produced it: the display
+        // name is not unique (`rdp` and `remote_tools` both report under "Remote
+        // Access"), and the UI has to look up that section's age.
+        let findings: Vec<serde_json::Value> = self
+            .checks
+            .iter()
+            .flat_map(|(id, section)| {
+                section.iter().map(move |f| {
+                    serde_json::json!({
+                        "id": id,
+                        "section": f.section,
+                        "item": f.item,
+                        "status": f.status,
+                        "severity": f.severity,
+                        "description": f.description,
+                        "fix_available": f.fix_available,
+                    })
+                })
+            })
+            .collect();
         serde_json::json!({
             "score": score,
             "findings": findings,
             "startup_entries": self.startup.clone().unwrap_or_default(),
             "scheduled_tasks": self.scheduled_tasks.clone().unwrap_or_default(),
             "sections": ran,
+            // What each section cost in wall-clock time: `{id: unix seconds}`,
+            // exactly for the sections that ran in *this* pass. A merge keeps the
+            // base's stamp for everything it did not re-read.
+            "section_times": self.stamps,
             "partial": partial,
             "merged": !refreshed.is_empty(),
             "refreshed": refreshed,
@@ -286,7 +318,10 @@ pub async fn collect_audit(
             continue;
         }
         match section.await {
-            Ok(findings) => pass.checks.push((name.to_string(), findings)),
+            Ok(findings) => {
+                pass.checks.push((name.to_string(), findings));
+                pass.stamps.insert(name.to_string(), collected_at());
+            }
             Err(e) => {
                 tracing::warn!("{name} audit failed: {e:#}");
             }
@@ -296,11 +331,21 @@ pub async fn collect_audit(
 
     if wants("startup") {
         pass.startup = Some(collectors.audit_startup().await.unwrap_or_default());
+        pass.stamps.insert("startup".to_string(), collected_at());
     }
     if wants("scheduled_tasks") {
         pass.scheduled_tasks = Some(collectors.audit_scheduled_tasks().await.unwrap_or_default());
+        pass.stamps
+            .insert("scheduled_tasks".to_string(), collected_at());
     }
     pass
+}
+
+/// When a section finished, in unix seconds. A clock that is set back after the
+/// fact only makes a section look older than it is, which is the safe direction
+/// for a "not re-checked since" line.
+fn collected_at() -> i64 {
+    chrono::Utc::now().timestamp()
 }
 
 /// The last full audit, so a section re-check can be merged into a complete
@@ -327,6 +372,17 @@ impl AuditCache {
             );
         };
         for id in refreshed {
+            // A refreshed section is as new as its re-read; a section the merge
+            // could not re-read (its collector failed) has no stamp any more, so
+            // it cannot be presented as fresh either.
+            match fresh.stamps.get(id) {
+                Some(ts) => {
+                    base.stamps.insert(id.clone(), *ts);
+                }
+                None => {
+                    base.stamps.remove(id);
+                }
+            }
             match id.as_str() {
                 "startup" => {
                     if fresh.startup.is_some() {

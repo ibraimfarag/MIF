@@ -662,6 +662,37 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **و4 (c) — a merged audit now says how old every section it did not re-read is**
+  - **The gap.** A fix re-reads one section on top of the last full audit, which is
+    what keeps the score comparable — but the report then looked uniformly fresh to
+    the user, including the seven sections that were hours old. The register said
+    the UI never shows that age.
+  - **What moved.** Each audit section carries the unix time it finished
+    (`AuditPass::stamps`, filled by `collect_audit`), `report()` emits
+    `section_times: {id: seconds}`, and `AuditCache::merge` keeps the base's stamp
+    for every section it did not re-read while taking the re-read's own time for
+    the ones it did. A section whose collector failed on the re-read loses its
+    stamp — it is not reported as run, so it must not look fresh either. Every
+    finding also carries its **section id** now, because the display name is not
+    unique (`rdp` and `remote_tools` both read "Remote Access") and the age is
+    resolved through the id.
+  - **The UI says it, in both languages.** The audit screen prints
+    "Not re-checked now — read at HH:MM" (`audit.sectionAge`, Arabic mirrored) on
+    every finding and on the two inventory headers whose section this report did
+    not re-read, formatted through `TimeOfDay.format` so it follows the locale.
+    Nothing appears on a full audit, or on the section the fix just re-read.
+  - **Proved.** Engine: 139 tests, including a merge whose base section is stamped
+    at a fixed old time (so "it moved" cannot be a same-second coincidence), the
+    refreshed section's stamp proven newer, the untouched one proven unchanged,
+    every finding proven to carry a known section id, and the failing-collector
+    case proven to drop its stamp. Dart: 106 declared cases, with a widget test
+    that mounts the screen on a merged report and finds **3** stale lines (the
+    untouched finding plus the two inventory headers) and a time in each, and the
+    QA audit fixture rewritten to the new shape so the sweep renders it.
+  - Measured: `-Tier fast` green, `flutter analyze` clean, QA report regenerated
+    (65 methods, 100 controls, 106 Dart / 139 engine cases) with the ledger
+    unchanged — the line is text, not a new control.
+
 - **و4 (b) — one scanning path: the blocking `vuln.scan` is gone, and the command
   bar stops pinning a request for minutes**
   - **What the register got wrong, found by checking first.** The row said the
@@ -3643,7 +3674,7 @@ signing certificate respectively), so this is the work that is always available.
 |---|---|---|
 | HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6 | `dist/`, `installer/`, P4 |
 | HIGH | A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently (the engine now logs which file it used, and `verify-release.ps1` fails when the package is incomplete) | `dist/`, `guard/mod.rs`, `scanner/mod.rs` |
-| LOW | A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age (it re-reads the section it just changed, which is where the staleness would matter) | `traits.rs`, `providers.dart` |
+| ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is 65 methods again | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
 | LOW | A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS" (the threat model already says a card is UI, not proof) | `notify/toast.rs`, THREAT-MODEL §B10 |

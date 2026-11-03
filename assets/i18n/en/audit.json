@@ -11,6 +11,7 @@
   "audit.fixFailed": "Fix failed",
   "audit.fixed": "Fixed: {item} — rescan for the new score",
   "audit.loading": "Collecting live data from the engine…",
+  "audit.sectionAge": "Not re-checked now — read at {time}",
   "audit.startup": "Startup entries",
   "audit.subtitle": "Real checks from your machine — Defender, firewall, RDP, SMBv1, UAC, admins, startup and more",
   "audit.tasks": "Non-Microsoft scheduled tasks",

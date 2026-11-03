@@ -1298,6 +1298,54 @@ mod tests {
         assert_eq!(report["score"], serde_json::json!(79));
     }
 
+    /// A merged report is honest about age: the sections the merge did not re-read
+/// keep the time they were actually collected, and the ones it did re-read carry
+/// the new time. Without this the UI could only show one timestamp for the whole
+/// report, which is wrong for every section but the refreshed one.
+#[tokio::test]
+    async fn a_merged_audit_keeps_the_age_of_every_section_it_did_not_re_read() {
+        use crate::platform::traits::{collect_audit, AuditCache};
+
+        let mut cache = AuditCache::default();
+        let mut base = collect_audit(&SectionMock::default(), None).await;
+        assert_eq!(base.stamps.len(), 10, "8 checks + 2 inventory lists, each stamped");
+        // Make both sections visibly old, so "it moved" cannot be a same-second
+        // coincidence (the stamps have one-second resolution).
+        base.stamps.insert("defender".to_string(), 1_000_000);
+        base.stamps.insert("rdp".to_string(), 1_000_000);
+        cache.remember(base);
+
+        let fresh = collect_audit(
+            &SectionMock::secure_only(&["rdp"]),
+            Some(&["rdp".to_string()]),
+        )
+        .await;
+        let report = cache.merge(fresh, &["rdp".to_string()]).expect("base");
+
+        let times = report["section_times"].as_object().expect("section_times");
+        assert_eq!(
+            times["defender"], serde_json::json!(1_000_000),
+            "an untouched section keeps the time it was really collected"
+        );
+        assert!(
+            times["rdp"].as_i64().unwrap_or(0) > 1_000_000,
+            "a refreshed section carries the re-read's time, not the old one: {times:?}"
+        );
+        assert_eq!(
+            times.len(),
+            10,
+            "every section still has a stamp, merged or not"
+        );
+
+        // A finding names the section id it came from: the display name is not
+        // unique, and the UI resolves the age through the id.
+        let handled = ["defender", "firewall", "rdp", "smbv1", "uac", "admins", "hosts", "remote_tools"];
+        for finding in report["findings"].as_array().expect("findings") {
+            let id = finding["id"].as_str().expect("every finding carries its section id");
+            assert!(handled.contains(&id), "unexpected section id {id}");
+        }
+    }
+
     #[tokio::test]
     async fn a_section_that_fails_on_the_re_read_leaves_no_stale_finding() {
         use crate::platform::traits::{collect_audit, AuditCache};
@@ -1325,6 +1373,10 @@ mod tests {
                 .iter()
                 .all(|f| f["item"] != "rdp check"),
             "the old finding must not stay behind pretending to be fresh"
+        );
+        assert!(
+            report["section_times"].get("rdp").is_none(),
+            "nor may its age stay behind: a section that did not run has no time"
         );
     }
 

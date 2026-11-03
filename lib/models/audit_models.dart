@@ -15,6 +15,10 @@ const Map<String, String> auditSectionForHardeningAction = {
 
 /// Mirrors the engine's audit JSON (engine/src/platform/traits.rs).
 class AuditFinding {
+  /// The engine's section id (`rdp`, `remote_tools`, ...). The display `section`
+  /// is not unique — `rdp` and `remote_tools` both read "Remote Access" — so the
+  /// age of the check is resolved through this.
+  final String sectionId;
   final String section;
   final String item;
   final String status; // Secure | Warning | Vulnerable | Unknown
@@ -29,9 +33,11 @@ class AuditFinding {
     required this.severity,
     required this.description,
     required this.fixAvailable,
+    this.sectionId = '',
   });
 
   factory AuditFinding.fromJson(Map<String, dynamic> j) => AuditFinding(
+        sectionId: j['id'] as String? ?? '',
         section: j['section'] as String? ?? '',
         item: j['item'] as String? ?? '',
         status: j['status'] as String? ?? 'Unknown',
@@ -102,15 +108,29 @@ class AuditReport {
   final List<StartupEntry> startupEntries;
   final List<ScheduledTaskEntry> scheduledTasks;
 
+  /// True when this report was merged into an earlier full audit, so some
+  /// sections were re-read just now and the rest were not (`refreshed`).
+  final bool merged;
+
+  /// The section ids the merge actually re-read.
+  final List<String> refreshed;
+
+  /// Unix seconds at which each section was collected, by section id.
+  final Map<String, int> sectionTimes;
+
   AuditReport({
     required this.score,
     required this.findings,
     required this.startupEntries,
     required this.scheduledTasks,
+    this.merged = false,
+    this.refreshed = const [],
+    this.sectionTimes = const {},
   });
 
   factory AuditReport.fromJson(dynamic json) {
     final j = json as Map<String, dynamic>;
+    final times = (j['section_times'] as Map?) ?? const {};
     return AuditReport(
       score: (j['score'] as num? ?? 0).toInt(),
       findings: (j['findings'] as List? ?? [])
@@ -122,8 +142,28 @@ class AuditReport {
       scheduledTasks: (j['scheduled_tasks'] as List? ?? [])
           .map((f) => ScheduledTaskEntry.fromJson(f as Map<String, dynamic>))
           .toList(),
+      merged: j['merged'] as bool? ?? false,
+      refreshed: ((j['refreshed'] as List?) ?? const [])
+          .map((s) => s.toString())
+          .toList(),
+      sectionTimes: {
+        for (final entry in times.entries)
+          entry.key.toString(): (entry.value as num).toInt(),
+      },
     );
   }
+
+  /// When [sectionId] was last read, or `null` when the engine did not say.
+  DateTime? collectedAt(String sectionId) {
+    final seconds = sectionTimes[sectionId];
+    if (seconds == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+  }
+
+  /// Whether this report's [sectionId] is current: a full audit re-read
+  /// everything, a merge only the sections it was asked for.
+  bool wasReRead(String sectionId) =>
+      !merged || refreshed.contains(sectionId);
 
   int countByStatus(String status) =>
       findings.where((f) => f.status == status).length;

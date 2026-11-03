@@ -1,8 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
+import 'package:mics_app/features/audit/screens/audit_screen.dart';
 import 'package:mics_app/models/audit_models.dart';
 import 'package:mics_app/providers/providers.dart';
+
+import '../qa/ui/fake_engine.dart';
+import '../qa/ui/harness.dart';
 
 /// Stands in for the engine: records every RPC and answers `audit.run`.
 class _FakeIpc extends EngineIpc {
@@ -27,6 +32,7 @@ class _FakeIpc extends EngineIpc {
 }
 
 Map<String, dynamic> _finding(String status) => <String, dynamic>{
+      'id': 'rdp',
       'section': 'Remote Access',
       'item': 'rdp check',
       'status': status,
@@ -43,9 +49,45 @@ Map<String, dynamic> _report({String rdpStatus = 'Vulnerable'}) =>
       'startup_entries': <Map<String, dynamic>>[],
       'scheduled_tasks': <Map<String, dynamic>>[],
       'sections': ['defender', 'rdp', 'startup', 'scheduled_tasks'],
+      'section_times': {
+        'defender': 1762000000,
+        'rdp': rdpStatus == 'Secure' ? 1762003600 : 1762000000,
+        'startup': 1762000000,
+        'scheduled_tasks': 1762000000,
+      },
       'partial': false,
       'merged': rdpStatus == 'Secure',
       'refreshed': rdpStatus == 'Secure' ? ['rdp'] : <String>[],
+    };
+
+/// A merged report whose untouched section is visibly older than the re-read
+/// one: `defender` was collected an hour before `rdp` was.
+Map<String, dynamic> _mergedReport() => <String, dynamic>{
+      'score': 79,
+      'findings': [
+        <String, dynamic>{
+          'id': 'defender',
+          'section': 'Defender',
+          'item': 'real-time protection',
+          'status': 'Vulnerable',
+          'severity': 'Low',
+          'description': 'Defender real-time protection is off',
+          'fix_available': false,
+        },
+        _finding('Secure'),
+      ],
+      'startup_entries': <Map<String, dynamic>>[],
+      'scheduled_tasks': <Map<String, dynamic>>[],
+      'sections': ['defender', 'rdp', 'startup', 'scheduled_tasks'],
+      'section_times': {
+        'defender': 1762000000,
+        'rdp': 1762003600,
+        'startup': 1762000000,
+        'scheduled_tasks': 1762000000,
+      },
+      'partial': false,
+      'merged': true,
+      'refreshed': ['rdp'],
     };
 
 ProviderContainer _container(EngineIpc ipc) {
@@ -122,5 +164,48 @@ void main() {
 
     expect(ipc.requests.single['params'], isNull);
     expect(container.read(auditProvider).report, isNotNull);
+  });
+
+  test('the model knows which sections a merged report did not re-read', () {
+    final merged = AuditReport.fromJson(_mergedReport());
+    expect(merged.merged, isTrue);
+    expect(merged.refreshed, ['rdp']);
+    expect(merged.wasReRead('rdp'), isTrue,
+        reason: 'the section the fix re-read is current');
+    expect(merged.wasReRead('defender'), isFalse,
+        reason: 'everything else is only as fresh as the last full audit');
+    expect(merged.collectedAt('defender'),
+        DateTime.fromMillisecondsSinceEpoch(1762000000 * 1000));
+    expect(merged.collectedAt('nope'), isNull,
+        reason: 'a section the engine did not stamp has no age, not an epoch');
+
+    // A full audit re-read everything, so nothing is stale.
+    final full = AuditReport.fromJson(_report());
+    expect(full.merged, isFalse);
+    expect(full.wasReRead('defender'), isTrue);
+  });
+
+  testWidgets('the audit screen shows the age of the sections it did not re-read',
+      (tester) async {
+    // The engine answers with a merged report: `rdp` was re-read, `defender`
+    // was not, and the two inventory sections came from the same full audit.
+    final engine = FakeEngine(fixtures: {'audit.run': _mergedReport()});
+    final mounted = await openScreen(tester, const AuditScreen(), engine: engine);
+    await mounted.container.read(auditProvider.notifier).runAudit();
+    await settle(tester);
+
+    final labels = find.textContaining('Not re-checked now');
+    expect(labels, findsNWidgets(3),
+        reason: 'the defender card plus the two inventory headers — and never '
+            'the finding whose section was re-read');
+    final texts = labels
+        .evaluate()
+        .map((e) => e.widget)
+        .whereType<Text>()
+        .map((t) => t.data ?? '')
+        .toList();
+    expect(texts, hasLength(3));
+    expect(texts.every((t) => RegExp(r'\d{1,2}:\d{2}').hasMatch(t)), isTrue,
+        reason: 'each line names the time the section was really read: $texts');
   });
 }

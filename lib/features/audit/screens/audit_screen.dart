@@ -89,9 +89,14 @@ class AuditScreen extends ConsumerWidget {
           Text(context.tr('audit.subtitle'),
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
           const SizedBox(height: 16),
-          for (final f in report.findings) _FindingCard(finding: f),
+          for (final f in report.findings)
+            _FindingCard(
+                finding: f,
+                staleSince: _staleSince(context, report, f.sectionId)),
           const SizedBox(height: 16),
-          _SectionHeader(title: context.tr('audit.startup')),
+          _SectionHeader(
+              title: context.tr('audit.startup'),
+              staleSince: _staleSince(context, report, 'startup')),
           for (final s in report.startupEntries)
             ListTile(
               dense: true,
@@ -108,7 +113,9 @@ class AuditScreen extends ConsumerWidget {
                       AppTheme.mono(size: 10, color: AppColors.cyan)),
             ),
           const SizedBox(height: 16),
-          _SectionHeader(title: context.tr('audit.tasks')),
+          _SectionHeader(
+              title: context.tr('audit.tasks'),
+              staleSince: _staleSince(context, report, 'scheduled_tasks')),
           if (report.scheduledTasks.isEmpty)
             Padding(
               padding: EdgeInsets.all(12),
@@ -132,15 +139,53 @@ class AuditScreen extends ConsumerWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
+  const _SectionHeader({required this.title, this.staleSince});
   final String title;
+
+  /// The "last read at ..." line, for a section a merged report did not
+  /// re-read. `null` means the section is current (or the engine did not say).
+  final String? staleSince;
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 8),
-      child: Text(title,
-          style: TextStyle(
-              color: AppColors.cyan, fontWeight: FontWeight.w700)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: TextStyle(
+                color: AppColors.cyan, fontWeight: FontWeight.w700)),
+        if (staleSince != null) _StaleLine(label: staleSince!),
+      ]),
+    );
+  }
+}
+
+/// "Not re-checked now — read at 14:03": a merged audit is complete, but every
+/// section it did not re-read is only as fresh as the last full audit, and the
+/// screen must say which those are instead of presenting them as new (و4).
+String? _staleSince(BuildContext context, AuditReport report, String sectionId) {
+  if (report.wasReRead(sectionId)) return null;
+  final at = report.collectedAt(sectionId);
+  if (at == null) return null;
+  return context
+      .tr('audit.sectionAge')
+      .replaceAll('{time}', TimeOfDay.fromDateTime(at).format(context));
+}
+
+class _StaleLine extends StatelessWidget {
+  const _StaleLine({required this.label});
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(children: [
+        Icon(Icons.history, size: 12, color: AppColors.muted),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(label,
+              style: AppTheme.mono(size: 10, color: AppColors.muted)),
+        ),
+      ]),
     );
   }
 }
@@ -203,8 +248,12 @@ Future<void> _explainFinding(
 }
 
 class _FindingCard extends ConsumerWidget {
-  const _FindingCard({required this.finding});
+  const _FindingCard({required this.finding, this.staleSince});
   final AuditFinding finding;
+
+  /// Set when a merged report did not re-read this finding's section, so the
+  /// card cannot look fresher than the check behind it.
+  final String? staleSince;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -264,6 +313,7 @@ class _FindingCard extends ConsumerWidget {
                 Text(finding.description,
                     style: TextStyle(
                         color: AppColors.muted, fontSize: 12.5)),
+                if (staleSince != null) _StaleLine(label: staleSince!),
               ],
             ),
           ),

@@ -19,8 +19,8 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 23 files | 104 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 17 modules | 138 declared cases | `engine.test` step |
+| Dart tests | 23 files | 106 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Engine tests | 17 modules | 139 declared cases | `engine.test` step |
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
@@ -202,7 +202,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 
 | Test file | Declared cases |
 |---|---|
-| `test/audit_merge_test.dart` | 5 |
+| `test/audit_merge_test.dart` | 7 |
 | `test/crash_report_model_test.dart` | 3 |
 | `test/dark_contrast_audit_test.dart` | 0 |
 | `test/i18n_lint_test.dart` | 1 |
@@ -225,7 +225,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **104** in 23 files |
+| **total** | **106** in 23 files |
 
 ### Engine: the modules under engine/src with tests
 
@@ -246,9 +246,9 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/secrets.rs` | 5 |
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 8 |
-| `engine/src/tests.rs` | 48 |
+| `engine/src/tests.rs` | 49 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **138** in 17 modules |
+| **total** | **139** in 17 modules |
 
 ## What runs where
 

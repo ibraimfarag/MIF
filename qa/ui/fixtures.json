@@ -5,6 +5,7 @@
       "score": 62,
       "findings": [
         {
+          "id": "defender",
           "section": "Defender",
           "item": "Real-time Protection",
           "status": "Secure",
@@ -13,6 +14,7 @@
           "fix_available": false
         },
         {
+          "id": "smbv1",
           "section": "SMBv1",
           "item": "SMBv1 protocol",
           "status": "Vulnerable",
@@ -21,6 +23,7 @@
           "fix_available": true
         },
         {
+          "id": "firewall",
           "section": "Firewall",
           "item": "Outbound default",
           "status": "Warning",
@@ -29,6 +32,7 @@
           "fix_available": true
         },
         {
+          "id": "rdp",
           "section": "RDP",
           "item": "Remote Desktop",
           "status": "Secure",
@@ -37,6 +41,18 @@
           "fix_available": false
         }
       ],
+      "sections": ["defender", "firewall", "rdp", "smbv1", "startup", "scheduled_tasks"],
+      "section_times": {
+        "defender": 1762000000,
+        "firewall": 1762000000,
+        "rdp": 1762003600,
+        "smbv1": 1762000000,
+        "startup": 1762000000,
+        "scheduled_tasks": 1762000000
+      },
+      "partial": false,
+      "merged": true,
+      "refreshed": ["rdp"],
       "startup_entries": [
         {
           "name": "OneDrive",
@@ -227,21 +243,21 @@
       {
         "id": "smbv1_off",
         "name": "Disable SMBv1",
-        "name_ar": "إيقاف SMBv1",
+        "name_ar": "Ø¥ÙŠÙ‚Ø§Ù SMBv1",
         "explanation": "SMBv1 has no place on a workstation.",
         "applied": false
       },
       {
         "id": "rdp_off",
         "name": "Disable Remote Desktop",
-        "name_ar": "إيقاف سطح المكتب البعيد",
+        "name_ar": "Ø¥ÙŠÙ‚Ø§Ù Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ø§Ù„Ø¨Ø¹ÙŠØ¯",
         "explanation": "Nothing listens on 3389 when RDP is off.",
         "applied": true
       },
       {
         "id": "uac_on",
         "name": "Require UAC consent",
-        "name_ar": "طلب موافقة UAC",
+        "name_ar": "Ø·Ù„Ø¨ Ù…ÙˆØ§ÙÙ‚Ø© UAC",
         "explanation": "Elevation prompts for every administrator action.",
         "applied": true
       }
