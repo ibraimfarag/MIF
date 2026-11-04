@@ -864,6 +864,14 @@ click (P1.5) or a purchased certificate (P4).
     workflows were parsed with PyYAML: `ci` = 1 job / 6 steps, `release` = 5 jobs
     (`version`, `package-x64` 10 steps, `engine-arm64` 5, `package-arm64` 7,
     `publish` 6).
+  - **One measured difference between the two machines is now closed (D-029).** The
+    runner installed **Flutter 3.47.9** (newest stable, published 2026-10-29) while
+    this machine verifies with **3.47.8** (framework `737ba8f885`) - the workflow
+    asked for `channel: stable` and no version, so it followed the channel. Every
+    job now pins `flutter-version: 3.47.8` and `toolchain: 1.99.1` (the local rustc),
+    and D-029 records that moving either is a decision with its own measurement. That
+    is a candidate cause for the one Dart failure (two of the cases measure what
+    Material paints), not a proven one: the run's log still has to name the test.
 
 - **The history was rewritten so the repository can go public (2026-11-04)**
   - **Why.** The user wanted the work to stay in one place, so the repository itself

@@ -19,10 +19,22 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned to the version this project is verified against locally (3.47.8,
+          # framework 737ba8f). `channel: stable` alone means CI silently follows the
+          # newest patch release, which is how a red build appears without a code
+          # change - and one of the 136 Dart cases failed on the runner while passing
+          # here (CI run 41922021833, "135 tests passed, 1 failed"), with 3.47.9
+          # published four days before that run.
+          flutter-version: 3.47.8
           cache: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # Same reason: the release binaries should be built by a known toolchain,
+          # and moving it is a decision (recorded in docs/DECISIONS.md), not a
+          # side effect of `stable` moving.
+          toolchain: 1.99.1
 
       - name: Cache cargo registry and build output
         uses: actions/cache@v4

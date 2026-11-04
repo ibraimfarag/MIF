@@ -95,10 +95,13 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.8   # the version this project is verified against
           cache: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1   # a known compiler builds a signed release
 
       # Unset CARGO_TARGET_DIR (make-release builds into engine\target when it is
       # empty), so the cache path below is the one that gets reused.
@@ -207,11 +210,13 @@ jobs:
         with:
           channel: stable
           architecture: x64
+          flutter-version: 3.47.8   # same pin as the x64 job: CI must not drift
           cache: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.99.1
           # make-release.ps1 -Arch arm64 checks for this target's libs and stops
           # before packaging when it is missing.
           targets: aarch64-pc-windows-msvc

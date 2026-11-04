@@ -1329,3 +1329,33 @@ written. A country-sized `RemoteAddresses` string has no documented ceiling and 
 not measured (changing the firewall needs administrator rights, which the probe has
 through the helper but chooses not to spend on a guess): it stays one rule per
 country, exactly as before, and the open question is in the register.
+
+---
+
+## D-029 — CI and release builds pin their toolchains
+
+**Status:** accepted (2026-11-04)
+
+**Decision.** Every job that compiles or tests MI CS installs a **named** toolchain
+instead of whatever `stable` means that day: Flutter **3.47.8** (framework
+`737ba8f885`) and Rust **1.99.1**. Moving either is a decision that gets recorded
+here, not a side effect of a Wednesday.
+
+**Why.** The first CI run on the public repository failed in `Pipeline (full)` with
+**"135 tests passed, 1 failed"** (run 41922021833) while the same 136 Dart cases pass
+on this machine - including in a fresh `--depth 1` clone of that very commit and
+again with the runner's own environment forced (`CI`, `GITHUB_ACTIONS`,
+`USERNAME=runneradmin`, `USERPROFILE`, `TZ=UTC`, `LANG`). One measured difference
+between the two runs was the Flutter version: local **3.47.8** against **3.47.9**,
+published four days before that run, which the workflow picked up silently because
+it asked for `channel: stable` with no version. Two of the Dart cases measure what
+Material actually paints (`test/dark_contrast_audit_test.dart`), which is exactly the
+kind of assertion a patch release can move. The pin removes that class of
+difference; it is not proof about that specific failure, and the run's log still
+names the test if it persists.
+
+**Commits us to.** A toolchain bump is its own commit with the measurement that
+justifies it (the same rule as the opsec ratchet: numbers move with evidence), and
+the local developer's versions are the reference - so the pin and the machine that
+verifies it agree. It also means a signed release is built by a known compiler,
+which matters more once ب5's certificate exists than it does today.
