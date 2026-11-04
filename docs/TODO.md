@@ -858,6 +858,13 @@ click (P1.5) or a purchased certificate (P4).
     does not carry them), so the committed pair describes 3.47.8 and the runner was
     building with 3.47.9. With `flutter-version: 3.47.8` pinned it should match - and
     that is a prediction, not a result: the next `Release` run is what settles it.
+  - **The CI now names its own failure.** Job logs need a signed-in browser (the public
+    API answers 403 on `actions/jobs/{id}/logs`), which is why every diagnosis above
+    cost a round trip with the user. The `Pipeline (full)` step tees its output to
+    `build/pipeline-log.txt` and, on failure, prints the last matching lines as
+    `::error::` annotations - the same public surface the Dart reporter already used.
+    Verified locally with the exact snippet: `-Tier fast` through `Tee-Object` still
+    returns **exit 0** on PASS and the log holds all 388 lines.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the

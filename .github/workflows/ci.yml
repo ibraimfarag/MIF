@@ -48,9 +48,25 @@ jobs:
 
       # The same script a human runs before a commit, so the two cannot drift.
       # `full` adds the release builds that used to live only here.
+      #
+      # The output is tee'd so a failure can name itself in an annotation: job logs
+      # need a signed-in browser (the public API answers 403), annotations do not, and
+      # `pipeline.ps1` fails fast without saying which step failed once it is gone.
       - name: Pipeline (full)
         shell: pwsh
-        run: ./scripts/pipeline.ps1 -Tier full
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $log = 'build/pipeline-log.txt'
+          & ./scripts/pipeline.ps1 -Tier full *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Get-Content $log |
+              Select-String -Pattern 'RESULT: FAIL|passed;|Expected:|Actual:|panicked at|^ *FAIL \(' |
+              Select-Object -Last 12 |
+              ForEach-Object { Write-Output "::error:: $($_.Line.Trim())" }
+            exit $code
+          }
 
       # The measured half of QA next to the committed report: the contract run's
       # own JSON and the step report, so a reviewer sees what executed.
