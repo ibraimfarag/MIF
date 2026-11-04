@@ -818,14 +818,15 @@ click (P1.5) or a purchased certificate (P4).
     bundle records a complete history". It is now the only copy of the pre-rewrite
     history: filter-repo repacks and prunes the old objects when it finishes.
   - **The rewrite.** `git filter-repo --path dist --invert-paths --replace-text
-    <<account>==><account>>` (git-filter-repo a40bce5). A stale
+    <expressions>` (git-filter-repo a40bce5), where the one expression maps the
+    machine's account name to `<account>`. A stale
     `.git/filter-repo/already_ran` from **2026-10-27** made the first attempt stop at
     an interactive prompt (`EOFError` in a non-interactive shell, before touching
     anything - HEAD and tree were verified unchanged afterwards), so the marker was
     removed and the run repeated. Took 6.9 s.
   - **Verified, not assumed.** 147 → **145** commits (two commits held nothing but
     `dist/` and were pruned); `git log --all --name-only -- dist/` returns nothing;
-    `git log --all -S '<account>'` returns nothing; HEAD's tree is
+    a history-wide search for the account name returns nothing; HEAD's tree is
     **byte-identical** (`2c0b83a9c3986f7000c02cc497a6d8739f78b01e` before and after,
     267 tracked files, clean working tree); the author/committer identity is
     unchanged on purpose (the user chose to keep `ib.farag@gmail.com`, which never
