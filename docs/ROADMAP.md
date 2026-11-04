@@ -177,13 +177,31 @@ the project returns to afterwards.
 
 ## 4. Blocked on the user (do not plan around these)
 
-1. **The 15-minute helper acceptance** (`docs/TODO.md` §0.2, `PRIVILEGED-OPS.md`):
-   Settings → Engine → Install helper is already installed and reachable; what is
-   left is enabling Default-Deny, turning SMBv1 off and importing a hosts list in one
-   session and confirming **zero** further prompts plus one `phase=start`/`phase=done`
-   pair per operation in `%PROGRAMDATA%\MICS\logs\priv.log`.
-2. **A signing certificate** (ب5): OV (~$200–400/yr, days of validation) or Azure
-   Trusted Signing (~$10/month, faster). Costs and constraints: `docs/COST.md`.
+Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §0.2.
+
+1. **د3 - three clicks, and the helper acceptance rides along.** Run
+   `dist\MICS-setup-0.1.0-x64.exe` (all users, one prompt, it installs the helper
+   too), then in the installed app turn Default-Deny on, disable SMBv1 and add one
+   IDS domain (zero further prompts), then uninstall it from Apps & features. I
+   measure the install tree, the AUMID shortcuts, the service's `ImagePath`, three
+   `phase=start`/`phase=done` pairs in `priv.log`, and that the uninstall removes
+   both halves. Reminders: the old per-machine copy is already gone (2026-11-04), and
+   the leftover `MICSHelper` pointing at a debug build is expected - the new
+   installer re-creates it.
+2. **A signing certificate** (ب5, the only HIGH row left): OV/EV or a cloud signing
+   service, with the subject **exactly `CN=MI CS Code Signing`** (D-016). Free for
+   open-source projects through SignPath. Costs and constraints: `docs/COST.md`.
+   Then ب6 publishes - which needs a **place to publish** (item 3 below).
+3. **Seven decisions that each stop ready work**: where the release is published
+   (also هـ1's default update URL); whether licensed GeoIP lists may be bundled;
+   starter pack vs real detection rules; thumbprint pin vs CN (D-016); IDS beyond
+   DNS; real-time watching (و2); and the language-tag policy.
+4. **D-023 and the bridge endpoint** - what holds ز2-د (crash-report delivery), and a
+   choice no code can make for you (AGENTS.md 8 forbids inventing a destination).
+5. **A Windows on ARM machine** (optional): the engine builds and is checked for
+   ARM64, but the app needs an ARM64 host, and nothing ARM64 has ever *run* here.
+6. **Public or private repository**: public unlocks GitHub's ARM64 runners and
+   SignPath's free signing; the licence is GPL-3.0 either way.
 
 ## 5. Out of scope by design (not "remaining work")
 

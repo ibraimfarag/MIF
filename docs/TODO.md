@@ -281,32 +281,67 @@ signing (the certificate, §0.2 item 2).
 
 ### 0.2 Blocked on the user
 
-1. **The IDS domain add - the last operation of the helper acceptance (this finishes
-   P1.5).**
-   Measured on 2026-11-01 by the user, on a real install, with **one** UAC prompt in
-   total: the helper was installed and is running from `%LOCALAPPDATA%\MI CS`
-   (`STATE : 4 RUNNING`, `ImagePath "...\MI CS\mics-engine.exe" helper-service`); the
-   SMBv1 apply went through and its rollback was pressed from the UI and answered
-   `ok=true` in 3184 ms; Default-Deny went on and off (`ok=true`, 1651 ms / 1899 ms).
-   All of them through the helper, none of them with a prompt. The **IDS add** is the
-   one that failed, three times in a row, on the validator bug that is fixed now (Done
-   log). What is left:
-   - swap in the rebuilt engine and press **Repair (one prompt)** in Settings → Engine,
-     because the helper is a running process and only loads the fixed binary when it
-     restarts;
-   - then add one domain in **IDS (L2)** - that is the hosts write - and check the
-     hosts file kept its BOM and gained the managed section.
-   Expect **zero** further prompts and one `phase=start`/`phase=done` pair per
-   operation in `%PROGRAMDATA%\MICS\logs\priv.log`.
-   unelevated by `scripts\verify-helper.ps1`.
-2. **A real OV/EV certificate (this is the public half of P4).** The local half is
-   done: `scripts\make-release.ps1 -Sign` self-signs, trusts the certificate in
+Everything below waits on a human, and nothing else in the plan does. It was
+recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
+
+1. **د3: three clicks, and the helper acceptance happens in the same session.**
+   The old per-machine install was removed on 2026-11-04 (measured: `C:\Program
+   Files\MI CS` and the `HKLM\...\Uninstall\MICS` entry are both gone; the leftover
+   `MICSHelper` service still points at `engine\target\debug\mics-engine.exe`, and
+   that is expected - the new installer's `install-helper` stops, deletes and
+   re-creates the definition, so no manual cleanup is needed).
+   The setup to run is the one built from `main` on 2026-11-03 17:20:
+   `dist\MICS-setup-0.1.0-x64.exe`, 16,628,250 bytes,
+   `sha256 CB6F912FB60C066FE751CFC3C176A696F29CDBA4359E6126E15FF9B2E19E41CA`.
+   - **click 1** - run the setup, UAC yes, Next/Install/Finish. It shows "Unknown
+     publisher" (ب5 is the fix) and installs **all users** with **one** prompt,
+     including the helper. If it warns that the helper was not installed, stop and
+     report that instead of continuing.
+   - **click 2** - in the installed app, in **one** session: Network → *Default deny
+     outbound* on; Hardening → *Disable SMBv1*; IDS → add one domain (that is the
+     hosts write). Expect **zero** further prompts; a prompt means D-007's promise is
+     broken and the operation's name is what matters.
+   - **click 3** - uninstall from Apps & features; the uninstaller must remove the
+     product **and** the helper in that one prompt, and a "could not remove its
+     privileged helper" box means D-026 is broken.
+   What I measure afterwards: the installed tree and shortcuts with their AUMID, the
+   `Apps & features` row, that `MICSHelper` now points into `%ProgramFiles%\MI CS`,
+   three `phase=start`/`phase=done` pairs in `%PROGRAMDATA%\MICS\logs\priv.log`, the
+   firewall/SMB/hosts values read back from the OS itself, that the per-user copy in
+   `%LOCALAPPDATA%\MI CS` is never touched, and that the uninstall leaves nothing
+   behind.
+2. **A real signing certificate (ب5, the only HIGH row in §7).** The local half is
+   done and tested: `scripts\make-release.ps1 -Sign` self-signs through
    `CurrentUser\Root` + `TrustedPublisher`, signs DLLs then EXEs before hashing and
-   zipping. A public release needs the certificate (the `-PfxPath`/`-PfxPassword`
-   path already timestamps), and only then does SmartScreen stop warning strangers.
-3. ~~**Two decisions**~~ — both answered on 2026-10-31: the VirusTotal client is
-   **deleted** (D-019, small step 2), and the Start-Menu shortcut keeps the name
-   `MI CS` (D-020, small step 3 — no code change).
+   zipping. A public release needs the bought certificate (`-PfxPath`/`-PfxPassword`
+   already timestamps). **The subject must be exactly `CN=MI CS Code Signing`**
+   (D-016 pins that name; a different one needs a new decision entry), and
+   `docs/COST.md` carries the routes and their trade-offs - including the free
+   SignPath route for open-source projects, which is only available while the source
+   is public. Then **ب6**: a version bump, the signed zip + installer and a place to
+   publish.
+3. **Seven decisions, one line each.** Every one of them stops work that is otherwise
+   ready: *(a)* where the release is published (GitHub Releases? a self-hosted file?
+   it also becomes هـ1's default update URL); *(b)* whether licensed **GeoIP**
+   country lists may be bundled, since the licensing is unclear; *(c)* whether the
+   detection content stays the **starter pack** or real rules are written; *(d)*
+   whether the update pin moves to the certificate **thumbprint** (D-016) once a
+   certificate exists; *(e)* whether **IDS** grows past the DNS blocklist
+   (Suricata/ET-Open is out of scope today, so this reopens a decision); *(f)*
+   whether **real-time watching** (و2, 6-10 h) is wanted, because it costs CPU
+   continuously; *(g)* the **language-tag policy** (which tags the engine accepts and
+   the UI can render).
+4. **D-023 and the bridge endpoint, which is what holds ز2-د (delivery).** A
+   deliberate choice about where crash reports go, and an endpoint for the Open
+   WhatsApp bridge. No code can be written before the answer, and inventing one would
+   break the no-telemetry rule (AGENTS.md 8).
+5. **A Windows on ARM machine (optional, and it is the last ARM64 step).** The engine
+   builds and is checked for `aarch64-pc-windows-msvc` (ب2), but the Flutter app has
+   no Windows cross-compile, so an ARM64 download needs an ARM64 host - and it is
+   also the only way any ARM64 binary will ever be *run* here.
+6. **Whether the repository goes public (a decision with two free unlocks).** GitHub's
+   ARM64 Windows runners are public-repo only, and SignPath signs qualifying
+   open-source projects for free. MI CS is GPL-3.0 (D-001) either way.
 
 ### 0.3 The plan, in order — what a new session works through
 
