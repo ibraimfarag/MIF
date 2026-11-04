@@ -421,25 +421,27 @@ needs first, all of it measured rather than assumed:
    `THIRD-PARTY-NOTICES` regenerated at that version, `dart run tool\sbom.dart
    --check` PASS).
 
-**What is left for you, in order** (the push below is the only step that needs your
-GitHub account; `gh` is not installed):
+**What is left, and what is already done** (the visibility switch is the only step
+that needs your GitHub account; `gh` is not installed):
 
 ```powershell
-# 1. The rewritten history is pushed to the same repository as soon as you say go:
-git remote add origin git@github.com:ibraimfarag/MIF.git   # filter-repo removed it
-git push --force-with-lease origin main
-#    After that: Settings -> General -> Danger Zone -> Change visibility -> Public.
+# DONE 2026-11-04: the rewritten history is on the remote.
+#   remote main = 1ae33a4, 147 commits, .git 6.2 MB (was 106.4 MB), and neither
+#   `dist/` nor the account name appears in any revision or commit message.
+#   The branch tracks origin/main again (filter-repo drops the remote each run).
 
+# 1. YOUR STEP: Settings -> General -> Danger Zone -> Change visibility -> Public.
 # 2. If you have any other clone or worktree of this repository, re-clone it. It
 #    still holds the old history, and pulling will not clean it.
+# 3. Optional, and the only way to hurry GitHub along: a support request asking them
+#    to remove the now-unreachable objects. They can stay in internal storage for a
+#    while; their SHAs are not published anywhere, which is what keeps that residual
+#    small.
 ```
 
-Then run the Release workflow once by hand (Actions → Release → Run workflow,
-version `0.1.0`) and read the log: it is the first execution of
-`.github/workflows/release.yml`, and the ARM64 jobs are informational until they
-have a green run. Keep `MIF-prepublic-backup.bundle` (29.3 MB, one directory above
-the repository) until you are sure the rewrite was right - it is the only copy of
-the pre-rewrite history that exists anywhere.
+Keep `MIF-prepublic-backup.bundle` (29.3 MB, one directory above the repository)
+until you are sure the rewrite was right - it is the only copy of the pre-rewrite
+history that exists anywhere.
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -837,6 +839,19 @@ click (P1.5) or a purchased certificate (P4).
     the unreachable old objects in internal storage for a while (a support request
     can force their removal), and every other clone of this repository still holds
     the old history and must be re-cloned rather than pulled.
+  - **A second pass, because the first commit after the rewrite put the string back.**
+    The Done-log entry spelled the account name out twice - inside the filter-repo
+    expression and inside the search command that proves it is gone - and the commit
+    message carried it too. Found by running the search *after* committing. Fixed in
+    two steps: the entry now describes the mechanism without quoting the string, and
+    a second filter-repo pass (`--replace-text` + `--replace-message`) took it out of
+    the two commit messages and the one revision that still had it. Verified
+    afterwards across every revision, not just HEAD: no blob in any of the 147
+    commits and no commit message contains it. Then the branch was force-pushed again
+    (remote main = `1ae33a4`, matching local), the upstream was restored -
+    filter-repo drops the `origin` remote on every run - and the local `reflog` and
+    unreachable objects were pruned, leaving the bundle as the only copy of the
+    pre-rewrite history.
 
 - **The README's ARM64 claim matches the corrected one (2026-11-04)**
   - The public face said "an ARM64 download needs an ARM64 build host; until then an
