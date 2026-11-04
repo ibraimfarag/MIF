@@ -203,10 +203,14 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
    ARM64, but the app needs an ARM64 host, and nothing ARM64 has ever *run* here.
    CI now supplies that host: the release workflow's two `windows-11-arm` jobs run
    the engine's tests natively (informational until they have a green run).
-6. **~~Public or private repository~~** - **decided 2026-11-04: public, as a fresh
-   repository built from an orphan snapshot commit** (this one stays as the private
-   archive), and **one version number: 0.1.0**. The pre-public checks and the exact
-   commands are `docs/TODO.md` §0.2a.
+6. **~~Public or private repository~~** - **decided and prepared 2026-11-04: this
+   repository goes public.** The history was rewritten in place first (git-filter-repo:
+   `dist/` build artefacts dropped, the machine account name scrubbed from old
+   revisions) - 147 → 145 commits, no `dist/` path and no account name left in any
+   commit, HEAD's tree identical, `.git` 106.4 MB → 7.1 MB - and **one version
+   number: 0.1.0**. What remains is the force-push and the visibility switch (both
+   in `docs/TODO.md` §0.2a) and the نسخة bundle of the old history, which is the only
+   copy left of it.
 
 ## 5. Out of scope by design (not "remaining work")
 

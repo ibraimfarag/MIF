@@ -49,12 +49,14 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: on 2026-11-04 the user chose to make the repository public**, which is the
-> item §0.2 was waiting on, so the work in flight is now the pre-public and release
-> lane: `.github/workflows/release.yml` (written, **never run** — it needs a push to
-> GitHub), `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built and
-> checked for x64, refused for arm64 on an x64 package), and the history decision in
-> §0.2a. The last release-lane item that still needs you at the machine is **د3**
+> **next: on 2026-11-04 the user chose to make this repository public**, and its
+> history was rewritten for it (filter-repo: `dist/` artefacts and the account name
+> gone from every commit, HEAD's tree identical, `.git` 106.4 MB → 7.1 MB - §0.2a
+> item 2). What is left is the force-push and the visibility switch, and the release
+> lane is in place: `.github/workflows/release.yml` (written, **never run** — it needs
+> a push to GitHub), `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built
+> and checked for x64, refused for arm64 on an x64 package). The last release-lane
+> item that still needs you at the machine is **د3**
 > (E2E on the built installer): one per-machine run, and with that click the whole
 > product can be measured as a user meets it. ز2-د stays blocked on D-023 and the
 > bridge endpoint; the autonomous alternatives meanwhile are هـ1 (the default
@@ -349,14 +351,15 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    Since 2026-11-04 CI supplies that host: `.github/workflows/release.yml` carries
    two `windows-11-arm` jobs (the engine's tests run natively there), marked
    informational until they have a green run.
-6. **Whether the repository goes public - DECIDED 2026-11-04: yes, as a fresh
-   public repository, and the version becomes 0.1.0.** SignPath signs qualifying
+6. **Whether the repository goes public - DECIDED 2026-11-04: yes, this repository,
+   after rewriting its own history (and the version becomes 0.1.0).** SignPath signs
+   qualifying
    open-source projects for free, and the runner reference gives public repositories
    4 vCPU Windows runners with free, unlimited minutes (private repositories get
    2 vCPU drawing on included minutes). MI CS is GPL-3.0 (D-001) either way.
    **Corrected 2026-11-04:** ARM64 runners (`windows-11-arm`) are *not* public-repo
-   only — see the D-003 correction. The two decisions taken with the answer are in
-   §0.2a items 2 and 5.
+   only — see the D-003 correction. The rewrite is measured in §0.2a item 2; all that
+   is left is the force-push and the visibility switch.
 
 ### 0.2a Before the repository is flipped to public (measured 2026-11-04)
 
@@ -370,20 +373,34 @@ needs first, all of it measured rather than assumed:
    `tool/`). All four now read `<account>` / `<repo root>`, and the same search
    returns nothing at HEAD (commit 8a54e69) - including in this section, which
    deliberately does not spell the name out.
-2. **The history is not clean, and the route is decided: a FRESH public repository.**
-   `.git` is **106.4 MB** and 142 commits carry (a) a **34,000,312-byte**
-   `mics-engine.exe` committed under `dist/MICS-v1.0.0-windows-portable/` — a build
-   from *before* the ط1 fingerprint sweep, so it very likely contains the account's
-   `.cargo` paths in binary form — plus `app.so` copies, and (b) the account name in
-   **13** textual places and a personal Gmail address. The user chose on 2026-11-04
-   to **start a fresh public repository from the current tree**, which is the safer
-   of the two routes: a single-commit snapshot cannot leak a rewritten-history
-   remnant, and this repository stays as the private archive. `git switch --orphan
-   public` has been prepared with that one commit (branch `public`, verified to
-   contain no account name, no `dist/` and no state files); GitHub keeps unreachable
-   objects and cached views, which is exactly why the rewrite route was dropped.
-   **Push it to the new repository and only then flip anything to public** — the
-   commands are at the end of this section.
+2. **The history was NOT clean, and it has been rewritten in place - DONE 2026-11-04.**
+   `.git` was **106.4 MB** and the history carried (a) a **34,000,312-byte**
+   `mics-engine.exe` committed under `dist/MICS-v1.0.0-windows-portable/`, a build
+   from *before* the ط1 fingerprint sweep (so it holds the account's `.cargo` paths
+   in binary form - `git log -S` matched the name inside it) plus `app.so` copies,
+   and (b) the account name in **13** textual places. The user first chose a fresh
+   snapshot repository and then changed the decision the same day: **work stays in
+   one place, so this repository is the one that goes public**, which means the
+   history had to be rewritten. Measured, before and after:
+   - `git filter-repo --path dist --invert-paths --replace-text ...` (git-filter-repo
+     a40bce5), with a verified `git bundle` of the old history taken first
+     (`MIF-prepublic-backup.bundle`, 29.3 MB, outside the repository).
+   - **145 commits** (was 147; two commits contained nothing but `dist/` and were
+     pruned), **no `dist/` path in any commit**, **no commit contains the account
+     name** (`git log --all -S` returns nothing), and the author/committer identity
+     is deliberately unchanged (`ibrahim ahmed <ib.farag@gmail.com>` - the user's
+     decision, and the address never appeared in any file's content, only in commit
+     metadata).
+   - **The tree at HEAD is byte-identical**: tree `2c0b83a9c3986f7000c02cc497a6d8739f
+     78b01e` before and after, working tree clean, 267 tracked files. `.git` is
+     **7.1 MB** now.
+   - Every commit hash changed, so hashes cited in this file from before 2026-11-04
+     (and the `8a54e69` above) name commits of the **pre-public** history. The
+     documents, not the hashes, are the record that travels with the code.
+   - Residual, stated rather than hidden: GitHub can keep the now-unreachable old
+     objects in internal storage for a while (a support request can force their
+     removal), and **any other clone or worktree of this repository still holds the
+     old history** and must be re-cloned instead of pulled.
 3. **What the checkout contains that must never be published**: the VM lab's
    malware samples, `%LOCALAPPDATA%\MICS` state (`mics.db`, `secrets.dat`), and
    `dist/` (already ignored). The working tree is otherwise free of credentials:
@@ -404,28 +421,25 @@ needs first, all of it measured rather than assumed:
    `THIRD-PARTY-NOTICES` regenerated at that version, `dart run tool\sbom.dart
    --check` PASS).
 
-**What is left for you, in order** (nothing here can be done from this machine -
-creating the repository needs your GitHub account, and `gh` is not installed):
+**What is left for you, in order** (the push below is the only step that needs your
+GitHub account; `gh` is not installed):
 
 ```powershell
-# 1. On GitHub: create an EMPTY repository (no README, no .gitignore, no licence -
-#    the tree already has them). Suggested name: mi-cs.
-# 2. Push the prepared snapshot: branch `public` is a single commit holding this
-#    tree and nothing else, so none of the old history is uploaded.
-git remote add public git@github.com:<your-account>/mi-cs.git
-git push public public:main
+# 1. The rewritten history is pushed to the same repository as soon as you say go:
+git remote add origin git@github.com:ibraimfarag/MIF.git   # filter-repo removed it
+git push --force-with-lease origin main
+#    After that: Settings -> General -> Danger Zone -> Change visibility -> Public.
 
-# 3. Recommended once that works: make the public repository the working one and
-#    keep this one as the readable archive, so public development has a normal
-#    history from that commit onwards.
-git remote rename origin archive
-git remote rename public origin
+# 2. If you have any other clone or worktree of this repository, re-clone it. It
+#    still holds the old history, and pulling will not clean it.
 ```
 
 Then run the Release workflow once by hand (Actions → Release → Run workflow,
 version `0.1.0`) and read the log: it is the first execution of
 `.github/workflows/release.yml`, and the ARM64 jobs are informational until they
-have a green run.
+have a green run. Keep `MIF-prepublic-backup.bundle` (29.3 MB, one directory above
+the repository) until you are sure the rewrite was right - it is the only copy of
+the pre-rewrite history that exists anywhere.
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -792,6 +806,37 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The history was rewritten so the repository can go public (2026-11-04)**
+  - **Why.** The user wanted the work to stay in one place, so the repository itself
+    is the one going public - which means its own history had to stop carrying two
+    things: a **34,000,312-byte** `mics-engine.exe` from *before* the ط1 fingerprint
+    sweep (committed under `dist/MICS-v1.0.0-windows-portable/`, and `git log -S`
+    finds the machine account name **inside the binary**), and the account name in
+    **13** textual places across old revisions.
+  - **Safety first.** `git bundle create MIF-prepublic-backup.bundle --all` (29.3 MB,
+    written one directory above the repository) and `git bundle verify` said "The
+    bundle records a complete history". It is now the only copy of the pre-rewrite
+    history: filter-repo repacks and prunes the old objects when it finishes.
+  - **The rewrite.** `git filter-repo --path dist --invert-paths --replace-text
+    <<account>==><account>>` (git-filter-repo a40bce5). A stale
+    `.git/filter-repo/already_ran` from **2026-10-27** made the first attempt stop at
+    an interactive prompt (`EOFError` in a non-interactive shell, before touching
+    anything - HEAD and tree were verified unchanged afterwards), so the marker was
+    removed and the run repeated. Took 6.9 s.
+  - **Verified, not assumed.** 147 → **145** commits (two commits held nothing but
+    `dist/` and were pruned); `git log --all --name-only -- dist/` returns nothing;
+    `git log --all -S '<account>'` returns nothing; HEAD's tree is
+    **byte-identical** (`2c0b83a9c3986f7000c02cc497a6d8739f78b01e` before and after,
+    267 tracked files, clean working tree); the author/committer identity is
+    unchanged on purpose (the user chose to keep `ib.farag@gmail.com`, which never
+    appeared in file content, only in commit metadata); `.git` went from **106.4 MB**
+    to **7.1 MB**. filter-repo removed the `origin` remote as designed, so it is
+    re-added before the force-push.
+  - **What is not provable from here, and is written down instead**: GitHub can keep
+    the unreachable old objects in internal storage for a while (a support request
+    can force their removal), and every other clone of this repository still holds
+    the old history and must be re-cloned rather than pulled.
+
 - **The README's ARM64 claim matches the corrected one (2026-11-04)**
   - The public face said "an ARM64 download needs an ARM64 build host; until then an
     ARM64 package does not exist (D-003 appendix)" in the status note and in the
@@ -831,11 +876,10 @@ click (P1.5) or a purchased certificate (P4).
     been written or run yet" instead. What CI still cannot do is reproduce P1.5's
     human half: a Windows runner is an administrator with UAC disabled, so it
     proves the operations and the audit pairs, never "one prompt, then silence".
-  - **The account name is out of the published tree**: 4 hits at HEAD → 0, with
-    the measured facts (two administrators, one of them the user) unchanged. The
-    history still carries it (13 places) and a 34,000,312-byte pre-ط1 engine
-    binary — that is §0.2a item 2, the one decision left before the repository is
-    flipped.
+  - **The account name is out of the published tree and now out of the history**: 4
+    hits at HEAD → 0, with the measured facts (two administrators, one of them the
+    user) unchanged, and the rewrite that followed took it out of every old revision
+    together with the 34,000,312-byte pre-ط1 engine binary (§0.2a item 2).
   - **`make-installer.ps1` is arch-aware** (`-Arch x64|arm64`, D-003): it names the
     output `MICS-setup-<version>-<arch>.exe`, passes `MICS_ARCH` to NSIS, checks
     the package's own binaries with `verify-hardening.ps1 -Arch` **before** wrapping
