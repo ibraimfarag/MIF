@@ -49,13 +49,20 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: on 2026-11-04 the user chose to make this repository public**, and its
-> history was rewritten for it (filter-repo: `dist/` artefacts and the account name
-> gone from every commit, HEAD's tree identical, `.git` 106.4 MB → 7.1 MB - §0.2a
-> item 2). What is left is the force-push and the visibility switch, and the release
-> lane is in place: `.github/workflows/release.yml` (written, **never run** — it needs
-> a push to GitHub), `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built
-> and checked for x64, refused for arm64 on an x64 package). The last release-lane
+> **next: the repository is public and its first CI run is on the record**
+> (`Release` 41922523593, `CI` 41922021833 on `5eb956a`): `Package (x64)` failed at
+> the step that is green on this machine (`make-release.ps1 -Sign`, re-run here:
+> `RESULT: PASS`), `CI` failed inside `Pipeline (full)` with **"135 tests passed, 1
+> failed"** — the Dart suite is 136 cases and passes here even in a fresh clone and
+> with the runner's environment forced, so the failing test's name has to come from
+> the run's log (it needs a signed-in browser; the public API answers 403). The
+> **ARM64 diagnosis is done and fixed**: Flutter publishes no Windows ARM64 SDK
+> (0 of 747 archives), so the job now asks for the x64 SDK and for
+> `targets: aarch64-pc-windows-msvc`, and both ARM64 jobs stay informational. The
+> release lane is otherwise in place: `.github/workflows/release.yml` (`version`,
+> `package-x64` 10 steps, `engine-arm64`, `package-arm64`, `publish`),
+> `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built and checked for
+> x64, refused for arm64 on an x64 package). The last release-lane
 > item that still needs you at the machine is **د3**
 > (E2E on the built installer): one per-machine run, and with that click the whole
 > product can be measured as a user meets it. ز2-د stays blocked on D-023 and the
@@ -807,6 +814,56 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **First CI run on the public repository: what failed, and what was fixed (2026-11-04)**
+  - **The run itself is on the record.** `Release` run **41922523593** (`main` =
+    `5eb956a`) and `CI` run **41922021833** on the same commit. `Release`:
+    `Resolve the version and tag` PASS, **`Package (x64)` FAIL** at step 6
+    ("Build, sign, hash and zip", i.e. `make-release.ps1 -Sign -Arch x64`),
+    **`Package (arm64)` FAIL** at step 2 ("Setup Flutter"),
+    `ARM64 engine, run natively` running, `Publish` **skipped** - which is the
+    dependency working as intended: nothing was published from a run that failed.
+    `CI`: `pipeline` FAIL inside `Pipeline (full)`, annotated
+    **"135 tests passed, 1 failed."**
+  - **That annotation is a Dart count, not a Rust one.** `flutter test` here runs
+    **136** cases (measured: `+136 All tests passed`), so 135 + 1 is that suite; the
+    Rust harness prints `test result: FAILED. N passed; M failed` with semicolons,
+    so it is not the engine's. Which test fails on the runner is **not known yet**:
+    job logs need authentication (the public API answers **403**) and the HTML page
+    is a shell, so the text has to come from the user's browser.
+  - **The environment is not the difference I could reproduce here.** The suite
+    passes locally in a **fresh `--depth 1` clone** of the published commit (no
+    tags, no `dist/`, no build outputs - 0 tags, 1 commit) and passes again with the
+    runner's own conditions forced (`CI=true`, `GITHUB_ACTIONS=true`,
+    `USERNAME=runneradmin`, `USERPROFILE=C:\Users\runneradmin`, `TZ=UTC`,
+    `LANG=en_US.UTF-8`). So it is either something only that image has or a flaky
+    timing test - the log decides.
+  - **`Package (x64)` is green on this machine, end to end**: re-ran the exact step
+    (`make-release.ps1 -Sign -Arch x64 -Version 0.1.0`) and read it to the end -
+    hardening PASS, opsec PASS, signing PASS (`Valid - CN=MI CS Code Signing,
+    O=Mourad Ibrahim (MI CS)`), manifest 68 files, tamper PASS, `RESULT: PASS`. So
+    the runner's failure is one of that script's own gates behaving differently
+    there, and again the log names which.
+  - **The ARM64 failure is diagnosed and fixed.** `Setup Flutter` failed because
+    Flutter publishes **no Windows ARM64 SDK**: **0** of the **747** archives in
+    `releases_windows.json` mention arm64, and the action says so itself -
+    `Unable to determine Flutter version for channel: stable version: any
+    architecture: arm64` (job 126898444291). `.github/workflows/release.yml` now
+    asks that runner for the **x64** SDK (Windows runs it under emulation) and for
+    `targets: aarch64-pc-windows-msvc`, which `make-release.ps1 -Arch arm64` checks
+    for before it packages - a prerequisite the job never satisfied. Both ARM64
+    jobs stay `continue-on-error` and informational: a green packaging run would be
+    the first real ARM64 app (the host-derived target in
+    `commands\build_windows.dart` plus `verify-hardening.ps1 -Arch arm64` refusing an
+    x64 package is what makes that claim checkable), and a red one means Flutter's
+    Windows tooling cannot produce it yet. The engine half needs no such
+    qualification - it runs natively on that runner.
+  - **The workflow is still only YAML-verified where it matters.** The ARM64 job's
+    step list was re-read after the edit (7 steps, `Install NSIS` and
+    `Build, sign, hash and zip` restored - the first edit had dropped them) and both
+    workflows were parsed with PyYAML: `ci` = 1 job / 6 steps, `release` = 5 jobs
+    (`version`, `package-x64` 10 steps, `engine-arm64` 5, `package-arm64` 7,
+    `publish` 6).
 
 - **The history was rewritten so the repository can go public (2026-11-04)**
   - **Why.** The user wanted the work to stay in one place, so the repository itself

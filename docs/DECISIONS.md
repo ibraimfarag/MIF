@@ -95,7 +95,22 @@ CI can install the helper and drive privileged operations but cannot reproduce t
 "one prompt, then no prompts" half of P1.5. The consequence for this decision is
 therefore the opposite of what was written: the ARM64 app leg and the ARM64 test
 run are reachable through CI without an ARM64 machine, which is planned work, not
-a limitation. The SBOM stays
+a limitation. **Second correction (2026-11-04, measured on the first run):** the
+ARM64 *app* leg is not reachable through CI either, because Flutter publishes no
+Windows ARM64 SDK at all — 0 of the **747** archives in
+`storage.googleapis.com/flutter_infra_release/releases/releases_windows.json`
+mention arm64 — and `subosito/flutter-action@v2` says it in as many words when the
+runner is ARM64: `Unable to determine Flutter version for channel: stable version:
+any architecture: arm64` (release run 41922523593, job 126898444291). The two ARM64
+jobs now ask for what exists: the **engine** job runs `cargo test --release`
+natively on `windows-11-arm` (the host target is already
+`aarch64-pc-windows-msvc`), and the packaging job asks for the **x64** SDK to run
+under emulation plus `targets: aarch64-pc-windows-msvc` for the engine half, which
+`make-release.ps1 -Arch arm64` checks for before it packages. Whether the app then
+builds as ARM64 is exactly what that job answers: `flutter build windows` takes the
+target from the host platform, and `verify-hardening.ps1 -Arch arm64` refuses an
+x64 package, so a green job would mean a real ARM64 app and a red one means the
+tooling cannot do it yet. Until then the ARM64 claim stays engine-level. The SBOM stays
 architecture-independent on purpose — it describes the dependency set, which is
 shared — and the artifact names its own arch (`-<arch>.zip`, the `VERSION` line,
 and the PE machine that `verify-release.ps1` refuses to disagree with).

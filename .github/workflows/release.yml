@@ -191,14 +191,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Flutter publishes no Windows ARM64 SDK: 0 of the 747 archives in
+      # releases_windows.json mention arm64 (measured 2026-11-04), and the action
+      # says so itself - "Unable to determine Flutter version for channel: stable
+      # version: any architecture: arm64" (run 41922523593, job 126898444291). So
+      # this asks for the x64 SDK explicitly and lets Windows run it under
+      # emulation. Whether the app then builds as ARM64 is the open question this
+      # job exists to answer: `flutter build windows` takes its target from the
+      # host platform (packages/flutter_tools/lib/src/commands/build_windows.dart,
+      # `hostPlatform == HostPlatform.windows_arm64`), and `verify-hardening.ps1
+      # -Arch arm64` refuses an x64 package - so a green job means a real ARM64 app,
+      # and a red one means Flutter's tooling cannot do it yet.
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          architecture: x64
           cache: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # make-release.ps1 -Arch arm64 checks for this target's libs and stops
+          # before packaging when it is missing.
+          targets: aarch64-pc-windows-msvc
 
       - name: Install NSIS
         shell: pwsh
