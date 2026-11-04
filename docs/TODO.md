@@ -363,12 +363,13 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
 The user decided on 2026-11-04 to take the repository public. What that decision
 needs first, all of it measured rather than assumed:
 
-1. **The published tree is clean of the machine's account name.** `git grep
-   <account>` at HEAD returned **4** hits (an example repo path in
+1. **The published tree is clean of the machine's account name.** A search for the
+   account name at HEAD returned **4** hits (an example repo path in
    `MI-CS-Agent-Prompt.md`, a measured OneDrive desktop path and a real
    `net localgroup` line in this file, and a widget-test startup-entry fixture in
-   `tool/`). All four now read `<account>` / `<repo root>`; the command returns
-   nothing at HEAD (commit 8a54e69).
+   `tool/`). All four now read `<account>` / `<repo root>`, and the same search
+   returns nothing at HEAD (commit 8a54e69) - including in this section, which
+   deliberately does not spell the name out.
 2. **The history is not clean, and the route is decided: a FRESH public repository.**
    `.git` is **106.4 MB** and 142 commits carry (a) a **34,000,312-byte**
    `mics-engine.exe` committed under `dist/MICS-v1.0.0-windows-portable/` — a build
