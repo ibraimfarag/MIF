@@ -80,13 +80,22 @@ build uses the **Android NDK's** LLVM (clang 19) as a build-time tool; the
 Windows SDK already has the arm64 import libraries.
 
 Two limits are architectural rather than local: **Flutter has no Windows
-cross-compile flag**, so the ARM64 *app* is produced on an ARM64 host with an SDK
-that has `windows-arm64` artifacts (this SDK's cache holds `windows-x64*` only) —
-therefore a portable ARM64 package still needs that host, while its engine can be
-built anywhere; and the GitHub-hosted **ARM64 Windows runners are offered for
-public repositories**, while this one answers 404 to the public API, so the "when
-runners are available" condition above is not met and no `windows-11-arm` job was
-added (it would queue forever and block the pipeline). The SBOM stays
+cross-compile flag** — `flutter build windows` picks the target from the host
+(`windows-arm64` only when the host is ARM64, `commands\build_windows.dart`), and
+this SDK's cache holds `windows-x64*` only — so a portable ARM64 package needs an
+ARM64 host, while its engine can be built anywhere. **Correction (2026-11-04):**
+an earlier version of this paragraph said GitHub's ARM64 Windows runners were
+public-repo only and that a `windows-11-arm` job "would queue forever". That was
+wrong: the runners reference lists `windows-11-arm` for **private** repositories
+as well (2 vCPU/8 GB, drawing on the account's included minutes) and for public
+ones (4 vCPU/16 GB, free and unlimited). What is true is different and still
+matters: no ARM64 job has been written or run yet, an ARM64 job on a private repo
+costs minutes, and a Windows runner is an **administrator with UAC disabled**, so
+CI can install the helper and drive privileged operations but cannot reproduce the
+"one prompt, then no prompts" half of P1.5. The consequence for this decision is
+therefore the opposite of what was written: the ARM64 app leg and the ARM64 test
+run are reachable through CI without an ARM64 machine, which is planned work, not
+a limitation. The SBOM stays
 architecture-independent on purpose — it describes the dependency set, which is
 shared — and the artifact names its own arch (`-<arch>.zip`, the `VERSION` line,
 and the PE machine that `verify-release.ps1` refuses to disagree with).

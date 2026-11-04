@@ -339,9 +339,15 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    builds and is checked for `aarch64-pc-windows-msvc` (ب2), but the Flutter app has
    no Windows cross-compile, so an ARM64 download needs an ARM64 host - and it is
    also the only way any ARM64 binary will ever be *run* here.
-6. **Whether the repository goes public (a decision with two free unlocks).** GitHub's
-   ARM64 Windows runners are public-repo only, and SignPath signs qualifying
-   open-source projects for free. MI CS is GPL-3.0 (D-001) either way.
+6. **Whether the repository goes public (a decision that unlocks the free signing
+   route).** SignPath signs qualifying open-source projects for free, and the runner
+   reference gives public repositories 4 vCPU Windows runners with free, unlimited
+   minutes (private repositories get 2 vCPU drawing on included minutes). MI CS is
+   GPL-3.0 (D-001) either way. **Corrected 2026-11-04:** ARM64 runners
+   (`windows-11-arm`) are *not* public-repo only — see the D-003 correction; the
+   reason no ARM64 CI job exists yet is that none has been written, not that the
+   label is unavailable. The user chose **public** on 2026-11-04, after the
+   pre-public checks in §0.2a.
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -768,14 +774,21 @@ click (P1.5) or a purchased certificate (P4).
     the app; no timing, no memory figure and no behaviour is claimed for ARM64, and
     nothing measured on x64 was copied over. The claim is exactly "compiled and
     linked for `aarch64-pc-windows-msvc`, and the artifact is a hardened ARM64 PE".
-  - **CI, and why there is no ARM64 job in it yet.** D-003 commits the project to
-    "adding an ARM64 build leg to CI when ARM64 hardware or runners are available".
-    Measured: `https://api.github.com/repos/ibraimfarag/MIF` answers **404**, i.e.
-    the repository is private, and GitHub's ARM64 Windows runners are offered for
-    public repositories — so a `windows-11-arm` job would sit queued forever and
-    block the pipeline it is supposed to extend. The condition in D-003 is therefore
-    not met yet, and the leg lives in `build-engine-arm64.ps1` where a human or a
-    future runner can call it. The SBOM stays arch-independent on purpose: it
+  - **CI, and why there is no ARM64 job in it yet (corrected 2026-11-04).** D-003
+    commits the project to "adding an ARM64 build leg to CI when ARM64 hardware or
+    runners are available". Measured at the time: `https://api.github.com/repos/
+    ibraimfarag/MIF` answers **404**, i.e. the repository is private, and this entry
+    then concluded the ARM64 runners were public-repo only. **That conclusion was
+    wrong**: GitHub's runner reference lists `windows-11-arm` for private
+    repositories too (2 vCPU/8 GB, drawing on the account's included minutes) and
+    for public ones (4 vCPU/16 GB, free and unlimited), and `flutter build windows`
+    picks `windows-arm64` from the host, so an ARM64 runner can build the app as
+    well as the engine. The honest status is therefore: **no ARM64 job has been
+    written or run yet** - it is planned work in `docs/TODO.md` §0.1, and the leg
+    lives in `build-engine-arm64.ps1` until a workflow calls it. What CI cannot do
+    is reproduce P1.5's human half: a Windows runner is an administrator with UAC
+    disabled, so it proves the operations and the audit pairs, never "one prompt,
+    then silence". The SBOM stays arch-independent on purpose: it
     describes the dependency set, which is the same for both legs, and the artifact
     itself (`-<arch>.zip`, `VERSION`, PE machine) is what names the arch.
   - Measured: `-Tier fast` green; the ARM64 numbers above come from the two cargo

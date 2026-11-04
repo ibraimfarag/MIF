@@ -77,7 +77,7 @@
 # 4) REPO STRUCTURE (Monorepo)
 
 ```
-C:\Users\<account>\Projects\mi-cs\
+<repo root>\
 ├─ app\                      # Flutter (flutter create --platforms=windows mics_app)
 │  └─ lib\
 │     ├─ main.dart
