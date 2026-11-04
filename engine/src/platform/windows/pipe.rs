@@ -385,7 +385,14 @@ mod tests {
         // access) — the same grant in its stored form.
         let user = current_user_sid().expect("current user SID");
 
-        assert!(sddl.contains(&format!("(A;;FA;;;{user})")), "{sddl}");
+        // SDDL replaces the built-in Administrator account's SID with the `LA` alias
+        // when the descriptor is converted back to text, which is what happened on
+        // GitHub's Windows runner (2026-11-05, D-030): the same grant, written the
+        // other way. A directory-owner test cannot see this, so it is tolerated here
+        // and nowhere else.
+        let grants_the_user = sddl.contains(&format!("(A;;FA;;;{user})"))
+            || (user.ends_with("-500") && sddl.contains("(A;;FA;;;LA)"));
+        assert!(grants_the_user, "{sddl}");
         assert!(sddl.contains("(A;;FA;;;SY)"), "{sddl}");
         assert!(sddl.contains("(A;;FA;;;BA)"), "{sddl}");
         assert_eq!(

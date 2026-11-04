@@ -8,29 +8,35 @@
 //! 1. `GetNamedPipeClientProcessId` names the client process. A handle to that
 //!    process is opened and kept until both answers below are read, so the pid
 //!    cannot be recycled between the calls.
-//! 2. The image path must be the engine — `mics-engine.exe` by name, or exactly the
+//! 2. The image path must be the engine â€” `mics-engine.exe` by name, or exactly the
 //!    path in `MICS_ENGINE_PATH`, the hook the installer records.
-//! 3. The caller's token user SID must be the account MI CS was installed for. That
-//!    is read as the owner of `%PROGRAMDATA%\MICS`, a directory only the elevated
-//!    installer creates, so a *different* local user cannot drive the helper even by
-//!    copying the engine binary.
+//! 3. The caller's token must belong to the account MI CS was installed for. That
+//!    account is read as the owner of `%PROGRAMDATA%\MICS`, a directory only the
+//!    elevated installer creates, so a *different* local user cannot drive the
+//!    helper even by copying the engine binary. The owner is not always an
+//!    account: a server-class Windows (and any machine whose "default owner"
+//!    security policy says so) gives a directory an administrator creates to
+//!    **BUILTIN\Administrators**, so a record naming that group is satisfied by a
+//!    caller whose token carries the group - measured on GitHub's Windows runner on
+//!    2026-11-05, where the record was `S-1-5-32-544` and the installing account was
+//!    `S-1-5-21-...-500` (D-030).
 //!
 //! When no data directory exists yet (portable run, a console helper in a fresh
 //! checkout), step 3 has nothing to compare against: [`judge`] then lets the image
 //! check stand alone, because refusing would break the documented development flows
-//! for no security gain — a console helper already runs with the caller's own token.
+//! for no security gain â€” a console helper already runs with the caller's own token.
 
 use anyhow::{bail, Context, Result};
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use windows::core::PWSTR;
+use windows::core::{BOOL, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HLOCAL, LocalFree, HANDLE};
 use windows::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
+    ConvertSidToStringSidW, ConvertStringSidToSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
 };
 use windows::Win32::Security::{
-    GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_QUERY,
-    TOKEN_USER, TokenUser,
+    CheckTokenMembership, GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+    PSID, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
 use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::Threading::{
@@ -41,6 +47,11 @@ use windows::Win32::System::Threading::{
 /// The only image name the helper answers without `MICS_ENGINE_PATH` being set.
 const ENGINE_IMAGE: &str = "mics-engine.exe";
 
+/// BUILTIN\Administrators â€” the owner a server-class Windows records for a directory
+/// an administrator creates, which is why the installer's account can be a group
+/// rather than a user (see D-030).
+const BUILTIN_ADMINISTRATORS: &str = "S-1-5-32-544";
+
 /// Everything the helper needs to decide about one connection.
 #[derive(Debug, Clone)]
 pub struct Caller {
@@ -49,6 +60,9 @@ pub struct Caller {
     /// The token user SID, when it could be read. `None` means the query failed,
     /// which is not the same thing as "a different user".
     pub sid: Option<String>,
+    /// True when the token carries an enabled BUILTIN\Administrators group. Needed
+    /// only for the record that names that group instead of an account.
+    pub is_administrator: bool,
 }
 
 /// Why a caller was refused, or that it was not.
@@ -70,7 +84,7 @@ pub fn is_engine_image(path: &Path) -> bool {
 /// True when `path` is a client this helper serves.
 ///
 /// The engine image by name is always allowed. `allowed` (the `MICS_ENGINE_PATH`
-/// the installer records) adds one more trusted client — which is how the
+/// the installer records) adds one more trusted client â€” which is how the
 /// verification scripts speak the protocol themselves, and how a differently named
 /// build can be named instead of loosening the check for everyone.
 pub fn is_authorised(path: &Path, allowed: Option<&Path>) -> bool {
@@ -95,8 +109,20 @@ pub fn judge(caller: &Caller, allowed: Option<&Path>, installer_sid: Option<&str
         return Verdict::NotTheEngine;
     }
     match (installer_sid, caller.sid.as_deref()) {
-        (Some(expected), Some(found)) if !expected.eq_ignore_ascii_case(found) => {
-            Verdict::NotTheInstaller(found.to_string())
+        (Some(expected), Some(found)) => {
+            let is_the_account = expected.eq_ignore_ascii_case(found);
+            // A record that names BUILTIN\Administrators means the data directory was
+            // created by an administrator on a machine that hands such objects to the
+            // group (D-030). The installing account is then recognised by carrying
+            // that group; refusing it would break a legitimate install and protect
+            // nothing, because an administrator can take the directory over anyway.
+            let is_the_group =
+                expected.eq_ignore_ascii_case(BUILTIN_ADMINISTRATORS) && caller.is_administrator;
+            if is_the_account || is_the_group {
+                Verdict::Allowed
+            } else {
+                Verdict::NotTheInstaller(found.to_string())
+            }
         }
         _ => Verdict::Allowed,
     }
@@ -122,8 +148,12 @@ pub fn describe(pid: u32) -> Result<Caller> {
 
     let image = image_path(process);
     // The SID is best effort here: an unreadable SID is reported by `judge` as "no
-    // SID", not as "a different user".
-    let sid = token_user_sid(process).ok();
+    // SID", not as "a different user". The group membership is best effort too, and
+    // its absence can only refuse a record that names a group.
+    let (sid, is_administrator) = match token_facts(process) {
+        Ok((sid, is_administrator)) => (Some(sid), is_administrator),
+        Err(_) => (None, false),
+    };
     // SAFETY: `process` came from `OpenProcess` above and is closed exactly once.
     let _ = unsafe { CloseHandle(process) };
 
@@ -131,6 +161,7 @@ pub fn describe(pid: u32) -> Result<Caller> {
         pid,
         image: image.with_context(|| format!("caller pid {pid}"))?,
         sid,
+        is_administrator,
     })
 }
 
@@ -155,16 +186,50 @@ fn image_path(process: HANDLE) -> Result<PathBuf> {
     Ok(PathBuf::from(String::from_utf16_lossy(&buffer[..len])))
 }
 
-/// The token user SID of an open process, as `S-1-5-...`.
-pub fn token_user_sid(process: HANDLE) -> Result<String> {
+/// The token user SID of a process and whether its token carries
+/// BUILTIN\Administrators.
+fn token_facts(process: HANDLE) -> Result<(String, bool)> {
+    with_token(process, |token| {
+        let sid = token_sid(token)?;
+        Ok((sid, token_is_administrator(token)))
+    })
+}
+
+/// Runs `read` with a query token for `process`, closing the token exactly once.
+fn with_token<T>(process: HANDLE, read: impl FnOnce(HANDLE) -> Result<T>) -> Result<T> {
     let mut token = HANDLE::default();
     // SAFETY: `token` is a valid out-handle and `process` is an open process handle.
     unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) }
         .context("open the caller's token")?;
-    let result = token_sid(token);
+    let result = read(token);
     // SAFETY: `token` came from `OpenProcessToken` and is closed exactly once.
     let _ = unsafe { CloseHandle(token) };
     result
+}
+
+/// True when `token` carries an enabled BUILTIN\Administrators group.
+///
+/// `CheckTokenMembership` is asked about the group SID directly, so an unprivileged
+/// caller answers "no" without any elevation attempt. A SID that cannot be built
+/// answers "no" as well: the only thing this can do is refuse a record that names
+/// the group.
+fn token_is_administrator(token: HANDLE) -> bool {
+    let text: Vec<u16> = BUILTIN_ADMINISTRATORS
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut sid = PSID::default();
+    // SAFETY: `text` is NUL-terminated, `sid` is a valid out-pointer, and the SID it
+    // returns is freed with `LocalFree` below, which is the allocator it uses.
+    if unsafe { ConvertStringSidToSidW(PCWSTR(text.as_ptr()), &mut sid) }.is_err() {
+        return false;
+    }
+    let mut member = BOOL::default();
+    // SAFETY: both handles are valid for the duration of the call and only read.
+    let checked = unsafe { CheckTokenMembership(Some(token), sid, &mut member) }.is_ok();
+    // SAFETY: `sid` came from `ConvertStringSidToSidW` above.
+    let _ = unsafe { LocalFree(Some(HLOCAL(sid.0))) };
+    checked && member.as_bool()
 }
 
 fn token_sid(token: HANDLE) -> Result<String> {
@@ -229,7 +294,7 @@ pub fn owner_sid(path: &Path) -> Result<String> {
 
 /// The account MI CS was installed for: the owner of `%PROGRAMDATA%\MICS`.
 ///
-/// `None` when that directory does not exist (a portable run) — `judge` then has no
+/// `None` when that directory does not exist (a portable run) â€” `judge` then has no
 /// record to compare against and says so in the threat model.
 pub fn installer_account() -> Option<String> {
     let program_data = std::env::var_os("PROGRAMDATA")?;
@@ -268,6 +333,16 @@ mod tests {
             pid: 4242,
             image: PathBuf::from(image),
             sid: sid.map(str::to_string),
+            is_administrator: false,
+        }
+    }
+
+    fn admin_caller(image: &str, sid: &str) -> Caller {
+        Caller {
+            pid: 4242,
+            image: PathBuf::from(image),
+            sid: Some(sid.to_string()),
+            is_administrator: true,
         }
     }
 
@@ -331,7 +406,7 @@ mod tests {
             Verdict::Allowed
         );
         // A *different* user who copied the engine: the image passes, the SID does
-        // not — exactly the case the image check alone could not stop.
+        // not â€” exactly the case the image check alone could not stop.
         assert_eq!(
             judge(
                 &caller(engine, Some("S-1-5-21-9-9-9-1002")),
@@ -371,6 +446,53 @@ mod tests {
     }
 
     #[test]
+    fn a_record_that_names_administrators_is_satisfied_by_an_administrator() {
+        // What GitHub's Windows runner measured on 2026-11-05: the data directory was
+        // owned by BUILTIN\Administrators (S-1-5-32-544) while the installing account
+        // was S-1-5-21-...-500, so an exact match refused the legitimate install
+        // (D-030). Membership is what decides it instead.
+        let engine = r"C:\ProgramData\MICS\mics-engine.exe";
+        let installed_by_admin = "S-1-5-21-3077485881-3661871218-4154919024-500";
+
+        assert_eq!(
+            judge(
+                &admin_caller(engine, installed_by_admin),
+                None,
+                Some(BUILTIN_ADMINISTRATORS)
+            ),
+            Verdict::Allowed
+        );
+        // The same account without the group is still refused: the rule is membership,
+        // not "any caller once administrators own the directory".
+        assert_eq!(
+            judge(
+                &caller(engine, Some(installed_by_admin)),
+                None,
+                Some(BUILTIN_ADMINISTRATORS)
+            ),
+            Verdict::NotTheInstaller(installed_by_admin.to_string())
+        );
+        // A standard user is not an administrator, whatever the record says.
+        assert_eq!(
+            judge(
+                &caller(engine, Some("S-1-5-21-9-9-9-1002")),
+                None,
+                Some(BUILTIN_ADMINISTRATORS)
+            ),
+            Verdict::NotTheInstaller("S-1-5-21-9-9-9-1002".to_string())
+        );
+        // And a user record is never satisfied by an administrator token.
+        assert_eq!(
+            judge(
+                &admin_caller(engine, installed_by_admin),
+                None,
+                Some("S-1-5-21-1-2-3-1001")
+            ),
+            Verdict::NotTheInstaller(installed_by_admin.to_string())
+        );
+    }
+
+    #[test]
     fn a_process_id_with_no_process_is_an_error() {
         // 0 is never a valid client, and the call must say so instead of returning
         // a path that belongs to somebody else.
@@ -389,9 +511,14 @@ mod tests {
 
         let owner = owner.expect("read the directory owner");
         let me = me.expect("read this process's token SID");
-        assert_eq!(
-            owner, me,
-            "a directory this process created is owned by this process's user"
+        // On a workstation an administrator's own objects are theirs; on a server-class
+        // Windows the "default owner" policy hands them to BUILTIN\Administrators, which
+        // is what GitHub's runner did on 2026-11-05 (D-030). Both are correct answers,
+        // and the second one is why `judge` accepts a group record.
+        assert!(
+            owner == me || owner == BUILTIN_ADMINISTRATORS,
+            "a directory this process created is owned by this process's user or by \
+             BUILTIN\\Administrators; got {owner} for user {me}"
         );
         assert!(owner.starts_with("S-1-5-"), "not a SID: {owner}");
     }

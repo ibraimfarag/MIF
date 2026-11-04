@@ -815,6 +815,54 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The CI logs arrived: both failures diagnosed, one of them was the product (2026-11-05)**
+  - **The engine refused its own client, and that is a real install scenario (D-030).**
+    `engine.test` failed three cases on the runner (job log: `test result: FAILED. 136
+    passed; 3 failed`), and the interesting one is
+    `tests::tests::privileged_requests_are_audited_and_refused_when_malformed`, which
+    panicked with the engine's own words - `ping answers: this pipe only serves the
+    account MI CS was installed for`. The cause is a Windows policy, not a wrong
+    comparison: on a **server-class** Windows a directory an administrator creates is
+    owned by **`BUILTIN\Administrators`**, not by the account. Measured on the runner:
+    the directory the test created was owned by `S-1-5-32-544` while the process's own
+    token user was `S-1-5-21-3077485881-3661871218-4154919024-500`. So MI CS would have
+    refused the person who installed it on any Windows Server (and on any workstation
+    whose "default owner for objects created by members of the Administrators group"
+    policy names the group). Fixed in `engine\src\platform\windows\caller.rs`: a record
+    that names that group is satisfied by a caller whose token carries it
+    (`CheckTokenMembership`, asked of the SID - never guessed from a name), while an
+    account record still demands that account. **140 engine cases pass here, 0 failed**
+    (was 139 - one new case), including four new/rewritten assertions: the group record
+    allowed for a member, refused for the same account without the group, a user record
+    never satisfied by an administrator token, and the pipe DACL test tolerating the
+    `LA` alias Windows prints for the built-in Administrator
+    (`D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;LA)` - the same grant written the other way,
+    which is what `the_engine_pipe_grants_only_the_owner_system_and_administrators`
+    actually hit). F-2 in `docs\THREAT-MODEL.md` carries the amendment: a standard user
+    is still refused by both tests, and an administrator could take the directory over
+    anyway, so nothing was widened.
+  - **The one Dart failure was the Flutter version, and the pin proved it (D-029).**
+    `scripts\pipeline.ps1:301` fails fast on the first failing step, so the pre-pin runs
+    stopped at `flutter.test` (**"135 tests passed, 1 failed."**) after ~4 minutes,
+    while run **41926473473** (the pinned `4e04757`) failed at `engine.test` **327.1 s**
+    into a 9-minute job - the Dart suite was no longer where it failed. The second
+    reading is package:test's GitHub reporter: it emits its `N tests passed, M failed`
+    annotation only when the Dart suite fails, and that run had none, where both earlier
+    runs did. Neither reading is the log line, and both say the same thing.
+  - **The `Package (x64)` failure is the same class of problem, and the pin should close
+    it - unverified.** The step died at
+    `RESULT: FAIL - sbom.cdx.json or THIRD-PARTY-NOTICES is stale; run 'dart run
+    tool\sbom.dart' and commit both`, and the reason is visible in that log's own
+    environment: `FLUTTER_ROOT: ...\stable-3.47.9-x64\flutter`. `tool\sbom.dart` reads
+    `dart pub deps --json` for **the SDK versions** (its header says so: the lockfile
+    does not carry them), so the committed pair describes 3.47.8 and the runner was
+    building with 3.47.9. With `flutter-version: 3.47.8` pinned it should match - and
+    that is a prediction, not a result: the next `Release` run is what settles it.
+  - **What this says about the workflow.** Every "green locally, red in CI" here has been
+    the *environment*, not the code: an unpinned channel, a server-class default-owner
+    policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
+    policy instead of skipping the test on such machines.
+
 - **First CI run on the public repository: what failed, and what was fixed (2026-11-04)**
   - **The run itself is on the record.** `Release` run **41922523593** (`main` =
     `5eb956a`) and `CI` run **41922021833** on the same commit. `Release`:

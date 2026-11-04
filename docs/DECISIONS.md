@@ -1351,11 +1351,69 @@ published four days before that run, which the workflow picked up silently becau
 it asked for `channel: stable` with no version. Two of the Dart cases measure what
 Material actually paints (`test/dark_contrast_audit_test.dart`), which is exactly the
 kind of assertion a patch release can move. The pin removes that class of
-difference; it is not proof about that specific failure, and the run's log still
-names the test if it persists.
+difference. **Measured on the next run** (41926473473, on `4e04757`): the pipeline
+fails fast on the first failing step (`break` in `scripts/pipeline.ps1:301`), and that
+run failed at `engine.test` 327.1 s into a 9-minute job instead of at `flutter.test`
+after 4 minutes - and package:test's GitHub reporter, which emits its `N tests passed,
+M failed` annotation only when the Dart suite fails, emitted nothing, where both
+earlier runs had carried `135 tests passed, 1 failed`. Two independent readings of the
+same run say the Dart suite is green under 3.47.8; neither is the log line itself, and
+the pin is what makes that repeatable rather than lucky.
 
 **Commits us to.** A toolchain bump is its own commit with the measurement that
 justifies it (the same rule as the opsec ratchet: numbers move with evidence), and
 the local developer's versions are the reference - so the pin and the machine that
 verifies it agree. It also means a signed release is built by a known compiler,
 which matters more once ب5's certificate exists than it does today.
+
+---
+
+## D-030 — The installer account may be a group: BUILTIN\Administrators is matched by membership
+
+**Status:** accepted (2026-11-05)
+
+**Decision.** The privileged helper still records the installer as the owner of
+`%PROGRAMDATA%\MICS` and still compares SIDs. What changes is what a *group* record
+means:
+
+- a record naming an account SID is satisfied only by that account (unchanged);
+- a record naming **BUILTIN\Administrators** (`S-1-5-32-544`) is satisfied by a caller
+  whose token carries that group, asked of `CheckTokenMembership` and never guessed
+  from a name;
+- the image check (`mics-engine.exe`, or the path in `MICS_ENGINE_PATH`) is unchanged
+  and still runs first.
+
+**Why.** Once the Flutter pin (D-029) let the pipeline reach `engine.test`, run
+41926473473 failed three engine tests, and one of them was the *product*, not the test:
+`tests::tests::privileged_requests_are_audited_and_refused_when_malformed` panicked
+with the engine's own refusal, `this pipe only serves the account MI CS was installed
+for`, on a `ping` from its own test client. The cause is a Windows security policy
+rather than a wrong comparison: **a server-class Windows gives a directory an
+administrator creates to the Administrators group**, not to the account. Measured on
+the runner -
+
+```
+left:  "S-1-5-32-544"                              (the directory's owner)
+right: "S-1-5-21-3077485881-3661871218-4154919024-500"   (the process's token user)
+```
+
+That is a real install scenario - any Windows Server, plus any workstation whose
+"System objects: default owner for objects created by members of the Administrators
+group" policy names the group - and on those machines MI CS would have refused the
+person who installed it.
+
+**Why this does not widen F-2.** The risk F-2 closes is *another local user* driving the
+LocalSystem helper. A standard user still fails both the account test and the
+membership test, and an administrator could already take the directory over, replace the
+binary, or answer a UAC prompt - so refusing them protects nothing and breaks a
+legitimate install. D-007's trade (no per-action prompts; the install owner is the trust
+anchor) is unchanged.
+
+**Commits us to.** Measured assertions instead of ones that only hold on a workstation:
+the group record is allowed for a member and refused for the same account without the
+group, a user record is never satisfied by an administrator token, the owner test names
+both correct answers, and the pipe DACL test tolerates the `LA` alias Windows prints
+instead of the built-in Administrator's SID - the same grant written the other way,
+which cost the runner's `the_engine_pipe_grants_only_the_owner_system_and_administrators`
+(`D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;LA)`). `docs/THREAT-MODEL.md` F-2 carries the
+amendment.
