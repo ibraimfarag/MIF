@@ -46,6 +46,10 @@ param(
   [string]$Makensis,
   [string]$Out,
   [string]$HelperServiceKey,
+  # Which architecture the package inside is (D-003). It does not change how NSIS
+  # compiles - it names the output, records the arch, and is checked against the
+  # package's own binaries before anything is wrapped.
+  [ValidateSet("x64", "arm64")][string]$Arch = "x64",
   [switch]$TestUser
 )
 
@@ -67,7 +71,7 @@ if (-not (Test-Path $PackageDir)) {
   exit 1
 }
 if (-not $Out) {
-  $name = if ($TestUser) { "MICS-setup-$Version-x64-test.exe" } else { "MICS-setup-$Version-x64.exe" }
+  $name = if ($TestUser) { "MICS-setup-$Version-$Arch-test.exe" } else { "MICS-setup-$Version-$Arch.exe" }
   $Out = Join-Path $root ("dist\" + $name)
 }
 if (-not $Makensis) {
@@ -95,17 +99,17 @@ if ($missing.Count -gt 0) {
   exit 1
 }
 
-Write-Host "checking the package's binaries are hardened..."
+Write-Host "checking the package's binaries are hardened and built for $Arch..."
 $stopPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {
-  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $PackageDir
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-hardening.ps1") -Path $PackageDir -Arch $Arch
   $hardeningExit = $LASTEXITCODE
 } finally {
   $ErrorActionPreference = $stopPreference
 }
 if ($hardeningExit -ne 0) {
-  Write-Output "RESULT: FAIL - the package is not hardened; refusing to wrap it in an installer"
+  Write-Output "RESULT: FAIL - the package is not a hardened $Arch build; refusing to wrap it in an installer"
   exit 1
 }
 
@@ -128,7 +132,8 @@ $defines = @(
   "/DVERSION=$Version",
   "/DSRCDIR=$PackageDir",
   "/DSCRIPTDIR=$scriptDir",
-  "/DOUTFILE=$Out"
+  "/DOUTFILE=$Out",
+  "/DMICS_ARCH=$Arch"
 )
 if ($TestUser) { $defines += "/DTESTUSER" }
 if ($HelperServiceKey) { $defines += "/DHELPER_SVC_KEY=$HelperServiceKey" }
@@ -150,5 +155,6 @@ Write-Output ("MI CS {0} installer{1}" -f $Version, $(if ($TestUser) { " (per-us
 Write-Output ("  exe   : {0}  ({1:N1} MB)" -f $Out, ($size / 1MB))
 Write-Output ("  sha256: {0}" -f $hash)
 Write-Output ("  source: {0}" -f $PackageDir)
+Write-Output ("  arch  : {0}" -f $Arch)
 Write-Output ("  scope : {0}" -f $(if ($TestUser) { "current user, no UAC (verification only)" } else { "all users, one UAC prompt" }))
 Write-Output "RESULT: PASS"

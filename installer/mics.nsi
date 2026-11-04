@@ -36,8 +36,14 @@ SetCompressor /SOLID lzma
 !ifndef SRCDIR
   !error "SRCDIR must point at the assembled package (pass /DSRCDIR=...)"
 !endif
+; Which architecture this setup packages (D-003). The binaries inside decide what
+; actually runs; this define only names the file, records the arch and lets the
+; setup refuse a machine it was not built for.
+!ifndef MICS_ARCH
+  !define MICS_ARCH "x64"
+!endif
 !ifndef OUTFILE
-  !define OUTFILE "MICS-setup-${VERSION}-x64.exe"
+  !define OUTFILE "MICS-setup-${VERSION}-${MICS_ARCH}.exe"
 !endif
 !ifndef SCRIPTDIR
   !error "SCRIPTDIR must point at the repo's scripts folder (pass /DSCRIPTDIR=...)"
@@ -99,6 +105,28 @@ VIAddVersionKey "LegalCopyright" "MI CS"
 ; asking again and leaving a second one behind.
 Function .onInit
   SetShellVarContext ${SHELL_CONTEXT}
+  ; Refuse the wrong machine before anything is written: an x64 package on Windows
+  ; on ARM and an ARM64 package on x64 both install "successfully" and then fail to
+  ; start, which is the worst shape a packaging mistake can take. PROCESSOR_
+  ; ARCHITECTURE is the machine's own answer (AMD64 / ARM64), not the emulated
+  ; process view, so it is the value to ask for. Silent mode gets an exit code
+  ; instead of a box, so an unattended install cannot hang on a dialog.
+  ReadEnvStr $0 "PROCESSOR_ARCHITECTURE"
+  !if "${MICS_ARCH}" == "arm64"
+    ${If} $0 != "ARM64"
+      IfSilent +2 0
+      MessageBox MB_ICONSTOP "This is the Windows on ARM (ARM64) package. This PC reports $0, so the x64 package is the one to run."
+      SetErrorLevel 2
+      Abort
+    ${EndIf}
+  !else
+    ${If} $0 == "ARM64"
+      IfSilent +2 0
+      MessageBox MB_ICONSTOP "This is the x64 package. This PC reports ARM64, so the Windows on ARM package is the one to run."
+      SetErrorLevel 2
+      Abort
+    ${EndIf}
+  !endif
   ; $PLUGINSDIR is where the AUMID writer is unpacked (and deleted again on exit):
   ; the package folder itself must stay byte-for-byte the one the release gate
   ; checked, so nothing of ours is written into $INSTDIR from here.
@@ -178,6 +206,7 @@ Section "MI CS" SecMain
     WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "MI CS"
     WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${APP_EXE}"
     WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "${UNINST_KEY}" "Architecture" "${MICS_ARCH}"
     WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
     WriteRegStr HKLM "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
     WriteRegDWORD HKLM "${UNINST_KEY}" "NoModify" 1

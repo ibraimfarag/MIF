@@ -49,14 +49,20 @@
 > engine, obfuscated Dart snapshot whose symbols never enter the package, and
 > `scripts\verify-hardening.ps1` gates the release on what the file says rather than
 > on the flags) ·
-> **next: the last release-lane item needs you at the machine — د3 (E2E on the built
-> installer) wants one per-machine run; with that click I can measure the whole
-> product as a user meets it, and until then the code is written and said to be
-> unmeasured. ز2-د stays blocked on D-023 and the bridge endpoint; the autonomous
-> alternatives meanwhile are هـ1 (the default update-manifest URL + a signature check
-> before applying) or a §7 register row. The ARM64 leg is built and checked but has
-> never been run — there is no ARM64 machine here, and no ARM64 download exists
-> because the Flutter app needs an ARM64 host.**
+> **next: on 2026-11-04 the user chose to make the repository public**, which is the
+> item §0.2 was waiting on, so the work in flight is now the pre-public and release
+> lane: `.github/workflows/release.yml` (written, **never run** — it needs a push to
+> GitHub), `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built and
+> checked for x64, refused for arm64 on an x64 package), and the history decision in
+> §0.2a. The last release-lane item that still needs you at the machine is **د3**
+> (E2E on the built installer): one per-machine run, and with that click the whole
+> product can be measured as a user meets it. ز2-د stays blocked on D-023 and the
+> bridge endpoint; the autonomous alternatives meanwhile are هـ1 (the default
+> update-manifest URL + a signature check before applying) or a §7 register row. The
+> ARM64 engine is built and checked but **has never been run here** — no ARM64
+> machine exists — and ARM64 CI jobs now exist for that (marked informational until
+> they have a green run) while the ARM64 *app* still needs an ARM64 host, which CI
+> can supply.
 > ب4 landed 2026-11-03 (D-026): the installer now creates the privileged helper inside
 > the one UAC prompt it already asks for — by calling the shipped engine's own
 > `install-helper` — and its uninstaller stops and deletes that service again through
@@ -348,6 +354,41 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    reason no ARM64 CI job exists yet is that none has been written, not that the
    label is unavailable. The user chose **public** on 2026-11-04, after the
    pre-public checks in §0.2a.
+
+### 0.2a Before the repository is flipped to public (measured 2026-11-04)
+
+The user decided on 2026-11-04 to take the repository public. What that decision
+needs first, all of it measured rather than assumed:
+
+1. **The published tree is clean of the machine's account name.** `git grep
+   <account>` at HEAD returned **4** hits (an example repo path in
+   `MI-CS-Agent-Prompt.md`, a measured OneDrive desktop path and a real
+   `net localgroup` line in this file, and a widget-test startup-entry fixture in
+   `tool/`). All four now read `<account>` / `<repo root>`; the command returns
+   nothing at HEAD (commit 8a54e69).
+2. **The history is not clean, and that is the open decision.** `.git` is **106.4
+   MB** and 142 commits carry (a) a **34,000,312-byte** `mics-engine.exe` committed
+   under `dist/MICS-v1.0.0-windows-portable/` — a build from *before* the ط1
+   fingerprint sweep, so it very likely contains the account's `.cargo` paths in
+   binary form — plus `app.so` copies, and (b) the account name in **13** textual
+   places and a personal Gmail address. Two routes, and only the user can pick:
+   rewrite the 142 commits (drop `dist/`, scrub the strings, force-push — cheaper
+   for continuity, but GitHub keeps unreachable objects and any fork or cached
+   view can still hold them), or start a fresh public repository with the current
+   tree as one initial commit and keep this one as the private archive (loses git
+   history, which matters least here because `docs/TODO.md`'s Done log *is* the
+   history). **Not done yet — do not flip the repository until this is chosen.**
+3. **What the checkout contains that must never be published**: the VM lab's
+   malware samples, `%LOCALAPPDATA%\MICS` state (`mics.db`, `secrets.dat`), and
+   `dist/` (already ignored). The working tree is otherwise free of credentials:
+   the history scan for private keys, AWS/GitHub/OpenAI/Google key shapes and
+   `Authorization: Bearer` returned **zero** hits, and the only two
+   `api_key = "..."` matches are test fixtures (`"nvd-KEY-123456"`,
+   `"nvd-PROTECTED"`) in the engine's own tests.
+4. **A first public version should not ship the internal brief as-is**:
+   `MI-CS-Agent-Prompt.md` is a build prompt written for an agent, mojibake-encoded
+   in places, and names the author. Keeping it is defensible (it is the project's
+   origin story) but it is a deliberate choice, not an oversight.
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -713,6 +754,51 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **Pre-public preparation, and a release workflow that has never run (2026-11-04,
+  commit 8a54e69 and this one)**
+  - **A claim this project made was wrong, and it is corrected rather than
+    quietly dropped.** D-003 said GitHub's ARM64 Windows runners were public-repo
+    only and that a `windows-11-arm` job "would queue forever". The runner
+    reference lists `windows-11-arm` for **private** repositories too (2 vCPU /
+    8 GB, drawing on included minutes) and for public ones (4 vCPU / 16 GB, free
+    and unlimited), and `flutter build windows` derives `windows-arm64` from the
+    host (`commands\build_windows.dart`), so an ARM64 runner can build the app as
+    well as the engine. D-003, the ب2 row and this file now say "no ARM64 job has
+    been written or run yet" instead. What CI still cannot do is reproduce P1.5's
+    human half: a Windows runner is an administrator with UAC disabled, so it
+    proves the operations and the audit pairs, never "one prompt, then silence".
+  - **The account name is out of the published tree**: 4 hits at HEAD → 0, with
+    the measured facts (two administrators, one of them the user) unchanged. The
+    history still carries it (13 places) and a 34,000,312-byte pre-ط1 engine
+    binary — that is §0.2a item 2, the one decision left before the repository is
+    flipped.
+  - **`make-installer.ps1` is arch-aware** (`-Arch x64|arm64`, D-003): it names the
+    output `MICS-setup-<version>-<arch>.exe`, passes `MICS_ARCH` to NSIS, checks
+    the package's own binaries with `verify-hardening.ps1 -Arch` **before** wrapping
+    it, and the installer refuses the wrong machine at `.onInit` (silent mode gets
+    exit code 2 instead of a dialog). Measured: the x64 installer rebuilt green
+    (`MICS-setup-0.1.0-x64.exe`, 15.9 MB, sha256
+    `F18B47ED1B19C403E3990BDC970348DD6A199F45C58E504E565F1DDC1133966A`), and
+    `-Arch arm64` against that same package **fails on purpose** with
+    "`mics_app.exe`: built for x64 (0x8664) but this package is arm64" — the
+    mistake this whole change exists to prevent.
+  - **`.github/workflows/release.yml` is written and validated as YAML, and has
+    never been executed** (no push from here; `gh` is not installed). Five jobs:
+    resolve the version and refuse a tag that disagrees with `engine/Cargo.toml`,
+    package x64 on `windows-latest` (`make-release.ps1 -Sign` → `make-installer.ps1
+    -Arch x64` → `verify-release.ps1 -Arch x64 -SkipToast`), two informational
+    ARM64 jobs on `windows-11-arm` (the engine's tests **run** there natively, plus
+    a packaging attempt), and publish to GitHub Releases with `gh release create`
+    and `contents: write`. The ARM64 jobs are `continue-on-error` and gate nothing
+    until they have a green run; the notes it publishes say the builds are not
+    signed by a publicly trusted publisher, because that is ب5 and no workflow
+    change can fix it.
+  - **Found while writing the version gate**: `pubspec.yaml` says **1.0.0+1** and
+    `engine/Cargo.toml` says **0.1.0**, and the artifacts that ship are named
+    0.1.0 — so the app's own version resource and the installer's disagree. The
+    workflow warns instead of failing (it must not block a release on an unrelated
+    fix), but one number has to win; that is a decision in §0.2.
 
 - **ب2 (f) — the ARM64 leg: the engine builds and is checked, the app cannot be
   built here, and nothing was run**

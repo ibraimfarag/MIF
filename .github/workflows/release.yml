@@ -1,0 +1,313 @@
+name: Release
+
+# Cuts a downloadable release from a branch or from a tag.
+#
+# Run it by hand (Actions -> Release -> Run workflow, giving the version the tag
+# should carry) or by pushing a v* tag. Everything published here is produced on a
+# GitHub-hosted runner from the commit the run checked out - no local dist/ folder
+# is uploaded - so the SHA256SUMS in the release describe files this workflow hashed
+# itself. That is the point of the whole file: a release that can be reproduced and
+# checked without trusting the machine it was cut on.
+#
+# Signing: `make-release.ps1 -Sign` self-signs the staged binaries on the runner
+# (CurrentUser\Root + TrustedPublisher, D-016). That proves a file was not touched
+# after the build; it is NOT a publicly trusted publisher identity, so Windows still
+# says "Unknown publisher" and SmartScreen still warns - that is row ب5 in
+# docs/ROADMAP.md, and the fix is a real certificate, not a workflow change. When one
+# exists, add it as the repository secrets MICS_PFX (base64 PFX) and
+# MICS_PFX_PASSWORD, then pass -PfxPath/-PfxPassword in the build step below.
+#
+# ARM64: `windows-11-arm` is a real runner (D-003's correction, 2026-11-04), so the
+# ARM64 legs are here - but they have never run, and Flutter's own Windows ARM64 SDK
+# availability has not been measured either. They are `continue-on-error` on purpose
+# and they gate nothing until they have a green run behind them; when they do, drop
+# the flag and add them to `publish`'s needs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.1.0 - must match engine/Cargo.toml"
+        required: true
+        type: string
+      tag:
+        description: "Tag to create or reuse (default: v<version>)"
+        required: false
+        type: string
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve the version and tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#v}"
+          fi
+          [ -n "$tag" ] || tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "releasing $version as $tag"
+      - name: The tag has to be the version the engine builds as
+        shell: bash
+        run: |
+          set -euo pipefail
+          crate=$(grep -m1 '^version' engine/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          app=$(sed -nE 's/^version:[[:space:]]*([^+[:space:]]+).*/\1/p' pubspec.yaml | head -1)
+          echo "engine/Cargo.toml=$crate  pubspec.yaml=$app  tag=${{ steps.resolve.outputs.version }}"
+          if [ "$crate" != "${{ steps.resolve.outputs.version }}" ]; then
+            echo "::error::the tag says ${{ steps.resolve.outputs.version }} but engine/Cargo.toml says $crate"
+            exit 1
+          fi
+          if [ "$app" != "$crate" ]; then
+            echo "::warning::pubspec.yaml says $app while the release is $crate; the app's own version resource and the installer's will disagree until they are made one number"
+          fi
+
+  package-x64:
+    name: Package (x64)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Unset CARGO_TARGET_DIR (make-release builds into engine\target when it is
+      # empty), so the cache path below is the one that gets reused.
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-release-x64-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-release-x64-
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --no-progress -y
+
+      - name: Build, sign, hash and zip
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: ./scripts/make-release.ps1 -Sign -Arch x64 -Version ${{ needs.version.outputs.version }}
+
+      - name: Wrap the package in an installer
+        shell: pwsh
+        run: ./scripts/make-installer.ps1 -Arch x64 -Version ${{ needs.version.outputs.version }}
+
+      # -SkipToast: a runner has no interactive session to raise the card in, and
+      # that half is verified on a real desktop (see docs/TODO.md, the release gate).
+      - name: Verify the download the way a user's machine sees it
+        shell: pwsh
+        run: ./scripts/verify-release.ps1 -Arch x64 -SkipToast
+
+      - name: Collect the download
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-x64
+          path: |
+            dist/MICS-portable-*.zip
+            dist/MICS-setup-*.exe
+          if-no-files-found: error
+
+      - name: Keep the QA report with the binaries it describes
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-report
+          path: qa/report.md
+
+  engine-arm64:
+    name: ARM64 engine, run natively (informational)
+    needs: version
+    continue-on-error: true
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: cargo-arm64-native-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: cargo-arm64-native-
+
+      # The claim this closes: "compiled for aarch64" was all that could be said
+      # about ARM64 here, because no ARM64 machine existed. On this runner the
+      # engine's own tests execute as ARM64 code.
+      - name: Run the engine test suite on ARM64
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: |
+          cd engine
+          cargo test --release
+
+      - name: The result has to be a hardened ARM64 PE
+        shell: pwsh
+        run: ./scripts/verify-hardening.ps1 -Path engine/target/release -Arch arm64
+
+  package-arm64:
+    name: Package (arm64, informational)
+    needs: version
+    continue-on-error: true
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --no-progress -y
+
+      - name: Build, sign, hash and zip
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: ./scripts/make-release.ps1 -Sign -Arch arm64 -Version ${{ needs.version.outputs.version }}
+
+      - name: Wrap the package in an installer
+        shell: pwsh
+        run: ./scripts/make-installer.ps1 -Arch arm64 -Version ${{ needs.version.outputs.version }}
+
+      - name: Collect the download
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-arm64
+          path: |
+            dist/MICS-portable-*.zip
+            dist/MICS-setup-*.exe
+          if-no-files-found: warn
+
+  publish:
+    name: Publish
+    needs: [version, package-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect what the runners produced
+        uses: actions/download-artifact@v4
+        with:
+          path: download
+          merge-multiple: true
+
+      - name: Hash what is about to be published
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd download
+          ls -l
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: The tag this release belongs to
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; the release points at it"
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "refs/tags/$tag"
+          fi
+
+      # Quoted heredoc: the notes contain backticks and dollar signs that must stay
+      # literal, so the two values that do change are substituted afterwards.
+      - name: Notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          MI CS @VERSION@ - detection, audit and hardening for one Windows machine.
+
+          ## What is in here
+
+          | File | What it is |
+          |---|---|
+          | `MICS-portable-@VERSION@-x64.zip` | The portable package: unpack it anywhere, run `mics_app.exe` |
+          | `MICS-setup-@VERSION@-x64.exe` | The installer: one UAC prompt, Start Menu and desktop shortcuts, uninstall entry |
+          | `report.md` | The QA report of the run that built these files |
+          | `SHA256SUMS` | Hashes of exactly the files above, made in this run |
+
+          ## Before you install
+
+          Requirements: **Windows 10 21H2 or newer, or Windows 11, x64**. Windows 8
+          and 8.1 cannot run it at all - the Flutter runtime the UI is built on
+          requires Windows 10 1809+.
+
+          These builds are **not signed by a publicly trusted publisher**: no
+          certificate exists yet (docs/ROADMAP.md ب5), so Windows shows "Unknown
+          publisher" and SmartScreen warns. The binaries do carry the project's own
+          manifest signature and hash list - check the download against
+          `SHA256SUMS` and against the source commit below.
+
+          ## Evidence, not claims
+
+          - Built from commit `@SHA@` by the Release workflow, on GitHub's own
+            runners - never on a developer machine.
+          - The QA report is generated by the same contract that
+            `scripts/pipeline.ps1 -Tier full` enforces locally.
+          - The engine's ARM64 tests run natively on an ARM64 runner in this
+            workflow; those jobs are marked informational until they have a green
+            history.
+          NOTES
+          sed -i "s/@VERSION@/${{ needs.version.outputs.version }}/g; s/@SHA@/$GITHUB_SHA/g" notes.md
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ needs.version.outputs.tag }}" \
+            --title "MI CS ${{ needs.version.outputs.version }}" \
+            --notes-file notes.md \
+            download/*
