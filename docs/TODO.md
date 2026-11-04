@@ -325,18 +325,19 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    `docs/COST.md` carries the routes and their trade-offs - including the free
    SignPath route for open-source projects, which is only available while the source
    is public. Then **ب6**: a version bump, the signed zip + installer and a place to
-   publish.
-3. **Seven decisions, one line each.** Every one of them stops work that is otherwise
-   ready: *(a)* where the release is published (GitHub Releases? a self-hosted file?
-   it also becomes هـ1's default update URL); *(b)* whether licensed **GeoIP**
-   country lists may be bundled, since the licensing is unclear; *(c)* whether the
-   detection content stays the **starter pack** or real rules are written; *(d)*
+   publish - and the place is now decided (**GitHub Releases**, item 6 below), with
+   `.github/workflows/release.yml` written for it.
+3. **Six decisions, one line each.** Every one of them stops work that is otherwise
+   ready: *(a)* whether licensed **GeoIP**
+   country lists may be bundled, since the licensing is unclear; *(b)* whether the
+   detection content stays the **starter pack** or real rules are written; *(c)*
    whether the update pin moves to the certificate **thumbprint** (D-016) once a
-   certificate exists; *(e)* whether **IDS** grows past the DNS blocklist
-   (Suricata/ET-Open is out of scope today, so this reopens a decision); *(f)*
+   certificate exists; *(d)* whether **IDS** grows past the DNS blocklist
+   (Suricata/ET-Open is out of scope today, so this reopens a decision); *(e)*
    whether **real-time watching** (و2, 6-10 h) is wanted, because it costs CPU
-   continuously; *(g)* the **language-tag policy** (which tags the engine accepts and
-   the UI can render).
+   continuously; *(f)* the **language-tag policy** (which tags the engine accepts and
+   the UI can render). The publishing destination used to be the seventh and is
+   answered: **GitHub Releases** (2026-11-04).
 4. **D-023 and the bridge endpoint, which is what holds ز2-د (delivery).** A
    deliberate choice about where crash reports go, and an endpoint for the Open
    WhatsApp bridge. No code can be written before the answer, and inventing one would
@@ -344,16 +345,18 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
 5. **A Windows on ARM machine (optional, and it is the last ARM64 step).** The engine
    builds and is checked for `aarch64-pc-windows-msvc` (ب2), but the Flutter app has
    no Windows cross-compile, so an ARM64 download needs an ARM64 host - and it is
-   also the only way any ARM64 binary will ever be *run* here.
-6. **Whether the repository goes public (a decision that unlocks the free signing
-   route).** SignPath signs qualifying open-source projects for free, and the runner
-   reference gives public repositories 4 vCPU Windows runners with free, unlimited
-   minutes (private repositories get 2 vCPU drawing on included minutes). MI CS is
-   GPL-3.0 (D-001) either way. **Corrected 2026-11-04:** ARM64 runners
-   (`windows-11-arm`) are *not* public-repo only — see the D-003 correction; the
-   reason no ARM64 CI job exists yet is that none has been written, not that the
-   label is unavailable. The user chose **public** on 2026-11-04, after the
-   pre-public checks in §0.2a.
+   also the only way any ARM64 binary will ever be *run* **on your own hardware**.
+   Since 2026-11-04 CI supplies that host: `.github/workflows/release.yml` carries
+   two `windows-11-arm` jobs (the engine's tests run natively there), marked
+   informational until they have a green run.
+6. **Whether the repository goes public - DECIDED 2026-11-04: yes, as a fresh
+   public repository, and the version becomes 0.1.0.** SignPath signs qualifying
+   open-source projects for free, and the runner reference gives public repositories
+   4 vCPU Windows runners with free, unlimited minutes (private repositories get
+   2 vCPU drawing on included minutes). MI CS is GPL-3.0 (D-001) either way.
+   **Corrected 2026-11-04:** ARM64 runners (`windows-11-arm`) are *not* public-repo
+   only — see the D-003 correction. The two decisions taken with the answer are in
+   §0.2a items 2 and 5.
 
 ### 0.2a Before the repository is flipped to public (measured 2026-11-04)
 
@@ -366,18 +369,20 @@ needs first, all of it measured rather than assumed:
    `net localgroup` line in this file, and a widget-test startup-entry fixture in
    `tool/`). All four now read `<account>` / `<repo root>`; the command returns
    nothing at HEAD (commit 8a54e69).
-2. **The history is not clean, and that is the open decision.** `.git` is **106.4
-   MB** and 142 commits carry (a) a **34,000,312-byte** `mics-engine.exe` committed
-   under `dist/MICS-v1.0.0-windows-portable/` — a build from *before* the ط1
-   fingerprint sweep, so it very likely contains the account's `.cargo` paths in
-   binary form — plus `app.so` copies, and (b) the account name in **13** textual
-   places and a personal Gmail address. Two routes, and only the user can pick:
-   rewrite the 142 commits (drop `dist/`, scrub the strings, force-push — cheaper
-   for continuity, but GitHub keeps unreachable objects and any fork or cached
-   view can still hold them), or start a fresh public repository with the current
-   tree as one initial commit and keep this one as the private archive (loses git
-   history, which matters least here because `docs/TODO.md`'s Done log *is* the
-   history). **Not done yet — do not flip the repository until this is chosen.**
+2. **The history is not clean, and the route is decided: a FRESH public repository.**
+   `.git` is **106.4 MB** and 142 commits carry (a) a **34,000,312-byte**
+   `mics-engine.exe` committed under `dist/MICS-v1.0.0-windows-portable/` — a build
+   from *before* the ط1 fingerprint sweep, so it very likely contains the account's
+   `.cargo` paths in binary form — plus `app.so` copies, and (b) the account name in
+   **13** textual places and a personal Gmail address. The user chose on 2026-11-04
+   to **start a fresh public repository from the current tree**, which is the safer
+   of the two routes: a single-commit snapshot cannot leak a rewritten-history
+   remnant, and this repository stays as the private archive. `git switch --orphan
+   public` has been prepared with that one commit (branch `public`, verified to
+   contain no account name, no `dist/` and no state files); GitHub keeps unreachable
+   objects and cached views, which is exactly why the rewrite route was dropped.
+   **Push it to the new repository and only then flip anything to public** — the
+   commands are at the end of this section.
 3. **What the checkout contains that must never be published**: the VM lab's
    malware samples, `%LOCALAPPDATA%\MICS` state (`mics.db`, `secrets.dat`), and
    `dist/` (already ignored). The working tree is otherwise free of credentials:
@@ -388,7 +393,38 @@ needs first, all of it measured rather than assumed:
 4. **A first public version should not ship the internal brief as-is**:
    `MI-CS-Agent-Prompt.md` is a build prompt written for an agent, mojibake-encoded
    in places, and names the author. Keeping it is defensible (it is the project's
-   origin story) but it is a deliberate choice, not an oversight.
+   origin story) but it is a deliberate choice, not an oversight. The same goes for
+   `docs/TODO.md` itself: it is 340 KB of internal handoff notes, and publishing it
+   is what makes the project's claims checkable - but it is a choice.
+5. **The version is one number again: 0.1.0.** `pubspec.yaml` said `1.0.0+1` while
+   `engine/Cargo.toml` and every shipped artefact said `0.1.0`, so the app's own
+   version resource disagreed with the installer that carried it. Decided
+   2026-11-04: **0.1.0 wins** (`pubspec.yaml` → `0.1.0+1`, and `sbom.cdx.json` +
+   `THIRD-PARTY-NOTICES` regenerated at that version, `dart run tool\sbom.dart
+   --check` PASS).
+
+**What is left for you, in order** (nothing here can be done from this machine -
+creating the repository needs your GitHub account, and `gh` is not installed):
+
+```powershell
+# 1. On GitHub: create an EMPTY repository (no README, no .gitignore, no licence -
+#    the tree already has them). Suggested name: mi-cs.
+# 2. Push the prepared snapshot: branch `public` is a single commit holding this
+#    tree and nothing else, so none of the old history is uploaded.
+git remote add public git@github.com:<your-account>/mi-cs.git
+git push public public:main
+
+# 3. Recommended once that works: make the public repository the working one and
+#    keep this one as the readable archive, so public development has a normal
+#    history from that commit onwards.
+git remote rename origin archive
+git remote rename public origin
+```
+
+Then run the Release workflow once by hand (Actions → Release → Run workflow,
+version `0.1.0`) and read the log: it is the first execution of
+`.github/workflows/release.yml`, and the ARM64 jobs are informational until they
+have a green run.
 
 ### 0.3 The plan, in order — what a new session works through
 
@@ -754,6 +790,22 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **One version number: 0.1.0 (2026-11-04)**
+  - `pubspec.yaml` said `1.0.0+1` while `engine/Cargo.toml` said `0.1.0` and every
+    shipped artefact was named `0.1.0`, so `mics_app.exe`'s own version resource
+    disagreed with the installer carrying it. Decided by the user: **0.1.0 wins**
+    (it is what the downloads are called and what `mics-engine --version` reports),
+    so `pubspec.yaml` → `0.1.0+1` (`windows/runner/Runner.rc` keeps Flutter's
+    template fallbacks `1,0,0,0`, which only apply to a raw MSBuild build with no
+    `FLUTTER_VERSION*` macros - the Flutter build overrides them from pubspec).
+  - The inventory is regenerated at that version rather than edited by hand:
+    `dart run tool\sbom.dart --version 0.1.0` rewrote `sbom.cdx.json` and
+    `THIRD-PARTY-NOTICES`. Measured diff: 4 lines - the app component moves from
+    `pkg:generic/mi-cs@1.0.0` to `0.1.0`, the CycloneDX serial number is derived from
+    it, and the notices header follows. `dart run tool\sbom.dart --check` PASS
+    (exit 0) against the tree, which is the same check `make-release.ps1` runs before
+    it ships either file.
 
 - **Pre-public preparation, and a release workflow that has never run (2026-11-04,
   commit 8a54e69 and this one)**

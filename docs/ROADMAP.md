@@ -191,17 +191,22 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
 2. **A signing certificate** (ب5, the only HIGH row left): OV/EV or a cloud signing
    service, with the subject **exactly `CN=MI CS Code Signing`** (D-016). Free for
    open-source projects through SignPath. Costs and constraints: `docs/COST.md`.
-   Then ب6 publishes - which needs a **place to publish** (item 3 below).
-3. **Seven decisions that each stop ready work**: where the release is published
-   (also هـ1's default update URL); whether licensed GeoIP lists may be bundled;
-   starter pack vs real detection rules; thumbprint pin vs CN (D-016); IDS beyond
-   DNS; real-time watching (و2); and the language-tag policy.
+   Then ب6 publishes - and the place is decided: **GitHub Releases**, with
+   `.github/workflows/release.yml` written for it (never run yet).
+3. **Six decisions that each stop ready work**: whether licensed GeoIP lists may be
+   bundled; starter pack vs real detection rules; thumbprint pin vs CN (D-016);
+   IDS beyond DNS; real-time watching (و2); and the language-tag policy. The
+   publishing destination was the seventh and is answered (GitHub Releases).
 4. **D-023 and the bridge endpoint** - what holds ز2-د (crash-report delivery), and a
    choice no code can make for you (AGENTS.md 8 forbids inventing a destination).
 5. **A Windows on ARM machine** (optional): the engine builds and is checked for
    ARM64, but the app needs an ARM64 host, and nothing ARM64 has ever *run* here.
-6. **Public or private repository**: public unlocks GitHub's ARM64 runners and
-   SignPath's free signing; the licence is GPL-3.0 either way.
+   CI now supplies that host: the release workflow's two `windows-11-arm` jobs run
+   the engine's tests natively (informational until they have a green run).
+6. **~~Public or private repository~~** - **decided 2026-11-04: public, as a fresh
+   repository built from an orphan snapshot commit** (this one stays as the private
+   archive), and **one version number: 0.1.0**. The pre-public checks and the exact
+   commands are `docs/TODO.md` §0.2a.
 
 ## 5. Out of scope by design (not "remaining work")
 
