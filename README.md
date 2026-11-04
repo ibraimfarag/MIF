@@ -12,8 +12,10 @@ explains, and suggests the next action instead of dumping raw data.
 > package now carries a signed manifest of itself that the app checks at start-up
 > (see *Is this copy the published one?*). What is still missing is public code
 > signing (it needs a certificate to buy) and a download for Windows on ARM (the
-> ARM64 engine builds and is checked, but the app needs an ARM64 build host — see
-> *Requirements*). What is left, with priorities and
+> ARM64 engine builds and is checked, and GitHub's `windows-11-arm` runner is the
+> build host the app needs — the release workflow builds and tests ARM64 there, but
+> those jobs are informational until they have a green run — see *Requirements*).
+> What is left, with priorities and
 > estimates: [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md).
@@ -140,7 +142,7 @@ flutter test --no-pub tool\write_screenshots_test.dart
 
 | | |
 |---|---|
-| **OS** | Windows 10 21H2+ or Windows 11 (x64) — that is the only download today. **Windows on ARM**: the engine compiles and links for ARM64 (`scripts\build-engine-arm64.ps1`, artifact checked as a hardened ARM64 PE) but the Flutter app has no Windows ARM64 cross-compile, so an ARM64 download needs an ARM64 build host; until then an ARM64 package does not exist (D-003 appendix). 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
+| **OS** | Windows 10 21H2+ or Windows 11 (x64) — that is the only download today. **Windows on ARM**: the engine compiles and links for ARM64 (`scripts\build-engine-arm64.ps1`, artifact checked as a hardened ARM64 PE) but the Flutter app has no Windows ARM64 cross-compile, so an ARM64 download needs an ARM64 build host; GitHub's `windows-11-arm` runner is such a host and `.github/workflows/release.yml` builds and tests ARM64 there, but those jobs are marked informational until they have a green run, so until then an ARM64 package does not exist (D-003 and its 2026-11-04 correction). 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
 | **CPU / RAM** | 4 cores / 8 GB. The engine idles at ~11 MB RAM. |
 | **Disk** | ~150 MB for the app + engine, plus whatever the quarantine and intel cache grow to. |
 | **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |

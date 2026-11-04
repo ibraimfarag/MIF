@@ -792,6 +792,16 @@ click (P1.5) or a purchased certificate (P4).
 
 ### Done log (append only)
 
+- **The README's ARM64 claim matches the corrected one (2026-11-04)**
+  - The public face said "an ARM64 download needs an ARM64 build host; until then an
+    ARM64 package does not exist (D-003 appendix)" in the status note and in the
+    Requirements row, which was true but stopped being the whole truth once the
+    release workflow gained the two `windows-11-arm` jobs. Both now name GitHub's
+    ARM64 runner as that host, say the workflow builds and tests ARM64 there, and
+    keep the honest part - the jobs are **informational until they have a green
+    run** - so nothing in the public repo promises a download that does not exist.
+    No Arabic mirror: the README's Arabic section never mentioned ARM64.
+
 - **One version number: 0.1.0 (2026-11-04)**
   - `pubspec.yaml` said `1.0.0+1` while `engine/Cargo.toml` said `0.1.0` and every
     shipped artefact was named `0.1.0`, so `mics_app.exe`'s own version resource
