@@ -254,7 +254,12 @@ try {
   Pop-Location
   $ErrorActionPreference = $stopPreference
 }
-Get-Content $sbomOut | Where-Object { $_ -match "RESULT|sbom:|stale" } | ForEach-Object { "  $_" }
+# The tool's own words, including the first line that differs: `--check` prints
+# "components differs at line N" with the committed and generated text, and dropping
+# that line is what left "stale" as the only clue for two release runs.
+Get-Content $sbomOut |
+  Where-Object { $_ -match "RESULT|sbom:|stale|differs at line|committed:|generated:" } |
+  ForEach-Object { "  $_" }
 $sbomPassed = ($sbomExit -eq 0) -and ((Get-Content $sbomOut -Raw) -match "RESULT: PASS")
 Remove-Item $sbomOut -ErrorAction SilentlyContinue
 if (-not $sbomPassed) {
