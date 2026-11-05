@@ -61,10 +61,11 @@ jobs:
           & ./scripts/pipeline.ps1 -Tier full *>&1 | Tee-Object -FilePath $log
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            Get-Content $log |
-              Select-String -Pattern 'RESULT: FAIL|passed;|Expected:|Actual:|panicked at|^ *FAIL \(' |
-              Select-Object -Last 12 |
-              ForEach-Object { Write-Output "::error:: $($_.Line.Trim())" }
+            # Two annotations, not twelve: GitHub keeps only the first few and drops
+            # the rest silently, so the tail of the log goes in one message.
+            $fail = Get-Content $log | Select-String -Pattern 'RESULT: FAIL' | Select-Object -Last 1
+            Write-Output "::error::$($fail.Line.Trim())"
+            Write-Output "::error:: $(((Get-Content $log | Select-Object -Last 25) -join ' | '))"
             exit $code
           }
 

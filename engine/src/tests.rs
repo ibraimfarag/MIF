@@ -881,6 +881,18 @@ mod tests {
         assert!(refused.contains("\"ok\":false"), "{refused}");
         assert!(refused.contains("marker"), "{refused}");
 
+        // Cargo captures this unless the case fails, and on a machine whose default
+        // owner policy differs from this one the facts are exactly what a log needs to
+        // name the refusal (D-030). GitHub's runner needed them and could not be read
+        // without a signed-in browser.
+        eprintln!(
+            "facts: installer={:?} caller={:?} log={}",
+            crate::platform::windows::caller::installer_account(),
+            crate::platform::windows::caller::describe(std::process::id())
+                .map(|caller| (caller.sid, caller.is_administrator)),
+            log.display()
+        );
+
         // The real protocol, over a real pipe, in this process.
         server::spawn_console().expect("helper pipe binds");
         let pong = crate::privileged::call(&Op::Ping).expect("ping answers");

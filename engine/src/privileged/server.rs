@@ -117,9 +117,10 @@ async fn handle_client(server: NamedPipeServer) -> Result<()> {
                 }
                 crate::platform::windows::caller::Verdict::NotTheInstaller(found) => {
                     warn!(
-                        "privileged helper refused pid {} ({}): signed in as {found}, not the account MI CS was installed for",
+                        "privileged helper refused pid {} ({}): installer={installer:?}, signed in as {found}, administrator={}, so it is not the account MI CS was installed for",
                         caller.pid,
-                        caller.image.display()
+                        caller.image.display(),
+                        caller.is_administrator
                     );
                     Some(refusal(
                         "this pipe only serves the account MI CS was installed for",
