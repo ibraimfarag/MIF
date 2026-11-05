@@ -9,7 +9,12 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-05 · **a decoy read is detected, and the coverage behind it is
+> Last updated: 2026-11-05 · **the shipped detection pack is measured by what it catches,
+> and the first rule that could never fire is fixed** (D-033: one vector per rule in
+> `engine\testdata\detection`, a unit test in the fast tier, `scripts\verify-rules.ps1` —
+> 35 checks, PASS — and `verify-release.ps1` now runs it against the packaged `rules\`;
+> `Malicious_Macro_AutoOpen` compared the zip magic against `"KP"`, so it could never
+> match a real `.docm`) · **a decoy read is detected, and the coverage behind it is
 > measured** (D-032: HIGH `canary_read` read off the file's last-access time, its own
 > rule id so reads can be quieted alone, a 90 s settle window for a decoy MI CS has just
 > written, and `scripts\verify-canary.ps1` — 20 checks, PASS — against a real engine; the
@@ -349,13 +354,22 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
 3. **Six decisions, one line each.** Every one of them stops work that is otherwise
    ready: *(a)* whether licensed **GeoIP**
    country lists may be bundled, since the licensing is unclear; *(b)* whether the
-   detection content stays the **starter pack** or real rules are written; *(c)*
+   detection content stays the **starter pack** or real rules are written — measured
+   on 2026-11-05 so the answer is arithmetic rather than taste: the shipped pack holds
+   **8 of its 10 rules to a file**, one of those (`Malicious_Macro_AutoOpen`) can only
+   see an uncompressed container and a real `.docm` deflates its strings out of reach,
+   and 2 rules cannot be proven by a text file at all (see D-033 and the row in §7);
+   *(c)*
    whether the update pin moves to the certificate **thumbprint** (D-016) once a
    certificate exists; *(d)* whether **IDS** grows past the DNS blocklist
    (Suricata/ET-Open is out of scope today, so this reopens a decision); *(e)*
    whether **real-time watching** (و2, 6-10 h) is wanted, because it costs CPU
    continuously; *(f)* the **language-tag policy** (which tags the engine accepts and
-   the UI can render). The publishing destination used to be the seventh and is
+   the UI can render) — measured on 2026-11-05: the engine accepts any BCP-47-shaped
+   tag (deliberately not a closed list) and the UI resolves exact code, then the
+   primary subtag, then falls back to **Arabic** while missing *keys* fall back to
+   English, which is the incoherence the decision has to settle. The publishing
+   destination used to be the seventh and is
    answered: **GitHub Releases** (2026-11-04).
 4. **D-023 and the bridge endpoint, which is what holds ز2-د (delivery).** A
    deliberate choice about where crash reports go, and an endpoint for the Open
@@ -793,6 +807,7 @@ not implemented yet, see D-008).
 | `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted ransom-note string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
 | `scripts\verify-firewall.ps1` | The firewall is Windows' API, not `netsh` (D-028), measured against this machine: a fake `netsh.exe` is put first on the engine's PATH (and a direct `netsh` is shown to stop working under it, so the trap is proved to be a trap); `fw.default_deny.status` and `fw.rules.list` are compared with `Get-NetFirewallProfile`/`Get-NetFirewallRule -PolicyStore ActiveStore` field by field; one rule is created through the engine, read back from Windows with the exact direction, action, port, program, profile and group that were asked for, then removed and Windows is asked again. A profile policy is never flipped: a default-deny toggle would cut the network of whatever else is running. Writes go through the running `MICSHelper` (or need an elevated shell - the probe records a skip, never a pass). Cleans up after a failed run; ~8 s |
 | `scripts\verify-canary.ps1` | A decoy **read** is detected and the coverage behind it is measured, not assumed (D-032), against a real engine on a private pipe, a private `USERPROFILE` (so the default decoy paths cannot touch the real Documents folder) and a private data directory: a decoy MI CS had just written is settled silently inside the 90 s window and the engine's log says `canary settling`; a decoy that was already on disk raises `canary_read`/HIGH under rule id `CANARY_READ` with its size and **SHA-256 unchanged**; one appended byte raises `canary_triggered`/CRITICAL under `CANARY`; fifty metadata queries in a row move no last-access time and raise nothing, so the guard's own poll cannot trip its trap; and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell, on the folder the decoys are actually in. With no elevation (the unelevated poll is the path that has to see it) and no ETW; on a volume that keeps no last-access time it reports part 2 as **SKIP** with the reason instead of a pass. No elevation, ~35 s |
+| `scripts\verify-rules.ps1` | The shipped detection pack is measured by **what it catches**, not by whether it loads (D-033): 8 vectors in `engine\testdata\detection` (one per rule, plus a clean control that must stay silent) are scanned by a real engine, each must be caught under the rule it was written for, every rule the pack declares must either be caught by one of them or be named as unreachable with its reason, and the engine must say it loaded that pack rather than the copy compiled into the binary. Prints the pack's SHA-256. Fails by construction when it should — an inverted magic loses `pk-macro.txt`, an unproven new rule fails on its own name (both measured, exit 1). `-InPlace` measures the pack beside the engine (what `verify-release.ps1` does with an extracted package); without it, `-RulesBase` points a dev binary at a tree. Isolated data directory with `{"dnd": true}` so it does not put a card on the desktop per finding (measured 7 without, 0 with). No elevation, ~6 s |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -831,6 +846,44 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **The shipped rules are held to files now, and the first one that could never fire is fixed (2026-11-05, D-033)**
+  - **The gap.** `verify-release.ps1` proved that a package's `rules\` is the one the
+    engine loads — a statement about packaging. Nothing ever asked a rule to *match*
+    anything, and the bill arrived the moment one was asked: the shipped
+    `Malicious_Macro_AutoOpen` tested `uint16(0) == 0x504B`. YARA reads `uint16`
+    little-endian, so that constant is the bytes `K`,`P` in file order, while a
+    zip/OOXML container starts `P`,`K` and reads `0x4B50`. **The rule could not fire on
+    any `.docm` that has ever existed**, and a gate that counts loaded rules cannot
+    notice a rule that loads perfectly.
+  - **Measured before and after.** A file whose first two bytes are `KP` plus
+    `AutoOpen`/`Shell` *was* caught (`yara:Malicious_Macro_AutoOpen`) while a real
+    container built with `Compress-Archive` (`50 4B 03 04`) was not; after the fix the
+    `KP` file is silent and a `PK`-shaped file with the same strings is caught.
+    Re-measured through a real engine on an isolated data directory, the pack now holds
+    **8 of its 10 rules to a file**: `Suspicious_HTA_Exec`,
+    `Suspicious_BAT_Certutil_Download`, `Suspicious_Cmd_PowerShell_Download`,
+    `Suspicious_VBS_Dropper`, `Malicious_Macro_AutoOpen`, `Double_Extension_Emailer`,
+    `Ransom_Note_Names`, `Suspicious_Scheduled_Task_Creator` — with the 2 it cannot
+    reach named and reasoned (`EICAR_Test_File`: the string is what Defender
+    quarantines; `Tiny_Packed_Pe_Installer`: needs a binary PE).
+  - **What holds it now.** `engine\testdata\detection` carries one vector per rule plus
+    a clean control; `scanner::yara_engine::tests` runs the table in the fast tier (4
+    cases, 0.25 s) and `scripts\verify-rules.ps1` runs the same table through the
+    shipped engine and the packaged pack (**35 checks, PASS**), while
+    `verify-release.ps1` now calls the probe with `-InPlace` so a release proves its own
+    `rules\` *detects* rather than merely loads. The probe fails by construction when it
+    should, both measured at exit 1: the inverted constant loses `pk-macro.txt`, and a
+    rule nobody has a vector for fails on its own name. The pack's SHA-256 is printed
+    with the verdict, because which bytes were measured is part of the measurement.
+  - **The honest remainder.** The fix removes the impossibility, not the weakness. A real
+    `.docm` deflates its macro strings, and the probe measured that `AutoOpen`,
+    `CreateObject` and `Shell` are **absent** from such a file's bytes — so the rule
+    still cannot see a real document, and catching one needs an OOXML/OLE parser.
+    That is decision (b), and it has numbers behind it now instead of adjectives.
+  - **Two side measurements.** A detection probe must not spam the desktop: with the
+    staged data directory's `{"dnd": true}` the scan logged 0 `alert shown` lines where
+    the same scan without it logged 7. And 9 vectors cost 6 s, so this runs anywhere.
 
 - **A decoy read is an event now, and the coverage behind it is measured (2026-11-05, D-032)**
   - **What changed.** `guard/canary.rs`'s snapshot carries the decoy's last-access
@@ -4472,7 +4525,7 @@ signing certificate respectively), so this is the work that is always available.
 | ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is 65 methods again | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
 | ~~LOW~~ | ~~A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS"~~ — **closed 2026-11-03 (و4) by evidence, as a documented limit rather than a defect**: `verify-aumid.ps1` PASSes — `DisplayName` is `MI CS`, its `IconUri` names a file that exists, **both** shortcuts carry `System.AppUserModel.ID = MICS`, and the Shell files `MI CS` under AppID `MICS` — which is exactly what the AUMID was for (the app is filed by name instead of by exe path). The row's *substance* is not fixable in the app and `docs/THREAT-MODEL.md` §B10 already says it: a card is UI, not proof of origin, because the AppUserModelID is not an authenticator. Nothing in the product reads a card as evidence of anything; the register row existed to stop that reading | `notify/toast.rs`, THREAT-MODEL §B10 |
 | MED | **No real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection between runs (Windows Defender is the real-time layer, and the audit says so loudly when it is off). **The scheduled half is done** (و1, 2026-11-03, D-027): the engine runs a scan by itself every `scan_interval_hours` (opt-in, off by default) over `scan_target`, report-only, and `scripts\verify-scan-schedule.ps1` proves it starts, finds, and leaves the file in place — but a schedule is a moment, not a monitor: what changed *between* two runs is still only seen by Defender | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
-| LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
+| LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it. **The "checks that packs load, not what they catch" half closed 2026-11-05 (D-033)**: `scripts\verify-rules.ps1` holds the pack a package ships to files — `engine\testdata\detection`, 8 vectors each written for one rule plus a clean control, **35 checks PASS** — and every rule the pack declares must either be caught by one of them or be named as unreachable with its reason. That ratchet immediately found the pack's one impossible rule: `Malicious_Macro_AutoOpen` compared `uint16(0)` against `0x504B`, which little-endian is `"KP"`, so it could never fire on any container that exists (a real `.docm` starts `50 4B` = `0x4B50`) — fixed, with the measured pair pinned by a test and re-measured through the probe. Measured reach of the 10 rules: **8 held to a file**, 2 named unreachable by a text vector (`EICAR_Test_File` — the string is what Defender quarantines; `Tiny_Packed_Pe_Installer` — needs a binary PE). **What stays open is the content decision, not the mechanism**: the macro rule's container test is two magic bytes plus substrings, and a real `.docm` deflates those substrings out of any pattern's reach (measured: `AutoOpen`, `CreateObject` and `Shell` are absent from the file's bytes), so document-borne malware needs an OOXML/OLE parser rather than another rule — which is decision (b) of the six in §0.2 | `engine/rules/yara/starter.yar`, `engine/testdata/detection/`, `scripts/verify-rules.ps1`, `scripts/verify-release.ps1`, `docs/PROTECTION-MATRIX.md` §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | ~~MED~~ | ~~Canaries detect mtime/size changes by polling; a read-only open is not detected~~ — **closed 2026-11-05 (D-032) by evidence**: the snapshot carries the file's last-access time, so a read-only open is its own HIGH `canary_read` event under rule id `CANARY_READ` — a separate id on purpose, so a user can quiet reads without losing the ones that mean their decoy was overwritten — while a write still wins as CRITICAL `canary_triggered`/`CANARY`. `scripts\verify-canary.ps1` (**20 checks, PASS**) drives a real engine over a private pipe with a private `USERPROFILE` and measures: a decoy MI CS had just written is settled silently inside the 90 s window (`READ_SETTLE`, and the engine's log says `canary settling` instead of hiding it), a decoy that was already on disk raises `canary_read` with its size and SHA-256 unchanged, one appended byte raises `canary_triggered`/critical, fifty metadata queries in a row move no last-access time and raise nothing (the poll cannot trip its own trap), and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell. **Found while measuring:** the verdict had been probed on the *previous* decoy folder, so on a machine whose decoys live on another volume it would have named the wrong disk — the probe now asserts `probed_on` is the decoys' own folder, and the engine re-measures when they move. What remains is honest and named: only a volume that keeps a last-access time can show a read, so `canary.status`/`guard.status` and the Canaries screen report the measured verdict (with the `fsutil behavior set disablelastaccess 0` that turns it on) instead of implying coverage, and the engine still cannot name the reader without the kernel event source | `guard/canary.rs`, `guard/mod.rs`, `dispatcher.rs`, `docs/PROTECTION-MATRIX.md` §4.2, `scripts\verify-canary.ps1` |

@@ -81,7 +81,29 @@ restored or deleted. A scan never stops a process or a file from loading.
   looked up off-box either: reputation is the local cache plus YARA.
 - **Detection content is a starter pack** (6 guard rules, 10 YARA rules). The
   engine is the product; the packs are a demonstration until real content is
-  curated, and `verify-release.ps1` checks that they *load*, not what they catch.
+  curated. What they catch is **measured, not assumed**: `scripts\verify-rules.ps1`
+  holds the pack a package ships to the vectors in `engine\testdata\detection`
+  (8 files, each written for one rule, plus a clean control), and every rule the
+  pack declares must either be caught by one of them or be named as unreachable
+  with its reason. Measured 2026-11-05 on the shipped pack (`starter.yar`,
+  sha256 `69899c59…`): **8 of the 10 rules are held to a file** — `Suspicious_HTA_Exec`,
+  `Suspicious_BAT_Certutil_Download`, `Suspicious_Cmd_PowerShell_Download`,
+  `Suspicious_VBS_Dropper`, `Malicious_Macro_AutoOpen`, `Double_Extension_Emailer`,
+  `Ransom_Note_Names`, `Suspicious_Scheduled_Task_Creator` — and 2 are not:
+  `EICAR_Test_File` (the string is what Defender itself reacts to, so a committed
+  fixture would be quarantined) and `Tiny_Packed_Pe_Installer` (a PE-shaped fixture
+  has to be binary). The same table runs in the fast tier as
+  `scanner::yara_engine::tests`, so a rule that stops matching fails in seconds
+  instead of on a user's machine.
+- **The macro rule's reach is one container shape, and no more.** `Malicious_Macro_AutoOpen`
+  tests a container by two magic bytes plus substrings, and a real macro document
+  **deflates** those substrings into bytes no pattern can read. Measured on a
+  `.docm` built for the probe: the literals `AutoOpen`, `CreateObject` and `Shell`
+  are absent from the file's bytes (only the entry name `vbaProject` survives).
+  Before 2026-11-05 the rule was worse than weak — it compared `uint16(0)` against
+  `0x504B`, which little-endian is `"KP"`, so it could never fire on any document
+  at all; the shipped constant is `0x4B50` now. Catching a real macro document
+  needs an OOXML/OLE parser, which is a decision (D-033), not a rule edit.
 
 ## 3. L1/L2 — network and name resolution
 
@@ -262,6 +284,7 @@ administrator can delete it (F-10).
 | AMSI / script-content inspection | Script and in-memory payloads pass (section 2) |
 | ETW-TI (threat-intelligence provider) | No kernel-level event telemetry beyond process creation |
 | Memory scanning, unpacking, emulation | Packed/obfuscated malware is invisible to L4 |
+| Office macro / document parsing | A macro-bearing document is not parsed: the pack tests a container by two magic bytes plus substrings, and a real `.docm` deflates those substrings out of any pattern's reach (measured, section 2). Closing it needs an OOXML/OLE macro extractor, not another rule |
 | Network packet inspection (no Suricata/ET-Open) | No protocol-level detection, no beaconing heuristics |
 | Resolver-level DNS filtering | The hosts sinkhole is bypassed by DoH and by IP-only traffic |
 | Patch management | Vulnerabilities are reported, never fixed |
@@ -283,3 +306,4 @@ administrator can delete it (F-10).
 | The scanner resumes instead of restarting after a crash | the durable-job tests in `tests.rs` |
 | A decoy *read* is detected, and what the decoys cover is a measurement | `scripts\verify-canary.ps1` (20 checks, PASS, 2026-11-05) against a real engine on a private pipe: a decoy MI CS had just written is settled silently inside the 90 s window (and the log records it), a pre-existing decoy raises HIGH `canary_read` with its size and SHA-256 unchanged, one appended byte raises CRITICAL `canary_triggered`, fifty metadata queries move no last-access time and raise nothing, and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell — including that the verdict names the decoys' own folder |
 | Reading and writing are told apart in one place | the six `guard::canary::tests` cases over `classify` (untouched, read-only, read-that-also-writes, deleted, a volume without atime, and the probe leaving nothing behind) |
+| What the shipped detection pack *catches*, not that it loads | `scripts\verify-rules.ps1` (**35 checks, PASS, 2026-11-05**) scans the 9 vectors in `engine\testdata\detection` with the pack a package ships and requires each one to be caught under the rule it was written for, the clean control to stay silent, and every declared rule to be either caught or named as unreachable — plus the same table as a unit test (`scanner::yara_engine::tests`, 4 cases), which is what found `Malicious_Macro_AutoOpen` comparing the zip magic against `"KP"`. `verify-release.ps1` runs the probe against the packaged pack with `-InPlace`, so the artifact's own `rules\` is what catches the vectors |

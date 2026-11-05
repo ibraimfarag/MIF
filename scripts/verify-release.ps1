@@ -16,7 +16,10 @@
     4. the extracted engine puts a real card on the desktop (`verify-toast.ps1`);
     5. the extracted engine loads its rules **from the package**, not from the
        compiled-in fallback - the engine logs which file it used, and a package
-       that falls back is an incomplete package;
+       that falls back is an incomplete package - and those rules are then held to
+       files (`verify-rules.ps1`): every vector must be caught under the rule it
+       was written for, and every rule the pack declares must either have such a
+       vector or be named, with its reason, as unreachable;
     6. both binaries are hardened the way the release claims (`verify-hardening.ps1`:
        CFG, ASLR/DEP, stripped) and the Dart snapshot is really obfuscated, with
        no symbol table inside the package.
@@ -279,6 +282,20 @@ try {
   if ($yaraLine -and $yaraLine -like "*$work*rules\yara\starter.yar*") { Pass "YARA rules: $yaraLine" }
   else { Fail "the scan did not use the packaged YARA rules (log line: $yaraLine)" }
 
+  # Loading the packs is a packaging claim. What they *catch* is a detection claim,
+  # and it is measured against the same vector files the fast tier holds the rules
+  # to. This step exists because the pack once shipped `Malicious_Macro_AutoOpen`
+  # comparing the zip magic against 0x504B ("KP" in file order), which no real
+  # container starts with - a rule that could never fire, and nothing asked it to.
+  $rulesOut = Join-Path $env:TEMP "rel-rules.out"
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-rules.ps1") `
+    -EngineExe (Join-Path $work "mics-engine.exe") -InPlace > $rulesOut 2>&1
+  $rulesExit = $LASTEXITCODE
+  Get-Content $rulesOut | Where-Object { $_ -match "RESULT|^FAIL|sha256|Coverage|not exercised" } | ForEach-Object { "  $_" }
+  Remove-Item $rulesOut -ErrorAction SilentlyContinue
+  if ($rulesExit -eq 0) { Pass "the packaged pack catches every vector it ships (verify-rules.ps1)" }
+  else { Fail "verify-rules.ps1 failed on the packaged pack (exit $rulesExit)" }
+
   $versionFile = Join-Path $work "VERSION"
   if (Test-Path $versionFile) {
     $versionLine = Get-Content $versionFile -TotalCount 1
@@ -321,7 +338,7 @@ try {
 }
 
 if ($failures.Count -eq 0) {
-  Write-Output "RESULT: PASS - the published release matches its hashes, is complete, runs, and loads its own rules"
+  Write-Output "RESULT: PASS - the published release matches its hashes, is complete, runs, loads its own rules, and those rules catch the vectors they ship"
   exit 0
 }
 Write-Output "failures:"

@@ -1510,3 +1510,50 @@ read-level canary as missing. If a future Windows changes the last-access policy
 the measured verdict is what tells the user - so nothing here may be re-stated as "reads
 are detected" without the volume it was measured on. Naming the *reader* still needs ETW
 or a driver and stays out of scope; `pid` is 0 on this event, and the copy says so.
+
+---
+
+## D-033 — A rule that has never matched a file is a claim, not a detection
+
+**Status:** accepted (2026-11-05)
+
+**Context.** The register row said it plainly: `verify-release.ps1` checks that the packs
+*load*, not what they catch. Loading is a statement about a loader, and detection content
+is the one part of this product whose *content is the feature*. The bill arrived the first
+time a rule was asked to match anything: the shipped `Malicious_Macro_AutoOpen` tested
+`uint16(0) == 0x504B`. YARA reads `uint16` little-endian, so `0x504B` is the bytes `K`,`P`
+in file order - while a zip/OOXML container starts `P`,`K` and reads `0x4B50`. The rule
+could not fire on any `.docm` that has ever existed, and no gate could notice, because a
+rule that can never match loads perfectly.
+
+**Decision.** Every rule the pack ships is either held to a file that proves it or named,
+with its reason, as unreachable by a text vector.
+
+1. `engine\testdata\detection` carries one vector per provable rule plus a clean control.
+   The expectation table lives in two places that cannot drift: a unit test
+   (`scanner::yara_engine::tests`, fast tier) and `scripts\verify-rules.ps1` (a real
+   engine, the pack a package ships).
+2. A declared rule that appears in neither table fails: the unit test asserts the counts
+   add up, and the probe fails on the rule's own name. Adding a rule therefore means
+   writing a vector or writing down why one is impossible.
+3. Two rules are named rather than skipped: `EICAR_Test_File` (the string is what Defender
+   itself reacts to, so a committed fixture would be quarantined and the gate would fail
+   for the wrong reason) and `Tiny_Packed_Pe_Installer` (a PE-shaped fixture has to be
+   binary; a malformed one is quarantine bait, a real one is a build artifact).
+4. The probe prints the pack's SHA-256 with the verdict, and `verify-release.ps1` calls it
+   with `-InPlace`, so the artifact's own `rules\` is what must catch the vectors - not a
+   copy staged by the probe and not the pack compiled into the binary.
+
+**Why.** Eight of ten rules are provable with a text file, and nobody had looked. The
+ratchet is cheap (4 unit cases, 0.25 s; 35 probe checks, 6 s), it fails for the right
+reason, and it makes the pack's coverage a number instead of a claim. It also converts the
+"starter pack or real rules" question from taste into arithmetic: 8 of 10 rules are alive,
+one of them only sees an uncompressed container, and the remaining two cannot be proven by
+a file at all.
+
+**Commits us to.** A new detection rule needs a vector or a named reason, and the fast tier
+fails if a shipped rule stops matching. The measured limit stays written down where the
+claim is made: a real `.docm` deflates its macro strings - measured, `AutoOpen`,
+`CreateObject` and `Shell` are absent from the file's bytes - so the macro rule's reach is
+one container shape, not document detection, and closing that is decision (b) (an
+OOXML/OLE parser), not another rule edit.

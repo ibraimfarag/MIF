@@ -95,5 +95,9 @@ rule Malicious_Macro_AutoOpen
         $shell = "Shell" nocase
         $createobject = "CreateObject" nocase
     condition:
-        uint16(0) == 0x504B and 2 of them
+        // 0x4B50 is "PK": uint16(0) reads little-endian, so a zip/OOXML
+        // container (50 4B 03 04) is 0x4B50, not 0x504B. The inverted constant
+        // this used to carry matched only a file starting with "KP", so the
+        // rule could never fire on a real .docm/.docm-family document.
+        uint16(0) == 0x4B50 and 2 of them
 }

@@ -194,8 +194,14 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
    Then ب6 publishes - and the place is decided: **GitHub Releases**, with
    `.github/workflows/release.yml` written for it (never run yet).
 3. **Six decisions that each stop ready work**: whether licensed GeoIP lists may be
-   bundled; starter pack vs real detection rules; thumbprint pin vs CN (D-016);
-   IDS beyond DNS; real-time watching (و2); and the language-tag policy. The
+   bundled; starter pack vs real detection rules (measured 2026-11-05, D-033: 8 of the
+   10 shipped rules are now held to a file, one of those only sees an uncompressed
+   container because a real `.docm` deflates its macro strings, and 2 cannot be proven
+   by a text file at all); thumbprint pin vs CN (D-016);
+   IDS beyond DNS; real-time watching (و2); and the language-tag policy (measured:
+   the engine accepts any BCP-47-shaped tag by design, the UI resolves exact code then
+   the primary subtag and then falls back to Arabic while missing keys fall back to
+   English). The
    publishing destination was the seventh and is answered (GitHub Releases).
 4. **D-023 and the bridge endpoint** - what holds ز2-د (crash-report delivery), and a
    choice no code can make for you (AGENTS.md 8 forbids inventing a destination).
