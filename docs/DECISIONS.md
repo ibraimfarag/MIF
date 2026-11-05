@@ -1432,3 +1432,24 @@ instead of the built-in Administrator's SID - the same grant written the other w
 which cost the runner's `the_engine_pipe_grants_only_the_owner_system_and_administrators`
 (`D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;LA)`). `docs/THREAT-MODEL.md` F-2 carries the
 amendment.
+
+---
+
+## D-031 — A release run creates a draft; a human publishes it
+
+**Status:** accepted (2026-11-05)
+
+**Decision.** The `Release` workflow uploads its assets and notes to a **draft** release
+(`gh release create --draft`) and prints the tag it made. Publishing - the click that
+makes it visible - stays with the owner.
+
+**Why.** Two reasons, one of them measured. The build is **self-signed** (D-016): Windows
+still says "Unknown publisher", so a release that appears by itself is a warning
+delivered to strangers without anyone reading it first. And the workflow is still being
+verified: the first two `Release` runs (41922523593, 41963395561) failed in packaging,
+the ARM64 legs are deliberately `continue-on-error`, and a tag push now re-runs the whole
+thing. With a draft, verifying a run costs a tag and publishes nothing.
+
+**Commits us to.** Publishing is a human step, and the release page is where the hashes
+are read before it happens. When ب5's real certificate exists and the ARM64 legs have a
+green history, this can be revisited - as a decision, not as a silent flag flip.

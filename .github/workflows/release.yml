@@ -123,7 +123,14 @@ jobs:
         shell: pwsh
         env:
           YRX_REGENERATE_MODULES_RS: "false"
-        run: ./scripts/make-release.ps1 -Sign -Arch x64 -Version ${{ needs.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $log = 'build/release-x64-log.txt'
+          & ./scripts/make-release.ps1 -Sign -Arch x64 -Version "${{ needs.version.outputs.version }}" *>&1 |
+            Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
 
       - name: Wrap the package in an installer
         shell: pwsh
@@ -184,7 +191,14 @@ jobs:
 
       - name: The result has to be a hardened ARM64 PE
         shell: pwsh
-        run: ./scripts/verify-hardening.ps1 -Path engine/target/release -Arch arm64
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $log = 'build/release-arm64-engine-log.txt'
+          & ./scripts/verify-hardening.ps1 -Path engine/target/release -Arch arm64 *>&1 |
+            Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
 
   package-arm64:
     name: Package (arm64, informational)
@@ -229,7 +243,14 @@ jobs:
         shell: pwsh
         env:
           YRX_REGENERATE_MODULES_RS: "false"
-        run: ./scripts/make-release.ps1 -Sign -Arch arm64 -Version ${{ needs.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $log = 'build/release-arm64-log.txt'
+          & ./scripts/make-release.ps1 -Sign -Arch arm64 -Version "${{ needs.version.outputs.version }}" *>&1 |
+            Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
 
       - name: Wrap the package in an installer
         shell: pwsh
@@ -328,7 +349,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # --draft on purpose (D-031): the assets, the hashes and the notes are all
+          # uploaded and checkable, but nothing is visible to the world until a human
+          # publishes it. A self-signed build (D-016) should not appear on its own.
           gh release create "${{ needs.version.outputs.tag }}" \
+            --draft \
             --title "MI CS ${{ needs.version.outputs.version }}" \
             --notes-file notes.md \
             download/*
+          echo "::notice::draft ${{ needs.version.outputs.tag }} created - publish it from the Releases page when the hashes read right"

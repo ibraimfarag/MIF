@@ -902,6 +902,21 @@ click (P1.5) or a purchased certificate (P4).
     (`engine.clippy`, once the component is asked for), **5 and 6 ran for the first time
     and passed** (`engine.build`, `engine.smoke`), 7 (`engine.contract`) is the harness
     bug above, and **8 (`app.build`) has still never run there**.
+  - **The Release run failed in all three packaging jobs; the CI is green (2026-11-05).**
+    Run **41951427102** (on `6fee0ce`) is the first **green CI**: all 8 full-tier steps,
+    including `app.build`, which had never run on a runner before.
+    `workflow_dispatch` run **41963395561** then showed the release side: `Resolve the
+    version and tag` PASS, and three failures - `Package (x64)` step 7
+    ("Build, sign, hash and zip"), `Package (arm64)` step 6 and the informational
+    `ARM64 engine, run natively` step 6 ("The result has to be a hardened ARM64 PE").
+    `Publish` was **skipped**, which is the dependency doing its job. **x64 is green on
+    this machine, end to end** - `make-release.ps1 -Sign -Arch x64 -Version 0.1.0`
+    printed `RESULT: PASS` with the SBOM check passing (579 components) and 41 checks /
+    0 failures / 154.6 s - so the runner's x64 failure is environmental and the log has
+    to name it. Because the Release workflow had no self-annotating step, three steps
+    now tee their output and call `scripts/annotate-failure.ps1` (extracted from the CI
+    step, one owner for the format), and the release is created as a **draft** (D-031) so
+    verifying a run costs a tag and publishes nothing.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
