@@ -66,11 +66,17 @@ jobs:
           & ./scripts/pipeline.ps1 -Tier full *>&1 | Tee-Object -FilePath $log
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            # Two annotations, not twelve: GitHub keeps only the first few and drops
-            # the rest silently, so the tail of the log goes in one message.
+            # Three annotations, not twelve: GitHub keeps only the first few and drops
+            # the rest silently. `qa/contract.dart` prints "  FAIL  <case>", the Rust
+            # harness prints "failures:" blocks, so the markers are named explicitly
+            # instead of hoping they land in the tail.
             $fail = Get-Content $log | Select-String -Pattern 'RESULT: FAIL' | Select-Object -Last 1
             Write-Output "::error::$($fail.Line.Trim())"
-            Write-Output "::error:: $(((Get-Content $log | Select-Object -Last 25) -join ' | '))"
+            $cases = Get-Content $log |
+              Select-String -Pattern '^\s*FAIL\s{2,}|HARNESS FAILURE|^failures:$|^\s+test result: FAILED' |
+              Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }
+            if ($cases) { Write-Output "::error:: $($cases -join ' | ')" }
+            Write-Output "::error:: tail: $(((Get-Content $log | Select-Object -Last 12) -join ' | '))"
             exit $code
           }
 
