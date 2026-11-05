@@ -10,8 +10,10 @@ explains, and suggests the next action instead of dumping raw data.
 > **Status: pre-release.** Every feature below is implemented and covered by
 > tests, the portable package and its installer are built and verified, and the
 > package now carries a signed manifest of itself that the app checks at start-up
-> (see *Is this copy the published one?*). What is still missing is public code
-> signing (it needs a certificate to buy) and a download for Windows on ARM. The
+> (see *Is this copy the published one?*). **The first public build exists: `v0.1.0`
+> on the [Releases page](https://github.com/ibraimfarag/MIF/releases)** — see
+> [Download](#download). What is still missing is public code signing (it needs a
+> certificate to buy) and a download for Windows on ARM. The
 > ARM64 engine builds, and GitHub's `windows-11-arm` runner runs its tests natively;
 > the ARM64 *app* download is a different question, because Flutter publishes no
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
@@ -23,6 +25,37 @@ explains, and suggests the next action instead of dumping raw data.
 > [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
+
+## Download
+
+**The first public build is [`v0.1.0`](https://github.com/ibraimfarag/MIF/releases)**,
+built and verified by the [Release workflow](.github/workflows/release.yml) on GitHub's own
+runners — never on a developer machine. Windows 10 21H2+ or Windows 11, x64
+(see [Requirements](#requirements) for ARM64 and 32-bit).
+
+| File | What it is |
+|---|---|
+| `MICS-setup-0.1.0-x64.exe` | The installer: one UAC prompt, Start-Menu and desktop shortcuts, an entry in Apps & features, an uninstaller — and the privileged helper. **Recommended.** |
+| `MICS-portable-0.1.0-x64.zip` | The portable package: unpack it anywhere and run `mics_app.exe`. Nothing registered, nothing to uninstall. |
+| `SHA256SUMS` | The SHA-256 of exactly the files above, written by the run that built them. |
+| `report.md` | The QA report of that same run. |
+
+Check what you downloaded before you run it:
+
+```powershell
+Get-FileHash .\MICS-setup-0.1.0-x64.exe -Algorithm SHA256
+```
+
+The hash it prints has to be the hash `SHA256SUMS` lists for that file. Both were produced in
+the same run that built the bytes, so they also tell you the download arrived whole.
+
+**Windows will say "Unknown publisher", and SmartScreen may warn.** That is expected, not a
+sign of a bad download: these builds are not signed by a publicly trusted certificate yet
+(row ب5 in [`docs/ROADMAP.md`](docs/ROADMAP.md)) — the binaries carry the project's own
+signature and its manifest of every shipped file, which the app checks at start-up, but no
+public reputation. The run-anyway, hash-check and `Unblock-File` steps are in
+[Troubleshooting](#troubleshooting). GitHub also marks such a build as an unsigned binary on
+the release page; that label is the same missing certificate, not a missing file.
 
 ## What MI CS does
 
@@ -155,7 +188,7 @@ flutter test --no-pub tool\write_screenshots_test.dart
 Today MI CS ships as a **portable folder and a portable archive**, and as an
 **installer** (`MICS-setup-<version>-x64.exe`, built with NSIS from the same
 package — one UAC prompt, a Start-Menu entry, a desktop icon, an entry in Apps &
-features, and an uninstaller). Pick one:
+features, and an uninstaller). Both are on the [Releases page](#download). Pick one:
 
 **Installer (recommended).** Run `MICS-setup-<version>-x64.exe` and click through
 one UAC prompt. It installs for every user under `%ProgramFiles%\MI CS`, creates the
@@ -737,6 +770,13 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 تشغّل أي حاجة نزّلتها، اتأكد منها:
 `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` وقارنه بالـ
 `SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه.
+
+**من فين تنزّل:** الإصدار الأول `v0.1.0` على
+[صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases) — المثبّت
+`MICS-setup-0.1.0-x64.exe` أو النسخة المحمولة `MICS-portable-0.1.0-x64.zip`. البناء
+والتوقيع والفحص كلهم بيتعملوا على runners جيت هاب نفسها، وإطلاق الإصدار للعامة بيد بشر بعد
+ما كل الفحوص تعدّي (D-031)؛ ولسه مفيش توقيع عام بشهادة موثوقة، فـ ويندوز هيقول
+"ناشر غير معروف" وSmartScreen ممكن يحذّر — والملفات نفسها بتتحقق من نفسها بالبيان الموقّع.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة

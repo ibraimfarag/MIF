@@ -980,7 +980,16 @@ click (P1.5) or a purchased certificate (P4).
     components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
     `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
     reports its measured `2 of 7`.
-  - **The first release is built, verified and sitting as a draft (2026-11-05, run
+  - **The README now says where the release is (2026-11-05, ب6's publishing half).** A
+    `## Download` section sits under the status block: `v0.1.0` on the Releases page, the two
+    artefacts and what each one is, `SHA256SUMS` + `report.md`, a `Get-FileHash` check to run
+    before anything is executed, and the honest note that Windows will say "Unknown
+    publisher" because the build has no publicly trusted certificate yet (ب5) - the app's own
+    manifest check is what is available. The Arabic overview got the same line, and
+    `docs/ROADMAP.md`'s ب6 row now records the measured state: tag `v0.1.0` on `da77bb3`,
+    run **42040718389** green end to end, and the release created as a **draft** that is
+    still a draft at this commit - publishing it is the one click D-031 reserved for you.
+- **The first release is built, verified and sitting as a draft (2026-11-05, run
     **42040718389** on `da77bb3`).** Every job that has to pass passed: `Resolve the
     version and tag`, **`Package (x64)`** (probe, build, signing, manifest, NSIS installer,
     `verify-release.ps1 -Arch x64 -SkipToast`, artifact upload, QA report) and **`Publish`**,
