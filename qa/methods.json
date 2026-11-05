@@ -234,6 +234,13 @@
       "note": "Reads the decoy configuration in the sandbox."
     },
     {
+      "method": "canary.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "What the decoys cover, plus the measured verdict on whether a read-only open of one would be seen on their volume (it is measured when the watchers arm, and never assumed)."
+    },
+    {
       "method": "canary.configure",
       "class": "mutating",
       "missing": true,

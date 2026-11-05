@@ -77,6 +77,9 @@ class SoundRouter {
     switch (type) {
       case 'canary_triggered':
         cue = SoundCue.critical;
+      case 'canary_read':
+        // Nothing on disk changed, so this is not the critical cue.
+        cue = SoundCue.warning;
       case 'process_suspicious':
         cue = (data['severity'] == 'critical')
             ? SoundCue.critical

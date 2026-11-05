@@ -602,6 +602,7 @@ impl Dispatcher {
                 }
             }
             "canary.list" => Some(json!(crate::guard::canary::list_decoys())),
+            "canary.status" => Some(crate::guard::canary::status_json()),
             "canary.configure" => {
                 let Some(paths) = req.params.as_ref().and_then(|p| p.get("paths")).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>()) else {
                     return error_response(req, "missing paths array");
@@ -609,13 +610,19 @@ impl Dispatcher {
                 let cfg = crate::guard::canary::CanaryConfig { paths };
                 match crate::guard::canary::save_config(&cfg) {
                     Ok(()) => {
-                        let _ = crate::guard::canary::deploy_decoys();
-                        Some(json!({"status": "saved"}))
+                        // Re-arm rather than only deploy: the extra decoy (or the
+                        // removed one) has to reach the watcher's baseline, and a
+                        // file *this* call creates is the only kind that gets the
+                        // settle window.
+                        match crate::guard::canary::arm_watchers() {
+                            Ok(()) => Some(json!({"status": "saved"})),
+                            Err(e) => { error!("canary.configure: {e:#}"); return detailed_error(req, "canary.configure", e); }
+                        }
                     }
                     Err(e) => { error!("canary.configure: {e:#}"); return detailed_error(req, "canary.configure", e); }
                 }
             }
-            "canary.deploy" => match crate::guard::canary::deploy_decoys() {
+            "canary.deploy" => match crate::guard::canary::arm_watchers_detailed() {
                 Ok(n) => Some(json!({"created": n})),
                 Err(e) => { error!("canary.deploy: {e:#}"); return detailed_error(req, "canary.deploy", e); }
             },

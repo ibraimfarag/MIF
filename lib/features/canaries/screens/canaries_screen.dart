@@ -25,6 +25,7 @@ class CanariesNotifier extends Notifier<List<CanaryFile>> {
               path: e[0] as String, deployed: e[1] as bool))
           .toList();
     } catch (_) {}
+    await ref.read(canariesStatusProvider.notifier).refresh();
   }
 
   Future<void> deploy() async {
@@ -46,6 +47,115 @@ class CanariesNotifier extends Notifier<List<CanaryFile>> {
         .read(engineIpcProvider)
         .request('canary.configure', {'paths': paths});
     await refresh();
+  }
+}
+
+/// What the decoys actually cover on this machine. It is a measurement, not a
+/// promise: a volume that keeps no last-access time cannot show a decoy read at
+/// all, and [readAvailable] is `null` until the engine has measured it.
+class CanariesStatus {
+  final int configured;
+  final int deployed;
+  final int readSettleSeconds;
+  final bool? readAvailable;
+  final String readProbedOn;
+
+  const CanariesStatus({
+    required this.configured,
+    required this.deployed,
+    required this.readSettleSeconds,
+    required this.readAvailable,
+    required this.readProbedOn,
+  });
+
+  factory CanariesStatus.fromJson(Map<String, dynamic> j) {
+    final detection = (j['read_detection'] as Map?)?.cast<String, dynamic>();
+    return CanariesStatus(
+      configured: (j['configured'] as num?)?.toInt() ?? 0,
+      deployed: (j['deployed'] as num?)?.toInt() ?? 0,
+      readSettleSeconds: (j['read_settle_seconds'] as num?)?.toInt() ?? 0,
+      readAvailable: detection?['available'] as bool?,
+      readProbedOn: (detection?['probed_on'] as String?) ?? '',
+    );
+  }
+}
+
+final canariesStatusProvider =
+    NotifierProvider<CanariesStatusNotifier, CanariesStatus?>(
+        CanariesStatusNotifier.new);
+
+class CanariesStatusNotifier extends Notifier<CanariesStatus?> {
+  @override
+  CanariesStatus? build() => null;
+
+  Future<void> refresh() async {
+    try {
+      final res = await ref.read(engineIpcProvider).request('canary.status');
+      state = CanariesStatus.fromJson((res as Map).cast<String, dynamic>());
+    } catch (_) {}
+  }
+}
+
+/// The honest coverage line: whether a read-only open of a decoy would be seen
+/// here, and the one window in which a read is settled instead of reported.
+class _ReadCoverage extends StatelessWidget {
+  final CanariesStatus? status;
+  const _ReadCoverage({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status;
+    if (s == null) {
+      return Text(
+        context.tr('canaries.readDetection.unknown'),
+        style: TextStyle(color: AppColors.muted, fontSize: 11),
+      );
+    }
+    final IconData icon;
+    final Color color;
+    final String key;
+    if (s.readAvailable == true) {
+      icon = Icons.verified_user_outlined;
+      color = AppColors.green;
+      key = 'canaries.readDetection.on';
+    } else if (s.readAvailable == false) {
+      icon = Icons.warning_amber_outlined;
+      color = AppColors.yellow;
+      key = 'canaries.readDetection.off';
+    } else {
+      icon = Icons.help_outline;
+      color = AppColors.muted;
+      key = 'canaries.readDetection.unknown';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.tr(key),
+                style: TextStyle(color: AppColors.text, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          context
+              .tr('canaries.readDetection.settle')
+              .replaceAll('{seconds}', '${s.readSettleSeconds}'),
+          style: TextStyle(color: AppColors.muted, fontSize: 11),
+        ),
+        if (s.readProbedOn.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(s.readProbedOn, style: AppTheme.mono(size: 10)),
+        ],
+      ],
+    );
   }
 }
 
@@ -99,6 +209,8 @@ class _CanariesScreenState extends ConsumerState<CanariesScreen> {
           context.tr('canaries.intro'),
           style: TextStyle(color: AppColors.muted, fontSize: 12),
         ),
+        const SizedBox(height: 10),
+        _ReadCoverage(status: ref.watch(canariesStatusProvider)),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(

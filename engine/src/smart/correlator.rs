@@ -63,10 +63,10 @@ pub fn record_event(ev: &GuardEvent) -> Result<()> {
         st.open.remove(&key);
     }
 
-    let title = if ev.r#type == "canary_triggered" {
-        format!("Canary file modified: {}", ev.detail)
-    } else {
-        format!("{} → {} ({})", ev.parent, ev.process, ev.rule_name)
+    let title = match ev.r#type.as_str() {
+        "canary_triggered" => format!("Canary file modified: {}", ev.detail),
+        "canary_read" => format!("Canary file opened for read: {}", ev.detail),
+        _ => format!("{} → {} ({})", ev.parent, ev.process, ev.rule_name),
     };
     let id = storage.create_incident(&title, &ev.severity, ev.at)?;
     storage.append_incident_event(id, ev)?;

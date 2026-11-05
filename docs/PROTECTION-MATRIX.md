@@ -153,16 +153,33 @@ parent image and command-line substring, with severity and `action: alert|kill`.
 
 ### 4.2 Canaries (`guard/canary.rs`)
 
-**Sees.** mtime and size of the decoy files (three defaults under Documents and
-Desktop, configurable).
-**Detects.** A CRITICAL event when a decoy's mtime/size changes.
+**Sees.** mtime, size and **last-access time** of the decoy files (three defaults
+under Documents and Desktop, configurable), polled on every guard tick.
+**Detects.** A CRITICAL event when a decoy's mtime or size changes (written,
+truncated, renamed, deleted), and a separate HIGH `canary_read` event when its
+last-access time moved and nothing else did — a read-only open, on its own rule id
+(`CANARY_READ`) so reads can be quieted without quieting the writes. A decoy MI CS
+has just created is left quiet for 90 s (`READ_SETTLE`): Defender's first look at a
+brand-new file is not an alert, and the engine's log says `canary settling` rather
+than staying silent about it.
 **Blocks.** Nothing.
 
-**Misses.** A **read** leaves mtime and size untouched, and NTFS last-access
-updates are off by default, so a stealer that only reads a decoy is invisible. The
-copy no longer hides that: the event, the card title and the incident all say
-*modified*, and nothing claims "accessed". Decoys are also files in obvious places:
-they catch mass encryption and careless hands, not a targeted actor.
+**Misses.** A read can only be seen on a volume that keeps a last-access time, and
+that is measured rather than assumed: when the watchers arm, `read_detection()`
+writes a scratch file, reads it back and compares the time, and `guard.status` /
+`canary.status` carry `{available, probed_on, detail}` — the Canaries screen prints
+the verdict, including the `fsutil behavior set disablelastaccess 0` that turns it
+on, instead of implying coverage. The verdict is about the **decoys' own folder** and
+is re-measured when they move. The engine cannot name the *reader* without the kernel
+event source (pid 0), so a read is evidence that something opened the decoy, not who.
+Decoys are also files in obvious places: they catch mass encryption and careless
+hands, not a targeted actor.
+
+Measured on this machine, 2026-11-05 (`scripts\verify-canary.ps1`, 20 checks, PASS):
+`DisableLastAccess = 2 (System Managed, Last Access Time Updates ENABLED)`, four
+reads in a row moved the atime, a read from a *different* process moved it, and fifty
+metadata queries in a row moved nothing — which is what lets the poll stat its own
+decoys without tripping the trap it arms.
 
 ### 4.3 Correlator and noise learner
 
@@ -241,7 +258,7 @@ administrator can delete it (F-10).
 
 | Missing | Consequence |
 |---|---|
-| Kernel driver / minifilter | No pre-execution file blocking, no read-level canary, no tamper protection for our own files (F-8, F-9) |
+| Kernel driver / minifilter | No pre-execution file blocking, no tamper protection for our own files (F-8, F-9). A read-level canary exists now (4.2), but only on a volume that keeps a last-access time — the copy says which, per volume |
 | AMSI / script-content inspection | Script and in-memory payloads pass (section 2) |
 | ETW-TI (threat-intelligence provider) | No kernel-level event telemetry beyond process creation |
 | Memory scanning, unpacking, emulation | Packed/obfuscated malware is invisible to L4 |
@@ -264,3 +281,5 @@ administrator can delete it (F-10).
 | A release loads its own rule packs instead of the built-in starter | `scripts/verify-release.ps1` |
 | The guard's CPU/RAM cost | `scripts/measure-guard-cpu.ps1` — with the **shipped 6-rule starter pack loaded** (`-RealRules`, four 60 s windows, guard on minus `MICS_NO_GUARD=1`, engine unelevated so the 2 s poll loop is what runs): **0.156–0.521 % of one core, median 0.417 % = 0.0028–0.0093 % of this 56-thread machine, median 0.0074 %**; the guard-off half measured 0.000 % (below the 15.6 ms timer resolution), and the earlier 1.56 % / 3.52 % were the poll loop before two trims. `mics-engine benchmark` reports the engine process itself (`cpu_percent`, `cpu_percent_of_machine`, `budget_ok`) |
 | The scanner resumes instead of restarting after a crash | the durable-job tests in `tests.rs` |
+| A decoy *read* is detected, and what the decoys cover is a measurement | `scripts\verify-canary.ps1` (20 checks, PASS, 2026-11-05) against a real engine on a private pipe: a decoy MI CS had just written is settled silently inside the 90 s window (and the log records it), a pre-existing decoy raises HIGH `canary_read` with its size and SHA-256 unchanged, one appended byte raises CRITICAL `canary_triggered`, fifty metadata queries move no last-access time and raise nothing, and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell — including that the verdict names the decoys' own folder |
+| Reading and writing are told apart in one place | the six `guard::canary::tests` cases over `classify` (untouched, read-only, read-that-also-writes, deleted, a volume without atime, and the probe leaving nothing behind) |

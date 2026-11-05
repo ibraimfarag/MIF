@@ -1,5 +1,9 @@
-﻿{
+{
   "canaries.addPath": "Add decoy path",
   "canaries.deploy": "Deploy decoys",
-  "canaries.intro": "Decoy files nobody should ever touch. Any access is a CRITICAL canary event — the classic sign of ransomware or a snooper. Decoys arm when the Guard runs."
+  "canaries.intro": "Decoy files nobody should ever touch. A program that writes to, renames or deletes one raises a CRITICAL canary event; one that merely opens it for reading raises a HIGH alert of its own, because a decoy exists to be read by something that should not be reading it. Decoys arm when the Guard runs.",
+  "canaries.readDetection.on": "Reads are seen on this volume: opening a decoy for reading moves its last-access time, and MI CS reports it.",
+  "canaries.readDetection.off": "Reads cannot be seen on this volume: it keeps no last-access time, so only a write, rename or delete on a decoy can be detected. Running `fsutil behavior set disablelastaccess 0` in an elevated prompt turns last-access times on and makes reads visible.",
+  "canaries.readDetection.unknown": "Read coverage has not been measured yet — it is measured when the Guard arms the decoys.",
+  "canaries.readDetection.settle": "A decoy MI CS has just created is left quiet for {seconds} seconds, so Defender's first look at a brand-new file is not an alert."
 }

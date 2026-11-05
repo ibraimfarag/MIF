@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>65 rows in <code>qa&#47;methods.json</code></td>
-      <td>65 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>66 rows in <code>qa&#47;methods.json</code></td>
+      <td>66 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>66 declared in the registry, 14 classified not to run</td>
+      <td>67 declared in the registry, 14 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -81,14 +81,14 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Dart tests</td>
-      <td>23 files</td>
-      <td>106 declared cases (a floor: loops add more at run time)</td>
+      <td>24 files</td>
+      <td>110 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
       <td>Engine tests</td>
-      <td>17 modules</td>
-      <td>140 declared cases</td>
+      <td>18 modules</td>
+      <td>146 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 65 methods</h2>
+<h2>The pipe: 66 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -141,8 +141,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>read</code></td>
-      <td class="num">23</td>
-      <td class="num">23</td>
+      <td class="num">24</td>
+      <td class="num">24</td>
       <td class="num">0</td>
     </tr>
     <tr>
@@ -182,6 +182,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>canary.list</code></td>
+      <td><code>read</code></td>
+      <td class="num">1</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><code>canary.status</code></td>
       <td><code>read</code></td>
       <td class="num">1</td>
       <td></td>
@@ -870,6 +876,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>7</td>
     </tr>
     <tr>
+      <td><code>test&#47;canary_status_test.dart</code></td>
+      <td>4</td>
+    </tr>
+    <tr>
       <td><code>test&#47;crash_report_model_test.dart</code></td>
       <td>3</td>
     </tr>
@@ -959,7 +969,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**106** in 23 files</td>
+      <td>**110** in 24 files</td>
     </tr>
   </tbody>
 </table>
@@ -973,6 +983,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>engine&#47;src&#47;crash.rs</code></td>
       <td>14</td>
+    </tr>
+    <tr>
+      <td><code>engine&#47;src&#47;guard&#47;canary.rs</code></td>
+      <td>6</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;notify&#47;alert.rs</code></td>
@@ -1040,7 +1054,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**140** in 17 modules</td>
+      <td>**146** in 18 modules</td>
     </tr>
   </tbody>
 </table>

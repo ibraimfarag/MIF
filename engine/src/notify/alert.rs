@@ -251,7 +251,10 @@ pub fn package_changed(detail: &str) -> bool {
 /// Routes a guard event: CRITICAL/HIGH/MEDIUM become desktop cards, LOW does
 /// not — and every one of them becomes an in-app card unless DND is on.
 pub fn guard_event(ev: &crate::guard::GuardEvent) {
-    let canary = ev.r#type == "canary_triggered";
+    // Both canary answers are the same producer: a decoy nobody should have
+    // opened. (`canary_read` = opened for reading, `canary_triggered` =
+    // written/renamed/deleted.)
+    let canary = ev.r#type == "canary_triggered" || ev.r#type == "canary_read";
     let title = if canary {
         text("guard.canary.title")
     } else {

@@ -312,7 +312,7 @@ class _EventTile extends StatelessWidget {
         children: [
           Row(children: [
             Icon(
-                ev.type == 'canary_triggered'
+                ev.type == 'canary_triggered' || ev.type == 'canary_read'
                     ? Icons.egg
                     : Icons.warning_amber_rounded,
                 size: 15,

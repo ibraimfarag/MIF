@@ -239,6 +239,16 @@
       ["C:/Users/qa/Documents/passwords.kdbx", true],
       ["C:/Users/qa/Documents/notes.txt", false]
     ],
+    "canary.status": {
+      "configured": 3,
+      "deployed": 2,
+      "read_settle_seconds": 90,
+      "read_detection": {
+        "available": true,
+        "probed_on": "C:/Users/qa/Documents",
+        "detail": "a read-only open moves the last-access time on this volume, so a decoy read is detected"
+      }
+    },
     "hardening.list": [
       {
         "id": "smbv1_off",

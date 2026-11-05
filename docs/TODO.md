@@ -9,7 +9,12 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-05 · **the release pipeline is green end to end and the first
+> Last updated: 2026-11-05 · **a decoy read is detected, and the coverage behind it is
+> measured** (D-032: HIGH `canary_read` read off the file's last-access time, its own
+> rule id so reads can be quieted alone, a 90 s settle window for a decoy MI CS has just
+> written, and `scripts\verify-canary.ps1` — 20 checks, PASS — against a real engine; the
+> probe caught the verdict naming the *previous* decoy folder, which the register row
+> never would have) · **the release pipeline is green end to end and the first
 > release exists as a draft** (run 42040718389: x64 packaged, verified, uploaded, and
 > `Publish` created `v0.1.0` as a draft for your click - D-031), after three fixes that
 > each had a measurement behind them: the certificate dialog that stalled two runs, the
@@ -683,8 +688,14 @@ what "next" means.
   **done** 2026-11-03 (D-026; the per-machine run is the one item left for a human)
 - **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
 - **هـ1** a default update-manifest URL + signature check
-- the register's open MED rows: Defender tamper protection, real-time watching,
-  canary read-only
+- ~~**canary read-only** (the register's MED row)~~ — **done 2026-11-05 (D-032)**: the
+  variable the row was missing is the last-access time, not a driver, so a read-only
+  open is a HIGH `canary_read` event of its own (`CANARY_READ`), a write stays
+  CRITICAL, a decoy MI CS has just written is settled for 90 s and says so in the log,
+  and `scripts\verify-canary.ps1` (20 checks, PASS) measures all of it against a real
+  engine — plus that the volume's read coverage is measured and reported rather than
+  assumed. See the Done log for the defect the probe found on the way
+- the register's open MED rows: Defender tamper protection, real-time watching
 
 **Large — where a human or money is required**
 
@@ -781,6 +792,7 @@ not implemented yet, see D-008).
 | `scripts\verify-installer.ps1` | The installer's promises, measured on a real install: a silent per-user install into `%TEMP%`, the app, engine and rule packs landing, both shortcuts' `System.AppUserModel.ID`, the AUMID key and Apps-&-features entry pointing at that copy, `Get-StartApps` filing "MI CS" under `MICS` with nothing under the exe path, the checker's answers, the uninstaller removing all of it while the machine's helper and the user's own copy stay untouched, and the refusal (error level 5, everything left in place) against a synthetic service key. Exports and re-imports the AUMID key, deletes everything it created, no elevation, ~2 min |
 | `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted ransom-note string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
 | `scripts\verify-firewall.ps1` | The firewall is Windows' API, not `netsh` (D-028), measured against this machine: a fake `netsh.exe` is put first on the engine's PATH (and a direct `netsh` is shown to stop working under it, so the trap is proved to be a trap); `fw.default_deny.status` and `fw.rules.list` are compared with `Get-NetFirewallProfile`/`Get-NetFirewallRule -PolicyStore ActiveStore` field by field; one rule is created through the engine, read back from Windows with the exact direction, action, port, program, profile and group that were asked for, then removed and Windows is asked again. A profile policy is never flipped: a default-deny toggle would cut the network of whatever else is running. Writes go through the running `MICSHelper` (or need an elevated shell - the probe records a skip, never a pass). Cleans up after a failed run; ~8 s |
+| `scripts\verify-canary.ps1` | A decoy **read** is detected and the coverage behind it is measured, not assumed (D-032), against a real engine on a private pipe, a private `USERPROFILE` (so the default decoy paths cannot touch the real Documents folder) and a private data directory: a decoy MI CS had just written is settled silently inside the 90 s window and the engine's log says `canary settling`; a decoy that was already on disk raises `canary_read`/HIGH under rule id `CANARY_READ` with its size and **SHA-256 unchanged**; one appended byte raises `canary_triggered`/CRITICAL under `CANARY`; fifty metadata queries in a row move no last-access time and raise nothing, so the guard's own poll cannot trip its trap; and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell, on the folder the decoys are actually in. With no elevation (the unelevated poll is the path that has to see it) and no ETW; on a volume that keeps no last-access time it reports part 2 as **SKIP** with the reason instead of a pass. No elevation, ~35 s |
 
 Both tools need an engine to talk to; start one with an isolated pipe first
 (`MICS_PIPE_NAME`, `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `PROGRAMDATA`).
@@ -819,6 +831,52 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **A decoy read is an event now, and the coverage behind it is measured (2026-11-05, D-032)**
+  - **What changed.** `guard/canary.rs`'s snapshot carries the decoy's last-access
+    time beside its mtime and size, and the whole detection rule is one pure function
+    (`classify`) with six test cases: identical state → nothing, atime-only → **Read**,
+    size/mtime/deleted → **Written**, and a volume that keeps no atime → never invents
+    a read. A read emits HIGH `canary_read` under its own rule id (`CANARY_READ`) so a
+    user can quiet reads without losing the write that means the decoy was
+    overwritten; a write keeps CRITICAL `canary_triggered`/`CANARY` unchanged. Both
+    flow to the alert card (one producer), the incident correlator (its own title) and
+    the sound router (a warning cue, not the critical one).
+  - **The settle window, and why it is not a cover-up.** The first program to open a
+    brand-new file on Windows is usually Defender or the indexer, so a decoy MI CS has
+    just written is left quiet for 90 s (`READ_SETTLE`) — and the log says `canary
+    settling` when that happens, so "nobody read it" and "somebody read it and we
+    chose not to shout" stay different answers. A decoy that was already on disk gets
+    no window. `canary.configure`/`canary.deploy` now **re-arm** rather than only
+    deploy, which is what keeps that distinction true for a decoy added at runtime —
+    and fixed a latent false alarm on the same lines: a newly configured path used to
+    reach the watcher with no baseline and be reported as *modified*.
+  - **The honesty half.** `read_detection()` measures whether the decoys' volume keeps
+    a last-access time (write a scratch file, read it back, compare), `guard.status`
+    and the new `canary.status` carry `{available, probed_on, detail}`, and the
+    Canaries screen prints the verdict — including the `fsutil behavior set
+    disablelastaccess 0` that turns it on — instead of implying coverage. **The probe
+    caught a real defect here**: the verdict was cached per process rather than per
+    folder, so after `canary.configure` moved the decoys it still named the previous
+    folder's volume; where the decoys live on another disk that is a wrong answer, not
+    a stale one. It re-measures when the folder changes now, and the probe asserts
+    `probed_on` is the decoys' own folder.
+  - **Measured, not asserted.** `scripts\verify-canary.ps1` — **20 checks, PASS** —
+    runs a real engine on a private pipe with a private `USERPROFILE` (so the default
+    decoy paths can never touch the real Documents folder) and measures: a decoy MI CS
+    had just written is settled and the log says so, a pre-existing decoy opened
+    read-only raises `canary_read`/HIGH with its size and **SHA-256 unchanged**, one
+    appended byte raises `canary_triggered`/critical, fifty metadata queries in a row
+    move no atime and raise nothing, and the engine's verdict equals the same
+    measurement taken independently in PowerShell. The probe's own readiness check also
+    learned something worth keeping: `Test-Path \\.\pipe\x` *opens a connection*, so
+    asking it twice in a row races the server's accept loop and the second answer is a
+    false negative — readiness is a real `ping` now.
+  - **Machine figures** (`fsutil behavior query disablelastaccess` = `2, System
+    Managed, Last Access Time Updates ENABLED`): four reads in a row moved the atime
+    (0.4–1.3 s lag), a read from a *different* process moved it, fifty metadata queries
+    in a row moved nothing. Engine tests 146 (was 140; six new), the QA surface moved
+    **65 → 66 methods** with `qa/report.md` regenerated, and the register row closed.
 
 - **The CI logs arrived: both failures diagnosed, one of them was the product (2026-11-05)**
   - **The engine refused its own client, and that is a real install scenario (D-030).**
@@ -4417,7 +4475,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it, and `verify-release.ps1` checks that packs *load*, not what they catch | `engine/rules/`, `scripts/verify-release.ps1`, PROTECTION-MATRIX §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
-| MED | Canaries detect mtime/size changes by polling; a read-only open is not detected | `guard/canary.rs` |
+| ~~MED~~ | ~~Canaries detect mtime/size changes by polling; a read-only open is not detected~~ — **closed 2026-11-05 (D-032) by evidence**: the snapshot carries the file's last-access time, so a read-only open is its own HIGH `canary_read` event under rule id `CANARY_READ` — a separate id on purpose, so a user can quiet reads without losing the ones that mean their decoy was overwritten — while a write still wins as CRITICAL `canary_triggered`/`CANARY`. `scripts\verify-canary.ps1` (**20 checks, PASS**) drives a real engine over a private pipe with a private `USERPROFILE` and measures: a decoy MI CS had just written is settled silently inside the 90 s window (`READ_SETTLE`, and the engine's log says `canary settling` instead of hiding it), a decoy that was already on disk raises `canary_read` with its size and SHA-256 unchanged, one appended byte raises `canary_triggered`/critical, fifty metadata queries in a row move no last-access time and raise nothing (the poll cannot trip its own trap), and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell. **Found while measuring:** the verdict had been probed on the *previous* decoy folder, so on a machine whose decoys live on another volume it would have named the wrong disk — the probe now asserts `probed_on` is the decoys' own folder, and the engine re-measures when they move. What remains is honest and named: only a volume that keeps a last-access time can show a read, so `canary.status`/`guard.status` and the Canaries screen report the measured verdict (with the `fsutil behavior set disablelastaccess 0` that turns it on) instead of implying coverage, and the engine still cannot name the reader without the kernel event source | `guard/canary.rs`, `guard/mod.rs`, `dispatcher.rs`, `docs/PROTECTION-MATRIX.md` §4.2, `scripts\verify-canary.ps1` |
 | MED | ~~**Firewall uses `netsh`, not FirewallAPI COM**~~ — closed by **و3** (2026-11-03, D-028): the engine speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, so there is no child process to hang, no English console text to parse and no locale to depend on. `scripts\verify-firewall.ps1` (23 checks) compares the reads with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, creates and removes one real rule, and proves the `netsh` dependency is gone by putting a fake `netsh.exe` first on PATH. **What stays open**: a country-sized `RemoteAddresses` string has no documented ceiling and was not measured, so `block_country` still sends one rule per country | `firewall/mod.rs`, PROTECTION-MATRIX §3.2 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | ~~LOW~~ | ~~The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** with one inert rule in force; with the shipped starter pack the earlier runs measured 0.234 %~~ — **closed 2026-11-03 (و4)**: re-measured with the **shipped pack** actually loaded (`measure-guard-cpu.ps1 -RealRules`, four 60 s windows, 56 logical cores, guard on minus `MICS_NO_GUARD=1`): **0.156–0.521 % of one core, median 0.417 % = 0.0028–0.0093 % of the machine, median 0.0074 %**. The engine was unelevated, so ETW was denied and the 2 s poll loop is what ran (`on.err` names it); the guard-off half measured 0.000 % in every window — below the 15.6 ms process-timer resolution, i.e. < 0.03 % of one core. The earlier "with the starter pack it is 0.234 %, the difference is one-time startup matching" is **not supported by this measurement**: the lowest shipped-pack window equals the inert-rule number, so the spread is run-to-run noise on a busy 56-thread box, not a rule-count effect. The row's *number* was stale; the `< 1 %` budget holds under either definition | `guard/mod.rs`, `platform/windows/pids.rs`, `scripts/measure-guard-cpu.ps1` |

@@ -102,7 +102,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
 | **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **done** — ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package) and **ط2 landed 2026-11-03** (`scripts\verify-tamper.ps1`, the `tamper.verify` release step), which also closed a hole in the manifest gate it was written to test | ✅ | — | nothing |
 | **هـ — P3 remainder** | compiled-in update manifest URL + signature check on the manifest | **partial** — check/download/apply work, manifest is user-supplied | 🟡 LOW | 2–3 h | nothing |
-| **و — the register** | rows in §7 that are real work rather than accepted gaps | **12 open rows** (1 HIGH, 4 MED, 7 LOW) out of 22 — counted 2026-11-04 by walking the 22-row table in `docs/TODO.md` §7 (10 rows are struck through as closed) | 🟡 LOW–MED, per row | 6–12 h | some rows need a decision from you |
+| **و — the register** | rows in §7 that are real work rather than accepted gaps | **11 open rows** (1 HIGH, 3 MED, 7 LOW) out of 22 — counted 2026-11-05 by walking the 22-row table in `docs/TODO.md` §7 (11 rows are struck through as closed; the canary read-only row closed the same day, D-032) | 🟡 LOW–MED, per row | 5–11 h | some rows need a decision from you |
 | **P1.5** | helper acceptance: three privileged operations with **zero** prompts | the first attempt (2026-11-01) found **two engine bugs instead of a helper problem** — both fixed that day (netsh policy argument shape, PowerShell quoting in the hardening snapshots); the helper itself was installed, running and reachable | 🔴 **HIGH** — this is the product's core promise | **15 min of your time** | **you** — and MI CS must be started *unelevated* for the helper path to be exercised |
 
 Total: **~35–62 h of work** plus the certificate (money + procurement time).
@@ -218,11 +218,13 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
 ## 5. Out of scope by design (not "remaining work")
 
 No kernel driver, no pre-execution blocking, no inline network filtering, no
-Suricata/ET-Open, no ClamAV/CAPA, no detection of a pure read on a canary, no
-anti-tamper watchdog. Each is written down with its reason in
-`docs/THREAT-MODEL.md` (§6 residual risks) and `docs/PROTECTION-MATRIX.md` (§9).
-They are product decisions, not backlog items — reopening one needs a new entry in
-`docs/DECISIONS.md`.
+Suricata/ET-Open, no ClamAV/CAPA, no anti-tamper watchdog. Each is written down
+with its reason in `docs/THREAT-MODEL.md` (§6 residual risks) and
+`docs/PROTECTION-MATRIX.md` (§9). They are product decisions, not backlog items —
+reopening one needs a new entry in `docs/DECISIONS.md`. (**A read-level canary left
+this list on 2026-11-05**, D-032: it is a snapshot field, not a driver, and what it
+costs is that it only works on a volume that keeps last-access times — which the
+copy now measures per volume and reports instead of assuming.)
 
 ## 6. How every step ends
 

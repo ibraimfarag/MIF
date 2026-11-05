@@ -12,19 +12,19 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 65 rows in `qa/methods.json` | 65 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 66 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 67 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 100 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 23 files | 106 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 17 modules | 140 declared cases | `engine.test` step |
+| Dart tests | 24 files | 110 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Engine tests | 18 modules | 146 declared cases | `engine.test` step |
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 65 methods
+## The pipe: 66 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
@@ -34,7 +34,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `mutating` | 21 | 12 | 9 |
 | `network` | 4 | 0 | 4 |
 | `pure` | 6 | 6 | 0 |
-| `read` | 23 | 23 | 0 |
+| `read` | 24 | 24 | 0 |
 | `sandbox` | 10 | 10 | 0 |
 
 ### Every method
@@ -45,6 +45,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `canary.configure` | `mutating` | 1 |  |
 | `canary.deploy` | `mutating` | 0 | yes |
 | `canary.list` | `read` | 1 |  |
+| `canary.status` | `read` | 1 |  |
 | `crash.delete` | `sandbox` | 3 |  |
 | `crash.get` | `read` | 3 |  |
 | `crash.list` | `read` | 1 |  |
@@ -203,6 +204,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | Test file | Declared cases |
 |---|---|
 | `test/audit_merge_test.dart` | 7 |
+| `test/canary_status_test.dart` | 4 |
 | `test/crash_report_model_test.dart` | 3 |
 | `test/dark_contrast_audit_test.dart` | 0 |
 | `test/i18n_lint_test.dart` | 1 |
@@ -225,13 +227,14 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **106** in 23 files |
+| **total** | **110** in 24 files |
 
 ### Engine: the modules under engine/src with tests
 
 | Module | Declared cases |
 |---|---|
 | `engine/src/crash.rs` | 14 |
+| `engine/src/guard/canary.rs` | 6 |
 | `engine/src/notify/alert.rs` | 10 |
 | `engine/src/notify/sound.rs` | 2 |
 | `engine/src/notify/toast.rs` | 4 |
@@ -248,7 +251,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/settings.rs` | 8 |
 | `engine/src/tests.rs` | 49 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **140** in 17 modules |
+| **total** | **146** in 18 modules |
 
 ## What runs where
 

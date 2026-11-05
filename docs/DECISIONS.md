@@ -1453,3 +1453,60 @@ thing. With a draft, verifying a run costs a tag and publishes nothing.
 **Commits us to.** Publishing is a human step, and the release page is where the hashes
 are read before it happens. When ب5's real certificate exists and the ARM64 legs have a
 green history, this can be revisited - as a decision, not as a silent flag flip.
+
+---
+
+## D-032 — A decoy read is a detection with a measured range, not a sensor we assume
+
+**Status:** accepted (2026-11-05)
+
+**Context.** `guard/canary.rs` watched mtime and size, so a write, a rename or a delete
+was caught and a **read-only open was invisible** - and the register said so: the
+sharpest thing a decoy can catch (something looking at it) was the one thing it could
+not see. The thorough fix is a minifilter, which is a driver, an install, a signing
+story and a bugcheck; the cheap fix is a field the file already has. NTFS keeps a
+**last-access time**, and it was off by default for years, which is why the row said
+"not detected" rather than "not attempted".
+
+**Decision.** A read is detected from the last-access time, and **the range of that
+detection is measured per volume and reported** instead of assumed:
+
+1. **One pure rule.** `CanaryState` carries `{exists, mtime, size, atime}` and
+   `classify(before, after)` answers `None`, `Read` or `Written`. A reader that also
+   writes is a writer (the write answers first), and a volume that keeps no atime never
+   invents a read.
+2. **A read is its own event.** HIGH `canary_read`, rule id `CANARY_READ` - a separate
+   id on purpose, so quieting reads cannot quiet the write that means the decoy was
+   overwritten. Writes keep CRITICAL `canary_triggered`/`CANARY` unchanged, and both
+   reach the same alert gate, correlator (own title) and sound router (warning cue, not
+   the critical one).
+3. **A fresh decoy settles.** A decoy MI CS has just written is quiet for 90 s
+   (`READ_SETTLE`), because the first thing to open a brand-new file on Windows is
+   usually Defender or the indexer; the log records `canary settling`, so a settled read
+   is a decision on the record and not silence. A decoy that was already on disk has no
+   window. `canary.configure`/`canary.deploy` re-arm rather than only deploy, which is
+   what keeps that true for a decoy added at runtime - and it removed a latent false
+   alarm: a newly configured path used to arrive with no baseline and be reported as
+   *modified*.
+4. **The verdict travels with the product.** `read_detection()` writes a scratch file,
+   reads it back and compares the time - on the **decoys' own folder** - and
+   `canary.status`, `guard.status` and the Canaries screen carry
+   `{available, probed_on, detail}` with the `fsutil behavior set disablelastaccess 0`
+   that turns it on. When the decoys move to another folder the verdict is re-measured:
+   caching it per process was a defect the probe caught, because a verdict about the
+   previous volume is a *wrong* answer, not a stale one.
+
+**Why.** The row existed because the copy said "modified" about an access it could not
+see. The missing variable was not a kernel component, it was a timestamp - and where
+that timestamp does not exist, the honest answer is a named limit the user can switch
+on, not a claim. It also costs nothing: no driver, no elevation (the unelevated poll
+sees it), no new dependency, and the guard's own poll provably cannot trip it (fifty
+metadata queries in a row moved no last-access time; four reads in a row did).
+
+**Commits us to.** `scripts\verify-canary.ps1` (20 checks) has to keep passing against a
+real engine on a private pipe and a private `USERPROFILE`, `PROTECTION-MATRIX.md` §4.2
+carries the measured range instead of the old "invisible" line, and §9 no longer lists a
+read-level canary as missing. If a future Windows changes the last-access policy again,
+the measured verdict is what tells the user - so nothing here may be re-stated as "reads
+are detected" without the volume it was measured on. Naming the *reader* still needs ETW
+or a driver and stays out of scope; `pid` is 0 on this event, and the copy says so.

@@ -392,5 +392,8 @@ pub fn status_json() -> serde_json::Value {
         // True = instant kernel events; false = 2 s poll fallback (unelevated).
         "etw_active": etw::is_active(),
         "rules": load_rules().unwrap_or_default(),
+        // What the decoys cover, and whether a read-only open would be seen on
+        // this volume at all (measured, never assumed).
+        "canaries": canary::status_json(),
     })
 }
