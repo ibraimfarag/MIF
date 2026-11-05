@@ -141,6 +141,7 @@ jobs:
         # (3 h in 41980725064, 50 min in 42010747061) after the build was already done.
         timeout-minutes: 5
         run: |
+          $ErrorActionPreference = 'Continue'
           $log = 'build/signing-probe-log.txt'
           & ./scripts/signing-probe.ps1 *>&1 | Tee-Object -FilePath $log
           $code = $LASTEXITCODE
