@@ -292,11 +292,20 @@ if (-not $EnginePath) {
   if ($env:CARGO_TARGET_DIR) { $candidates = @((Join-Path $env:CARGO_TARGET_DIR "$releaseSub\mics-engine.exe")) + $candidates }
   foreach ($c in $candidates) { if (Test-Path $c) { $EnginePath = $c; break } }
 }
-if (-not $EnginePath -or -not (Test-Path $EnginePath)) {
-  Write-Output "RESULT: FAIL - no engine build found for $Arch; run 'cargo build --release' in engine\ or pass -EnginePath"
+if ($EnginePath -and -not (Test-Path $EnginePath)) {
+  Write-Output "RESULT: FAIL - the engine build at $EnginePath does not exist"
   exit 1
 }
-$EnginePath = (Resolve-Path $EnginePath).Path
+# A build is not required up front: step 4 below runs `cargo build --release` itself and
+# then prefers the binary it just built. Demanding one here is what made this script
+# unable to cut a release from a clean checkout - the exact thing the Release workflow
+# does (measured 2026-11-05, run 41976679343: "no engine build found for x64" on a
+# runner that had just fetched the crates and had not built anything yet).
+if (-not $EnginePath -and $SkipBuild) {
+  Write-Output "RESULT: FAIL - no engine build found for $Arch and -SkipBuild was given; run 'cargo build --release' in engine\ or pass -EnginePath"
+  exit 1
+}
+if ($EnginePath) { $EnginePath = (Resolve-Path $EnginePath).Path }
 
 if (-not $SkipBuild) {
   # Native builds write progress to stderr, and with ErrorActionPreference=Stop
@@ -380,6 +389,10 @@ if (-not $SkipBuild) {
     if ($env:CARGO_TARGET_DIR) { $fresh += (Join-Path $env:CARGO_TARGET_DIR "$releaseSub\mics-engine.exe") }
     $fresh += (Join-Path $root "engine\target\$releaseSub\mics-engine.exe")
     foreach ($c in $fresh) { if (Test-Path $c) { $EnginePath = (Resolve-Path $c).Path; break } }
+    if (-not $EnginePath -or -not (Test-Path $EnginePath)) {
+      Write-Output "RESULT: FAIL - cargo reported success but no mics-engine.exe is under engine\target\$releaseSub (set CARGO_TARGET_DIR or pass -EnginePath)"
+      exit 1
+    }
   }
 }
 

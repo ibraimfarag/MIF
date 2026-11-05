@@ -956,6 +956,25 @@ click (P1.5) or a purchased certificate (P4).
     "stale", and the raw tail is printed. Same run: the ARM64 engine leg is **green**
     (`cargo build --release` before the verifier was the whole difference), and
     `Package (arm64)` still reports its measured `2 of 7` prerequisites.
+- **`make-release.ps1` could not cut a release from a clean checkout (2026-11-05).** With
+    the inventory check fixed, run **41976679343** moved one step deeper and stopped at
+    `RESULT: FAIL - no engine build found for x64; run 'cargo build --release' in engine\`.
+    The script insisted on an existing engine binary *before* the step that builds it
+    (`cargo build --release`, then "prefer the binary we just built over whatever the
+    earlier lookup found") - so the one place it had to work, a runner that has just
+    fetched the crates and built nothing, was the one place it refused. It now treats a
+    missing build as something to produce, keeps the refusal for `-SkipBuild` and for an
+    `-EnginePath` that does not exist, and says so when cargo succeeds but no
+    `mics-engine.exe` is where it expected.
+  - **Measured on the fix**: `CARGO_TARGET_DIR` pointed at an **empty** directory, so the
+    lookup had nothing to find and the script had to build everything itself -
+    `make-release.ps1 -Sign -Arch x64 -Version 0.1.0` ended in `RESULT: PASS` (68 files
+    hashed against the signed manifest, tamper checks included). That is the same shape as
+    the release runner, and it is the first time this path was measured from nothing.
+  - **The runner's x64 release now gets further than it ever has**: `sbom: up to date (579
+    components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
+    `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
+    reports its measured `2 of 7`.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
