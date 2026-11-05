@@ -260,12 +260,24 @@ try {
 Get-Content $sbomOut |
   Where-Object { $_ -match "RESULT|sbom:|stale|differs at line|committed:|generated:" } |
   ForEach-Object { "  $_" }
-$sbomPassed = ($sbomExit -eq 0) -and ((Get-Content $sbomOut -Raw) -match "RESULT: PASS")
-Remove-Item $sbomOut -ErrorAction SilentlyContinue
+$sbomRaw = Get-Content $sbomOut -Raw
+$sbomPassed = ($sbomExit -eq 0) -and ($sbomRaw -match "RESULT: PASS")
 if (-not $sbomPassed) {
-  Write-Output "RESULT: FAIL - sbom.cdx.json or THIRD-PARTY-NOTICES is stale; run 'dart run tool\sbom.dart' and commit both"
+  # Two different failures wore one message: the files really are stale, and the check
+  # never ran. On the runner the tool printed nothing at all (measured 2026-11-05, run
+  # 41972021335: no `sbom:` line, no difference line, only this FAIL), and calling that
+  # "stale" sends the reader to regenerate files that were already right.
+  if ($sbomRaw -notmatch "RESULT:") {
+    Write-Output "  the check did not report a result (exit $sbomExit); its output was:"
+    Get-Content $sbomOut -ErrorAction SilentlyContinue | Select-Object -Last 25 | ForEach-Object { "  | $_" }
+    Remove-Item $sbomOut -ErrorAction SilentlyContinue
+    Write-Output "RESULT: FAIL - the third-party inventory check did not run on this machine (exit $sbomExit); nothing was packaged"
+  } else {
+    Write-Output "RESULT: FAIL - sbom.cdx.json or THIRD-PARTY-NOTICES is stale; run 'dart run tool\sbom.dart' and commit both"
+  }
   exit 1
 }
+Remove-Item $sbomOut -ErrorAction SilentlyContinue
 
 # The engine is built by cargo, not by Flutter, and it may live outside the repo
 # (CARGO_TARGET_DIR). Find it explicitly so the package never ships a stale one.

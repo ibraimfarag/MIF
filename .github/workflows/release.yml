@@ -126,6 +126,17 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build | Out-Null
+          # The pin, enforced and printed: `flutter-version: 3.47.8` is what the
+          # workflow asks for, and this is the only place that checks it was what
+          # arrived - the inventory in sbom.cdx.json records the SDK it was generated
+          # with, so a runner that quietly installs another one fails the check below.
+          $want = '3.47.8'
+          $have = ((flutter --version) | Select-Object -First 1) -replace '^Flutter\s+', '' -replace '\s.*$', ''
+          "Flutter $have (wanted $want), FLUTTER_ROOT=$env:FLUTTER_ROOT"
+          if ($have -ne $want) {
+            Write-Output "::error::the runner installed Flutter $have, not $want - the pin did not hold"
+            exit 1
+          }
           $log = 'build/release-x64-log.txt'
           & ./scripts/make-release.ps1 -Sign -Arch x64 -Version "${{ needs.version.outputs.version }}" *>&1 |
             Tee-Object -FilePath $log
@@ -258,6 +269,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build | Out-Null
+          $want = '3.47.8'
+          $have = ((flutter --version) | Select-Object -First 1) -replace '^Flutter\s+', '' -replace '\s.*$', ''
+          "Flutter $have (wanted $want), FLUTTER_ROOT=$env:FLUTTER_ROOT"
           $log = 'build/release-arm64-log.txt'
           & ./scripts/make-release.ps1 -Sign -Arch arm64 -Version "${{ needs.version.outputs.version }}" *>&1 |
             Tee-Object -FilePath $log

@@ -44,7 +44,7 @@ if ($result) { Emit $result.Line } else { Emit 'the step failed without a RESULT
 # harness and the QA report write "  FAIL  <case>", cargo writes a "failures:" block
 # and "test result: FAILED", and the packaging scripts write FAIL/<verb> lines.
 $cases = $lines |
-    Select-String -Pattern '^\s*FAIL\s{2,}|^\s*FAIL\b|HARNESS FAILURE|^failures:$|test result: FAILED|is stale|differs at line|not hardened|NOT READY|expected' |
+    Select-String -Pattern '^\s*FAIL\s{2,}|^\s*FAIL\b|HARNESS FAILURE|^failures:$|test result: FAILED|is stale|differs at line|did not report a result|not hardened|NOT READY|Flutter [0-9]|FLUTTER_ROOT=|expected' |
     Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }
 if ($cases) { Emit ($cases -join ' | ') }
 
