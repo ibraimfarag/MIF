@@ -189,9 +189,25 @@ jobs:
 
       # -SkipToast: a runner has no interactive session to raise the card in, and
       # that half is verified on a real desktop (see docs/TODO.md, the release gate).
+      # It keeps a log for the same reason the build does: this step was reached for the
+      # first time on 2026-11-05 (run 42028521051) and failed with nothing but GitHub's
+      # "exit code 1", because it ran without a tee.
       - name: Verify the download the way a user's machine sees it
         shell: pwsh
-        run: ./scripts/verify-release.ps1 -Arch x64 -SkipToast
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $log = 'build/release-verify-x64-log.txt'
+          & ./scripts/verify-release.ps1 -Arch x64 -SkipToast *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
+
+      # A step cancelled by its timeout never reaches the branch above, so the one case
+      # where the log matters most - a verification that stopped talking - would leave no
+      # annotation at all. This runs for either ending.
+      - name: Say where the verification stopped
+        if: failure() || cancelled()
+        shell: pwsh
+        run: ./scripts/annotate-failure.ps1 -Path build/release-verify-x64-log.txt
 
       - name: Collect the download
         uses: actions/upload-artifact@v4
