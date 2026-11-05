@@ -42,9 +42,10 @@ if ($result) { Emit $result.Line } else { Emit 'the step failed without a RESULT
 
 # The markers the three harnesses in this repository actually print: the contract
 # harness and the QA report write "  FAIL  <case>", cargo writes a "failures:" block
-# and "test result: FAILED", and the packaging scripts write FAIL/<verb> lines.
+# and "test result: FAILED", the packaging scripts write FAIL/<verb> lines, and the
+# verification harnesses bracket theirs with "[FAIL] <case>".
 $cases = $lines |
-    Select-String -Pattern '^\s*FAIL\s{2,}|^\s*FAIL\b|HARNESS FAILURE|^failures:$|test result: FAILED|is stale|differs at line|did not report a result|not hardened|NOT READY|Flutter [0-9]|FLUTTER_ROOT=|expected' |
+    Select-String -Pattern '^\s*FAIL\s{2,}|^\s*FAIL\b|\[FAIL\]|^\s+-\s|HARNESS FAILURE|^failures:$|test result: FAILED|is stale|differs at line|did not report a result|not hardened|NOT READY|Flutter [0-9]|FLUTTER_ROOT=|expected|refus|elevated' |
     Select-Object -First 8 | ForEach-Object { $_.Line.Trim() }
 if ($cases) { Emit ($cases -join ' | ') }
 

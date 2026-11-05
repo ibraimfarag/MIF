@@ -206,7 +206,17 @@ try {
   & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-helper.ps1") `
     -EnginePath $engine > $helperOut 2>&1
   $helperExit = $LASTEXITCODE
-  Get-Content $helperOut | Where-Object { $_ -match "RESULT|\[FAIL\]" } | ForEach-Object { "  $_" }
+  # On success the summary lines are enough. On failure the *whole* output is printed: the
+  # first runner that reached this step (2026-11-05, run 42032189178) failed here and the
+  # filtered view hid the one line that said why, so the check cost a release cycle to
+  # learn nothing.
+  $helperLines = @(Get-Content $helperOut)
+  if ($helperExit -eq 0) {
+    $helperLines | Where-Object { $_ -match "RESULT|\[FAIL\]" } | ForEach-Object { "  $_" }
+  } else {
+    Write-Output "  verify-helper.ps1 said (all $($helperLines.Count) line(s)):"
+    $helperLines | ForEach-Object { "    $_" }
+  }
   Remove-Item $helperOut -ErrorAction SilentlyContinue
   if ($helperExit -eq 0) { Pass "the packaged engine serves the helper protocol" }
   else { Fail "verify-helper.ps1 failed against the packaged engine (exit $helperExit)" }
