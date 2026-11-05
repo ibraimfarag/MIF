@@ -119,6 +119,20 @@ jobs:
         shell: pwsh
         run: choco install nsis --no-progress -y
 
+      # The inventory in step 1 runs `cargo metadata` and asks it not to touch the
+      # network, so it needs the crates resolved and present first: measured 2026-11-05
+      # (run 41974398428), a fresh runner answered "cargo metadata failed (101): no
+      # matching package named `aes-gcm` found ... offline mode (via --offline)" and the
+      # check was reported as a stale inventory. It is also the download the build would
+      # otherwise do later, so this costs nothing.
+      - name: Fetch the Rust dependencies
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: |
+          cd engine
+          cargo fetch --locked
+
       - name: Build, sign, hash and zip
         shell: pwsh
         env:
@@ -261,6 +275,14 @@ jobs:
       - name: Install NSIS
         shell: pwsh
         run: choco install nsis --no-progress -y
+
+      - name: Fetch the Rust dependencies
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: |
+          cd engine
+          cargo fetch --locked
 
       - name: Build, sign, hash and zip
         shell: pwsh

@@ -943,6 +943,19 @@ click (P1.5) or a purchased certificate (P4).
     something the runner's SDK reports.
   - **The release is a draft (D-031).** It made this verification possible: a tag push
     re-runs everything and publishes nothing.
+- **The x64 packaging failure was never a stale inventory (2026-11-05).** Run
+    **41974398428** (tag on `0c86ac7`) finally carried the check's own output, and it
+    said: `cargo metadata failed (101)` / `error: no matching package named aes-gcm
+    found` / `note: offline mode (via --offline)`. `tool/sbom.dart` reads the crate graph
+    and deliberately keeps it offline; on a developer machine the crates are already in
+    `~/.cargo/registry`, and on a fresh runner **nothing has fetched them yet** - the
+    release workflow's first cargo-touching step was the inventory check itself. So the
+    check died (exit 2) and three releases reported it as files that needed
+    regenerating. Both packaging jobs now run `cargo fetch --locked` before it (which the
+    build would have done anyway), the check's failure is a separate message from
+    "stale", and the raw tail is printed. Same run: the ARM64 engine leg is **green**
+    (`cargo build --release` before the verifier was the whole difference), and
+    `Package (arm64)` still reports its measured `2 of 7` prerequisites.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
