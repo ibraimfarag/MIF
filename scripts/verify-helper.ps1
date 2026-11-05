@@ -97,6 +97,15 @@ function Expect([string]$label, [string]$answer, [string]$mustContain) {
   if (-not $ok) { $script:failures.Add("$label did not contain '$mustContain'") }
 }
 
+# A refusal of a privileged op is only meaningful on a token that is not elevated, and
+# whether it is elevated is the helper's own answer - the token that matters - not this
+# script's guess. A GitHub-hosted Windows runner runs elevated (measured 2026-11-05, run
+# 42036237342: {"elevated":true}), so there the helper is *right* to accept
+# `hardening.run`, and demanding the refusal made a release fail over a token.
+function Get-CallerIsElevated([string]$versionAnswer) {
+  return ($versionAnswer -match '"elevated"\s*:\s*true')
+}
+
 $engine = Resolve-Engine $EnginePath
 $log = Join-Path $env:TEMP ("mics-helper-verify-" + [guid]::NewGuid().ToString("N").Substring(0, 8) + ".log")
 $err = Join-Path $env:TEMP ("mics-helper-verify-" + [guid]::NewGuid().ToString("N").Substring(0, 8) + ".err")
@@ -163,8 +172,20 @@ if ($helper.HasExited) {
 try {
   Write-Output "protocol:"
   Expect "ping" (Send-Op '{"op":"ping"}') '"pong":true'
-  Expect "version" (Send-Op '{"op":"version"}') '"version"'
-  Expect "hardening.run unelevated" (Send-Op '{"op":"hardening.run","action":"smbv1_off"}') "elevated token"
+  $versionAnswer = Send-Op '{"op":"version"}'
+  Expect "version" $versionAnswer '"version"'
+  if (Get-CallerIsElevated $versionAnswer) {
+    $script:elevated = $true
+    # Doing the op here to "prove" the elevated path would change SMBv1 on a machine
+    # nobody asked this probe to harden, and it would have to be undone with the
+    # snapshot operation to leave no trace. The refusal is proven where it means
+    # something - an unelevated shell - so this says which case this is instead.
+    Write-Output "  [SKIP] hardening.run unelevated - this token is elevated, so the helper"
+    Write-Output "         is meant to accept it; nothing was changed. Run this unelevated"
+    Write-Output "         (the documented way) to see the refusal."
+  } else {
+    Expect "hardening.run unelevated" (Send-Op '{"op":"hardening.run","action":"smbv1_off"}') "elevated token"
+  }
   Expect "hosts without marker" (Send-Op '{"op":"hosts.write","content":"127.0.0.1 example.test"}') "marker"
   Expect "malformed firewall rule" (Send-Op '{"op":"firewall.add_rule","rule":{"name":"x","direction":"sideways","action":"block"}}') "direction"
   Expect "operation outside the set" (Send-Op '{"op":"shell.exec","cmd":"whoami"}') "unknown variant"
@@ -197,7 +218,10 @@ Remove-Item $log, $err -ErrorAction SilentlyContinue
 Remove-Item $portableRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 if ($failures.Count -eq 0) {
-  Write-Output "RESULT: PASS - the helper protocol, validation, refusals and audit trail hold"
+  $note = if ($script:elevated) {
+    " (the hardening.run refusal was not applicable: this token is elevated)"
+  } else { "" }
+  Write-Output "RESULT: PASS - the helper protocol, validation, refusals and audit trail hold$note"
   exit 0
 }
 Write-Output "failures:"
