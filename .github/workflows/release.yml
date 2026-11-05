@@ -189,6 +189,18 @@ jobs:
           cd engine
           cargo test --release
 
+      # `cargo test` builds a test harness in `target/release/deps`, not the bin the
+      # verifier looks for: measured 2026-11-05, "no mics_app.exe or mics-engine.exe
+      # under engine/target/release" - the tests had passed and the check still had
+      # nothing to check. The bin is built explicitly first.
+      - name: Build the ARM64 engine binary
+        shell: pwsh
+        env:
+          YRX_REGENERATE_MODULES_RS: "false"
+        run: |
+          cd engine
+          cargo build --release
+
       - name: The result has to be a hardened ARM64 PE
         shell: pwsh
         run: |

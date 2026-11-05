@@ -1660,6 +1660,27 @@ Future<int> _run(List<String> args) async {
     }
     stderr.writeln('sbom: $bomPath or $noticesPath is stale.');
     stderr.writeln('RESULT: FAIL - run: dart run tool/sbom.dart');
+    // Name the difference. "Stale" alone cost two release runs and a round trip with
+    // the user, because the log that carried it needed a signed-in browser to read.
+    void explain(String label, String? committed, String generated) {
+      final left = (committed ?? '').split('\n');
+      final right = generated.split('\n');
+      if (committed == generated) return;
+      for (var i = 0; i < left.length || i < right.length; i++) {
+        final a = i < left.length ? left[i] : '<end of file>';
+        final b = i < right.length ? right[i] : '<end of file>';
+        if (a != b) {
+          stderr.writeln('$label differs at line ${i + 1}:');
+          stderr.writeln('  committed: $a');
+          stderr.writeln('  generated: $b');
+          return;
+        }
+      }
+      stderr.writeln('$label differs only in trailing content');
+    }
+
+    explain('components', currentBom, bom);
+    explain('notices', currentNotices, notices);
     return 1;
   }
 

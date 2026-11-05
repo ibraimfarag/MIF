@@ -917,6 +917,32 @@ click (P1.5) or a purchased certificate (P4).
     now tee their output and call `scripts/annotate-failure.ps1` (extracted from the CI
     step, one owner for the format), and the release is created as a **draft** (D-031) so
     verifying a run costs a tag and publishes nothing.
+  - **All three Release failures are named, and two are fixed (2026-11-05).** The
+    self-annotating steps paid for themselves on the first run (tag `v0.1.0` on
+    `1a6d871`, run **41966869643**):
+  - **ARM64 prerequisites, measured for the first time in full.** `Package (arm64)`
+    printed `RESULT: NOT READY - 2 of 7 prerequisite(s) missing: Windows SDK arm64 libs,
+    Flutter windows-arm64 engine`, with the five that *are* there named (rust target
+    `aarch64-pc-windows-msvc`, MSVC ARM64 `cl.exe`, MSVC ARM64 CRT libs, LLVM
+    `clang.exe` for ring's assembly, and an ARM64 host). That is ب2's answer in one
+    line: the runner is wired for ARM64, and the two things Flutter's Windows tooling
+    does not ship are exactly what is missing. The job stays informational.
+  - **The ARM64 engine check was looking for a file nobody built.** `verify-hardening.ps1
+    -Arch arm64` reported `no mics_app.exe or mics-engine.exe under
+    engine/target/release`: `cargo test --release` builds a test harness under
+    `target/release/deps`, not the bin. The job now runs `cargo build --release` before
+    the check.
+  - **x64 is still the SBOM, and now it says which line.** The runner printed the same
+    `sbom.cdx.json or THIRD-PARTY-NOTICES is stale` message as the first run, so the
+    Flutter pin was *not* the whole story: `tool/sbom.dart --check` printed whether it
+    was stale and nothing else. It now prints the first differing line of each file
+    (`<label> differs at line N`, committed vs generated), and
+    `scripts/annotate-failure.ps1` picks that up, so the next run names the component
+    instead of the file. Locally the same check passes on a tree with no
+    `.dart_tool/package_config.json` (dart regenerates it), so the difference is
+    something the runner's SDK reports.
+  - **The release is a draft (D-031).** It made this verification possible: a tag push
+    re-runs everything and publishes nothing.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
