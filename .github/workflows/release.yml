@@ -135,15 +135,19 @@ jobs:
 
       - name: Build, sign, hash and zip
         shell: pwsh
+        # A build that hangs must cost 50 minutes, not the 6 hours GitHub allows a job:
+        # measured 2026-11-05, run 41980725064 sat in this step for 3 h 40 min and was
+        # still going, with the whole release held behind it.
+        timeout-minutes: 50
         env:
           YRX_REGENERATE_MODULES_RS: "false"
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build | Out-Null
-          # The pin, enforced and printed: `flutter-version: 3.47.8` is what the
-          # workflow asks for, and this is the only place that checks it was what
-          # arrived - the inventory in sbom.cdx.json records the SDK it was generated
-          # with, so a runner that quietly installs another one fails the check below.
+          # The pin, enforced and printed: `flutter-version: 3.47.8` is what the workflow
+          # asks for, and this is the only place that checks what arrived - the inventory
+          # in sbom.cdx.json records the SDK it was generated with (run 41980725064 shows
+          # this line holding: "Flutter 3.47.8 (wanted 3.47.8)").
           $want = '3.47.8'
           $have = ((flutter --version) | Select-Object -First 1) -replace '^Flutter\s+', '' -replace '\s.*$', ''
           "Flutter $have (wanted $want), FLUTTER_ROOT=$env:FLUTTER_ROOT"
@@ -156,6 +160,14 @@ jobs:
             Tee-Object -FilePath $log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
+
+      # A step cancelled by its timeout never reaches the `if ($code -ne 0)` above, so the
+      # one case where the log matters most - a build that stopped talking - would leave
+      # no annotation at all. This runs for either ending.
+      - name: Say where the build stopped
+        if: failure() || cancelled()
+        shell: pwsh
+        run: ./scripts/annotate-failure.ps1 -Path build/release-x64-log.txt
 
       - name: Wrap the package in an installer
         shell: pwsh
@@ -286,6 +298,7 @@ jobs:
 
       - name: Build, sign, hash and zip
         shell: pwsh
+        timeout-minutes: 30
         env:
           YRX_REGENERATE_MODULES_RS: "false"
         run: |
@@ -299,6 +312,11 @@ jobs:
             Tee-Object -FilePath $log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
+
+      - name: Say where the build stopped
+        if: failure() || cancelled()
+        shell: pwsh
+        run: ./scripts/annotate-failure.ps1 -Path build/release-arm64-log.txt
 
       - name: Wrap the package in an installer
         shell: pwsh
