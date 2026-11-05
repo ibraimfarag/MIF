@@ -710,4 +710,7 @@ if ($signature -eq "Valid") {
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1"
 Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1"
+# The throwaway signing key does not outlive the build it signed: scripts/codesign-cert.ps1
+# keeps it as a PFX in this job's TEMP, and nothing after this point needs it.
+Remove-Item -LiteralPath (Join-Path $env:TEMP "mics-signing") -Recurse -Force -ErrorAction SilentlyContinue
 Write-Output "RESULT: PASS"

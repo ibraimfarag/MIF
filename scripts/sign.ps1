@@ -49,56 +49,13 @@ $signtool = $signtool.FullName
 Write-Host "signtool: $signtool"
 
 if ($SelfSigned) {
-    $cert = Get-ChildItem Cert:\CurrentUser\My |
-        Where-Object { $_.Subject -like "*MI CS Code Signing*" } |
-        Sort-Object NotAfter -Descending | Select-Object -First 1
-    if (-not $cert) {
-        Write-Host "Creating self-signed code-signing certificate (valid 3 years)..."
-        # Not New-SelfSignedCertificate: it printed this line on a GitHub runner and then
-        # hung for three hours, with nothing until the run was cancelled (measured
-        # 2026-11-05, run 41980725064) - it goes through CertEnroll and the CNG key store
-        # in a session with no interactive user. The certificate is built in memory
-        # instead, exported to a PFX, and imported: same result, no service to wait on.
-        $password = [guid]::NewGuid().ToString("N")
-        $rsa = [System.Security.Cryptography.RSA]::Create(3072)
-        try {
-            $req = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
-                "CN=MI CS Code Signing, O=$Publisher", $rsa,
-                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
-                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
-            $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
-                [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature, $true))) | Out-Null
-            $oids = New-Object System.Security.Cryptography.OidCollection
-            $oids.Add("1.3.6.1.5.5.7.3.3") | Out-Null   # extendedKeyUsage = codeSigning
-            $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension($oids, $true))) | Out-Null
-            $fresh = $req.CreateSelfSigned([DateTimeOffset]::Now.AddDays(-1), [DateTimeOffset]::Now.AddYears(3))
-            $pfx = Join-Path $env:TEMP ("mics-codesign-" + $fresh.Thumbprint + ".pfx")
-            [System.IO.File]::WriteAllBytes($pfx, $fresh.Export(
-                [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password))
-            $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
-            Import-PfxCertificate -FilePath $pfx -CertStoreLocation "Cert:\CurrentUser\My" -Password $secure | Out-Null
-            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
-        } finally {
-            $rsa.Dispose()
-        }
-        $cert = Get-ChildItem Cert:\CurrentUser\My |
-            Where-Object { $_.Subject -like "*MI CS Code Signing*" } |
-            Sort-Object NotAfter -Descending | Select-Object -First 1
-        if (-not $cert) { throw "the certificate was created but is not in Cert:\CurrentUser\My" }
-    }
-    # Trust it locally so the signature verifies without a warning. CurrentUser\Root
-    # makes the chain valid for this user; TrustedPublisher is what Explorer and
-    # SmartScreen look at when they decide to name the publisher instead of
-    # refusing the app. Neither needs elevation.
-    $cer = Join-Path $env:TEMP "mics-codesign.cer"
-    Export-Certificate -Cert $cert -FilePath $cer -Type CERT | Out-Null
-    foreach ($store in @("Root", "TrustedPublisher")) {
-        & certutil -user -addstore $store $cer | Out-Null
-        Write-Host ("trust {0,-16}: exit {1}" -f $store, $LASTEXITCODE)
-    }
-    Remove-Item $cer -Force -ErrorAction SilentlyContinue
-    Write-Host "Certificate thumbprint: $($cert.Thumbprint)"
-    $certArg = @("/sha1", $cert.Thumbprint)
+    # The certificate lives as a PFX file, never as a key in a store: both
+    # New-SelfSignedCertificate and Import-PfxCertificate hung on a GitHub runner with no
+    # interactive user (3 h in run 41980725064, 50 min in run 42010747061). signtool reads
+    # the PFX with /f, and scripts/codesign-cert.ps1 has already trusted the public half.
+    $signing = & (Join-Path $PSScriptRoot "codesign-cert.ps1") -Publisher $Publisher
+    Write-Host "Certificate thumbprint: $($signing.Thumbprint)"
+    $certArg = @("/f", $signing.Pfx, "/p", $signing.Password)
     # No timestamp server: a public TSA will not countersign a self-signed
     # signature, and for a local test build there is nothing to keep valid after
     # the certificate expires.
@@ -152,10 +109,25 @@ Write-Host "Verifying:"
 $failed = 0
 foreach ($file in $targets) {
     if (-not (Test-Path $file)) { continue }
-    $status = (Get-AuthenticodeSignature $file).Status
-    $signer = (Get-AuthenticodeSignature $file).SignerCertificate.Subject
-    Write-Host ("  {0,-28} {1,-14} {2}" -f (Split-Path $file -Leaf), $status, $signer)
-    if ($status -ne "Valid") { $failed++ }
+    $sig = Get-AuthenticodeSignature $file
+    $status = $sig.Status
+    $signer = $sig.SignerCertificate.Subject
+    # A self-signed certificate cannot reach `Valid` on a machine that has not been told
+    # to trust it, and being told means a confirmation dialog a runner cannot answer
+    # (measured 2026-11-05: adding the certificate to CurrentUser\Root blocks until
+    # someone clicks, which is what stalled two release runs). `UnknownError` there means
+    # "the chain is not trusted", not "the file was touched": tampering shows up as
+    # HashMismatch or NotSigned, so the check is the signer's identity plus the
+    # signature's own integrity. With a real certificate (D-016, row ب5) `Valid` is the
+    # only acceptable answer and this branch is not taken.
+    $ok = ($status -eq "Valid")
+    if (-not $ok -and $SelfSigned -and $status -eq "UnknownError" -and
+        $sig.SignerCertificate.Thumbprint -eq $signing.Thumbprint) {
+        $ok = $true
+        $status = "Signed (self-signed, not chained to a public root)"
+    }
+    Write-Host ("  {0,-28} {1,-14} {2}" -f (Split-Path $file -Leaf), $sig.Status, $signer)
+    if (-not $ok) { $failed++ }
 }
 if ($failed -gt 0) {
     Write-Output "RESULT: FAIL - $failed file(s) did not verify; SmartScreen will still warn"

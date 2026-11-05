@@ -975,28 +975,32 @@ click (P1.5) or a purchased certificate (P4).
     components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
     `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
     reports its measured `2 of 7`.
-  - **The 3 h 40 min build was `New-SelfSignedCertificate` (2026-11-05).** Run
-    **41980725064** was cancelled after three and a half hours inside "Build, sign, hash
-    and zip", and its log names the spot: `cargo build` finished in **13m 08s**, the
-    staged binaries passed hardening and the fingerprint check, and then the last two
-    lines were `signing the staged binaries (the engine waits for its manifest)...` and
-    `Creating self-signed code-signing certificate (valid 3 years)...` - nothing more
-    until the cancellation. The cmdlet goes through CertEnroll and the CNG key store in a
-    session with no interactive user, and on that runner it never came back. `sign.ps1`
-    now builds the certificate in memory (`CertificateRequest` + `CreateSelfSigned`, RSA
-    3072, `extendedKeyUsage=codeSigning`), exports it to a PFX and imports that: measured
-    here, the subject, the EKU and a 3,318-byte PFX all come out right and the temporary
-    store entry is removed again. The same run also measured the rest of the packaging
-    path for the first time: the engine's own hardening verdict (`0xC160`,
-    `CF_INSTRUMENTED`), the opsec table (9 binaries, `mics-engine.exe` 1243 `cargo`
-    markers against the 1243 baseline, none of this machine's account), and
-    `Flutter 3.47.8 (wanted 3.47.8)` from the pin.
-  - **A hang now costs 50 minutes and still reports.** That step had no timeout, so
-    GitHub's six-hour job limit was the only thing that would have stopped it, and a
-    cancelled step never reaches the `if ($code -ne 0)` branch that emits annotations.
-    `package-x64`'s build is capped at 50 minutes and `package-arm64`'s at 30, and both
-    jobs end with an `if: failure() || cancelled()` step that hands the log to
-    `scripts/annotate-failure.ps1`.
+  - **The hang was a certificate dialog, and it was never the build (2026-11-05).** Run
+    **42010747061** finished the engine in **13m 08s**, passed the hardening check
+    (`0xC160`, `CF_INSTRUMENTED`) and the opsec table (9 binaries, `mics-engine.exe` at
+    1243 `cargo` markers = the baseline, none of this machine's account) - and then stopped
+    at `Creating self-signed code-signing certificate...` until the 50-minute cap. The
+    same line stopped run 41980725064 for three hours before that. It is not the
+    certificate API: it is **adding a certificate authority to `CurrentUser\Root`**, which
+    Windows answers with a confirmation dialog nobody can click on a runner. Reproduced
+    here in seconds - `certutil -user -addstore Root` printed
+    `Root "Trusted Root Certification Authorities"`, then sat until killed, and
+    `X509Store.Add` on Root did exactly the same. The earlier runs only passed because the
+    then-current certificate was already in Root, so the add was a no-op.
+  - **What signing does now.** `scripts/codesign-cert.ps1` builds the certificate in
+    memory, keeps it as a PFX in the job's TEMP (signing key never in a store), and trusts
+    the public half only in `TrustedPeople` + `TrustedPublisher` - the two stores that take
+    an entry without asking. `sign.ps1` signs with `signtool /f`, and because a self-signed
+    signature cannot reach `Valid` without its root trusted, the check accepts
+    `UnknownError` **with our own signer certificate**: that status means the chain is not
+    publicly trusted, not that the file was touched (tampering reports
+    `HashMismatch`/`NotSigned`). A real certificate still has to be `Valid`.
+  - **`scripts/signing-probe.ps1` runs before the build** (5-minute cap, added to
+    `package-x64`): create the certificate, trust it, sign a copy of a real PE, verify the
+    signer. Measured here: **4 s**, `RESULT: PASS`, `signtool: UnknownError - CN=MI CS Code
+    Signing`. That is the step that would have saved both runs.
+  - **The throwaway key is deleted** at the end of `make-release.ps1`; nothing after it
+    needs it.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the

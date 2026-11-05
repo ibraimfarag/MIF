@@ -133,6 +133,19 @@ jobs:
           cd engine
           cargo fetch --locked
 
+      - name: Signing works on this machine
+        shell: pwsh
+        # Five minutes, because everything here takes seconds: creating the certificate,
+        # trusting it and signing a PE. It runs *before* the build so a hang costs a
+        # coffee instead of a release - measured 2026-11-05, signing stalled two runs
+        # (3 h in 41980725064, 50 min in 42010747061) after the build was already done.
+        timeout-minutes: 5
+        run: |
+          $log = 'build/signing-probe-log.txt'
+          & ./scripts/signing-probe.ps1 *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./scripts/annotate-failure.ps1 -Path $log; exit $code }
+
       - name: Build, sign, hash and zip
         shell: pwsh
         # A build that hangs must cost 50 minutes, not the 6 hours GitHub allows a job:
