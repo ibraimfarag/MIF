@@ -223,7 +223,14 @@ Reset-Work
 $gate = Get-ManifestVerdict $work
 Check "control: the release gate accepts the copy" $gate.Ok $gate.Result
 $app = Get-EngineVerdict $work "control"
-Check "control: the app says ok" (($app.Verdict -eq "ok")) ("integrity=$($app.Verdict) $($app.Detail)")
+# D-025 has three answers, not two. A build signed with our certificate on a machine that has
+# not trusted its root reports `untrusted-certificate`: every listed file hashes as published,
+# and the only thing missing is a chain Windows recognises - which is exactly a release
+# runner, where the self-signed certificate deliberately never enters the root store (see
+# scripts/codesign-cert.ps1). Both answers mean "nothing was edited"; `unverified` is the one
+# that means tampering or another signer, and it still fails here.
+$settled = @("ok", "untrusted-certificate")
+Check "control: the app says ok" ($settled -contains $app.Verdict) ("integrity=$($app.Verdict) $($app.Detail)")
 Check "control: no card is raised" (($app.Alert -eq "")) $(if ($app.Alert) { $app.Alert } else { "" })
 
 Write-Output ""
@@ -321,7 +328,7 @@ Reset-Work
 $gate = Get-ManifestVerdict $work
 Check "a copy of the published bytes: the gate accepts it" ($gate.Ok) $gate.Result
 $app = Get-EngineVerdict $work "copy"
-Check "a copy of the published bytes: the app says ok" (($app.Verdict -eq "ok")) "integrity=$($app.Verdict)"
+Check "a copy of the published bytes: the app says ok" ($settled -contains $app.Verdict) "integrity=$($app.Verdict)"
 Set-FlippedByte (Join-Path $work "data\app.so") | Out-Null
 $gate = Get-ManifestVerdict $work
 Check "the same copy with one changed file: the gate refuses it" (-not $gate.Ok) $gate.Reason

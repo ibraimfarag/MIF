@@ -975,7 +975,34 @@ click (P1.5) or a purchased certificate (P4).
     components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
     `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
     reports its measured `2 of 7`.
-  - **The hang was a certificate dialog, and it was never the build (2026-11-05).** Run
+  - **The x64 release got all the way to its last check (2026-11-05, run 42022830468).** The
+    signing probe passed on the runner for the first time (step 8, seconds), the build,
+    signing, manifest injection, NSIS installer and the download verification all
+    succeeded, and the run stopped at `verify-tamper.ps1`: **39 of 41 checks passed**, and
+    the two that did not were the same expectation written twice -
+    `control: the app says ok` and `a copy of the published bytes: the app says ok`. The
+    engine was right and the probe was wrong: `D-025` has **three** answers, and a build
+    signed with our certificate on a machine that has not trusted its root reports
+    `untrusted-certificate` (every listed file hashes as published; only the chain is
+    missing) - which is exactly a release runner, where `scripts/codesign-cert.ps1`
+    deliberately never writes the root store. Measured from the code that decides it:
+    `trust()` returns `Trust::UntrustedRoot` when the signature verifies and the embedded
+    CN is `EXPECTED_SIGNER_CN` = `MI CS Code Signing`, and the new certificate's CN is that
+    string. `verify-tamper.ps1` now accepts `ok` **or** `untrusted-certificate` for those
+    two checks and still fails on `unverified`, which is what tampering, a repack or
+    another signer report (`integrity=unverified ... data\app.so: changed` still passes as
+    a *detection*, and still fails as a control).
+  - **The probe's own failure was PowerShell, not signing** (run 42021515566). The probe
+    step failed in seconds with nothing to say because `$code = Invoke-SigningProbe`
+    captured every `Write-Output` the function produced - the log held only the
+    certificate script's `Write-Host` lines, and `exit $code` received an array of
+    strings. Its messages go to the host now, the function returns a number, and anything
+    that throws is printed as `RESULT: FAIL - <type>: <message>`. Measured here after the
+    fix: **RESULT: PASS in 5 s**, signing a copy of `mics-engine.exe`, `signtool:
+    UnknownError - CN=MI CS Code Signing`.
+  - **`sign.ps1` on the whole package, with the new certificate:** 8 binaries signed and
+    verified in **7 s**, every one `UnknownError` with our signer, `RESULT: PASS`.
+- **The hang was a certificate dialog, and it was never the build (2026-11-05).** Run
     **42010747061** finished the engine in **13m 08s**, passed the hardening check
     (`0xC160`, `CF_INSTRUMENTED`) and the opsec table (9 binaries, `mics-engine.exe` at
     1243 `cargo` markers = the baseline, none of this machine's account) - and then stopped
