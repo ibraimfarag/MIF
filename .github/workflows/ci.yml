@@ -35,6 +35,11 @@ jobs:
           # and moving it is a decision (recorded in docs/DECISIONS.md), not a
           # side effect of `stable` moving.
           toolchain: 1.99.1
+          # A named toolchain arrives bare: the hosted image ships clippy for its own
+          # stable, and `-Tier full` runs `cargo clippy` in step 4/8. Measured
+          # 2026-11-05: "cargo-clippy.exe is not installed for the toolchain
+          # 1.99.1-x86_64-pc-windows-msvc".
+          components: clippy
 
       - name: Cache cargo registry and build output
         uses: actions/cache@v4

@@ -875,6 +875,17 @@ click (P1.5) or a purchased certificate (P4).
     (D-030 carries both measurements), and the count went **3 failures -> 1 -> 0** as each
     assumption was replaced by a measurement: 139/1, then the same run with two of the
     three assertions fixed, then the group list.
+  - **The runner is green where it counts, and the last failure is a missing component.**
+    Run **41940095160** (on `d17122d`) printed `test result: ok. 140 passed; 0 failed`
+    and `PASS (362.0s)` for `engine.test` - **all three original engine failures are
+    gone**, D-030's group-list check is what the runner needed. The same run also shows
+    `flutter.analyze` and `flutter.test` passing (the pipeline failed at step **4/8**), so
+    the Flutter pin holds too. What is left is my own rust pin being incomplete: a *named*
+    toolchain arrives without the components the hosted image has for its stable, so
+    `cargo-clippy.exe is not installed for the toolchain 1.99.1-x86_64-pc-windows-msvc`
+    failed `engine.clippy` in **1.2 s**. `Setup Rust` now asks for
+    `components: clippy`. Steps 5-8 of the full tier (`engine.build`, `engine.smoke`,
+    `engine.contract`, `app.build`) have still never run on that runner.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
