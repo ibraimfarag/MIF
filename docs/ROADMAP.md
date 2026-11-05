@@ -193,7 +193,9 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
    open-source projects through SignPath. Costs and constraints: `docs/COST.md`.
    Then ب6 publishes - and the place is decided: **GitHub Releases**, with
    `.github/workflows/release.yml` written for it (never run yet).
-3. **Six decisions that each stop ready work**: whether licensed GeoIP lists may be
+3. **Six decisions that each stop ready work** - one-page briefs, with the cost of every
+   option and a recommendation, are in `docs/OPEN-DECISIONS.md`: whether licensed GeoIP
+   lists may be
    bundled; starter pack vs real detection rules (measured 2026-11-05, D-033: 8 of the
    10 shipped rules are now held to a file, one of those only sees an uncompressed
    container because a real `.docm` deflates its macro strings, and 2 cannot be proven

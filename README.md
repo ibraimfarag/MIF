@@ -22,7 +22,8 @@ explains, and suggests the next action instead of dumping raw data.
 > What is left, with priorities and
 > estimates: [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
-> [`docs/DECISIONS.md`](docs/DECISIONS.md).
+> [`docs/DECISIONS.md`](docs/DECISIONS.md). What is waiting on an
+> answer: [`docs/OPEN-DECISIONS.md`](docs/OPEN-DECISIONS.md).
 
 ---
 
@@ -561,7 +562,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
 | `scripts/` | User-facing helpers and acceptance probes: code signing, the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
 | `qa/` | The QA registries and the committed report (`report.md` / `report.html`), the JSON-RPC contract harness and the UI fixtures/ledger. |
-| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
+| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting

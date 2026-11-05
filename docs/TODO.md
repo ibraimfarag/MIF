@@ -352,7 +352,10 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    publish - and the place is now decided (**GitHub Releases**, item 6 below), with
    `.github/workflows/release.yml` written for it.
 3. **Six decisions, one line each.** Every one of them stops work that is otherwise
-   ready: *(a)* whether licensed **GeoIP**
+   ready - **[`docs/OPEN-DECISIONS.md`](OPEN-DECISIONS.md) has a one-page brief for each,
+   with what the code does today measured, the cost of every option, and a
+   recommendation**; answering in one line per item is enough. *(a)* whether licensed
+   **GeoIP**
    country lists may be bundled, since the licensing is unclear; *(b)* whether the
    detection content stays the **starter pack** or real rules are written — measured
    on 2026-11-05 so the answer is arithmetic rather than taste: the shipped pack holds
