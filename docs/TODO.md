@@ -865,6 +865,16 @@ click (P1.5) or a purchased certificate (P4).
     `::error::` annotations - the same public surface the Dart reporter already used.
     Verified locally with the exact snippet: `-Tier fast` through `Tee-Object` still
     returns **exit 0** on PASS and the log holds all 388 lines.
+  - **The instrumented run then named the last fact, and it was a filtered token.** With
+    the failure emitting its own log tail, run **41938235816** printed
+    `facts: installer=Some("S-1-5-32-544") caller=Ok((Some("S-1-5-21-...-500"), false))`:
+    the record was the Administrators group (as measured), and
+    `CheckTokenMembership` still answered **false** because the runner's token is
+    **UAC-filtered** - the group is there as deny-only, which that API does not report.
+    The check now reads `TokenGroups` and matches the SID whether enabled or deny-only
+    (D-030 carries both measurements), and the count went **3 failures -> 1 -> 0** as each
+    assumption was replaced by a measurement: 139/1, then the same run with two of the
+    three assertions fixed, then the group list.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the

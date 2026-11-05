@@ -1378,8 +1378,9 @@ means:
 
 - a record naming an account SID is satisfied only by that account (unchanged);
 - a record naming **BUILTIN\Administrators** (`S-1-5-32-544`) is satisfied by a caller
-  whose token carries that group, asked of `CheckTokenMembership` and never guessed
-  from a name;
+  whose token carries that group - read out of the token's **group list**, so a
+  UAC-filtered token counts (see the second measurement below), and never guessed from
+  a name;
 - the image check (`mics-engine.exe`, or the path in `MICS_ENGINE_PATH`) is unchanged
   and still runs first.
 
@@ -1401,6 +1402,20 @@ That is a real install scenario - any Windows Server, plus any workstation whose
 "System objects: default owner for objects created by members of the Administrators
 group" policy names the group - and on those machines MI CS would have refused the
 person who installed it.
+
+**Measured twice, on 2026-11-05.** The first fix asked `CheckTokenMembership` and the
+runner still refused, with its own facts printed by the failing test:
+
+```
+facts: installer=Some("S-1-5-32-544")
+       caller=Ok((Some("S-1-5-21-3077485881-3661871218-4154919024-500"), false))
+```
+
+`false` is the answer that API gives for a **UAC-filtered** token: the group is present
+as *deny-only*, and `CheckTokenMembership` reports enabled membership. So the second fix
+reads `TokenGroups` and matches the SID whether it is enabled or deny-only. Deny-only
+still means the account *is* an administrator, and the pipe ACL - not this check - is
+what keeps an unelevated process out of an actual privileged call.
 
 **Why this does not widen F-2.** The risk F-2 closes is *another local user* driving the
 LocalSystem helper. A standard user still fails both the account test and the

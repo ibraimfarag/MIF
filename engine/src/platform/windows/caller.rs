@@ -8,7 +8,7 @@
 //! 1. `GetNamedPipeClientProcessId` names the client process. A handle to that
 //!    process is opened and kept until both answers below are read, so the pid
 //!    cannot be recycled between the calls.
-//! 2. The image path must be the engine â€” `mics-engine.exe` by name, or exactly the
+//! 2. The image path must be the engine Ã¢â‚¬â€ `mics-engine.exe` by name, or exactly the
 //!    path in `MICS_ENGINE_PATH`, the hook the installer records.
 //! 3. The caller's token must belong to the account MI CS was installed for. That
 //!    account is read as the owner of `%PROGRAMDATA%\MICS`, a directory only the
@@ -24,19 +24,19 @@
 //! When no data directory exists yet (portable run, a console helper in a fresh
 //! checkout), step 3 has nothing to compare against: [`judge`] then lets the image
 //! check stand alone, because refusing would break the documented development flows
-//! for no security gain â€” a console helper already runs with the caller's own token.
+//! for no security gain Ã¢â‚¬â€ a console helper already runs with the caller's own token.
 
 use anyhow::{bail, Context, Result};
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use windows::core::{BOOL, PCWSTR, PWSTR};
+use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HLOCAL, LocalFree, HANDLE};
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSidToSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
 };
 use windows::Win32::Security::{
-    CheckTokenMembership, GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
-    PSID, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    EqualSid, GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    TOKEN_GROUPS, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER, TokenGroups, TokenUser,
 };
 use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::Threading::{
@@ -47,7 +47,7 @@ use windows::Win32::System::Threading::{
 /// The only image name the helper answers without `MICS_ENGINE_PATH` being set.
 const ENGINE_IMAGE: &str = "mics-engine.exe";
 
-/// BUILTIN\Administrators â€” the owner a server-class Windows records for a directory
+/// BUILTIN\Administrators Ã¢â‚¬â€ the owner a server-class Windows records for a directory
 /// an administrator creates, which is why the installer's account can be a group
 /// rather than a user (see D-030).
 const BUILTIN_ADMINISTRATORS: &str = "S-1-5-32-544";
@@ -84,7 +84,7 @@ pub fn is_engine_image(path: &Path) -> bool {
 /// True when `path` is a client this helper serves.
 ///
 /// The engine image by name is always allowed. `allowed` (the `MICS_ENGINE_PATH`
-/// the installer records) adds one more trusted client â€” which is how the
+/// the installer records) adds one more trusted client Ã¢â‚¬â€ which is how the
 /// verification scripts speak the protocol themselves, and how a differently named
 /// build can be named instead of loosening the check for everyone.
 pub fn is_authorised(path: &Path, allowed: Option<&Path>) -> bool {
@@ -207,55 +207,75 @@ fn with_token<T>(process: HANDLE, read: impl FnOnce(HANDLE) -> Result<T>) -> Res
     result
 }
 
-/// True when `token` carries an enabled BUILTIN\Administrators group.
+/// True when `token` carries BUILTIN\Administrators, whether the group is enabled or
+/// deny-only.
 ///
-/// `CheckTokenMembership` is asked about the group SID directly, so an unprivileged
-/// caller answers "no" without any elevation attempt. A SID that cannot be built
-/// answers "no" as well: the only thing this can do is refuse a record that names
-/// the group.
+/// The group list is read instead of asking `CheckTokenMembership`, because that call
+/// answers "no" for a **UAC-filtered** token: GitHub's runner runs the job with a
+/// filtered administrator token, and the measured answer was `administrator=false` for
+/// token user `S-1-5-21-...-500` (2026-11-05). A deny-only group still means the account
+/// *is* an administrator; the pipe ACL is what keeps an unelevated process out of an
+/// actual privileged call, and a standard user carries neither form of the group.
 fn token_is_administrator(token: HANDLE) -> bool {
-    let text: Vec<u16> = BUILTIN_ADMINISTRATORS
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    let mut sid = PSID::default();
-    // SAFETY: `text` is NUL-terminated, `sid` is a valid out-pointer, and the SID it
-    // returns is freed with `LocalFree` below, which is the allocator it uses.
-    if unsafe { ConvertStringSidToSidW(PCWSTR(text.as_ptr()), &mut sid) }.is_err() {
-        return false;
-    }
-    let mut member = BOOL::default();
-    // SAFETY: both handles are valid for the duration of the call and only read.
-    let checked = unsafe { CheckTokenMembership(Some(token), sid, &mut member) }.is_ok();
-    // SAFETY: `sid` came from `ConvertStringSidToSidW` above.
-    let _ = unsafe { LocalFree(Some(HLOCAL(sid.0))) };
-    checked && member.as_bool()
+    token_has_group(token, BUILTIN_ADMINISTRATORS)
 }
 
-fn token_sid(token: HANDLE) -> Result<String> {
-    // Two calls: the first for the size, the second for the data. `TOKEN_USER`
-    // begins with a `SID_AND_ATTRIBUTES`, so the buffer is read as that struct.
+/// True when `token`'s group list contains the SID in `group`.
+fn token_has_group(token: HANDLE, group: &str) -> bool {
+    let text: Vec<u16> = group.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut wanted = PSID::default();
+    // SAFETY: `text` is NUL-terminated, `wanted` is a valid out-pointer, and the SID it
+    // returns is freed with `LocalFree` below, which is the allocator it comes from.
+    if unsafe { ConvertStringSidToSidW(PCWSTR(text.as_ptr()), &mut wanted) }.is_err() {
+        return false;
+    }
+    let mut found = false;
+    if let Ok(buffer) = token_information(token, TokenGroups) {
+        // SAFETY: the API wrote a `TOKEN_GROUPS` at the start of the buffer, and its
+        // `Groups` field is a flexible array of `GroupCount` entries inside that same
+        // buffer, which outlives every SID read from it here.
+        let groups = unsafe { &*(buffer.as_ptr() as *const TOKEN_GROUPS) };
+        let count = groups.GroupCount as usize;
+        let entries = unsafe { std::slice::from_raw_parts(groups.Groups.as_ptr(), count) };
+        found = entries.iter().any(|entry| {
+            // SAFETY: both SIDs are valid for the duration of the comparison.
+            unsafe { EqualSid(entry.Sid, wanted) }.is_ok()
+        });
+    }
+    // SAFETY: `wanted` came from `ConvertStringSidToSidW` above.
+    let _ = unsafe { LocalFree(Some(HLOCAL(wanted.0))) };
+    found
+}
+
+/// One `GetTokenInformation` call, sized by the API itself.
+fn token_information(token: HANDLE, class: TOKEN_INFORMATION_CLASS) -> Result<Vec<u8>> {
+    // Two calls: the first for the size, the second for the data.
     let mut needed = 0u32;
     // SAFETY: a null buffer with length 0 asks only for the required size; the
     // returned error is expected and only the size matters.
-    let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut needed) };
+    let _ = unsafe { GetTokenInformation(token, class, None, 0, &mut needed) };
     if needed == 0 {
-        bail!("the token has no readable user");
+        bail!("the token has no readable {class:?}");
     }
     let mut buffer = vec![0u8; needed as usize];
     // SAFETY: `buffer` is `needed` bytes long and the call writes at most that much.
     unsafe {
         GetTokenInformation(
             token,
-            TokenUser,
+            class,
             Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
             needed,
             &mut needed,
         )
     }
-    .context("read the caller's token user")?;
+    .with_context(|| format!("read the caller's token {class:?}"))?;
+    Ok(buffer)
+}
+
+fn token_sid(token: HANDLE) -> Result<String> {
+    let buffer = token_information(token, TokenUser)?;
     // SAFETY: the buffer holds a `TOKEN_USER` (guaranteed by the API contract) whose
-    // first field is the user's `SID_AND_ATTRIBUTES`.
+    // first field is the user's `SID_AND_ATTRIBUTES`, and its SID points into it.
     let user: &TOKEN_USER = unsafe { &*(buffer.as_ptr() as *const TOKEN_USER) };
     sid_to_string(user.User.Sid)
 }
@@ -294,7 +314,7 @@ pub fn owner_sid(path: &Path) -> Result<String> {
 
 /// The account MI CS was installed for: the owner of `%PROGRAMDATA%\MICS`.
 ///
-/// `None` when that directory does not exist (a portable run) â€” `judge` then has no
+/// `None` when that directory does not exist (a portable run) Ã¢â‚¬â€ `judge` then has no
 /// record to compare against and says so in the threat model.
 pub fn installer_account() -> Option<String> {
     let program_data = std::env::var_os("PROGRAMDATA")?;
@@ -406,7 +426,7 @@ mod tests {
             Verdict::Allowed
         );
         // A *different* user who copied the engine: the image passes, the SID does
-        // not â€” exactly the case the image check alone could not stop.
+        // not Ã¢â‚¬â€ exactly the case the image check alone could not stop.
         assert_eq!(
             judge(
                 &caller(engine, Some("S-1-5-21-9-9-9-1002")),
