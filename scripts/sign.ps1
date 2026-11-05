@@ -54,13 +54,37 @@ if ($SelfSigned) {
         Sort-Object NotAfter -Descending | Select-Object -First 1
     if (-not $cert) {
         Write-Host "Creating self-signed code-signing certificate (valid 3 years)..."
-        $cert = New-SelfSignedCertificate `
-            -Type CodeSigningCert `
-            -Subject "CN=MI CS Code Signing, O=$Publisher" `
-            -KeyUsage DigitalSignature `
-            -KeySpec Signature `
-            -NotAfter (Get-Date).AddYears(3) `
-            -CertStoreLocation "Cert:\CurrentUser\My"
+        # Not New-SelfSignedCertificate: it printed this line on a GitHub runner and then
+        # hung for three hours, with nothing until the run was cancelled (measured
+        # 2026-11-05, run 41980725064) - it goes through CertEnroll and the CNG key store
+        # in a session with no interactive user. The certificate is built in memory
+        # instead, exported to a PFX, and imported: same result, no service to wait on.
+        $password = [guid]::NewGuid().ToString("N")
+        $rsa = [System.Security.Cryptography.RSA]::Create(3072)
+        try {
+            $req = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
+                "CN=MI CS Code Signing, O=$Publisher", $rsa,
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+            $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
+                [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature, $true))) | Out-Null
+            $oids = New-Object System.Security.Cryptography.OidCollection
+            $oids.Add("1.3.6.1.5.5.7.3.3") | Out-Null   # extendedKeyUsage = codeSigning
+            $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension($oids, $true))) | Out-Null
+            $fresh = $req.CreateSelfSigned([DateTimeOffset]::Now.AddDays(-1), [DateTimeOffset]::Now.AddYears(3))
+            $pfx = Join-Path $env:TEMP ("mics-codesign-" + $fresh.Thumbprint + ".pfx")
+            [System.IO.File]::WriteAllBytes($pfx, $fresh.Export(
+                [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password))
+            $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
+            Import-PfxCertificate -FilePath $pfx -CertStoreLocation "Cert:\CurrentUser\My" -Password $secure | Out-Null
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+        } finally {
+            $rsa.Dispose()
+        }
+        $cert = Get-ChildItem Cert:\CurrentUser\My |
+            Where-Object { $_.Subject -like "*MI CS Code Signing*" } |
+            Sort-Object NotAfter -Descending | Select-Object -First 1
+        if (-not $cert) { throw "the certificate was created but is not in Cert:\CurrentUser\My" }
     }
     # Trust it locally so the signature verifies without a warning. CurrentUser\Root
     # makes the chain valid for this user; TrustedPublisher is what Explorer and

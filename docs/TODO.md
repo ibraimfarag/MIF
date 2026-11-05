@@ -975,6 +975,28 @@ click (P1.5) or a purchased certificate (P4).
     components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
     `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
     reports its measured `2 of 7`.
+  - **The 3 h 40 min build was `New-SelfSignedCertificate` (2026-11-05).** Run
+    **41980725064** was cancelled after three and a half hours inside "Build, sign, hash
+    and zip", and its log names the spot: `cargo build` finished in **13m 08s**, the
+    staged binaries passed hardening and the fingerprint check, and then the last two
+    lines were `signing the staged binaries (the engine waits for its manifest)...` and
+    `Creating self-signed code-signing certificate (valid 3 years)...` - nothing more
+    until the cancellation. The cmdlet goes through CertEnroll and the CNG key store in a
+    session with no interactive user, and on that runner it never came back. `sign.ps1`
+    now builds the certificate in memory (`CertificateRequest` + `CreateSelfSigned`, RSA
+    3072, `extendedKeyUsage=codeSigning`), exports it to a PFX and imports that: measured
+    here, the subject, the EKU and a 3,318-byte PFX all come out right and the temporary
+    store entry is removed again. The same run also measured the rest of the packaging
+    path for the first time: the engine's own hardening verdict (`0xC160`,
+    `CF_INSTRUMENTED`), the opsec table (9 binaries, `mics-engine.exe` 1243 `cargo`
+    markers against the 1243 baseline, none of this machine's account), and
+    `Flutter 3.47.8 (wanted 3.47.8)` from the pin.
+  - **A hang now costs 50 minutes and still reports.** That step had no timeout, so
+    GitHub's six-hour job limit was the only thing that would have stopped it, and a
+    cancelled step never reaches the `if ($code -ne 0)` branch that emits annotations.
+    `package-x64`'s build is capped at 50 minutes and `package-arm64`'s at 30, and both
+    jobs end with an `if: failure() || cancelled()` step that hands the log to
+    `scripts/annotate-failure.ps1`.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the
