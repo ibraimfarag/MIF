@@ -886,6 +886,22 @@ click (P1.5) or a purchased certificate (P4).
     failed `engine.clippy` in **1.2 s**. `Setup Rust` now asks for
     `components: clippy`. Steps 5-8 of the full tier (`engine.build`, `engine.smoke`,
     `engine.contract`, `app.build`) have still never run on that runner.
+  - **The last failure was my own harness, not the engine.** With the emit naming cases,
+    run **41947091678** (on `6475568`) reported `FAIL  scan job finished state=queued`
+    and, downstream of it, `FAIL  a finished job is not cancellable`. `qa/contract.dart`
+    waited for the scan job with `if (state != 'running') break;` - and **`queued` is not
+    `running`**, so the first poll before a worker picked the job up was read as
+    "finished". On this machine the job is already `done` by the first poll, which is why
+    79 cases pass here; on the runner the poll landed in the queued window. The loop now
+    waits for the terminal states (`done`/`failed`/`cancelled`) with the same 120 s
+    deadline. Re-measured locally against the release engine: `79 case(s), 0 failed, 14
+    method(s) classified not-to-run`, `PASS  scan job finished state=done`, `PASS  a
+    finished job is not cancellable`.
+  - **Where the pipeline now stands on the runner** (run 41947091678): steps 1-3 pass
+    (`flutter.analyze`, `flutter.test`, `engine.test` - 140 passed), 4 passes
+    (`engine.clippy`, once the component is asked for), **5 and 6 ran for the first time
+    and passed** (`engine.build`, `engine.smoke`), 7 (`engine.contract`) is the harness
+    bug above, and **8 (`app.build`) has still never run there**.
   - **What this says about the workflow.** Every "green locally, red in CI" here has been
     the *environment*, not the code: an unpinned channel, a server-class default-owner
     policy, an SDDL alias. That is why D-029 pins the toolchains and D-030 documents the

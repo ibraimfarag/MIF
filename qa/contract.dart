@@ -343,6 +343,11 @@ Future<bool> _scanScenario(PipeClient pipe, Directory empty) async {
 
   var state = 'running';
   final deadline = DateTime.now().add(const Duration(seconds: 120));
+  // `queued` is a real state, not a finished one: a worker picks the job up a moment
+  // after `scan.start` returns, and on a slower machine the first poll lands right
+  // there. Measured on GitHub's runner, 2026-11-05: `state=queued` on the first poll,
+  // and the old `state != 'running'` test read that as "finished".
+  const finished = {'done', 'failed', 'cancelled'};
   while (DateTime.now().isBefore(deadline)) {
     final got = await pipe.call('job.get', params: {'job_id': jobId});
     if (!got.ok || got.result is! Map) {
@@ -351,7 +356,7 @@ Future<bool> _scanScenario(PipeClient pipe, Directory empty) async {
     }
     final job = (got.result as Map)['job'];
     state = '${job is Map ? job['state'] : ''}';
-    if (state != 'running') break;
+    if (finished.contains(state)) break;
     sleep(const Duration(milliseconds: 250));
   }
   _results.add({
