@@ -9,7 +9,12 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-03 · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
+> Last updated: 2026-11-05 · **the release pipeline is green end to end and the first
+> release exists as a draft** (run 42040718389: x64 packaged, verified, uploaded, and
+> `Publish` created `v0.1.0` as a draft for your click - D-031), after three fixes that
+> each had a measurement behind them: the certificate dialog that stalled two runs, the
+> tamper test's third answer (`untrusted-certificate`), and the elevated runner token that
+> made a refusal probe fail a release. · Earlier: · P1, P2 (settings/i18n/sounds/theme), P3 (badge +
 > update flow, sticky data dir), the P3d/P3e real-run sweeps (Defender checks,
 > pipe concurrency), P3c1 (intel source registry, D-012), P3c2 (vulnerability
 > scan as a cancellable job), P3c3 (Intel screen, configurable hash feed, KEV
@@ -975,7 +980,32 @@ click (P1.5) or a purchased certificate (P4).
     components)` with `RESULT: PASS` for the inventory, which is what the Flutter pin plus
     `cargo fetch --locked` bought. The ARM64 engine leg is green; `Package (arm64)` still
     reports its measured `2 of 7`.
-  - **The x64 release got all the way to its last check (2026-11-05, run 42022830468).** The
+  - **The first release is built, verified and sitting as a draft (2026-11-05, run
+    **42040718389** on `da77bb3`).** Every job that has to pass passed: `Resolve the
+    version and tag`, **`Package (x64)`** (probe, build, signing, manifest, NSIS installer,
+    `verify-release.ps1 -Arch x64 -SkipToast`, artifact upload, QA report) and **`Publish`**,
+    whose notice reads `draft v0.1.0 created - publish it from the Releases page when the
+    hashes read right`. `Package (arm64, informational)` is still a failure by design -
+    measured `NOT READY - 2 of 7 prerequisite(s) missing: Windows SDK arm64 libs, Flutter
+    windows-arm64 engine` - and `continue-on-error` keeps it from failing the run. Nothing
+    is public until the publish button is pressed (D-031).
+  - **Four things stood between the first run and this one, each one measured.** (1) The
+    root-store dialog (next entry). (2) The tamper test demanding `ok` from a self-signed
+    build that correctly reports `untrusted-certificate`. (3) `verify-release.ps1` failing
+    on `verify-helper.ps1` while filtering the reason out of its own output - on failure it
+    prints the helper's whole answer now, and `annotate-failure.ps1` recognises `[FAIL]`
+    and `  - ` markers. (4) That reason: **a runner's token is elevated** - the helper's own
+    `version` answer said `{"elevated":true}` (run 42036237342) - so accepting
+    `hardening.run` is the correct behaviour there, and `verify-helper.ps1` skips that one
+    refusal when the token says elevated, printing
+    `[SKIP] hardening.run unelevated - this token is elevated ...` and naming it in the
+    summary instead of changing SMBv1 on a machine nobody asked it to harden. Unelevated
+    (this machine: `{"elevated":false}`) the refusal is still required and still checked.
+  - **Measured while fixing, not assumed**: `verify-release.ps1 -Arch x64 -SkipToast` PASS
+    locally twice (17 s, and again after the helper change); `annotate-failure.ps1` naming a
+    synthetic helper failure case for case; `-Tier fast` green at 55.9-66.5 s; and the
+    signing probe PASS on the runner in seconds, twice.
+- **The x64 release got all the way to its last check (2026-11-05, run 42022830468).** The
     signing probe passed on the runner for the first time (step 8, seconds), the build,
     signing, manifest injection, NSIS installer and the download verification all
     succeeded, and the run stopped at `verify-tamper.ps1`: **39 of 41 checks passed**, and
