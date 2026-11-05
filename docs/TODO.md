@@ -4703,6 +4703,17 @@ settings and read environment variables only.
     running anything or loading dependencies, and `FindResource` wants the
     `MAKEINTRESOURCE` integer for `RT_RCDATA` (10) but a wide string for the
     resource name (`scripts\manifest-resource.ps1`).
+27. **A package signed twice is unreadable to the engine's own signer check.**
+    `signtool` appends a second signature to a file that already has one (measured:
+    +344 bytes per pass, so re-signing `dist\MICS-portable` grew
+    `flutter_windows.dll` from 205,368 to 205,712 bytes). `Get-AuthenticodeSignature`
+    and `X509Certificate.CreateFromSignedFile` still read it, but
+    `CryptQueryObject(CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED)` returns nothing, so
+    `embedded_signer_name()` answers `None` and the three `signature::tests` that read
+    `dist\MICS-portable\mics-engine.exe` fail - which is how a local `-Tier fast` run
+    turned red on 2026-11-05 while the same tree passed on a runner that has no `dist`.
+    Sign once per artifact, and if you re-sign a package by hand, move the artifact
+    aside before running the tier (a fresh `make-release.ps1` rebuilds it).
 
 ---
 
