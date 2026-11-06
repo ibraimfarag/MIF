@@ -123,16 +123,34 @@ comes from the CA. When it is known, add one line with the date to this file.
 
 ## 5. When the certificate arrives (the ب5 checklist)
 
-1. `scripts\sign.ps1`: add a `-Thumbprint <sha1>` selector. The `/sha1` call
-   already exists (it is how the self-signed certificate is used), so this is a
-   parameter and not a rewrite — and it is what a token or a cloud service needs.
-2. `scripts\make-release.ps1`: pass the thumbprint through instead of requiring
-   `-PfxPath`, and keep the timestamping step (it is what keeps old releases
-   valid).
-3. D-016: confirm the signer's subject is `CN=MI CS Code Signing`, or record a new
-   decision entry that replaces the name pin.
-4. `scripts\verify-release.ps1` already asserts the artifact is signed and prints
-   the signer; check that a *CA-issued* signature still passes it, then update the
-   expected subject if the CN changed.
-5. Replace the "NotSigned" reporting line in this repository's docs with the real
-   publisher, and add the purchase date + figure to §2 of this file.
+The code stopped waiting for it on **2026-11-06 (D-034)**: a release reads its signing
+identity from the environment, so the day a certificate exists the change is **two
+repository secrets** (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT`) with no
+code edit. What is left is confirming the identity and writing the purchase down.
+
+1. **Done (D-034).** `scripts\sign.ps1` selects the identity with `-SelfSigned`,
+   `-PfxPath`/`-PfxPassword`, or `-Thumbprint <sha1>` — the last is what a hardware token
+   or a cloud signing service's agent needs, because the key never leaves the device. It
+   refuses zero identities or two, and the two production modes accept only a signature
+   Windows calls `Valid`. `scripts\verify-signing.ps1` (18 checks) measures that refusal.
+2. **Done (D-034).** `scripts\make-release.ps1 -Sign` decides the identity in one place
+   and prints it before the build: `-Thumbprint`, then `-PfxPath`, then
+   `MICS_CERT_THUMBPRINT`, then `MICS_PFX_B64` + `MICS_PFX_PASSWORD`, then
+   `MICS_PFX_PATH` + `MICS_PFX_PASSWORD`, and only then the self-signed development
+   certificate. The `Release` workflow already passes those two secrets through, and a PFX
+   handed in as base64 is written to a temp file, used by `signtool /f`, and deleted before
+   the script returns. Timestamping (RFC 3161) is unchanged, so old releases keep
+   verifying after the certificate expires. **Do not put the throwaway certificate here**:
+   both production modes accept only a `Valid` signature, so a self-signed PFX in
+   `MICS_PFX` fails the build instead of publishing a release that only *looks* signed
+   (measured 2026-11-06: seven binaries signed, seven refusals, `nothing was published`).
+3. **Confirm the subject** is exactly `CN=MI CS Code Signing` (D-016 pins that string), or
+   record a decision that replaces the name pin with a thumbprint — the brief, with the
+   cost of each answer, is `docs/OPEN-DECISIONS.md` item 3.
+4. **Check the release gate with a real signature.** `scripts\verify-release.ps1` asserts
+   the artifact is signed and prints the signer; a CA-issued signature should pass it
+   unchanged, and the expected subject is updated if the CN differs.
+5. **Write the publisher down.** Replace the honest "not signed by a publicly trusted
+   publisher" lines (the release notes, the README, §1 of this file) with the real
+   publisher, and add the purchase date and figure to §2.
+

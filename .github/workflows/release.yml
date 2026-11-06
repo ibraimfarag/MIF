@@ -9,13 +9,15 @@ name: Release
 # itself. That is the point of the whole file: a release that can be reproduced and
 # checked without trusting the machine it was cut on.
 #
-# Signing: `make-release.ps1 -Sign` self-signs the staged binaries on the runner
-# (CurrentUser\Root + TrustedPublisher, D-016). That proves a file was not touched
-# after the build; it is NOT a publicly trusted publisher identity, so Windows still
-# says "Unknown publisher" and SmartScreen still warns - that is row ب5 in
-# docs/ROADMAP.md, and the fix is a real certificate, not a workflow change. When one
-# exists, add it as the repository secrets MICS_PFX (base64 PFX) and
-# MICS_PFX_PASSWORD, then pass -PfxPath/-PfxPassword in the build step below.
+# Signing: `make-release.ps1 -Sign` signs the staged binaries. With no CA certificate
+# configured it self-signs on the runner (CurrentUser\Root + TrustedPublisher, D-016):
+# that proves a file was not touched after the build, but it is NOT a publicly trusted
+# publisher identity, so Windows still says "Unknown publisher" and SmartScreen still
+# warns - that is row ب5 in docs/ROADMAP.md. The fix is a real certificate, and it is
+# *only* two repository secrets: make-release.ps1 reads MICS_PFX (a base64 PFX) with
+# MICS_PFX_PASSWORD, or MICS_CERT_THUMBPRINT for a certificate already in a store
+# (a token or a signing agent), and prints the identity it chose. No step below has to
+# change on that day - see docs/COST.md §5.
 #
 # ARM64: `windows-11-arm` is a real runner (D-003's correction, 2026-11-04), so the
 # ARM64 legs are here - but they have never run, and Flutter's own Windows ARM64 SDK
@@ -155,6 +157,11 @@ jobs:
         timeout-minutes: 50
         env:
           YRX_REGENERATE_MODULES_RS: "false"
+          # Empty until a certificate exists (ب5): an unset secret expands to "", and
+          # make-release.ps1 falls back to the self-signed development certificate and
+          # prints which identity it used. Two repository secrets, no workflow edit.
+          MICS_PFX: ${{ secrets.MICS_PFX }}
+          MICS_PFX_PASSWORD: ${{ secrets.MICS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build | Out-Null
@@ -331,6 +338,10 @@ jobs:
         timeout-minutes: 30
         env:
           YRX_REGENERATE_MODULES_RS: "false"
+          # Same two secrets as the x64 leg; the ARM64 leg is informational for now
+          # (it has never had a green run), so it may self-sign while x64 does not.
+          MICS_PFX: ${{ secrets.MICS_PFX }}
+          MICS_PFX_PASSWORD: ${{ secrets.MICS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build | Out-Null

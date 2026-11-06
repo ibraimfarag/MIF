@@ -62,12 +62,16 @@ param(
   [string]$Configuration = "Release",
   [string]$EnginePath = "",
   [switch]$SkipBuild,
-  # Sign the staged binaries before they are hashed and zipped. Without -PfxPath
-  # this uses a self-signed certificate trusted on this machine (fine for local
-  # testing, no reputation for downloads); with -PfxPath it uses a real one.
+  # Sign the staged binaries before they are hashed and zipped. The identity comes
+  # from -Thumbprint, then -PfxPath, then the environment (what CI fills from
+  # repository secrets), and only then the self-signed development certificate -
+  # so a real certificate is two secrets and no code change (docs/COST.md section 5).
   [switch]$Sign,
   [string]$PfxPath = "",
   [string]$PfxPassword = "",
+  # SHA-1 thumbprint of a certificate already in a store (a hardware token or a
+  # signing service's agent). Mutual with -PfxPath; see scripts/sign.ps1.
+  [string]$Thumbprint = "",
   # Which architecture to package (D-003). The default is the leg that ships.
   [ValidateSet("x64", "arm64")]
   [string]$Arch = "x64",
@@ -307,6 +311,56 @@ if (-not $EnginePath -and $SkipBuild) {
 }
 if ($EnginePath) { $EnginePath = (Resolve-Path $EnginePath).Path }
 
+# ------------------------------------------------- the signing identity
+# A released binary carries whoever signed it, so the identity is decided in exactly
+# one place, printed, and never guessed: an explicit parameter first, then the
+# environment - which is how CI passes a repository secret - and only then the
+# self-signed development certificate. A real certificate is therefore two secrets
+# in the repository and no code change (docs/COST.md section 5):
+#   MICS_CERT_THUMBPRINT  a certificate already in a store (token / signing agent)
+#   MICS_PFX_B64          a PFX as base64, with MICS_PFX_PASSWORD
+#   MICS_PFX_PATH         a PFX on disk,      with MICS_PFX_PASSWORD
+# It runs this early on purpose: a misspelled secret must not cost a ten-minute build
+# before it is noticed.
+$signPfxTemp = $null
+$signArgs = @()
+$signIdentity = ""
+$signedRequest = $Sign -or [bool]$PfxPath -or [bool]$Thumbprint
+if ($signedRequest) {
+  if ($Thumbprint) {
+    $signArgs = @("-Thumbprint", $Thumbprint)
+    $signIdentity = "the certificate with thumbprint $Thumbprint"
+  } elseif ($PfxPath) {
+    $signArgs = @("-PfxPath", (Resolve-Path $PfxPath).Path, "-PfxPassword", $PfxPassword)
+    $signIdentity = "the PFX at $PfxPath"
+  } elseif ($env:MICS_CERT_THUMBPRINT) {
+    $signArgs = @("-Thumbprint", $env:MICS_CERT_THUMBPRINT)
+    $signIdentity = "the certificate MICS_CERT_THUMBPRINT names ($($env:MICS_CERT_THUMBPRINT))"
+  } elseif ($env:MICS_PFX_B64) {
+    if (-not $env:MICS_PFX_PASSWORD) {
+      Write-Output "RESULT: FAIL - MICS_PFX_B64 is set without MICS_PFX_PASSWORD"
+      exit 1
+    }
+    # Written to a temp file for signtool's /f and deleted before this script returns:
+    # a PFX left in the tree could be zipped into the package or committed.
+    $signPfxTemp = Join-Path ([IO.Path]::GetTempPath()) ("mics-sign-" + [guid]::NewGuid().ToString("N") + ".pfx")
+    [IO.File]::WriteAllBytes($signPfxTemp, [Convert]::FromBase64String($env:MICS_PFX_B64))
+    $signArgs = @("-PfxPath", $signPfxTemp, "-PfxPassword", $env:MICS_PFX_PASSWORD)
+    $signIdentity = "the CA certificate in MICS_PFX_B64"
+  } elseif ($env:MICS_PFX_PATH) {
+    if (-not $env:MICS_PFX_PASSWORD) {
+      Write-Output "RESULT: FAIL - MICS_PFX_PATH is set without MICS_PFX_PASSWORD"
+      exit 1
+    }
+    $signArgs = @("-PfxPath", (Resolve-Path $env:MICS_PFX_PATH).Path, "-PfxPassword", $env:MICS_PFX_PASSWORD)
+    $signIdentity = "the CA certificate at $($env:MICS_PFX_PATH)"
+  } else {
+    $signArgs = @("-SelfSigned")
+    $signIdentity = "the self-signed development certificate (no CA certificate configured - docs/COST.md section 5)"
+  }
+  Write-Host "signing identity: $signIdentity"
+}
+
 if (-not $SkipBuild) {
   # Native builds write progress to stderr, and with ErrorActionPreference=Stop
   # PowerShell 5.1 turns a single stderr line into a terminating error. Let them
@@ -491,16 +545,13 @@ if ($opsecExit -ne 0) {
   exit 1
 }
 
-$signArgs = @()
-if ($Sign -or $PfxPath) {
+if ($signedRequest) {
   # The engine is left out of this pass on purpose: its signature has to cover the
   # manifest resource, and Windows' resource API cannot rewrite an already-signed
   # PE - the file keeps a certificate table that no longer matches its layout, and
   # signtool then refuses it (0x800700C1, measured 2026-11-03). So the engine is
   # signed once, after the injection below.
-  Write-Host "signing the staged binaries (the engine waits for its manifest)..."
-  if ($PfxPath) { $signArgs = @("-PfxPath", (Resolve-Path $PfxPath).Path, "-PfxPassword", $PfxPassword) }
-  else { $signArgs = @("-SelfSigned") }
+  Write-Host "signing the staged binaries with $signIdentity (the engine waits for its manifest)..."
   $stopPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
@@ -511,6 +562,7 @@ if ($Sign -or $PfxPath) {
     $ErrorActionPreference = $stopPreference
   }
   if ($signExit -ne 0) {
+    if ($signPfxTemp) { Remove-Item $signPfxTemp -Force -ErrorAction SilentlyContinue }
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
     Write-Output "RESULT: FAIL - signing failed; nothing was published"
     exit 1
@@ -533,8 +585,8 @@ $manifestJson = New-MicsManifestJson -Files $manifestFiles -Version $Version
 Write-MicsManifestResource -Exe (Join-Path $staging "mics-engine.exe") -Json $manifestJson
 Write-Host ("  manifest : format 1, {0} file(s), {1} byte(s), in mics-engine.exe as MICS_MANIFEST" -f $manifestFiles.Count, $manifestJson.Length)
 
-if ($Sign -or $PfxPath) {
-  Write-Host "signing the engine (its signature covers the injected manifest)..."
+if ($signedRequest) {
+  Write-Host "signing the engine with $signIdentity (its signature covers the injected manifest)..."
   $stopPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
@@ -544,6 +596,8 @@ if ($Sign -or $PfxPath) {
   } finally {
     $ErrorActionPreference = $stopPreference
   }
+  # The PFX from MICS_PFX_B64 has done its two jobs; it does not outlive this script.
+  if ($signPfxTemp) { Remove-Item $signPfxTemp -Force -ErrorAction SilentlyContinue }
   if ($resignExit -ne 0) {
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
     Write-Output "RESULT: FAIL - signing the engine after the manifest injection failed; nothing was published"
@@ -702,10 +756,11 @@ Write-Output ("  engine name: {0}" -f $engineName)
 Write-Output ("  manifest: {0} file(s) described by the MICS_MANIFEST resource in the engine" -f $manifestFiles.Count)
 if ($signature -eq "Valid") {
   Write-Output "  signed : $signature - $signer"
+  if ($signedRequest) { Write-Output "  identity: $signIdentity" }
 } else {
   Write-Output "  signed : $signature - Windows will show 'Unknown publisher' and SmartScreen"
   Write-Output "           may ask before the first run; see the SmartScreen row in the README troubleshooting table"
-  Write-Output "           (re-run with -Sign to sign it with a certificate trusted on this machine)"
+  Write-Output "           (a CA certificate needs MICS_PFX + MICS_PFX_PASSWORD or MICS_CERT_THUMBPRINT, docs/COST.md section 5)"
 }
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1"

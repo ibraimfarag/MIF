@@ -9,7 +9,16 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-05 · **the shipped detection pack is measured by what it catches,
+> Last updated: 2026-11-06 · **the certificate is two secrets, not a code change** (D-034:
+> `scripts\sign.ps1` takes exactly one identity — self-signed, a PFX, or a certificate
+> already in a store by SHA-1 thumbprint, which is what a token or a cloud agent needs —
+> and `make-release.ps1 -Sign` resolves the identity in one documented order and prints it
+> *before* the build, so a misspelled secret costs ten seconds instead of ten minutes;
+> `scripts\verify-signing.ps1` — 18 checks, PASS — measures every refusal it makes. The
+> honest limit is written where the claim is: with no CA certificate the two production
+> modes end in "did not verify" and exit 1, because `Valid` is what a CA-issued certificate
+> produces, so that half stays unproven until the certificate row is bought) ·
+> **the shipped detection pack is measured by what it catches,
 > and the first rule that could never fire is fixed** (D-033: one vector per rule in
 > `engine\testdata\detection`, a unit test in the fast tier, `scripts\verify-rules.ps1` —
 > 35 checks, PASS — and `verify-release.ps1` now runs it against the packaged `rules\`;
@@ -342,15 +351,20 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    behind.
 2. **A real signing certificate (ب5, the only HIGH row in §7).** The local half is
    done and tested: `scripts\make-release.ps1 -Sign` self-signs through
-   `CurrentUser\Root` + `TrustedPublisher`, signs DLLs then EXEs before hashing and
-   zipping. A public release needs the bought certificate (`-PfxPath`/`-PfxPassword`
-   already timestamps). **The subject must be exactly `CN=MI CS Code Signing`**
-   (D-016 pins that name; a different one needs a new decision entry), and
-   `docs/COST.md` carries the routes and their trade-offs - including the free
-   SignPath route for open-source projects, which is only available while the source
-   is public. Then **ب6**: a version bump, the signed zip + installer and a place to
+   `CurrentUser\TrustedPublisher`, signs DLLs then EXEs before hashing and
+   zipping. **The wiring stopped waiting for the certificate on 2026-11-06 (D-034):**
+   adding one is now two repository secrets - `MICS_PFX` + `MICS_PFX_PASSWORD`, or
+   `MICS_CERT_THUMBPRINT` for a certificate a token or a cloud agent holds - which the
+   `Release` workflow already passes through and `make-release.ps1` resolves in one
+   documented order, printing the identity it chose before the build starts. Nothing in
+   the workflow has to change on that day. **The subject must be exactly
+   `CN=MI CS Code Signing`** (D-016 pins that name; a different one needs a new decision
+   entry), and `docs/COST.md` carries the routes and their trade-offs - including the free
+   SignPath route for open-source projects, which needs the source to be public, which it
+   is. Then **ب6**: a version bump, the signed zip + installer and a place to
    publish - and the place is now decided (**GitHub Releases**, item 6 below), with
-   `.github/workflows/release.yml` written for it.
+   `.github/workflows/release.yml` written for it and `v0.1.0` already sitting there as a
+   draft for your click (D-031).
 3. **Six decisions, one line each.** Every one of them stops work that is otherwise
    ready - **[`docs/OPEN-DECISIONS.md`](OPEN-DECISIONS.md) has a one-page brief for each,
    with what the code does today measured, the cost of every option, and a
@@ -718,7 +732,8 @@ what "next" means.
 
 - ~~**د4** `qa/report.html` + CI gate~~ — **done** (the checkbox was stale; see §0.3)
 - **د3** E2E against the built installer (**needs one UAC click from you**)
-- **ب5** the certificate → **ب6** public release (both need the user)
+- **ب5** the certificate → **ب6** public release (both need the user; the wiring is done —
+  two secrets, D-034)
 - real-time file watching as a real subsystem
 
 ---
@@ -807,6 +822,7 @@ not implemented yet, see D-008).
 | `scripts\check-helper-ownership.ps1` | Whether the installed `MICSHelper` service points at one install folder: prints `RESULT: SAFE` / `OWNED` / `UNKNOWN` and exits 0 / 2 / 1. The uninstaller asks it before deleting anything, so a service is never left aiming at a deleted `mics-engine.exe`; read-only, no elevation |
 | `installer\mics.nsi` | The installer itself: the package, a Start-Menu folder and a desktop icon, both halves of the AUMID the toast source needs (the registry key, and the shortcuts' `System.AppUserModel.ID` written by `register-aumid.ps1` through `IPropertyStore`), an Apps-&-features entry whose uninstaller refuses to remove a copy the privileged helper still points at, and an upgrade that reuses the previous install location instead of asking twice |
 | `scripts\verify-installer.ps1` | The installer's promises, measured on a real install: a silent per-user install into `%TEMP%`, the app, engine and rule packs landing, both shortcuts' `System.AppUserModel.ID`, the AUMID key and Apps-&-features entry pointing at that copy, `Get-StartApps` filing "MI CS" under `MICS` with nothing under the exe path, the checker's answers, the uninstaller removing all of it while the machine's helper and the user's own copy stay untouched, and the refusal (error level 5, everything left in place) against a synthetic service key. Exports and re-imports the AUMID key, deletes everything it created, no elevation, ~2 min |
+| `scripts\verify-signing.ps1` | Which identity a release is signed with, and the refusals around it (D-034): `sign.ps1` refuses zero identities, two, or an unknown thumbprint before signtool runs; a certificate from a store signs a real PE and the signature carries that certificate's thumbprint; an untrusted chain is refused, not called verified; the imported certificate is removed from the store afterwards. 18 checks, PASS. What it states it cannot prove: the `Valid` half needs a CA-issued certificate, so with the local throwaway certificate the two production modes end in "did not verify" and exit 1 - the refusal is the design, and the certificate row is what changes it. Signs a copy under `%TEMP%\mics-signtest`, needs no elevation, ~4 s |
 | `scripts\verify-scan-schedule.ps1` | The scan schedule (D-027), measured against a real engine over its own pipe and an isolated data directory: with `scan_interval_hours = 0` nothing starts and `scan.schedule` says off; with an interval and a configured folder the first tick starts a scan by itself, the job's root is that folder, it finds the planted ransom-note string, and the file is **still there** afterwards (report-only); and the start is recorded, so a restart does not scan again. No elevation, ~20 s |
 | `scripts\verify-firewall.ps1` | The firewall is Windows' API, not `netsh` (D-028), measured against this machine: a fake `netsh.exe` is put first on the engine's PATH (and a direct `netsh` is shown to stop working under it, so the trap is proved to be a trap); `fw.default_deny.status` and `fw.rules.list` are compared with `Get-NetFirewallProfile`/`Get-NetFirewallRule -PolicyStore ActiveStore` field by field; one rule is created through the engine, read back from Windows with the exact direction, action, port, program, profile and group that were asked for, then removed and Windows is asked again. A profile policy is never flipped: a default-deny toggle would cut the network of whatever else is running. Writes go through the running `MICSHelper` (or need an elevated shell - the probe records a skip, never a pass). Cleans up after a failed run; ~8 s |
 | `scripts\verify-canary.ps1` | A decoy **read** is detected and the coverage behind it is measured, not assumed (D-032), against a real engine on a private pipe, a private `USERPROFILE` (so the default decoy paths cannot touch the real Documents folder) and a private data directory: a decoy MI CS had just written is settled silently inside the 90 s window and the engine's log says `canary settling`; a decoy that was already on disk raises `canary_read`/HIGH under rule id `CANARY_READ` with its size and **SHA-256 unchanged**; one appended byte raises `canary_triggered`/CRITICAL under `CANARY`; fifty metadata queries in a row move no last-access time and raise nothing, so the guard's own poll cannot trip its trap; and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell, on the folder the decoys are actually in. With no elevation (the unelevated poll is the path that has to see it) and no ETW; on a volume that keeps no last-access time it reports part 2 as **SKIP** with the reason instead of a pass. No elevation, ~35 s |
@@ -849,6 +865,49 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **The certificate is two secrets now, and a release discovers its own signing identity (2026-11-06, D-034)**
+  - **The gap.** `make-release.ps1 -Sign` had two ways to sign - `-PfxPath`, or the
+    self-signed throwaway - and the `Release` workflow's own comment told whoever bought the
+    certificate to add two repository secrets **and then edit the build step** to pass them.
+    A credential wired that way cannot be tested until it is bought, and a typo in it would
+    have cost a ten-minute build before the run said anything at all.
+  - **What landed.** `scripts\sign.ps1` takes exactly one identity and refuses zero or two:
+    `-SelfSigned`, `-PfxPath` + `-PfxPassword`, or `-Thumbprint <sha1>` - the last is what a
+    hardware token or a cloud signing agent needs, because the key never leaves the device.
+    The two production modes accept only a signature Windows calls `Valid`.
+    `scripts\make-release.ps1 -Sign` resolves the identity once, **before the build**:
+    `-Thumbprint`, then `-PfxPath`, then `MICS_CERT_THUMBPRINT`, then `MICS_PFX_B64` +
+    `MICS_PFX_PASSWORD`, then `MICS_PFX_PATH` + `MICS_PFX_PASSWORD`, and only then the
+    self-signed certificate - printing which one it chose. The workflow already passes
+    `secrets.MICS_PFX` and `secrets.MICS_PFX_PASSWORD` through on both legs, and an unset
+    secret expands to the empty string, so today's runs behave exactly as before.
+  - **Measured.** `scripts\verify-signing.ps1` - **18 checks, PASS** (`RESULT: PASS - 18
+    check(s)`, exit 0): the guard refuses no identity, two identities and an unknown
+    thumbprint *before* signtool is invoked; a certificate imported from
+    `%TEMP%\mics-signing\codesign.pfx` signs a real PE and the signature carries that
+    certificate's SHA-1 (`99FAFE73...`); the run then refuses to call it verified and exits
+    1; `-PfxPath` still signs (regression); and the imported certificate is gone from
+    `CurrentUser\My` afterwards. With `MICS_PFX_B64` and its password set, a release run
+    prints `signing identity: the CA certificate in MICS_PFX_B64` before it builds
+    anything; with the password missing it stops there with `RESULT: FAIL - MICS_PFX_B64 is
+    set without MICS_PFX_PASSWORD` (exit 1, measured).
+  - **Written limit, not a silent pass.** The throwaway certificate is trusted in
+    `TrustedPeople`, not `Root`, so both production modes end in "did not verify" on this
+    machine - that refusal is the design, and `Valid` is what a CA-issued certificate
+    produces. The positive half therefore stays **unproven until the certificate exists**,
+    and the probe prints that sentence instead of passing quietly.
+  - **Measured end to end too.** A full `make-release.ps1 -Sign` run with `MICS_PFX_B64`
+    and its password set printed the identity line before the build, signed all seven
+    binaries with that certificate, then failed every one of them (`UnknownError`):
+    `RESULT: FAIL - 7 file(s) did not verify; SmartScreen will still warn` →
+    `RESULT: FAIL - signing failed; nothing was published`, exit 1. The PFX decoded out of
+    the environment was gone afterwards (0 `mics-sign-*.pfx` left in TEMP) and `dist\` was
+    untouched, so "nothing was published" is literally true. A self-signed PFX dropped into
+    `MICS_PFX` therefore cannot ship - which is exactly what that variable is for.
+  - **Side finding.** `signtool /du` pointed at `github.com/mourad-ibrahim/mi-cs`, a
+    repository that is not this one. Nothing reads that field, which is exactly why it
+    survived; it now names `github.com/ibraimfarag/MIF`.
 
 - **The shipped rules are held to files now, and the first one that could never fire is fixed (2026-11-05, D-033)**
   - **The gap.** `verify-release.ps1` proved that a package's `rules\` is the one the
@@ -4521,7 +4580,7 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6 | `dist/`, `installer/`, P4 |
+| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6. **The code half closed 2026-11-06 (D-034)**: a certificate is now two repository secrets (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token/cloud agent), resolved in one documented order and printed before the build - so nothing in `release.yml` has to change on the day, and `scripts\verify-signing.ps1` (18 checks, PASS) holds the refusals. What stays open is the purchase and the click: a certificate nobody has bought, and `v0.1.0` sitting in GitHub Releases as a **draft** (D-031) | `dist/`, `installer/`, `scripts/`, P4 |
 | ~~HIGH~~ | ~~A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently~~ — **closed 2026-11-03 (و4) by evidence**: a package with `rules\` removed (and its own `SHA256SUMS` corrected, so nothing but the missing folder can fail) is refused by `verify-release.ps1`: 4 FAILs — `missing from the zip: rules\yara\starter.yar, rules\guard\starter.json`, `rules folder holds 0 file(s)` (the layout check, not just the file names), `the guard did not use the packaged rules: guard: 6 rule(s) from the built-in starter pack (rules/guard not found)` and `the scan did not use the packaged YARA rules (log line: YARA rules from the built-in starter pack (no rules\yara\starter.yar found))` — **exit code 1** (`RESULT: FAIL - the release artifact is not what it claims to be`). The silently-degraded copy the row described can no longer pass the gate, and the engine's own log names the source it used | `dist/`, `guard/mod.rs`, `scanner/mod.rs`, `scripts\verify-release.ps1` |
 | ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |

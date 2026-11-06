@@ -96,7 +96,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
-| **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + local signing work | 🔴 **HIGH** (the register's only HIGH row: "no installer") | 8–16 h | certificate + release hosting: **you**; the rest: nothing |
+| **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **partial** — portable ZIP + installer + local signing work, and the signing wiring no longer waits for the certificate (**D-034, 2026-11-06**: a certificate is two repository secrets, resolved by `make-release.ps1` and held by `verify-signing.ps1`); `v0.1.0` sits in GitHub Releases as a draft | 🔴 **HIGH** (the register's only HIGH row: "no installer") | the certificate itself + one click; no code left | certificate + one publish click: **you**; the rest: nothing |
 | **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **done** — build hardening (ج1, D-021), the integrity manifest end to end (ج2, 2026-11-03), the tamper proof (ط2, 2026-11-03), the threat model and protection matrix, and the README rewrite (**ج3**, 2026-11-03: "what it does / does not do" now carries the manifest, the self-check and the honest limits); the one thing left is F-11's reproducible-build note | ✅ | — | nothing (the reproducible-build note needs a real toolchain decision, not a slice) |
 | **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), the committed QA report with coverage gates **[done]** (د5), E2E on the built artifact (د3) | **almost done** — ز0, د1, د2 landed 2026-11-01 and د5 landed 2026-11-02; only د3 (E2E on the installer) is left | 🟠 MED | 4–7 h | the system-tier contract runs on this machine, not CI |
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
@@ -190,9 +190,13 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
    installer re-creates it.
 2. **A signing certificate** (ب5, the only HIGH row left): OV/EV or a cloud signing
    service, with the subject **exactly `CN=MI CS Code Signing`** (D-016). Free for
-   open-source projects through SignPath. Costs and constraints: `docs/COST.md`.
-   Then ب6 publishes - and the place is decided: **GitHub Releases**, with
-   `.github/workflows/release.yml` written for it (never run yet).
+   open-source projects through SignPath (the source is public, measured 2026-11-06 by
+   fetching it anonymously). Costs and constraints: `docs/COST.md`. **Buying it is now the
+   only step: D-034 means the certificate is two repository secrets** (`MICS_PFX` +
+   `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token or a cloud agent) that
+   `make-release.ps1` resolves and prints, with no workflow edit on the day. Then ب6
+   publishes - and the place is decided: **GitHub Releases**, with
+   `v0.1.0` already uploaded there as a draft that one click publishes (D-031).
 3. **Six decisions that each stop ready work** - one-page briefs, with the cost of every
    option and a recommendation, are in `docs/OPEN-DECISIONS.md`: whether licensed GeoIP
    lists may be

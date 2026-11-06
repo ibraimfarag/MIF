@@ -4,8 +4,12 @@
 #   Development (self-signed, trusted only on this machine):
 #     powershell -File scripts\sign.ps1 -SelfSigned
 #
-#   Production (OV/EV certificate):
+#   Production (OV/EV certificate as a PFX file):
 #     powershell -File scripts\sign.ps1 -PfxPath "cert.pfx" -PfxPassword "..."
+#
+#   Production (certificate already in a store, e.g. a hardware token or a cloud
+#   signing service's agent - signtool needs only the SHA-1 thumbprint):
+#     powershell -File scripts\sign.ps1 -Thumbprint "A1B2C3..."
 #
 #   One file only (what make-release.ps1 does after it injects the manifest into
 #   the engine, because writing a resource invalidates that engine's signature):
@@ -26,6 +30,10 @@ param(
     [switch]$SelfSigned,
     [string]$PfxPath,
     [string]$PfxPassword,
+    # SHA-1 thumbprint of a certificate already in a store (`signtool /sha1`). This is
+    # what a hardware token or a cloud signing agent needs: the key never leaves the
+    # device, so there is no PFX to read and no password to pass (docs/COST.md section 5).
+    [string]$Thumbprint,
     [string]$BuildDir = "dist\MICS-portable",
     [string]$Publisher = "Mourad Ibrahim (MI CS)",
     # File names (leaves, not paths) to sign. Empty means everything signable in
@@ -48,6 +56,16 @@ if (-not $signtool) { throw "signtool.exe not found (install Windows SDK)" }
 $signtool = $signtool.FullName
 Write-Host "signtool: $signtool"
 
+# Exactly one identity, never a guess: a release signed with the wrong certificate is
+# worse than one that refuses to build (docs/COST.md section 5).
+$modes = @()
+if ($SelfSigned) { $modes += "-SelfSigned" }
+if ($PfxPath) { $modes += "-PfxPath" }
+if ($Thumbprint) { $modes += "-Thumbprint" }
+if ($modes.Count -ne 1) {
+    throw "Pass exactly one of -SelfSigned, -PfxPath or -Thumbprint (got: $($modes -join ', '))"
+}
+
 if ($SelfSigned) {
     # The certificate lives as a PFX file, never as a key in a store: both
     # New-SelfSignedCertificate and Import-PfxCertificate hung on a GitHub runner with no
@@ -64,8 +82,24 @@ if ($SelfSigned) {
     if (-not $PfxPassword) { throw "PfxPassword required with PfxPath" }
     $certArg = @("/f", $PfxPath, "/p", $PfxPassword)
     $timestampArg = @("/td", "SHA256", "/tr", "http://timestamp.digicert.com")
+} elseif ($Thumbprint) {
+    # The certificate is already installed with its private key (the store, a token, or
+    # whatever the signing service's agent exposes). `signtool /sha1` selects it by
+    # thumbprint; there is nothing to import and no password to pass.
+    $found = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+        Where-Object { $_.Thumbprint -eq $Thumbprint.Replace(' ', '') }
+    if (-not $found) {
+        throw "no certificate with thumbprint $Thumbprint in CurrentUser\My or LocalMachine\My"
+    }
+    if (-not $found.HasPrivateKey) {
+        throw "the certificate $Thumbprint has no private key in this profile (a token may need its agent running)"
+    }
+    Write-Host "Certificate: $($found.Subject) (thumbprint $($found.Thumbprint))"
+    $certArg = @("/sha1", $found.Thumbprint)
+    $timestampArg = @("/td", "SHA256", "/tr", "http://timestamp.digicert.com")
 } else {
-    throw "Pass -SelfSigned or -PfxPath/-PfxPassword"
+    # Unreachable: the mode check above already refused an empty or doubled choice.
+    throw "no signing identity selected"
 }
 
 $targets = @(
@@ -99,7 +133,7 @@ foreach ($file in $targets) {
     if (-not (Test-Path $file)) { continue }
     Write-Host "Signing $(Split-Path $file -Leaf) ..."
     & $signtool sign /fd SHA256 @timestampArg @certArg `
-        /d "MI Cyber Security" /du "https://github.com/mourad-ibrahim/mi-cs" `
+        /d "MI Cyber Security" /du "https://github.com/ibraimfarag/MIF" `
         $file | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "signing failed for $file" }
 }
@@ -118,8 +152,8 @@ foreach ($file in $targets) {
     # someone clicks, which is what stalled two release runs). `UnknownError` there means
     # "the chain is not trusted", not "the file was touched": tampering shows up as
     # HashMismatch or NotSigned, so the check is the signer's identity plus the
-    # signature's own integrity. With a real certificate (D-016, row ب5) `Valid` is the
-    # only acceptable answer and this branch is not taken.
+    # signature's own integrity. With a real certificate (D-016; the certificate row in
+    # docs/ROADMAP.md) `Valid` is the only acceptable answer and this branch is not taken.
     $ok = ($status -eq "Valid")
     if (-not $ok -and $SelfSigned -and $status -eq "UnknownError" -and
         $sig.SignerCertificate.Thumbprint -eq $signing.Thumbprint) {

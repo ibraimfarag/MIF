@@ -1557,3 +1557,77 @@ claim is made: a real `.docm` deflates its macro strings - measured, `AutoOpen`,
 `CreateObject` and `Shell` are absent from the file's bytes - so the macro rule's reach is
 one container shape, not document detection, and closing that is decision (b) (an
 OOXML/OLE parser), not another rule edit.
+
+## D-034 — A release discovers its signing identity; the certificate is two secrets, not a code change
+
+**Status:** accepted (2026-11-06)
+
+**Context.** The one purchase this project needs (`docs/COST.md`) is a code-signing
+certificate, and the release path treated its absence as a property of the code:
+`make-release.ps1 -Sign` had two identities, `-PfxPath` or the self-signed throwaway, and
+the `Release` workflow carried a comment telling whoever bought the certificate to add two
+repository secrets **and then edit the build step** to pass them. That is the wrong place to
+keep a credential. The day the certificate exists, the release job would need a code change
+reviewed, built and run before anyone could find out whether the wiring was right - and a
+misspelled secret would have cost a ten-minute build before it said so.
+
+**Decision.** The signing identity is decided at the start of the run, printed, and never
+guessed.
+
+1. `scripts\sign.ps1` takes exactly one identity - `-SelfSigned`, `-PfxPath` +
+   `-PfxPassword`, or `-Thumbprint <sha1>` - and refuses zero of them or two. The thumbprint
+   form is the one a hardware token or a cloud signing agent needs: the key never leaves the
+   device, so there is no PFX to read and no password to pass. The two production forms
+   accept only a signature Windows calls `Valid`.
+2. `scripts\make-release.ps1 -Sign` resolves the identity once, before the build:
+   `-Thumbprint`, then `-PfxPath`, then `MICS_CERT_THUMBPRINT`, then `MICS_PFX_B64` +
+   `MICS_PFX_PASSWORD`, then `MICS_PFX_PATH` + `MICS_PFX_PASSWORD`, and only then the
+   self-signed development certificate. A PFX that arrives as base64 is written to a temp
+   file, used by `signtool /f`, and deleted before the script returns - a PFX left in the
+   tree could be zipped into the package or committed.
+3. The `Release` workflow already passes `secrets.MICS_PFX` and
+   `secrets.MICS_PFX_PASSWORD` through as those variables, on both legs. An unset secret
+   expands to the empty string, so today's runs behave exactly as before and the log says
+   which identity was used.
+4. `scripts\verify-signing.ps1` holds it: the guard refuses zero, two and an unknown
+   thumbprint before signtool runs; a certificate from a store signs a real PE and the
+   signature carries that certificate's thumbprint; an untrusted chain is *refused* rather
+   than called verified; and the certificate it imported is removed from the store
+   afterwards.
+
+**Why.** The measured behaviour, not an intention:
+
+- before this entry the wiring did not exist anywhere but in that comment;
+- with `MICS_PFX_B64` and `MICS_PFX_PASSWORD` set, the run prints `signing identity: the CA
+  certificate in MICS_PFX_B64` **before the build starts**, so a wrong secret is a
+  ten-second failure;
+- with `MICS_PFX_B64` set and the password missing, the run stops immediately with
+  `RESULT: FAIL - MICS_PFX_B64 is set without MICS_PFX_PASSWORD`, also before the build;
+- the honest limit: the local throwaway certificate is trusted in `TrustedPeople` and
+  `TrustedPublisher`, not `Root`, so both production modes end their verification with "did
+  not verify" and exit 1 on this machine - measured. That refusal is the design: `Valid` is
+  what a CA-issued certificate produces, and the certificate row in `docs/ROADMAP.md` is
+  what buys it. The positive end of that branch is therefore **unproven until a real
+  certificate exists**, and the probe prints that sentence instead of passing quietly;
+- end to end through the release script, with `MICS_PFX_B64` + `MICS_PFX_PASSWORD` set: the
+  identity line printed before the build, all seven binaries were signed with that
+  certificate (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`), every one of them came
+  back `UnknownError`, and the run ended `RESULT: FAIL - 7 file(s) did not verify` then
+  `RESULT: FAIL - signing failed; nothing was published` (exit 1). The temp PFX it decoded
+  was gone afterwards and `dist\` was untouched. A self-signed PFX in `MICS_PFX` therefore
+  cannot ship - which is the point of putting the certificate there and not the throwaway;
+- while in the file: the signature's description URL (`signtool /du`) pointed at
+  `github.com/mourad-ibrahim/mi-cs`, a repository that is not this one. Nothing reads that
+  field, which is exactly why it survived; it now names the real repository.
+
+**Commits us to.** A certificate is two repository secrets and no code edit, and
+`verify-signing.ps1` must stay green while that is true. The thumbprint mode assumes the
+runner already has the certificate with its key - a token or a signing agent - which the
+workflow does not set up and does not claim to. The self-signed mode stays the default so a
+release can always be cut, and its limit (Windows still says "Unknown publisher") stays in
+the release notes until step 5 of `docs/COST.md` §5 can be written. This is the **signing**
+side only: what the product *accepts* when it verifies an update payload is still the
+signer's common name, pinned in `platform\windows\signature.rs` (D-016), and moving that
+pin to a thumbprint is decision (c) in `docs/OPEN-DECISIONS.md` - a separate question with
+its own cost, not something this entry decides.
+

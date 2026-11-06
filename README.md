@@ -560,7 +560,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/i18n/<lang>/<module>.json` | Translation packs — one file per module, one folder per language. |
 | `assets/sounds/` | In-house notification cues. |
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
-| `scripts/` | User-facing helpers and acceptance probes: code signing, the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
+| `scripts/` | User-facing helpers and acceptance probes: code signing (identity discovered from the environment, `verify-signing.ps1`), the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
 | `qa/` | The QA registries and the committed report (`report.md` / `report.html`), the JSON-RPC contract harness and the UI fixtures/ledger. |
 | `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
