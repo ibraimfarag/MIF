@@ -57,9 +57,22 @@ Four constraints, all of them checkable before money changes hands:
    the CA, or a cloud signing service that holds the key for you.
    **Consequence for this repository:** the `-PfxPath`/`-PfxPassword` path in
    `scripts\sign.ps1` (a `.pfx` file on disk) **cannot** be used with a compliant
-   certificate. The good news is that the other path already exists: the same
-   script signs the self-signed certificate with `signtool /sha1 <thumbprint>`,
-   which is exactly what a token in the certificate store needs.
+   certificate. **A token cannot be exported into a CI secret either**, so on a
+   GitHub-hosted runner the realistic route is a cloud signing service. What that needs
+   from this codebase:
+
+   - **A service whose key appears as a store certificate** — `scripts\sign.ps1
+     -Thumbprint <sha1>` (D-034) already signs that way, which is what a token or an agent
+     that installs the key into the certificate store needs. SSL.com's eSigner is
+     documented to expose its cloud key through a Cloud Key Adapter that works this way;
+     that is a vendor claim, to be confirmed with them before it is relied on.
+   - **Azure's Artifact Signing is *not* wired.** It signs by invoking
+     `signtool ... /dlib <Azure.CodeSigning.Dlib.dll> /dmdf <metadata.json>`, a different
+     call from either mode here. Adding it is a named piece of work, not a secret.
+
+   (This paragraph used to claim the script "already" signed with `signtool /sha1`. It did
+   not — both of its paths used `/f` with a PFX — and nothing exercised the difference
+   until D-034 added the mode and `scripts\verify-signing.ps1` measured it.)
 2. **The certificate expires and has to be renewed.** A release signed while the
    certificate was valid keeps verifying because every file is timestamped — the
    timestamp is what makes an old download still trustworthy, and it is free.
@@ -144,6 +157,11 @@ code edit. What is left is confirming the identity and writing the purchase down
    both production modes accept only a `Valid` signature, so a self-signed PFX in
    `MICS_PFX` fails the build instead of publishing a release that only *looks* signed
    (measured 2026-11-06: seven binaries signed, seven refusals, `nothing was published`).
+   Note also §2.1: `MICS_PFX_B64`/`MICS_PFX_PATH` are for a PFX that may legally leave its
+   key store (an internal/enterprise CA, a legacy certificate, or a test), while a
+   CA-issued public certificate has to keep its key in hardware — so the variable a bought
+   certificate will actually use is usually **`MICS_CERT_THUMBPRINT`** (a cloud agent or a
+   token on the runner), or the Azure `/dlib` work named in §2.1.
 3. **Confirm the subject** is exactly `CN=MI CS Code Signing` (D-016 pins that string), or
    record a decision that replaces the name pin with a thumbprint — the brief, with the
    cost of each answer, is `docs/OPEN-DECISIONS.md` item 3.

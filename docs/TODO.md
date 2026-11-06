@@ -4926,6 +4926,17 @@ settings and read environment variables only.
     turned red on 2026-11-05 while the same tree passed on a runner that has no `dist`.
     Sign once per artifact, and if you re-sign a package by hand, move the artifact
     aside before running the tier (a fresh `make-release.ps1` rebuilds it).
+22. **A partially evicted `%TEMP%` cargo cache looks like a broken tree.** On 2026-11-06
+    the fast tier failed in `engine.test` (exit 101) with
+    `error[E0463]: can't find crate for 'anstyle'` followed by a page of
+    `cannot find value None`, `cannot find type Option` and `cannot find trait Into` -
+    core prelude items reported missing, which is a cache problem and never a source
+    problem. Nothing in the tree had changed: re-running the same step with the same
+    `CARGO_TARGET_DIR=%TEMP%\mics-target` passed with **150 tests** (166 s, i.e. it
+    rebuilt what was gone). The target directory lives under `%TEMP%`, which Windows is
+    free to clean between sessions, so read the *first* error: if it is that cascade,
+    re-run before believing anything is broken, and point `CARGO_TARGET_DIR` outside
+    `%TEMP%` if it keeps happening.
 
 ---
 
