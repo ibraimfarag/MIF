@@ -6,7 +6,7 @@ not remembered - then the options, what each costs, and what I would pick. Nothi
 needs a meeting: answering in one line per item is enough. For example:
 
 ```
-1: fetch     2: keep starter + more guard rules     3: thumbprint when ب5 lands
+1: fetch     2: keep starter + more guard rules     3: thumbprint, with ب5 not after it
 4: ip feed, measure the ceiling first               5: not yet     6: permissive + English fallback
 ```
 
@@ -94,6 +94,17 @@ so the package self-check can tell "not ours" from "ours, root not trusted yet" 
 So the pin is: *any* certificate that chains to something this machine trusts **and** whose
 subject CN reads "MI CS Code Signing". A CN is a free-text field; a thumbprint is not.
 
+**New since this brief was written (read 2026-11-06), and it changes the calculus.** The CN
+cannot be chosen at all: CA/B CSCBR §9.2.2 makes `subject:commonName` required and says it
+"MUST contain the Subject's legal name as verified under Section 11.1.1 or 11.2.1". No
+publicly trusted CA will issue "MI CS Code Signing" - that string exists only in the
+certificate `scripts\codesign-cert.ps1` creates locally. Every real route replaces it with
+the verified name of a person or a registered entity (Certum's OSS product even puts a fixed
+"Open Source Developer" prefix in front of it). So option 1 stops being "zero work" the day
+a certificate is bought: `update.rs:128` would refuse our own signed release, and
+`signature.rs:184` with `selfcheck.rs:192` would show it as a foreign signer. Moving the pin
+is part of buying the certificate, not a follow-up to it.
+
 **The options.**
 1. **Stay on the CN.** Zero work. The chain check still rejects self-signed impostors.
 2. **Pin the thumbprint** - the SHA-1/SHA-256 of the one certificate this project signs
@@ -103,9 +114,12 @@ subject CN reads "MI CS Code Signing". A CN is a free-text field; a thumbprint i
    change lands before ب5 and the day the certificate exists is a settings line, not a code
    change.
 
-**What I would pick.** (3). It is strictly stronger than today, it cannot break an existing
-install (no thumbprint configured means today's behaviour), and it turns "move the pin" into
-a one-line answer for whoever buys the certificate.
+**What I would pick.** (3), and it now has to land **in the same release as ب5** instead of
+riding along afterwards: with a real certificate the CN never matches again, so the first
+properly signed version would be unable to update itself. It is strictly stronger than
+today, it cannot break an existing install (no thumbprint configured means today's
+behaviour), and it turns "move the pin" into a settings line for whoever buys the
+certificate.
 
 **Cost.** About an hour: the CMSG read, a `update_pin_thumbprint` setting (empty by
 default), three tests (right thumbprint accepted, wrong thumbprint refused even with the

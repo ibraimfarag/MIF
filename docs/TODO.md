@@ -9,7 +9,26 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-06 · **the certificate is two secrets, not a code change** (D-034:
+> Last updated: 2026-11-06 · **the certificate question now has prices, and two of its
+> old assumptions are dead** (research pass: Microsoft's own comparison gives public
+> trust to organizations in the USA/Canada/EU/UK and to individuals in the **USA and
+> Canada only** — so Azure Artifact Signing cannot be bought from Egypt; EV **stopped
+> buying a SmartScreen bypass in 2024**; CA/B ballot CSC-31 capped a code-signing
+> certificate at **460 days** from 2026-03-01; and CSCBR §9.2.2 requires the subject CN
+> to be the verified legal name, so **no CA can ever issue `CN=MI CS Code Signing`** —
+> the D-016 pin moves to a thumbprint in the same release as the purchase, or
+> `update.rs:128` refuses our own update. The routes for an individual with no company:
+> Certum Open Source €49/year in their cloud (their CN becomes "Open Source Developer
+> <name>", and their cloud signs only while a logged-in SimplySign session holds the
+> virtual card, so it wants a persistent/self-hosted runner), or SSL.com IV $129/year +
+> eSigner $180/year whose own action signs on GitHub-hosted runners. **The free route is
+> closed, not merely awkward**: SignPath Foundation's code of conduct excludes "security
+> diagnosis tools that actively scan for and highlight exploitable vulnerabilities, e.g.
+> by identifying unprotected network ports" — this product's audit half — and
+> independently requires an already-released project with a verifiable reputation (this
+> repository: 0 releases, created 2026-10-27). `docs\COST.md` §2 has
+> the sources and the date each figure was read) ·
+> **the certificate is two secrets, not a code change** (D-034:
 > `scripts\sign.ps1` takes exactly one identity — self-signed, a PFX, or a certificate
 > already in a store by SHA-1 thumbprint, which is what a token or a cloud agent needs —
 > and `make-release.ps1 -Sign` resolves the identity in one documented order and prints it
@@ -357,11 +376,19 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    `MICS_CERT_THUMBPRINT` for a certificate a token or a cloud agent holds - which the
    `Release` workflow already passes through and `make-release.ps1` resolves in one
    documented order, printing the identity it chose before the build starts. Nothing in
-   the workflow has to change on that day. **The subject must be exactly
-   `CN=MI CS Code Signing`** (D-016 pins that name; a different one needs a new decision
-   entry), and `docs/COST.md` carries the routes and their trade-offs - including the free
-   SignPath route for open-source projects, which needs the source to be public, which it
-   is. Then **ب6**: a version bump, the signed zip + installer and a place to
+   the workflow has to change on that day. **The subject cannot be
+   `CN=MI CS Code Signing`**: CSCBR §9.2.2 requires the subject CN to be the verified
+   legal name, so no CA can issue that string - which means the pin moves to a
+   thumbprint (decision (c), `docs/OPEN-DECISIONS.md` item 3) **in the same release**,
+   or `update.rs` refuses our own update. `docs\COST.md` §2 carries the researched
+   routes with dated prices: Certum's Open Source certificate €49/year in their cloud,
+   which needs exactly the `signtool /sha1` call D-034 added *and* a logged-in
+   SimplySign session, so it implies a persistent runner or signing before publishing;
+   or SSL.com IV $129/year plus their eSigner service, whose own action signs on
+   GitHub-hosted runners. **The free SignPath route is closed**: their code of conduct
+   excludes "security diagnosis tools that actively scan for and highlight exploitable
+   vulnerabilities, e.g. by identifying unprotected network ports", and independently
+   requires an already-released project with a verifiable reputation. Then **ب6**: a version bump, the signed zip + installer and a place to
    publish - and the place is now decided (**GitHub Releases**, item 6 below), with
    `.github/workflows/release.yml` written for it and `v0.1.0` already sitting there as a
    draft for your click (D-031).
@@ -519,11 +546,11 @@ order the user picked (small → medium → large), and it is finished**
 | Step | What | Needs you |
 |---|---|---|
 | ~~**ب1a**~~ | ~~SBOM (CycloneDX) + `THIRD-PARTY-NOTICES`~~ — **done**: `tool\sbom.dart` generates both from the lockfiles (579 components, 8 licenses, 0 copyleft), commits them, and `--check` fails when they go stale; the release ships and re-reads them (D-018) | measured 2026-10-31 |
-| ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working, the `/sha1` path already exists), the options, what is deliberately not bought, and the ب5 checklist | written 2026-10-31 |
+| ~~**ب1b**~~ | ~~`docs\COST.md`: the real costs (signing certificate) and what stays free~~ — **done**: `docs\COST.md` names the one purchase (a CA-issued certificate), the four constraints that decide *how* it can be used (hardware key since June 2023 → `-PfxPath` stops working; the `/sha1` path this row claimed already existed was in fact added later, by D-034 on 2026-11-06), the options, what is deliberately not bought, and the ب5 checklist — and the purchase section was re-researched on 2026-11-06 with dated prices and per-route publisher names | written 2026-10-31, prices 2026-11-06 |
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | ~~**ب3**~~ | ~~NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB); the per-user variant installs 70 files and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore`; the uninstaller refuses a copy its helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s. Left for a human: one **per-machine** run (one UAC click) | done |
 | ~~**ب4**~~ | ~~Fold the privileged-helper install into the installer (replaces the separate UAC step)~~ — **done** (2026-11-03, D-026): the per-machine section runs the shipped engine's own `install-helper` under the installer's elevation, so one prompt installs the product *and* the service, and the uninstaller asks `check-helper-ownership.ps1 -Remove` to stop and delete exactly the service whose binPath points at `$INSTDIR` (scoped to `HELPER_SVC_KEY`'s leaf, so a probe cannot touch the real `MICSHelper`); both variants compile and `verify-installer.ps1` passes end to end. Left for a human: the same one **per-machine** run | done |
-| **ب5** | Real OV/EV certificate → sign the release, SmartScreen stops warning strangers | **yes** |
+| **ب5** | Real OV-class certificate → sign the release, which prints a real publisher and *starts* a SmartScreen reputation (it does not switch warnings off on day one — measured against Microsoft's own comparison, 2026-11-06). Routes priced in `docs\COST.md` §2: Certum Open Source **€49/year** (cloud, CN "Open Source Developer <name>", but it signs only with a logged-in SimplySign session → persistent/self-hosted runner) or SSL.com IV **$129/year + eSigner $180/year** (their action runs on GitHub-hosted runners). The free SignPath route is closed to this product category; Azure is not purchasable from Egypt | **yes** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
 
 **ج — P5 trust and integrity**
@@ -865,6 +892,62 @@ click (P1.5) or a purchased certificate (P4).
 | P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
 
 ### Done log (append only)
+
+- **The certificate question got prices, and two of its premises died (2026-11-06, research pass)**
+  - **The gap.** `docs\COST.md` named the one purchase and refused to quote a price
+    ("they move, they are bundled with a token or a cloud subscription"), which left the
+    project's only HIGH row as "buy a certificate" with no route, no figure, and no way to
+    tell whether the free open-source programme even applied. Two of its premises were
+    also wrong: that EV is the shortest path to SmartScreen trust, and that
+    `CN=MI CS Code Signing` is a string a CA can be asked for.
+  - **What the research found (everything read 2026-11-06; sources and dates are in the
+    file).** Microsoft's own comparison gives public trust to organizations in the
+    USA/Canada/EU/UK and to **individuals in the USA and Canada only**, so Azure Artifact
+    Signing is not purchasable from Egypt at all — its `/dlib` integration is closed as
+    "not our route" rather than left as planned work. **EV stopped buying a SmartScreen
+    bypass in 2024**, so the $400+/year premium is off the table. CA/B ballot CSC-31
+    (adopted 2025-11-17) capped a code-signing certificate at **460 days** from
+    2026-03-01. And CSCBR §9.2.2 requires `subject:commonName` to be the **verified legal
+    name**, so no CA can issue `CN=MI CS Code Signing` — measured consequence:
+    `update.rs:128` would refuse our own signed release and `signature.rs:184` would
+    report it as a foreign signer.
+  - **The routes that exist for an individual with no company, priced.** **Certum Open
+    Source €49/year** (their own shop; the CN becomes "Open Source Developer <name>",
+    individual-only, non-commercial, 459-day cap, ≤5,000 signatures/month; Egypt is in
+    their checkout country list, their shipping table delivers hardware there, and
+    Egyptian passports are in IDnow's supported-document list) — but their cloud signs
+    only while a logged-in SimplySign desktop session holds the virtual card, and Certum
+    publishes no headless agent, so it wants a persistent runner. **SSL.com IV $129/year
+    + eSigner $180/year**, whose own GitHub action signs on GitHub-hosted runners, i.e.
+    inside the workflow this repository already has. Standard OV $99–300/year; Certum's
+    own OV for an individual is €209/year.
+  - **The free route is closed, not merely awkward.** SignPath Foundation's code of
+    conduct excludes *"security diagnosis tools that actively scan for and highlight
+    exploitable vulnerabilities, e.g. by identifying unprotected network ports, missing
+    password protection etc."* — the audit half of this product — with a carve-out only
+    for malware and breach **detection**; and it independently requires an already
+    released project with a verifiable reputation, which a repository created 2026-10-27
+    with 0 releases does not have. Their published certificate reads
+    `CN=SignPath Foundation, O=SignPath Foundation, ...`, so even acceptance would print
+    their name and not ours. Reframing the product to slip past that policy is not on the
+    table.
+  - **What changed in the repo.** `docs\COST.md` §2 carries the dated table, the two
+    retracted premises and the CI question that actually decides the purchase; §4 now says
+    what buying does *not* do (SmartScreen warnings fade with downloads, not on day one);
+    `docs\OPEN-DECISIONS.md` item 3 records that moving the pin is part of buying the
+    certificate rather than a follow-up; and the register's HIGH row, the LOW pin row, the
+    ب5 row and `docs\ROADMAP.md` §4 item 2 all carry the figures.
+  - **Method note.** None of this is from memory: the searches went through the Exa MCP
+    endpoint (the deployed `web_search` has no API key), vendor pages were read live,
+    `shop.certum.eu` product pages and SSL.com's WordPress REST API supplied the prices,
+    the CA/B Forum published the ballot, and a project SignPath actually signed was
+    downloaded and its Authenticode subject read off the binary.
+  - **Not verified, and written as such.** Whether Certum accepts an Egyptian order
+    end to end (the evidence is positive; no order was placed); whether their €49 cloud
+    product can be driven unattended at all (a third-party tool exists and is
+    unsupported); SSL.com's "High Risk Region" clause; and the one behind all of them —
+    **no certificate has been bought, so every signature path in this repository is still
+    unproven against a real CA certificate.**
 
 - **The certificate is two secrets now, and a release discovers its own signing identity (2026-11-06, D-034)**
   - **The gap.** `make-release.ps1 -Sign` had two ways to sign - `-PfxPath`, or the
@@ -3062,22 +3145,33 @@ click (P1.5) or a purchased certificate (P4).
     a stranger's Windows says "Unknown publisher" (measured: the release probe prints
     `signed : NotSigned - Windows will show 'Unknown publisher'...`).
   - The document earns its keep by recording the four constraints that decide *how*
-    that certificate can be used, and one of them changes code: under the CA/Browser
+    that certificate can be used, and two of them change code. Under the CA/Browser
     Forum's baseline (June 2023) the private key must live in hardware (token) or a
     cloud service, so **`-PfxPath`/`-PfxPassword` stops being usable** with a
-    compliant certificate. The path that works is already in the repo — the
-    self-signed branch of `scripts\sign.ps1` signs with `signtool /sha1 <thumbprint>`
-    — so ب5 is "add a `-Thumbprint` selector and pass it through", not a rewrite. It
-    also notes that the publisher CN is pinned by D-016, that timestamps keep old
-    releases valid after renewal, and that EV's current SmartScreen advantage is a
-    verify-at-purchase question rather than something this project asserts.
-  - Prices are deliberately **not** quoted: they move, they are bundled with tokens
-    or cloud subscriptions, and they depend on the validation type; the shape (a
-    recurring subscription plus hardware/cloud) is what is fixed. The options table
-    covers OV, EV, cloud signing (Microsoft's service is **Artifact Signing** as of
-    2026, renamed from Trusted Signing), free OSS signing programmes, and the
-    Microsoft Store (which re-signs with Microsoft's own certificate and would need
-    the portable folder plus the `LocalSystem` helper repackaged as MSIX).
+    compliant certificate: the working path is `scripts\sign.ps1 -Thumbprint <sha1>`
+    (added 2026-11-06, D-034 — this summary originally claimed that path "is already
+    in the repo", which was false until that commit, and Certum's cloud manual
+    documents exactly that call). And the publisher CN is pinned by D-016, which
+    **cannot survive a real certificate**: CSCBR §9.2.2 requires the subject CN to be
+    the verified legal name, so the pin moves to a thumbprint in the same release
+    (`docs\OPEN-DECISIONS.md` item 3). Timestamps keep old releases valid after
+    renewal, and the 2026-03-01 change caps a certificate at 460 days.
+  - Prices **are** quoted as of 2026-11-06, each with its source and the day it was
+    read, because "the price moves" turned out to be a reason to date the figure
+    rather than to omit it. The options table is Microsoft's own comparison (OV
+    $150–300/year, EV $400+/year and **no longer an instant SmartScreen bypass since
+    2024**, Azure ~$9.99/month and **not purchasable by an individual outside the
+    USA/Canada**), plus the routes that exist for this maintainer: Certum's Open
+    Source certificate at €49/year in their cloud (CN becomes "Open Source
+    Developer <name>"; it signs only with a logged-in SimplySign session, so it wants
+    a persistent runner) and SSL.com IV at $129/year plus $180/year eSigner (their
+    action signs on GitHub-hosted runners). **SignPath Foundation's free route is
+    closed to this product category**: their code of conduct excludes "security
+    diagnosis tools that actively scan for and highlight exploitable vulnerabilities,
+    e.g. by identifying unprotected network ports", with a carve-out only for
+    malware/breach *detection*, and independently requires an already-released
+    project with a verifiable reputation. Reframing the product to slip past that
+    policy is not on the table.
   - `docs\COST.md`'s §5 is the ب5 checklist, and §3 lists what is deliberately not
     bought (no telemetry backend, no AV/EDR licence, no cloud sandbox, no paid rule
     feed, no update server, no CDN).
@@ -4511,7 +4605,9 @@ signing certificate respectively), so this is the work that is always available.
       plus a configurable hash feed (`ioc_feed_url`/`ioc_feed_key`) — P3c3.
 
 ### P4 — release engineering
-- [ ] Authenticode: OV/EV or Azure Trusted Signing; sign DLLs then EXEs;
+- [ ] Authenticode: an OV-class certificate bought as an individual (routes and
+      prices in `docs\COST.md` §2; Azure Artifact Signing is not purchasable from
+      Egypt); sign DLLs then EXEs;
       timestamp; `signtool verify` in CI; document SmartScreen reality.
       *Reality measured 2026-10-30:* the app is `NotSigned`, Smart App Control is
       off, SmartScreen policy is default, and the reputation endpoints are
@@ -4521,8 +4617,12 @@ signing certificate respectively), so this is the work that is always available.
       => The **local** half is solved (`make-release.ps1 -Sign` with a self-signed
       certificate trusted in `CurrentUser\Root` + `TrustedPublisher`: all binaries
       `Valid`, `signtool verify /pa` passes, prompts stop on this machine). What
-      remains in this item is only the **public** half: a real OV/EV (or Azure
-      Trusted Signing) certificate, timestamping through the `-PfxPath` path, and
+      remains in this item is only the **public** half: a real OV-class certificate
+      (the routes, prices and the publisher name each one prints are in
+      `docs\COST.md` §2, researched 2026-11-06 — Azure Artifact Signing is not
+      purchasable from Egypt, and no CA can issue our CN, so decision (c) ships with
+      it), timestamping through the certificate-store path a cloud agent needs
+      (`-Thumbprint`), and
       CI wiring — the scripts already take it.
 - [ ] Build legs: x64 (primary) + ARM64 (app + `aarch64-pc-windows-msvc` engine);
       optional x86 **CLI** build only (D-003).
@@ -4534,7 +4634,11 @@ signing certificate respectively), so this is the work that is always available.
 - [x] ~~`docs/COST.md` — the real costs and what stays free~~ — done (ب1b): the only
       purchase is a CA-issued certificate; the sheet also records that its key must
       be in hardware since June 2023, which retires the `-PfxPath` path in favour of
-      the `/sha1` one `scripts\sign.ps1` already has.
+      the `-Thumbprint` one — a mode D-034 added on 2026-11-06, after this row's
+      claim that a `/sha1` path already existed turned out to be false. The file was
+      re-researched the same day: it now carries dated list prices, per-route
+      publisher names, and the two rules that changed (460-day cap, EV's SmartScreen
+      bypass retired in 2024).
 
 ### P5 — trust & truth
 - [x] `docs/THREAT-MODEL.md` (assets, adversaries, trust boundaries, what a
@@ -4580,7 +4684,7 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6. **The code half closed 2026-11-06 (D-034)**: a certificate is now two repository secrets (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token/cloud agent), resolved in one documented order and printed before the build - so nothing in `release.yml` has to change on the day, and `scripts\verify-signing.ps1` (18 checks, PASS) holds the refusals. What stays open is the purchase and the click: a certificate nobody has bought, and `v0.1.0` sitting in GitHub Releases as a **draft** (D-031) | `dist/`, `installer/`, `scripts/`, P4 |
+| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6. **The code half closed 2026-11-06 (D-034)**: a certificate is now two repository secrets (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token/cloud agent), resolved in one documented order and printed before the build - so nothing in `release.yml` has to change on the day, and `scripts\verify-signing.ps1` (18 checks, PASS) holds the refusals. What stays open is the purchase and the click: a certificate nobody has bought, and `v0.1.0` sitting in GitHub Releases as a **draft** (D-031). The **research pass of 2026-11-06** replaced "buy a certificate" with a list and a price: Microsoft's own comparison gives public trust to organizations in the USA/Canada/EU/UK and to individuals in the **USA and Canada only**, so Azure Artifact Signing cannot be bought from Egypt at all; the OV-class routes for an individual with no company are **Certum's Open Source product (€49/year in the cloud, whose documented `signtool /sha1` call is exactly what D-034 already does — but whose session needs a logged-in SimplySign desktop agent, so it implies a persistent/self-hosted runner or signing before publishing)** or **SSL.com IV ($129/year) plus their eSigner service ($180/year, and their own action signs on GitHub-hosted runners)**, while the free SignPath route is **closed to this product category**: their code of conduct excludes "security diagnosis tools that actively scan for and highlight exploitable vulnerabilities, e.g. by identifying unprotected network ports", with a carve-out only for malware/breach detection, and independently requires an already-released project with a verifiable reputation — this repository has 0 releases. One measured fact makes part of this a code change: **CSCBR §9.2.2 requires the subject CN to be the verified legal name**, so no CA can issue `CN=MI CS Code Signing` — the pin must move to the thumbprint (decision (c), ~1 h) *in the same release*, or `update.rs:128` refuses our own signed update. Prices, sources and the publisher name per route: `docs/COST.md` §2 | `dist/`, `installer/`, `scripts/`, P4 |
 | ~~HIGH~~ | ~~A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently~~ — **closed 2026-11-03 (و4) by evidence**: a package with `rules\` removed (and its own `SHA256SUMS` corrected, so nothing but the missing folder can fail) is refused by `verify-release.ps1`: 4 FAILs — `missing from the zip: rules\yara\starter.yar, rules\guard\starter.json`, `rules folder holds 0 file(s)` (the layout check, not just the file names), `the guard did not use the packaged rules: guard: 6 rule(s) from the built-in starter pack (rules/guard not found)` and `the scan did not use the packaged YARA rules (log line: YARA rules from the built-in starter pack (no rules\yara\starter.yar found))` — **exit code 1** (`RESULT: FAIL - the release artifact is not what it claims to be`). The silently-degraded copy the row described can no longer pass the gate, and the engine's own log names the source it used | `dist/`, `guard/mod.rs`, `scanner/mod.rs`, `scripts\verify-release.ps1` |
 | ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
@@ -4596,7 +4700,7 @@ signing certificate respectively), so this is the work that is always available.
 | ~~LOW~~ | ~~The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** with one inert rule in force; with the shipped starter pack the earlier runs measured 0.234 %~~ — **closed 2026-11-03 (و4)**: re-measured with the **shipped pack** actually loaded (`measure-guard-cpu.ps1 -RealRules`, four 60 s windows, 56 logical cores, guard on minus `MICS_NO_GUARD=1`): **0.156–0.521 % of one core, median 0.417 % = 0.0028–0.0093 % of the machine, median 0.0074 %**. The engine was unelevated, so ETW was denied and the 2 s poll loop is what ran (`on.err` names it); the guard-off half measured 0.000 % in every window — below the 15.6 ms process-timer resolution, i.e. < 0.03 % of one core. The earlier "with the starter pack it is 0.234 %, the difference is one-time startup matching" is **not supported by this measurement**: the lowest shipped-pack window equals the inert-rule number, so the spread is run-to-run noise on a busy 56-thread box, not a rule-count effect. The row's *number* was stale; the `< 1 %` budget holds under either definition | `guard/mod.rs`, `platform/windows/pids.rs`, `scripts/measure-guard-cpu.ps1` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
 | ~~LOW~~ | ~~**The helper's caller check has nothing to compare against in a portable run**~~ — **closed 2026-11-03 (و4) by evidence**: `verify-helper.ps1` now starts the helper in exactly that layout (an empty `PROGRAMDATA` plus a separate `MICS_DATA_DIR`, so no install account exists) and measures both halves in one run: a client that is **not** the engine image is refused — `{"ok":false,"error":"this pipe only serves the MI CS engine"}` — while the helper's own log carries `no installer account recorded (no %PROGRAMDATA%\MICS) - the caller image is the only check`; then the same probe, with the documented `MICS_ENGINE_PATH` pin the installer records, is served (`pong:true`). The helper reads that pin from its own environment, which is why the probe uses two helper processes — the first version of this check reused one and the "pinned client" expectation failed, which is what made the behavior visible. `RESULT: PASS`, exit 0, 15 checks; the fallback stays what F-2 says it is (the pipe ACL is what keeps other users out) and is now measured rather than asserted | `platform/windows/caller.rs`, `privileged/server.rs`, `scripts\verify-helper.ps1`, D-017, THREAT-MODEL F-2 |
-| LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass. A thumbprint pin breaks on every locally re-issued release certificate | `platform/windows/signature.rs`, D-016, THREAT-MODEL F-3 |
+| LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass — and since **no CA can issue that CN at all** (CSCBR §9.2.2 requires the subject CN to be the verified legal name, measured 2026-11-06), the pin stops matching the moment ب5 is bought: without decision (c) the first CA-signed release is refused by `update.rs:128` as "signed by X, not MI CS Code Signing" and reported as foreign by `selfcheck`. A thumbprint pin breaks on every locally re-issued release certificate, which is why the fix is thumbprint-when-configured and the CN otherwise | `platform/windows/signature.rs`, D-016, `docs/OPEN-DECISIONS.md` item 3, THREAT-MODEL F-3 |
 | LOW | **A language folder that `pubspec.yaml` does not declare renders every key raw, silently**: the pack loader swallows a failed asset read on purpose ("a module that has not been translated yet must not break the app"), so nothing logs or fails when a whole language is missing from the asset list. `test/lang_registry_test.dart` now fails instead, and the app itself gates its first frame on the settings *and* the packs (`lib/main.dart`), so this cannot reach a user who is running a correct build | `pubspec.yaml`, `test/lang_registry_test.dart`, `lib/main.dart` |
 | LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |

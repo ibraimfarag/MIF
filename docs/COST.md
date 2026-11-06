@@ -7,6 +7,13 @@ carry the source they came from; where a figure is a moving target (CA list
 prices, cloud-signing eligibility) the file says so instead of guessing, because a
 stale price is worse than a pointer.
 
+**2026-11-06:** the purchase section was re-researched against live vendor pages
+and Microsoft's own comparison, so it now carries list prices, the publisher name
+each route actually prints, and the two rules that changed since this file was
+written (a code-signing certificate is now capped at 460 days, and EV stopped
+buying a SmartScreen bypass in 2024). Every figure names its source and the day it
+was read; re-read the source before spending.
+
 **In one line:** running and shipping MI CS costs **nothing** today, and exactly
 **one** thing has to be bought to hand it to strangers — a code-signing
 certificate. Everything else in the pipeline is free software, a free service, or
@@ -58,17 +65,26 @@ Four constraints, all of them checkable before money changes hands:
    **Consequence for this repository:** the `-PfxPath`/`-PfxPassword` path in
    `scripts\sign.ps1` (a `.pfx` file on disk) **cannot** be used with a compliant
    certificate. **A token cannot be exported into a CI secret either**, so on a
-   GitHub-hosted runner the realistic route is a cloud signing service. What that needs
-   from this codebase:
-
-   - **A service whose key appears as a store certificate** — `scripts\sign.ps1
-     -Thumbprint <sha1>` (D-034) already signs that way, which is what a token or an agent
-     that installs the key into the certificate store needs. SSL.com's eSigner is
-     documented to expose its cloud key through a Cloud Key Adapter that works this way;
-     that is a vendor claim, to be confirmed with them before it is relied on.
-   - **Azure's Artifact Signing is *not* wired.** It signs by invoking
-     `signtool ... /dlib <Azure.CodeSigning.Dlib.dll> /dmdf <metadata.json>`, a different
-     call from either mode here. Adding it is a named piece of work, not a secret.
+   GitHub-hosted runner the realistic route is a cloud signing service — and the
+   codebase already speaks that dialect: a service that puts the key into the Windows
+   certificate store is signed with `scripts\sign.ps1 -Thumbprint <sha1>` (D-034).
+   Certum's own cloud-signing manual documents exactly that call
+   (`signtool sign /sha1 "<thumbprint>" /tr http://time.certum.pl /td sha256 /fd sha256`
+   against the SimplySign virtual card), so that route needs no new signing mode here.
+   SSL.com's eSigner Cloud Key Adapter can do the same thing, but SSL.com's own CI/CD
+   compatibility matrix rates that route on GitHub Actions as **self-hosted runner
+   only** and points at their `CodeSignTool`, their `sslcom/actions-codesigner` action
+   or the CSC API instead — so buying there would mean adding a *second* signing path
+   next to `-Thumbprint`, not using it. For Certum the unattended half is the open
+   question: a fresh runner has to authenticate SimplySign before it can sign, and that
+   recipe has to be read and measured before the release job is handed a certificate.
+   - **Azure Artifact Signing is not a route for this project at all.** Microsoft's own
+     comparison (`ms.date 2026-04-20`) offers public trust to organizations in the USA,
+     Canada, the EU and the UK and to **individual developers in the USA and Canada
+     only**, and sends everyone else to an OV certificate. An individual in Egypt cannot
+     buy it, so its `signtool ... /dlib <Azure.CodeSigning.Dlib.dll> /dmdf
+     <metadata.json>` integration is a named gap that only matters if a US/CA/EU/UK
+     legal entity ever stands behind the project.
 
    (This paragraph used to claim the script "already" signed with `signtool /sha1`. It did
    not — both of its paths used `/f` with a PFX — and nothing exercised the difference
@@ -76,39 +92,106 @@ Four constraints, all of them checkable before money changes hands:
 2. **The certificate expires and has to be renewed.** A release signed while the
    certificate was valid keeps verifying because every file is timestamped — the
    timestamp is what makes an old download still trustworthy, and it is free.
-3. **The publisher name is pinned in code** (D-016): the update path accepts a
-   signer whose subject is `CN=MI CS Code Signing`. The name is supplied during
-   the CA's identity validation, so either it is entered exactly like that, or a
-   new decision entry replaces the pin. A thumbprint pin would be stronger and is
-   deliberately not used while the certificate is re-issued locally.
+   Since **2026-03-01** this is not even a choice: CA/B ballot CSC-31 (adopted
+   2025-11-17, CSCBR 3.10.0) cut the maximum validity from 39 months to **460
+   days**, so a "3-year" product is a re-issue schedule rather than one long-lived
+   key. Budget the renewal — and the identity validation that comes with it — once
+   a year whichever route is bought.
+3. **The publisher name is pinned in code, and it cannot stay as it is** (D-016).
+   The update path accepts a signer whose subject is `CN=MI CS Code Signing`, and
+   the CA/B code-signing baseline requirements make that string **unissuable**:
+   CSCBR §9.2.2 makes `subject:commonName` *required* and says it "MUST contain the
+   Subject's legal name as verified under Section 11.1.1 or 11.2.1" — the verified
+   name of a person or a registered entity, not a product name. The string exists
+   only in the certificate `scripts\codesign-cert.ps1` creates locally.
+   **Measured consequence:** `update.rs:128` refuses a payload signed by anyone else
+   ("is signed by X, not MI CS Code Signing - refusing to use it") and
+   `signature.rs:184` classifies it as `Trust::NotOurs`, so the first properly
+   signed release would be **refused by our own updater** and shown as foreign by
+   the package self-check. Moving the pin is decision (c) in
+   `docs/OPEN-DECISIONS.md` (about an hour: a thumbprint setting plus three tests),
+   and it sits **before** the purchase, not after it. The ratchet already says so:
+   `signature.rs:406` asserts the CN of `dist\MICS-portable\mics-engine.exe`.
 4. **The UAC prompt names the publisher** only with a trusted certificate
    (`docs/PRIVILEGED-OPS.md`): the elevated install shows "MI CS" instead of
    "Unknown publisher" — the D-002 consequence for P1.5.
 
 ### The options, and what each one actually unlocks
 
-| Option | Unlocks | Watch out for |
-|---|---|---|
-| **OV code-signing certificate** (token or cloud) | A named publisher, and SmartScreen reputation that builds as people download | Identity/business validation, an annual renewal, and hardware/key-holder mechanics to live with |
-| **EV code-signing certificate** | The same, with the strictest identity validation — and EV has historically been the *shortest* path to SmartScreen trust | Costs more than OV; whether EV still earns reputation faster than OV in Windows' current SmartScreen is a **verify-at-purchase question**, not something this file asserts |
-| **Cloud signing service** (e.g. SSL.com eSigner, Azure's signing service) | No token in a drawer: the key stays in an HSM, CI can sign | A monthly/annual subscription on top of the certificate, and eligibility rules. Microsoft's service is **Artifact Signing** as of 2026 (it was renamed from Trusted Signing — <https://azure.microsoft.com/en-us/pricing/details/artifact-signing/>); its public-trust profiles expect a verifiable business history, so an individual project must check eligibility first |
-| **Free signing for open-source projects** (e.g. the SignPath Foundation) | Free signing for qualifying OSS projects | Terms and eligibility change; MI CS is GPL-3.0 (D-001), so it is worth asking, and it must be re-checked before relying on it |
-| **Microsoft Store** | Microsoft signs and hosts the package; no certificate to buy | The app must be packaged as MSIX and pass Store policy, and Store signing puts *Microsoft* in the signature. Our layout — a portable folder plus a `LocalSystem` helper service installed with one prompt — would have to be repackaged and re-reviewed |
+Microsoft's own comparison is the backbone, because the vendor of the thing being
+bought is the one whose SmartScreen decides
+([Code signing options for Windows app developers](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options),
+`ms.date 2026-04-20`, read 2026-11-06):
 
-**Prices are deliberately not quoted here.** They are list prices that move,
-they are usually bundled with a token or a cloud subscription, and they depend on
-the validation type and the entity behind it. The shape is what is fixed — a
-recurring subscription plus a hardware or cloud component — and the current figure
-comes from the CA. When it is known, add one line with the date to this file.
+| Microsoft's row | Cost | Availability | SmartScreen | Store |
+|---|---|---|---|---|
+| Store, MSIX | free | worldwide | no warnings | yes |
+| Store, MSI/EXE (publisher signs) | a certificate | worldwide | no SmartScreen prompts during a Store install | yes |
+| Azure Artifact Signing | ~$9.99/month | organizations: USA, Canada, EU, UK; **individuals: USA and Canada only** | reputation builds over time, initial warnings expected | no |
+| OV certificate | $150–300/year | worldwide | same as Azure | no |
+| EV certificate | $400+/year | worldwide | **same as OV since 2024 — no longer an instant bypass** | no |
+| self-signed | free | — | blocks installation for the public | no |
+| no signature | free | — | strong SmartScreen block | no |
 
-### Open questions to settle before paying
+Two rows close two questions this file used to leave open. **EV buys nothing
+here**: the instant-reputation bypass was removed in 2024, so the $400+/year
+premium would pay for identity validation nobody sees — the old "verify at
+purchase" line is answered, don't. And **Azure Artifact Signing is unavailable**:
+Microsoft's own advice to an individual outside the USA/Canada is to use an OV
+certificate, which is the same place the availability table lands.
 
-- Does EV still buy anything over OV in today's SmartScreen? Ask the CA for the
-  current statement, and treat "EV skips reputation" as unverified until then.
-- Does the entity qualify for a cloud signing service (or for an OSS signing
-  programme)? That decides whether the hardware token is even in play.
-- Which CN is entered during validation? D-016's pin is a code change either way,
-  but knowing it in advance avoids a release that refuses to update itself.
+That leaves the OV-class purchase. The routes that actually exist for a solo
+maintainer with no registered company, in Egypt, read on **2026-11-06** (list
+prices move; the source is named so it can be re-read):
+
+| Route | Price seen | Publisher Windows will show | Why it fits / what it wants |
+|---|---|---|---|
+| **Certum Open Source Code Signing**, cloud via SimplySign | **€49.00 / year** (the certificate is 1 year; the card+reader set is €69 and a card-only "electronic code" €25) on [Certum's own shop](https://shop.certum.eu/code-signing.html) | **`Open Source Developer <name>`** — Certum's words: the "Open Source Developer" phrase is added to the CN and the Organization field is set to it | the only route that puts the *maintainer's* name in the signature. Individual-only (their words: "issued only for individuals"), must stay non-commercial ("if Certum determines that the certificate is being used to sign software distributed commercially, the certificate will be revoked"), and the certificate may not contain domain names or IP addresses. Wants: an identity check — automatic via IDnow, a registration point, a notarial confirmation, or photos holding the ID — plus a utility bill in the subscriber's name and the public project URL. **Egypt looks fine**: it is in the checkout country list, hardware ships there (€63 net), and Egyptian passports are in IDnow's document list; the only published exclusion is the generic "countries where the law of Poland prohibits doing business". ≤5,000 signatures/month, and Certum caps a certificate at **459 days** from 2026-02-27, so their 2–3 year products are free re-issues. **The catch is CI**: Certum's own manual signs with `signtool /sha1` only while SimplySign Desktop holds a logged-in virtual-card session (the login needs a token minted by their phone app); Certum publishes no headless signing agent — their web API is partner-only and SSL-scoped, and CertManager is a lifecycle dashboard — so a GitHub-hosted runner cannot sign unattended with this product |
+| **SSL.com IV + eSigner** | **$129/year** (IV) + **$180/year** (eSigner Tier 1, 240 signings) ≈ **$309/year** ([IV](https://www.ssl.com/products/software-integrity/code-signing/iv/), [eSigner pricing](https://www.ssl.com/guide/esigner-pricing-for-code-signing/)) | the individual's verified personal name | "no business registration required" is their own line, and their CP/CPS bars only US-denied entities, so Egypt appears eligible (a "High Risk Region" clause is the one open question). Multi-year terms are re-issues: SSL.com enforces a 458-day maximum. **CI is where this route wins**: they document cloud signing for GitHub-hosted runners through their `sslcom/actions-codesigner` action, `CodeSignTool` or the CSC API — their plain-`signtool` CKA route is the one they list as self-hosted-only |
+| **SSL.com EV Sole Proprietor** + EV eSigner | $359/year + $900/year ≈ $1,259/year | the verified personal name, EV-level | their product page says "no business entity required", but their own EV rules and the sole-proprietor form want a *registered* sole proprietorship plus two income/identity documents verified face to face — likely blocked for a non-US individual with no entity. **And EV buys nothing now** (see the Microsoft table above) |
+| **Any standard OV certificate** (Certum, SSL.com, DigiCert, Sectigo) | $99–300/year — a reseller and Microsoft's band agree; Certum's own individual OV is **€209/year** in their cloud or **€149** as an electronic-code SKU | the verified legal name | worldwide, and some CAs (Certum, SSL.com) validate individuals rather than only companies. Certum's CPS goes further and bars natural persons from **EV** entirely, so their OV individual is the ceiling |
+| **SignPath Foundation** | free | **SignPath Foundation** — verified on a project they signed: `CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US`, an OV certificate from GlobalSign | **effectively closed to MI CS**, for two independent reasons. Their code of conduct's "No hacking tools" clause says: *"Software must not include features designed to identify or exploit security vulnerabilities or circumvent security measures of their execution environment. This includes security diagnosis tools that actively scan for and highlight exploitable vulnerabilities, e.g. by identifying unprotected network ports, missing password protection etc."* The carve-out is only for *detecting breaches* (malware, traces of being hacked, PUP), which is the guard half of this product and not the audit half. Separately, the project must be "already released" with a verifiable reputation, and this repository has **0 releases** and was created 2026-10-27. Even if accepted: manual approval for every release, MFA for the whole team, GitHub-hosted runners only, and the foundation may revoke at its sole discretion with no arbitration |
+| **Microsoft Store (MSIX)** | free | Microsoft | worldwide, Microsoft re-signs and validates the developer identity for free — but distribution is through the Store, and our shape is a portable folder plus a `LocalSystem` helper installed with one prompt |
+
+**The headline is that the free route is not available to this product.** Two
+signed projects show the clause is applied by framing rather than by capability —
+NETworkManager (GPL-3.0, with a port scanner) and Fibratus (a YARA memory scanner)
+are both signed by the foundation — but the honest reading of the clause is that a
+tool whose own description is "audit this machine and tell the user what is
+misconfigured" is what it excludes. **Reframing the product to slip past that
+policy is not on the table**; what is on the table is paying €49–309 a year, or the
+Store.
+
+**Not on the list, and why:** a `.pfx` carried around (constraint 1); Azure
+(constraint 1's eligibility paragraph); a USB token for CI, because a token cannot
+be exported into a runner's secret store — it can only sign on the machine it is
+plugged into; and the other free programmes that exist (OSSign is suspended and
+excludes "offensive security" tools outright; Necessary Code Signing would put
+another company's name on the release and its site did not answer).
+
+### What this leaves to decide
+
+- **Cheap but not CI-native, or CI-native but dearer.** Certum's €49/year Open Source
+  certificate prints the maintainer's name and is the only route whose signing call is
+  already in `scripts\sign.ps1`, but it signs only while a GUI agent holds a logged-in
+  session: it needs a persistent/self-hosted Windows runner (on a public repository that
+  is a real security decision, and the reasoning would have to be written down) or a
+  signature produced on the maintainer's machine before publishing, which weakens the
+  provenance story. SSL.com's ~$309/year combination signs on GitHub-hosted runners
+  through their own action or CLI, i.e. inside the workflow that exists today. **The
+  price difference is the smaller half of this decision** — and it is the one question
+  that can be answered without a live certificate, by reading their two CI pages.
+- **Which CN comes back, and is the pin moved first?** Constraint 3: it will not be
+  `MI CS Code Signing` — Certum fixes the CN to "Open Source Developer <name>" (OSS) or
+  "the name and surname of the subscriber" (OV individual), and SSL.com does the same —
+  so decision (c) has to land in the same release as the certificate or the app refuses
+  its own update.
+- **Does Certum accept an Egyptian applicant?** The evidence is positive rather than
+  conclusive: Egypt is in the checkout country list, their shipping table delivers
+  hardware there for €63 net, and Egyptian passports are in IDnow's supported-document
+  list, while the only published exclusion is the generic "countries where the law of
+  Poland prohibits doing business". Nobody has placed an order, so this stays
+  unconfirmed until someone does.
 
 ## 3. What is deliberately not bought
 
@@ -133,6 +216,12 @@ comes from the CA. When it is known, add one line with the date to this file.
 - **For the project:** the honest alternative is "build it yourself", which means
   a Rust toolchain, Flutter 3.47.8 and NSIS on the user's machine. That is a
   legitimate answer for a GPL-3.0 tool, and it is the answer today.
+- **And buying does not switch SmartScreen off.** Microsoft marks OV exactly like
+  Azure — "reputation builds over time; initial warnings expected" — so what the
+  purchase really buys is a named publisher and the *start* of a reputation that
+  accrues as people download. The EV row that used to promise an instant bypass was
+  retired in 2024. Anyone selling this internally as "the warnings go away on day
+  one" is describing the pre-2024 behaviour.
 
 ## 5. When the certificate arrives (the ب5 checklist)
 
@@ -161,10 +250,15 @@ code edit. What is left is confirming the identity and writing the purchase down
    key store (an internal/enterprise CA, a legacy certificate, or a test), while a
    CA-issued public certificate has to keep its key in hardware — so the variable a bought
    certificate will actually use is usually **`MICS_CERT_THUMBPRINT`** (a cloud agent or a
-   token on the runner), or the Azure `/dlib` work named in §2.1.
-3. **Confirm the subject** is exactly `CN=MI CS Code Signing` (D-016 pins that string), or
-   record a decision that replaces the name pin with a thumbprint — the brief, with the
-   cost of each answer, is `docs/OPEN-DECISIONS.md` item 3.
+   token on the runner), or the Azure `/dlib` work named in §2.1 — which eligibility, not
+   effort, keeps out of reach for an individual in Egypt.
+3. **Move the pin before that release, not after.** No publicly trusted CA can issue
+   `CN=MI CS Code Signing` (constraint 3), so the string `EXPECTED_SIGNER_CN`
+   (`signature.rs:42`) compares against stops matching the moment the certificate is real,
+   and `update.rs:128` would then refuse our own update. Decision (c) — a thumbprint
+   setting, about an hour — belongs in the **same release** as the certificate;
+   `signature.rs:406` fails loudly until it is done. The brief with the cost of each answer
+   is `docs/OPEN-DECISIONS.md` item 3.
 4. **Check the release gate with a real signature.** `scripts\verify-release.ps1` asserts
    the artifact is signed and prints the signer; a CA-issued signature should pass it
    unchanged, and the expected subject is updated if the CN differs.

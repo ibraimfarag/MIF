@@ -384,9 +384,12 @@ unsigned binary it has never seen. Sign the package in the same step as the buil
 # no elevation, and Windows shows the publisher instead of refusing the app
 powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 
-# or with a real OV/EV certificate for a public release (this also timestamps)
+# or with a real certificate for a public release (this also timestamps). A CA-issued
+# certificate has to keep its key in hardware, so it is signed through the Windows
+# certificate store by thumbprint - a cloud agent (e.g. Certum's SimplySign) or a token
+# installed in CurrentUser\My. A .pfx on disk cannot carry a compliant key.
 powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign `
-  -PfxPath cert.pfx -PfxPassword "***"
+  -Thumbprint "<the certificate's SHA-1 thumbprint>"
 ```
 
 `-Sign` signs `mics_app.exe` and the bundled DLLs **before** they are hashed and
@@ -569,7 +572,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 
 | Symptom | Meaning / what to do |
 |---|---|
-| "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV/EV certificate; see [Building from source](#building-from-source). |
+| "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV-class certificate (EV stopped buying a faster SmartScreen verdict in 2024, so it is not worth its premium); `docs\COST.md` §2 lists what those cost and who can buy one from Egypt. See [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | **Settings → About says `unverified`**, or a card says these files are not the published ones | The folder no longer matches the manifest inside `mics-engine.exe`: a shipped file changed (a partial copy, an antivirus shim feeding a modified DLL, a repackaged build). `powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path <folder>` names the file and refuses the folder; re-extract from the zip and check it against `SHA256SUMS`. A copy you *built* yourself has no manifest until `make-release.ps1 -Sign` writes one — which is why a development build shows this line and no card. |

@@ -132,7 +132,7 @@ Total: **~35–62 h of work** plus the certificate (money + procurement time).
 | **و2** | Real-time file watching (`ReadDirectoryChangesW`/USN) | 🟠 | 6–10 h | **Architectural decision** (CPU cost, product behaviour) — bring it to the user first. |
 | ~~**و3**~~ | ~~`netsh` → **FirewallAPI COM**~~ — **done 2026-11-03 (D-028)**: `engine\src\firewall\mod.rs` speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process instead of spawning `netsh advfirewall` and parsing its English text, with the same public shape and the same helper payloads (so D-007's audit trail and refusals are untouched). Typed values replace matched strings, every rule sets an explicit all-profiles mask (the API's default is *no* profile, i.e. a rule that never fires) and the "MI CS" group, and a port without a protocol is refused with the fix named. Two measured traps are recorded in the decision: a COM interface released after `CoUninitialize` is an access violation (field order in the guard struct), and the rule enumerator hands out `VT_DISPATCH`, not `VT_UNKNOWN`. Proved by `scripts\verify-firewall.ps1` (23 checks, 8.7 s against the release engine): reads compared field by field with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, one rule created/read back/removed, and a fake `netsh.exe` on PATH that proves the dependency is gone. Deliberately not measured: the default-deny write (it would cut the machine's network) and a country-sized `RemoteAddresses` ceiling | ✅ | — | Removes the external-process dependency for firewall changes. |
 | ~~**و4**~~ | ~~Executable LOW rows (GeoIP lists, detection-pack size, guard cost, plaintext keys, method gaps)~~ — **done 2026-11-03, five commits (a–e)**: keys DPAPI-protected, blocking `vuln.scan` deleted, merged-audit ages shown, guard cost re-measured; three rows closed by evidence (incomplete package refused with exit 1, portable caller check measured in `verify-helper.ps1`, AUMID attribution as a documented limit). See the Done log in `docs/TODO.md` | ✅ | 6–10 h | 1–3 h each. |
-| **ب5** | Real OV/EV (or Azure Trusted Signing) certificate → sign the release | 🔴 | 1–2 h **+ procurement** | Code is ready (`scripts\sign.ps1` `/sha1`); see `docs/COST.md`. **Needs you.** |
+| **ب5** | Real OV-class certificate → sign the release, with decision (c)'s thumbprint pin in the same release | 🔴 | 1–2 h **+ €49–309/year** | Code is ready (`scripts\sign.ps1 -Thumbprint`). Routes and prices, researched 2026-11-06: **Certum Open Source €49/year** in their cloud — the only route that prints the maintainer's name (`Open Source Developer <name>`) and whose documented `signtool /sha1` call D-034 already makes — or **SSL.com IV $129/year + eSigner $180/year**. The free SignPath route is closed to this product category (quoted in §4 item 2), and Azure Artifact Signing is not purchasable from Egypt. **No CA can issue `CN=MI CS Code Signing`** (see §2 constraint 3), so the pin moves too. `docs/COST.md`. **Needs you.** |
 | **ب6** | Public release: signed ZIP + installer, version bump, README updated | 🔴 | 1–2 h | **The publishing half is done; the "signed" half still needs ب5.** Measured 2026-11-05: the repository is public, the tag `v0.1.0` is on `da77bb3`, and Release run **42040718389** was green end to end — `Package (x64)` built, signed, installed, verified and uploaded, and `Publish` created the release as a **draft** (`draft v0.1.0 created - publish it from the Releases page when the hashes read right`); publishing it is one click (D-031) and it is still a draft as of this commit. The README now has the download section (`## Download`: the two artefacts, the hash check, the unsigned-publisher warning, and no ARM64 download). Left here: that click, the certificate (ب5), and a version bump when the next build happens. |
 
 ## 3. The order to work in
@@ -188,15 +188,36 @@ Recounted 2026-11-04; the long form with the measured state is `docs/TODO.md` §
    both halves. Reminders: the old per-machine copy is already gone (2026-11-04), and
    the leftover `MICSHelper` pointing at a debug build is expected - the new
    installer re-creates it.
-2. **A signing certificate** (ب5, the only HIGH row left): OV/EV or a cloud signing
-   service, with the subject **exactly `CN=MI CS Code Signing`** (D-016). Free for
-   open-source projects through SignPath (the source is public, measured 2026-11-06 by
-   fetching it anonymously). Costs and constraints: `docs/COST.md`. **Buying it is now the
-   only step: D-034 means the certificate is two repository secrets** (`MICS_PFX` +
-   `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token or a cloud agent) that
-   `make-release.ps1` resolves and prints, with no workflow edit on the day. Then ب6
-   publishes - and the place is decided: **GitHub Releases**, with
-   `v0.1.0` already uploaded there as a draft that one click publishes (D-031).
+2. **A signing certificate** (ب5, the only HIGH row left). The research pass of
+   **2026-11-06** is written up in `docs/COST.md` §2 and closes the question this item
+   used to leave open: Microsoft's own comparison offers public trust to organizations in
+   the USA, Canada, the EU and the UK and to individuals in the **USA and Canada only**,
+   and sends everyone else to an OV certificate - so Azure Artifact Signing cannot be
+   bought from Egypt and its `/dlib` integration is not work to schedule. For a solo
+   maintainer with no company the realistic paid routes are an OV-class certificate
+   bought as an **individual**: Certum's Open Source product from €49/year in their cloud
+   (SimplySign), which needs the plain `signtool /sha1` call D-034 already makes, or
+   SSL.com IV at $129/year plus their eSigner service (~$309/year for both). Their CI
+   stories differ, and that is what the money really decides: Certum's cloud signs only
+   while a logged-in SimplySign session holds the virtual card (Certum publishes no
+   headless agent), so it wants a persistent/self-hosted runner, while SSL.com's own
+   action and CLI sign on GitHub-hosted runners - which is what `release.yml` uses today.
+   The free
+   route is **closed rather than merely awkward**: SignPath Foundation's terms exclude
+   "security diagnosis tools that actively scan for and highlight exploitable
+   vulnerabilities, e.g. by identifying unprotected network ports" - this product's audit
+   half - and independently require an already-released project with a verifiable
+   reputation, which a repository created 2026-10-27 with 0 releases does not have.
+   Reframing the product to slip past that policy is not on the table; the choices are
+   €49-309/year or the Store.
+   The subject **cannot stay `CN=MI CS Code Signing`**: CSCBR §9.2.2 requires the CN to be
+   the verified legal name, so decision (c) (thumbprint pin, ~1 h) ships **in the same
+   release** as the certificate - otherwise `update.rs:128` refuses our own update.
+   Buying it is otherwise the only step: D-034 means the certificate is two repository
+   secrets (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a cloud agent)
+   that `make-release.ps1` resolves and prints, with no workflow edit on the day. Then ب6
+   publishes - and the place is decided: **GitHub Releases**, with `v0.1.0` already
+   uploaded there as a draft that one click publishes (D-031).
 3. **Six decisions that each stop ready work** - one-page briefs, with the cost of every
    option and a recommendation, are in `docs/OPEN-DECISIONS.md`: whether licensed GeoIP
    lists may be
