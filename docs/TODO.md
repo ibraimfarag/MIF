@@ -1092,6 +1092,31 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The Store submission has a playbook, so the free account is the only thing left
+  (2026-11-07, later again)**
+  - [`docs/STORE.md`](STORE.md) is the operational half of route A, kept separate from
+    `SIGNING.md` (which records *why* each route is what it is): what only the owner can do
+    (the free account, the name reservation, and the four values Partner Center assigns — two
+    of which go straight into the manifest, with the Publisher DN required to equal the signing
+    certificate's subject), the exact `make-msix.ps1 -ServiceMode None -Identity … -Publisher …`
+    invocation for that identity, and the warning that **the submitted package must not be
+    self-signed**, because Microsoft signs it.
+  - The copy that would otherwise be improvised at submission time is in the file: short
+    description, description, "what's new", the two links (the privacy policy Store policy
+    10.5.1 requires — the document `PRIVACY.md` was written for), a four-screenshot list, the
+    IARC answers that are true for this build, and a certification note that states what the
+    app does, what it never does (no driver, no trust-store change, no telemetry, no account)
+    and how a reviewer can check it for themselves (`priv.log` is written before every
+    privileged op).
+  - It also writes down the part that only starts after certification: the clean-VM
+    measurement — install as a standard user and expect **no UAC prompt** (D-038), install the
+    helper with one prompt, verify the hosts/firewall change from outside the app, then update
+    the package and watch `helper-status` report `stale` (the engine change from this same
+    round is what makes that observable) — and the two refusals worth telling apart, product
+    policy versus the package itself.
+  - README's docs table and `SIGNING.md` §3 both point at it, so the playbook is reachable from
+    the two places a reader arrives from.
+
 - **The engine names a helper registration that points at nothing (2026-11-07, later
   again)**
   - `helper-status --json` gained `bin_path` (the program `sc qc MICSHelper` says the

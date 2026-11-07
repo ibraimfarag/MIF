@@ -189,7 +189,11 @@ reports `stale` and `bin_path` (`docs/PRIVILEGED-OPS.md`), and the failure messa
 the path that is gone and the one fix that works instead of blaming the caller's integrity.
 What stays open is that nothing re-registers on its own — the UI shows no badge, so the
 user meets it as a failed fix with a clear message — and the stable-location alternative
-is still just an option. That is the price of keeping the service out of the package. Two smaller facts from the same measurements: Windows refuses
+is still just an option. That is the price of keeping the service out of the package.
+
+The step-by-step submission playbook — what Partner Center assigns, the listing copy, the
+certification notes, and the measurement that follows certification — is
+[`docs/STORE.md`](STORE.md). Two smaller facts from the same measurements: Windows refuses
 the *unsigned* install path for us — `Add-AppxPackage -AllowUnsigned` exists on this
 machine but answers **0x80073D2C**, "its publisher is not in the unsigned namespace", for
 both our real subject and a bare `CN=MI CS (dev)` (the publisher has to carry a special OID
