@@ -184,9 +184,12 @@ it (`engine/src/privileged/service.rs`) — and a package's install location car
 version, so the helper a Store-edition user installs points into a folder that the next
 package update does not keep. The `None` shape therefore has to expect a **re-registration
 after every update** (one UAC prompt), or install the helper to a stable location the way
-the NSIS installer does, and the UI's helper-status check has to see a stale `binPath` and
-say so. That is an open design item, not a solved one, and it is the price of keeping the
-service out of the package. Two smaller facts from the same measurements: Windows refuses
+the NSIS installer does. The detection half is closed as of 2026-11-07: `helper-status`
+reports `stale` and `bin_path` (`docs/PRIVILEGED-OPS.md`), and the failure message names
+the path that is gone and the one fix that works instead of blaming the caller's integrity.
+What stays open is that nothing re-registers on its own — the UI shows no badge, so the
+user meets it as a failed fix with a clear message — and the stable-location alternative
+is still just an option. That is the price of keeping the service out of the package. Two smaller facts from the same measurements: Windows refuses
 the *unsigned* install path for us — `Add-AppxPackage -AllowUnsigned` exists on this
 machine but answers **0x80073D2C**, "its publisher is not in the unsigned namespace", for
 both our real subject and a bare `CN=MI CS (dev)` (the publisher has to carry a special OID

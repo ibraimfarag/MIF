@@ -219,6 +219,30 @@ Observed on this machine (unelevated, 2026-10-30):
 `scripts\verify-helper.ps1` does the same thing automatically and prints
 `RESULT: PASS|FAIL`.
 
+### A registration that points at nothing (2026-11-07)
+
+`helper-status --json` gained two fields, both read from Windows rather than guessed:
+`bin_path` (the program `sc qc MICSHelper` says the service runs) and `stale` (true when
+that program is no longer on disk). The parsing is a pure function with tests over the two
+real shapes — the quoted form this project installs (`"C:\Program Files\MI CS\
+mics-engine.exe" helper-service`) and the unquoted one (`sc qc Spooler` was the
+measurement) — and an absent or unreadable answer is `None`, never a guess, because a
+config query this caller may not read must not become a false "stale".
+
+It exists because a service whose program is gone reports the same `stopped` as a healthy
+one that is merely not started; only the file system tells them apart. Two ordinary ways
+to get there: the user moved or replaced the MI CS folder, and a package update replacing
+the versioned folder inside `WindowsApps` (`docs/SIGNING.md` §3, D-038). The engine no
+longer answers that case with "start MI CS from its installed folder" — it names the path
+that is gone and says the fix is installing the helper again, which rewrites `binPath` from
+the folder the running copy is in.
+
+Measured on this machine with the build of 2026-11-07: `helper-status --json` with no
+service installed reports `bin_path: null, stale: false` — the fields are there and they do
+not invent a problem. **Not observed yet:** `stale: true` itself, which needs an installed
+helper whose folder then moves — an administrator's install plus a move, or the same thing
+a package update does.
+
 ## What is still unproven
 
 The **elevated install itself** has been done once on this machine and it holds:

@@ -1092,6 +1092,31 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The engine names a helper registration that points at nothing (2026-11-07, later
+  again)**
+  - `helper-status --json` gained `bin_path` (the program `sc qc MICSHelper` says the
+    service runs) and `stale` (true when that program is not on disk). Both are read from
+    Windows, never guessed: parsing is a pure function, `parse_qc`, with a test over the
+    two real shapes — the quoted form this project installs
+    (`"C:\Program Files\MI CS\mics-engine.exe" helper-service`) and the unquoted one
+    (`sc qc Spooler` was the measurement) — and an absent or unreadable answer is `None`,
+    because a config query this caller may not read must not become a false "stale".
+  - **Why.** A service whose program is gone reports the same `stopped` as a healthy one
+    that is merely not started; only the file system tells them apart. Two ordinary routes
+    there: the user moved or replaced the MI CS folder, and a package update replacing the
+    versioned folder inside `WindowsApps` (D-038). The "installed but not answering" message
+    no longer gives that case the integrity advice — it names the path that is gone and the
+    fix that works, installing the helper again, which rewrites `binPath` from the folder
+    the running copy is in.
+  - **Measured** on this machine with the new build: `helper-status --json` with no service
+    reports `bin_path: null, stale: false` — the fields exist and do not invent a problem.
+    Engine tests **151 passed**, clippy clean with `-D warnings`. **Not observed:** `stale:
+    true` itself, which needs an installed helper whose folder then moves.
+  - **Left open, written down:** nothing re-registers on its own and the UI shows no
+    `stale` badge (`state` is unchanged, so the actionable text arrives when a fix fails);
+    the stable-install-location alternative in `docs/SIGNING.md` §3 is still just an
+    option.
+
 - **The throwaway certificate stops leaving private keys in the trust stores
   (2026-11-07, later again)**
   - `scripts\codesign-cert.ps1` promises in its own header that only the public half of

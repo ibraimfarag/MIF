@@ -57,12 +57,19 @@ pub fn sc_create_args(exe: &Path) -> Vec<String> {
     ]
 }
 
-/// What `sc query` told us.
+/// What `sc query` told us, plus whether the program the service runs still
+/// exists on disk.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct HelperState {
     pub installed: bool,
     pub running: bool,
     pub state: String,
+    /// The program the service is registered to run, as `sc qc` reports it.
+    pub binary: Option<String>,
+    /// True when that program is gone: the service points at nothing. This is
+    /// what a moved MI CS folder looks like, and what the folder of a previous
+    /// MSIX package version looks like after an update (`docs/SIGNING.md` §3).
+    pub binary_missing: bool,
 }
 
 impl HelperState {
@@ -71,6 +78,8 @@ impl HelperState {
             installed: false,
             running: false,
             state: "not_installed".into(),
+            binary: None,
+            binary_missing: false,
         }
     }
 }
@@ -106,7 +115,63 @@ pub fn parse_query(text: &str) -> HelperState {
         installed: state != "unknown",
         running,
         state,
+        // Filled in by `query()`, which is the only caller allowed to run
+        // `sc.exe` twice: this function stays pure so its parsing is testable.
+        binary: None,
+        binary_missing: false,
     }
+}
+
+/// The program named by the `BINARY_PATH_NAME` line of `sc qc` — the one way
+/// Windows spells "what this service runs".
+///
+/// The helper is created with a quoted path (`bin_path` quotes it because the
+/// install folder contains spaces) followed by the service subcommand, while a
+/// service created by hand is usually unquoted. Both shapes are read here, and
+/// anything else — no such line, an empty value, an unterminated quote — is
+/// `None`, because guessing a path would let the caller report a stale service
+/// that is not there.
+pub fn parse_qc(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let Some(rest) = line.trim_start().strip_prefix("BINARY_PATH_NAME") else {
+            continue;
+        };
+        let Some((_, value)) = rest.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        if let Some(quoted) = value.strip_prefix('"') {
+            let exe = quoted.split_once('"').map(|(exe, _)| exe)?;
+            return (!exe.is_empty()).then(|| exe.to_string());
+        }
+        return value
+            .split_whitespace()
+            .next()
+            .filter(|exe| !exe.is_empty())
+            .map(str::to_string);
+    }
+    None
+}
+
+/// Whether the program a service is registered to run still exists.
+///
+/// A service whose program is gone reports `not_installed`/`stopped` like any
+/// other, so the difference has to be read from the file system.
+pub fn binary_is_missing(binary: Option<&str>) -> bool {
+    binary
+        .map(|exe| !std::path::Path::new(exe).exists())
+        .unwrap_or(false)
+}
+
+/// The program the installed service runs, if Windows will say.
+///
+/// A service that was never installed, or a config query this caller may not
+/// read, is `None` rather than an error: this feeds a diagnostic message, and an
+/// unanswered question must not turn a working helper into a broken one.
+pub fn registered_binary() -> Option<String> {
+    run_sc(&["qc".to_string(), SERVICE_NAME.to_string()])
+        .ok()
+        .and_then(|text| parse_qc(&text))
 }
 
 /// How long one `sc.exe` call may take. The service control manager can be busy
@@ -140,7 +205,17 @@ fn run_sc(args: &[String]) -> Result<String> {
 /// Current service state. A missing service is a normal answer, not an error.
 pub fn query() -> HelperState {
     match run_sc(&["query".to_string(), SERVICE_NAME.to_string()]) {
-        Ok(text) => parse_query(&text),
+        Ok(text) => {
+            let mut state = parse_query(&text);
+            if state.installed {
+                // Only an installed service has a config to ask about, and the
+                // second `sc.exe` call is why this lives here rather than in
+                // `parse_query`.
+                state.binary = registered_binary();
+                state.binary_missing = binary_is_missing(state.binary.as_deref());
+            }
+            state
+        }
         Err(_) => HelperState::missing(),
     }
 }

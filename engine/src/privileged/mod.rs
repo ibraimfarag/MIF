@@ -60,6 +60,10 @@ pub struct HelperStatus {
     pub installed: bool,
     pub running: bool,
     pub state: String,
+    /// The program the service is registered to run (`sc qc`), when Windows says.
+    pub bin_path: Option<String>,
+    /// True when that program is gone, so the registration cannot work.
+    pub stale: bool,
     pub reachable: bool,
     pub version: Option<String>,
     pub elevated: bool,
@@ -74,6 +78,8 @@ pub fn status() -> HelperStatus {
         installed: state.installed,
         running: state.running,
         state: state.state,
+        bin_path: state.binary,
+        stale: state.binary_missing,
         reachable: probe.is_some(),
         version: probe.as_ref().map(|p| p.version.clone()),
         elevated: probe.as_ref().map(|p| p.elevated).unwrap_or(false),
@@ -179,6 +185,21 @@ fn wait_until_reachable() -> Result<HelperStatus> {
         std::thread::sleep(Duration::from_millis(300));
     }
     let state = status();
+    // A service whose program is gone cannot answer, and integrity is not the
+    // reason. Saying "start MI CS from its installed folder" would be wrong
+    // advice here; the fix is to register the helper again, which rewrites
+    // `binPath` from the folder this copy runs in. Two ways to arrive here: the
+    // user moved or replaced the MI CS folder, or a package update replaced the
+    // versioned folder inside `WindowsApps` (`docs/SIGNING.md` §3, D-038).
+    if state.stale {
+        bail!(
+            "the privileged helper is installed but its service points at a program that is gone \
+             ({}). MI CS has moved since the helper was installed, or the folder it ran from was \
+             replaced — a package update does exactly that. Install the helper again (Settings → \
+             Engine → Install helper) and it is registered from the folder this copy runs in",
+            state.bin_path.as_deref().unwrap_or("a path Windows would not name")
+        );
+    }
     // The pipe is owned by LocalSystem, so a client below Medium integrity is
     // refused at the access check and this probe fails for a helper that is
     // running perfectly. Naming the level turns "not answering" into something a

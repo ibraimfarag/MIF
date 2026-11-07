@@ -852,6 +852,49 @@ mod tests {
             parse_query("The specified service does not exist as an installed service."),
             crate::privileged::service::HelperState::missing()
         );
+        // Parsing a state must not invent a registration: the program a service
+        // runs comes from `sc qc`, which only `query()` may run.
+        assert_eq!(stopped.binary, None);
+        assert!(!stopped.binary_missing);
+    }
+
+    #[test]
+    fn service_config_parsing_finds_the_registered_program() {
+        use crate::privileged::service::{binary_is_missing, parse_qc};
+        // The shape `sc qc` prints for the helper: a quoted program (the install
+        // path contains spaces) followed by the service subcommand.
+        let helper = "\r\nSERVICE_NAME: MICSHelper\r\n        TYPE               : 10  WIN32_OWN_PROCESS\r\n        BINARY_PATH_NAME   : \"C:\\Program Files\\MI CS\\mics-engine.exe\" helper-service\r\n        START_TYPE         : 2   AUTO_START\r\n";
+        assert_eq!(
+            parse_qc(helper).as_deref(),
+            Some(r"C:\Program Files\MI CS\mics-engine.exe")
+        );
+        // A service installed without quotes and without arguments (measured
+        // against `sc qc Spooler` on Windows 11, 2026-11-07).
+        let plain = "        BINARY_PATH_NAME   : C:\\WINDOWS\\System32\\spoolsv.exe\n        LOAD_ORDER_GROUP   : SpoolerGroup\n";
+        assert_eq!(
+            parse_qc(plain).as_deref(),
+            Some(r"C:\WINDOWS\System32\spoolsv.exe")
+        );
+        // Nothing to read: a failed query, a line that is not this one, and an
+        // unterminated quote. Guessing would let the caller report a stale
+        // service that is not there.
+        assert_eq!(parse_qc("[SC] OpenService FAILED 1060:"), None);
+        assert_eq!(parse_qc("        START_TYPE         : 2   AUTO_START\n"), None);
+        assert_eq!(
+            parse_qc("        BINARY_PATH_NAME   : \"C:\\gone.exe helper-service\n"),
+            None
+        );
+        assert_eq!(parse_qc("        BINARY_PATH_NAME   :\n"), None);
+
+        // The stale case the message is built from: a registered program that is
+        // not on disk, versus a real one, versus no answer at all.
+        assert!(binary_is_missing(Some(r"C:\no-such-folder-mics\mics-engine.exe")));
+        assert!(!binary_is_missing(None));
+        let here = std::env::current_exe()
+            .expect("the test binary has a path")
+            .to_string_lossy()
+            .to_string();
+        assert!(!binary_is_missing(Some(here.as_str())));
     }
 
     #[test]

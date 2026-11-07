@@ -1892,7 +1892,11 @@ chose: the app is the UI, the helper is a separately-consented privileged compon
 product gives one UAC prompt before any fix works; until then the app can scan, detect,
 guard and report, and must say so rather than fail silently. The package can no longer
 guarantee that the service binary is present, so the UI's "helper absent" state stops
-being an edge case and becomes the first-run state.
+being an edge case and becomes the first-run state. The engine was given the other half of
+that story on the same day: `helper-status` now reports `stale` and `bin_path`
+(`docs/PRIVILEGED-OPS.md`), so a registration pointing into a folder a package update
+replaced is named, with the fix that works, instead of being reported as "installed but not
+answering". Nothing re-registers on its own, and that stays written as the open half.
 
 **Supersedes** one clause of D-037 — "the Store edition needs an administrator to
 install". Any package that *declares a service* needs one, and that measurement stands;
