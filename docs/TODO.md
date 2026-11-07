@@ -1092,6 +1092,29 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The throwaway certificate stops leaving private keys in the trust stores
+  (2026-11-07, later again)**
+  - `scripts\codesign-cert.ps1` promises in its own header that only the public half of
+    the certificate it mints goes into a store. It was adding the `X509Certificate2` it
+    had just signed with, and that object carries its private key, so `X509Store.Add`
+    persisted the key association. Measured before the fix: **17 MI CS Code Signing
+    entries across `CurrentUser\TrustedPeople` and `CurrentUser\TrustedPublisher`, 16 of
+    them `HasPrivateKey = True`** — the exact opposite of what the file promises.
+  - Fixed by adding the certificate read back from the exported `.cer`, with a throw if
+    that export ever carries a key. Measured after: a fresh run adds its two entries and
+    the key-bearing count does **not** move (16 → 16), and a second run reuses the same
+    thumbprint and adds nothing at all.
+  - **Signing was verified, not assumed.** The self-signed path hands signtool the pfx
+    with `/f`, and the `/sha1` path reads the MY store, where a real certificate's key
+    lives, so neither depends on what the trust stores hold. The service-free package was
+    re-signed with the fixed certificate: signer thumbprint matches, the script's own
+    `trusted for install (CurrentUser\TrustedPeople): True`, and `UnknownError` from
+    `Get-AuthenticodeSignature` — the documented answer for a correct MSIX signature.
+  - The script now says how many earlier certificates are still trusted, because losing
+    `%TEMP%\mics-signing` is precisely what makes it mint a new one and nothing else in
+    the project notices the pile. Removing them stays a human decision, with the command
+    in trap 31; the 16 old entries were left as found.
+
 - **The Store submission stops needing an administrator, and the reason is measured
   (2026-11-07, later again)**
   - **Two shapes, one switch.** `scripts\make-msix.ps1` gained
@@ -5604,6 +5627,22 @@ settings and read environment variables only.
     `Get-AuthenticodeSignature` reports `UnknownError` for a **correctly signed** MSIX —
     the AppX signature is not a PE signature — so signtool, not .NET, is the tool that
     answers "is this package signed".
+31. **`X509Store.Add` on the object you just signed with puts its private key in the
+    store.** `scripts\codesign-cert.ps1` builds the throwaway code-signing certificate in
+    memory and says in its own header that only the *public* half goes into a store — but
+    it was adding the `X509Certificate2` it had just signed with, and that object carries
+    its private key, so the store persisted the key association. Measured 2026-11-07:
+    **17 MI CS Code Signing entries across `CurrentUser\TrustedPeople` and
+    `CurrentUser\TrustedPublisher`, 16 of them `HasPrivateKey = True`**. Adding the
+    certificate read back from the exported `.cer` fixes it, and the fix is measured: a
+    fresh run adds two entries while the key-bearing count stays at 16, and a second run
+    reuses the same thumbprint and adds nothing. Two consequences to keep in mind: the pfx
+    in `%TEMP%\mics-signing` is the only copy of the private key, so losing that folder is
+    what makes the script mint a *new* certificate — and a store entry can never be reused
+    for signing for the same reason, which is why the pile grows. The script now reports
+    how many earlier certificates are still trusted; removing them is a person's decision,
+    not a build step, and this keeps only the newest:
+    `$all = Get-ChildItem Cert:\CurrentUser\TrustedPeople, Cert:\CurrentUser\TrustedPublisher | Where-Object Subject -like '*MI CS Code Signing*'; $keep = ($all | Sort-Object NotBefore -Descending | Select-Object -First 1).Thumbprint; $all | Where-Object Thumbprint -ne $keep | Remove-Item`.
 ---
 
 ## 9. Definition of done (per phase)

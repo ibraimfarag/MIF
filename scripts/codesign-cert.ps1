@@ -8,9 +8,10 @@
 # to own it. The certificate is therefore built in memory, kept as a PFX file in the
 # job's own TEMP, and handed to signtool with /f, which never registers it.
 #
-# Only the *public* half goes into a store - CurrentUser\Root and TrustedPublisher - so a
-# signature made with it verifies on this machine without a warning (D-016, and
-# docs/TODO.md row ب5 for what a real certificate would add).
+# Only the *public* half goes into a store - CurrentUser\TrustedPeople and
+# TrustedPublisher, never Root - so a signature made with it verifies on this machine
+# without a warning (D-016, and docs/TODO.md row ب5 for what a real certificate would
+# add).
 #
 # Returns an object with Pfx, Password, Thumbprint and Subject.
 
@@ -85,17 +86,40 @@ if (-not ($cert.EnhancedKeyUsageList | Where-Object { $_.ObjectId -eq "1.3.6.1.5
 $cer = Join-Path $keyDir "codesign.cer"
 [System.IO.File]::WriteAllBytes($cer, $cert.Export(
     [System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+# Add the certificate read back from those public bytes, not the object we just signed
+# with. The two are not the same: the signing object carries its private key, and
+# `X509Store.Add` persists that association, so adding it - which is what this script did
+# until 2026-11-07 - puts a private key container in the user's profile for every
+# certificate the script ever mints, exactly what the header of this file says it never
+# does. Measured: eight earlier MI CS entries in CurrentUser\TrustedPeople, every one of
+# them HasPrivateKey = True.
+$publicOnly = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($cer)
+if ($publicOnly.HasPrivateKey) { throw "the exported .cer unexpectedly carries a private key" }
 foreach ($storeName in @("TrustedPeople", "TrustedPublisher")) {
     Write-Host ("trust {0,-16}: opening" -f $storeName)
     $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeName, "CurrentUser")
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
     try {
         Write-Host ("trust {0,-16}: adding" -f $storeName)
-        $store.Add($cert)
+        $store.Add($publicOnly)
         Write-Host ("trust {0,-16}: added" -f $storeName)
     } finally {
         $store.Close()
     }
+}
+
+# Say it out loud when the machine is carrying certificates from earlier runs. Losing
+# %TEMP%\mics-signing is what makes this script mint a new certificate - the private key
+# lives only in that pfx, so a store entry can never be reused for signing - and nothing
+# else in the project notices the pile growing. Removing them is a human decision, not a
+# build step: they are trust anchors in somebody's profile.
+$stale = @(Get-ChildItem Cert:\CurrentUser\TrustedPeople, Cert:\CurrentUser\TrustedPublisher -ErrorAction SilentlyContinue |
+    Where-Object { $_.Subject -eq $cert.Subject -and $_.Thumbprint -ne $cert.Thumbprint })
+if ($stale.Count -gt 0) {
+    Write-Host ("note: {0} earlier MI CS Code Signing certificate(s) are still trusted in your stores " -f $stale.Count)
+    Write-Host "      (this run's certificate is the one just added; the others are not reused for signing,"
+    Write-Host "      because their private keys lived only in a pfx that is gone)"
 }
 
 [pscustomobject]@{
