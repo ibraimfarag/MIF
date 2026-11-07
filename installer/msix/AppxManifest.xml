@@ -23,13 +23,24 @@
       capabilities per app during Store certification; a sideloaded package
       declares them directly. Whether they are granted is unknown #1 in
       docs/SIGNING.md section 3.
+
+  The two uap10 attributes on Application state the trust level and app type
+  explicitly instead of leaving them implied by EntryPoint. They are what the
+  container behaves according to: "mediumIL" is a full-trust app, and
+  "packagedClassicApp" is a packaged Win32 (Desktop Bridge) app - not an
+  AppContainer app. That distinction is the whole reason docs/SIGNING.md section 3
+  can say what the container does and does not redirect: system-location writes
+  (such as the hosts file) are blocked for AppContainer apps, and the write
+  virtualization that remains covers HKCU and AppData, which is not where this
+  product's privileged work happens.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap desktop6">
+  IgnorableNamespaces="uap uap10 rescap desktop6">
 
   <Identity
     Name="__IDENTITY__"
@@ -54,7 +65,8 @@
   </Resources>
 
   <Applications>
-    <Application Id="MICS" Executable="mics_app.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="MICS" Executable="mics_app.exe" EntryPoint="Windows.FullTrustApplication"
+                 uap10:RuntimeBehavior="packagedClassicApp" uap10:TrustLevel="mediumIL">
       <uap:VisualElements
         DisplayName="__DISPLAY_NAME__"
         Description="__DESCRIPTION__"

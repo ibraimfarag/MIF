@@ -138,11 +138,9 @@ arguing about it:
      carries a product consequence worth writing into the Store listing: the Store
      edition will need an administrator (or the Store's own elevated install), just
      as the NSIS installer needs its single UAC prompt (D-026).
-- **So unknown 2 stays unmeasured, for a reason that is now precise:** it needs a
-  *trusted* package installed *by an administrator* — which arrives either from the
-  Store after certification, or from an administrator installing our self-signed test
-  package on a machine that trusts our root. Until then, nobody may claim the
-  container keeps `hosts` and firewall access.
+- **So unknown 2 stays unmeasured, but the documentation is now on our side** — see
+  the container section below, which narrows the risk to the one thing only an
+  administrator's install can decide.
 - **Two measured facts that are easy to get wrong.** `Get-AuthenticodeSignature`
   reports `UnknownError` for a *correctly signed* MSIX — the AppX signature is not a
   PE Authenticode signature, so signtool and the deployment API are the tools that
@@ -161,7 +159,9 @@ works:**
 2. that a service inside the MSIX container can still write the real
    `C:\Windows\System32\drivers\etc\hosts` and drive the Windows Firewall COM API
    and `netsh` — container redirection is the risk, and our whole privileged op set
-   (firewall/hosts/hardening) rides on it;
+   (firewall/hosts/hardening) rides on it. **The documented model says it can**, for
+   the reasons in "The container, documented" below; the empirical test is still the
+   only proof, and it needs an administrator;
 3. that a Store listing for a tool whose job is changing firewall and hosts
    settings passes certification at all.
 
@@ -169,6 +169,66 @@ The honest fallback if (2) fails is a **read-only Store edition** (scan, canary,
 guard, IDS reporting — no privileged writes) signed by Microsoft for free, with the
 full product staying on GitHub. If (1) fails and (2) has not been tested, this route
 closes and OSSign becomes the plan.
+
+### The container, documented (read 2026-11-07)
+
+An MSIX container is not a virtual machine: Windows gives a packaged app a
+*virtualized view* of the file system and registry, and how much is virtualized
+depends on the trust level the manifest declares. That is why `AppxManifest.xml` now
+states it explicitly — `uap10:TrustLevel="mediumIL"` (a full-trust app) and
+`uap10:RuntimeBehavior="packagedClassicApp"` (a packaged Win32 app, not an
+AppContainer app) — instead of leaving it implied by `EntryPoint`, and why makeappx
+accepting those attributes (measured: the re-packed manifest carries both, 75 files,
+22.11 MB, 3.9 s) matters. Microsoft's own page divides the behaviour like this
+(<https://learn.microsoft.com/en-us/windows/msix/msix-containerization-overview>,
+updated 2026-04-15):
+
+| Location | AppContainer app | Full-trust packaged app (ours) |
+|---|---|---|
+| The package's own install files | writes blocked | writes blocked — a package cannot modify itself |
+| System locations, e.g. `C:\Windows\` | **writes blocked** | **not blocked by the container** |
+| User profile, `AppData`, `HKCU` | writes redirected to a per-app location | pass through |
+| `HKLM\Software` | reads merged with the package's hive; writing a key the package ships is not allowed | allowed, subject to the account's own permissions |
+
+Two consequences, and they let this section be more precise than "unmeasured":
+
+1. **The hosts file is a system-location write**, and the rule that blocks those is
+   scoped to AppContainer apps. Our helper is a full-trust LocalSystem service, so
+   nothing in the documented model redirects or blocks
+   `C:\Windows\System32\drivers\etc\hosts`. The documentation is no longer the risk;
+   only the empirical test is left.
+2. **The write virtualization that remains governs `HKCU` and `AppData`.** The
+   flexible-virtualization feature exists to *exclude* locations from it, and the
+   documentation limits what can be excluded to exactly those two ("You can declare
+   only file system locations that are within `%USERPROFILE%\AppData`" / "only
+   Registry locations that are within **HKCU**",
+   <https://learn.microsoft.com/en-us/windows/msix/desktop/flexible-virtualization>,
+   read 2026-11-07). Our privileged work happens in `HKLM`, in the firewall's own
+   service and in the hosts file — none of it inside that scope — so a hardening
+   toggle that writes `HKLM\...` through the helper's allowlisted `reg add` is not the
+   classic "silently virtualized registry write" trap. It also means a read-back
+   **from inside the packaged process proves nothing**, which is the design rule for
+   the test below: write inside, read outside.
+
+**What that test is, exactly, and why it needs an administrator.** The two blocked
+installs above (0x800B0109 and 0x80073D28) are both administrator problems, so the
+measurement is one elevated command block: build the package with the self-signed
+identity, trust it machine-wide, `Add-AppxPackage`, confirm the service exists as
+`LocalSystem`/`auto` with its binary inside `C:\Program Files\WindowsApps\...`, then
+drive one privileged op through the engine's public RPC — `fw.rules.add` with a name
+that does not start with `MICS-` (the double-prefix defect in `docs/TODO.md` §7 makes
+a rule named `MICS-…` unremovable), and a `hosts.write` of one probe line — and check
+the results **from outside the container**: `netsh advfirewall firewall show rule
+name=MICS-<probe>` and the real
+`C:\Windows\System32\drivers\etc\hosts`. Anything the packaged service writes is also
+visible in `%PROGRAMDATA%\MICS\logs\priv.log`, which is written *before* each op runs.
+Then remove both, uninstall the package, and delete the test root.
+
+**Why a hand-rolled pipe client would prove nothing:** the helper identifies its
+caller (`engine/src/privileged/server.rs` refuses a client it cannot identify), so the
+op has to travel the product's own path — UI → engine → `\\.\pipe\mics_helper` — and a
+PowerShell script talking to the pipe would be testing its own privileges, not the
+container's.
 
 ## 4. Route B — OSSign, which signs our GitHub binaries
 
@@ -221,7 +281,46 @@ the "no hacking tools" clause in §6 applies only to certificates *issued by*
 SignPath Foundation, not to their free signing service. So a donated certificate is
 usable the day it exists, with zero code change.
 
+### The rules a *publicly trusted* certificate now has to follow (CSBR v3.11.0, read 2026-11-07)
+
+Three requirements from the CA/Browser Forum's Code Signing Baseline Requirements —
+version **3.11.0, dated 2026-06-16**
+(<https://cabforum.org/working-groups/code-signing/requirements/>) — change what
+"accept a donated certificate" means, and they are worth knowing *before* one is
+offered:
+
+1. **A certificate issued on or after 2026-03-01 is valid for at most 460 days**
+   (§6.3.2, ballot CSC-31). A donation is therefore a **~15-month commitment with a
+   renewal**, not a one-off.
+2. **The subscriber's private key must live in a hardware crypto module**
+   (§6.2.7.4.2, in force since 2023-06-01). A publicly trusted certificate can no
+   longer arrive as a software `.pfx` at all — which is exactly why Certum sells a
+   cloud service and a card+reader set, and why SSL.com sells eSigner.
+3. **From 2026-09-15 the certificate must carry exactly one reserved policy OID**
+   (ballot CSC-32) — an implementation detail for the CA, but one that means the
+   "one certificate, one purpose" reading is now enforced rather than conventional.
+
+**What that changes here, honestly:** D-034's two paths are not equal any more. The
+**PFX path is for self-signed and internal certificates only**; a publicly trusted
+one must come through `MICS_CERT_THUMBPRINT` — a token, a cloud signing agent, or a
+service like OSSign that holds the key itself. That is not a reversal of D-034 (which
+still resolves either identity and prints which one it chose), it is the reason the
+thumbprint and the keyless route are the ones that matter.
+
 ## 6. The closed routes, in their own words
+
+**Every CA's free open-source program is a *website* certificate, not a code-signing
+one.** GlobalSign runs the best-known of them — the page is titled *"Free SSL
+Certificates for Open Source Projects"*, its requirements include configuring TLS and
+passing their SSL Checker, and the certificate it issues is for a site
+(<https://www.globalsign.com/en/managed-ssl/ssl-open-source>, read 2026-11-07>).
+Certum's equivalent product for code is the paid €49 tier in §5, and no other public
+CA in the two independent 2026 surveys read for this document (My-SSL's guide, last
+updated 2026-10-22, and comparecheapssl.com's, updated 2026) offers a free
+code-signing certificate to open source. Both say so plainly: the free CA-issued
+code-signing certificate does not exist, which is the same conclusion this repository
+reached from the other direction — by asking *who else can sign for us* (D-036) —
+after SignPath's own clause closed the only free code-signing service, below.
 
 **SignPath Foundation** (terms page marked "Draft", read 2026-11-07,
 <https://signpath.org/terms>) — this is the clause that closes it, and it describes
@@ -296,4 +395,11 @@ is closed on eligibility and on money at the same time.
 | OSSign scope and keyless OIDC signing | <https://ossign.org/> and <https://github.com/OSSign/OSSign> |
 | OSSign terms as tracked (≥ 6 months, project-level, applications paused) | <https://foropensource.com/company/ossign/> |
 | Certum Open Source is €49/€69, not free | <https://foropensource.com/company/certum/> and <https://shop.certum.eu/open-source-code-signing.html> |
-| The three-route comparison, including Sigstore's uselessness on Windows | <https://my-ssl.com/learn/open-source-code-signing-certificate> |
+| The three-route comparison, including Sigstore's uselessness on Windows | <https://my-ssl.com/learn/open-source-code-signing-certificate> (published 2026-07-23, last updated 2026-10-22) |
+| A second, independent 2026 survey reaching the same conclusion: no public CA issues a free code-signing certificate | <https://comparecheapssl.com/free-code-signing-certificate-and-how-to-get-it/> |
+| A publicly trusted code-signing certificate is now ≤ **460 days** and its key must be in hardware (CSBR v3.11.0, 2026-06-16: §6.3.2, §6.2.7.4.2, ballots CSC-31/CSC-32) | <https://cabforum.org/working-groups/code-signing/requirements/> |
+| GlobalSign's free open-source programme is **SSL**, not code signing | <https://www.globalsign.com/en/managed-ssl/ssl-open-source> |
+| What the MSIX container virtualizes, per trust level; system-location writes are blocked only for AppContainer apps | <https://learn.microsoft.com/en-us/windows/msix/msix-containerization-overview> (updated 2026-04-15) |
+| Full-trust packaged apps: install location, file system, registry, uninstall; `uap10:RuntimeBehavior` and `uap10:TrustLevel` | <https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes> (updated 2026-09-30) |
+| Flexible virtualization — and that only `%USERPROFILE%\AppData` and `HKCU` can be excluded from it | <https://learn.microsoft.com/en-us/windows/msix/desktop/flexible-virtualization> |
+| Microsoft's own answer that a packaged service runs inside the container, and that installing one requires admin approval | <https://techcommunity.microsoft.com/discussion/3657086/using-msix-to-install-a-windows-service> |

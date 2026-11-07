@@ -1092,6 +1092,57 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The free-route search is closed by independent sources, and the container risk is
+  answered by Microsoft's own model (2026-11-07)**
+  - **"No free CA certificate" is now confirmed from the outside.** Two independent
+    surveys read this round — My-SSL's guide (published 2026-07-23, last updated
+    2026-10-22) and comparecheapssl.com's (updated 2026) — both state that no public CA
+    issues a free code-signing certificate, and both list exactly the routes already in
+    `docs/SIGNING.md`. The one programme that looked like a fourth route, **GlobalSign's
+    open-source programme, is SSL**: the page is titled *"Free SSL Certificates for Open
+    Source Projects"*, its requirements include passing their SSL Checker, and the
+    certificate is for a website — not for signing a binary. All four sources are in §8.
+  - **A new rule changes what a donated certificate is** (CSBR **v3.11.0**, 2026-06-16,
+    §6.3.2 / §6.2.7.4.2, ballots CSC-31 and CSC-32): a publicly trusted code-signing
+    certificate issued from 2026-03-01 is valid for at most **460 days**, its
+    subscriber key must live in a **hardware crypto module** (since 2023-06-01), and
+    from 2026-09-15 it carries exactly one reserved policy OID. So a donation is a
+    **~15-month renewable commitment**, and a publicly trusted certificate can no longer
+    arrive as a software `.pfx` at all — which makes `MICS_CERT_THUMBPRINT` (a token, a
+    cloud agent, or OSSign's keyless service) the path that matters, not the PFX one.
+    That is written in `docs/SIGNING.md` §5 as a clarification, not a reversal of D-034.
+  - **The container question is now documentation, not guesswork.** Reading
+    Microsoft's containerization overview (updated 2026-04-15), the full-trust packaged
+    app guide (updated 2026-09-30) and the flexible-virtualization page gave the exact
+    model: writes to system locations such as `C:\Windows\` are blocked **for
+    AppContainer apps**, while a full-trust package writes them subject to its own
+    account's permissions; the write virtualization that remains covers `HKCU` and
+    `AppData`; and the escape hatch can only exclude locations *inside* those two. So
+    the hosts file (a system-location write by a full-trust LocalSystem service) is
+    **not** redirected by the documented model, and the hardening ops' `reg add HKLM`
+    is **not** in the virtualized scope either — the classic "silently virtualized
+    registry write" trap does not apply to where this product works.
+  - **The manifest now says its trust level instead of implying it.**
+    `uap10:TrustLevel="mediumIL"` and `uap10:RuntimeBehavior="packagedClassicApp"` were
+    added to the Application element, with the `uap10` namespace. Re-packed and verified
+    **inside the package**: 75 files, 22.11 MB, 3.9 s, `sha256 5088D937...`, the
+    `desktop6:Service` declaration and all three capabilities intact. That also settles
+    the argument for the review: this package is deliberately *not* sandboxed, and the
+    manifest states the level it runs at.
+  - **The remaining test is written down as one elevated step** (§3): install with a
+    machine-trusted self-signed certificate, confirm the service as `LocalSystem`/`auto`
+    with its binary inside `C:\Program Files\WindowsApps\...`, drive `fw.rules.add`
+    (with a name that does **not** start with `MICS-`, because of the double-prefix
+    defect in §7) and one `hosts.write` probe line, then read the results **from outside
+    the container** — `netsh advfirewall firewall show rule` and the real hosts file —
+    because a read-back from inside a virtualized process would prove nothing. A
+    hand-rolled pipe client would prove even less: the helper identifies its caller
+    (`engine/src/privileged/server.rs`), so the op has to travel the product's own path.
+  - **Nothing was installed this round**, so the machine is untouched; `make-msix.ps1`'s
+    closing message was corrected — it used to call the container question "not
+    answerable locally" and now says what is documented and what one elevated test
+    settles.
+
 - **The Store's other prerequisites are written: a privacy policy, and a contact that
   exists (2026-11-07)**
   - **Why now.** D-036 committed the project to the Store listing's prerequisites, and

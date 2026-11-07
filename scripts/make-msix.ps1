@@ -228,7 +228,10 @@ if ($Install) {
 }
 
 Write-Host ""
-Write-Host "Not answered by this script, and not answerable locally: whether Microsoft grants"
-Write-Host "the two restricted capabilities in certification, whether a packaged service can"
-Write-Host "still write the real hosts file and drive the firewall, and whether the product"
-Write-Host "category certifies. See docs/SIGNING.md section 3."
+Write-Host "Not answered by this script: whether the packaged service can actually write the"
+Write-Host "real hosts file and add a firewall rule, and whether Microsoft grants the two"
+Write-Host "restricted capabilities in certification. The documented container model says the"
+Write-Host "first should work (system-location writes are blocked for AppContainer apps, not"
+Write-Host "for a full-trust package) and the second cannot be tested from here at all -"
+Write-Host "see docs/SIGNING.md section 3 for what was measured, what is documented, and the"
+Write-Host "one elevated test that settles the rest."

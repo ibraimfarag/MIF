@@ -1821,6 +1821,19 @@ Three things about it are decisions rather than details:
    instead of letting a human type it, and why a Store submission must use the
    identity Partner Center assigns.
 
+The manifest also **states its trust level instead of implying it**:
+`uap10:TrustLevel="mediumIL"` and `uap10:RuntimeBehavior="packagedClassicApp"`. That is
+not decoration — the container's behaviour is defined per trust level, and the
+documented model (read 2026-11-07, `docs/SIGNING.md` §3) is what makes the privileged
+product viable in a package: writes to system locations such as `C:\Windows\` are
+blocked for **AppContainer** apps, while a full-trust package writes them subject to its
+own account's permissions, and the write virtualization that remains covers `HKCU` and
+`AppData` — neither of which this product's privileged work touches (it writes `HKLM`,
+the firewall's own service, and the hosts file). The empirical test still decides it,
+and it is written down as one elevated step, with the rule that results are read from
+**outside** the container, because a read-back from inside a virtualized process would
+prove nothing.
+
 **Evidence, measured 2026-11-07:** makeappx 10.0.26100.0 packed 75 payload files into
 22.11 MB in 3.6 s (`sha256 FFA869F7...` unsigned, `D40AAE90...` signed); the ZIP holds
 79 entries including `[Content_Types].xml`, `AppxBlockMap.xml` and
