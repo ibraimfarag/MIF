@@ -69,6 +69,17 @@
 > honest limit is written where the claim is: with no CA certificate the two production
 > modes end in "did not verify" and exit 1, because `Valid` is what a CA-issued certificate
 > produces, so that half stays unproven until the certificate row is bought) ·
+> **the signature is free after all** (D-036, 2026-11-07: the earlier research asked
+> *which CA gives this project a free certificate* — none does — and never asked *who
+> else can sign for us for free*. **Microsoft** can: publishing an MSIX through the
+> Store makes signing "free and handled for you automatically", with a free developer
+> account in ~200 markets and no SmartScreen warnings. **OSSign** can: a project-level
+> certificate once the repository is six months old (~2027-04-27), signed keyless over
+> OIDC so the repository stores no secret. SignPath stays closed in their own words —
+> they cannot sign tools that "actively scan for and highlight exploitable
+> vulnerabilities, e.g. by identifying unprotected network ports", which is our audit
+> screen. Every route, source and date is in **`docs/SIGNING.md`**; route A needs
+> packaging work, not money) ·
 > **the shipped detection pack is measured by what it catches,
 > and the first rule that could never fire is fixed** (D-033: one vector per rule in
 > `engine\testdata\detection`, a unit test in the fast tier, `scripts\verify-rules.ps1` —
@@ -440,9 +451,10 @@ recounted on **2026-11-07**; if an item is not here, it is not waiting on you.
    - **And it found one real defect**, now a MED row in §7: a firewall rule whose name
      already starts with `MICS-` is prefixed a second time and can then never be
      removed by the name that was passed.
-2. **The signing certificate (ب5) — answered by constraint, not bought (D-035).**
-   This is a free, open-source project with no budget, so **no certificate, tool or
-   service will be purchased**. What that changes, and what it does not:
+2. **The signing certificate (ب5) — answered by constraint, and then answered again for
+   free (D-035, D-036).** This is a free, open-source project with no budget, so **no
+   certificate, tool or service will be purchased**. What that changes, and what it does
+   not:
    - **Off the plan: the purchase.** `docs\COST.md` §2 keeps the researched routes and
      their dated prices on record so nobody re-researches the dead ends (Certum Open
      Source €49/year in their cloud; SSL.com IV $129/year plus eSigner; Azure Artifact
@@ -451,6 +463,16 @@ recounted on **2026-11-07**; if an item is not here, it is not waiting on you.
      actively scan for and highlight exploitable vulnerabilities", and it independently
      wants an already-released project with a reputation). EV is not a route either: it
      stopped buying a faster SmartScreen verdict in 2024.
+   - **Not off the plan: being signed.** D-035 forbids *buying*, and the re-research of
+     2026-11-07 (**D-036**, all sources and dates in **`docs/SIGNING.md`**) found two
+     routes that cost nothing: **(A) the Microsoft Store re-signs an MSIX package** after
+     certification — Microsoft's own words — with a free developer account (the $19 fee is
+     waived, verification is a government ID and a selfie, "nearly 200 markets worldwide")
+     and **no SmartScreen warnings**; and **(B) OSSign** issues the *project* a
+     certificate once the repository is six months old (~**2027-04-27**), signing keyless
+     over OIDC so no secret is stored. Route A is available today and is **packaging
+     work**, plus three unknowns written as unknowns in `SIGNING.md` §3; route B is a
+     date. A **donated** certificate remains a drop-in either way.
    - **Still ready, still free to take: the wiring.** Adding a certificate is two
      repository secrets - `MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT`
      for one a token or a cloud agent holds - which the `Release` workflow already passes
@@ -630,7 +652,7 @@ order the user picked (small → medium → large), and it is finished**
 | **ب2** | ARM64 leg: Flutter target + `aarch64-pc-windows-msvc` engine, per D-003 | no |
 | ~~**ب3**~~ | ~~NSIS installer: bundled engine + `rules` + offline intel, shortcut, AUMID, one UAC prompt~~ — **done** (steps 1–3, 2026-11-01): `installer\mics.nsi` + `scripts\make-installer.ps1` build `dist\MICS-setup-0.1.0-x64.exe` (15.8 MB); the per-user variant installs 70 files and removes everything (exit 0); both shortcuts carry `System.AppUserModel.ID` through `IPropertyStore`; the uninstaller refuses a copy its helper still points at (`/S _?=$INSTDIR` → 5); and `scripts\verify-installer.ps1` proves all of it in 126 s. Left for a human: one **per-machine** run (one UAC click) | done |
 | ~~**ب4**~~ | ~~Fold the privileged-helper install into the installer (replaces the separate UAC step)~~ — **done** (2026-11-03, D-026): the per-machine section runs the shipped engine's own `install-helper` under the installer's elevation, so one prompt installs the product *and* the service, and the uninstaller asks `check-helper-ownership.ps1 -Remove` to stop and delete exactly the service whose binPath points at `$INSTDIR` (scoped to `HELPER_SVC_KEY`'s leaf, so a probe cannot touch the real `MICSHelper`); both variants compile and `verify-installer.ps1` passes end to end. Left for a human: the same one **per-machine** run | done |
-| **ب5** | Real OV-class certificate → sign the release, which prints a real publisher and *starts* a SmartScreen reputation (it does not switch warnings off on day one — measured against Microsoft's own comparison, 2026-11-06). Routes priced in `docs\COST.md` §2: Certum Open Source **€49/year** (cloud, CN "Open Source Developer <name>", but it signs only with a logged-in SimplySign session → persistent/self-hosted runner) or SSL.com IV **$129/year + eSigner $180/year** (their action runs on GitHub-hosted runners). The free SignPath route is closed to this product category; Azure is not purchasable from Egypt | **yes** |
+| **ب5** | Real OV-class certificate → sign the release, which prints a real publisher and *starts* a SmartScreen reputation (it does not switch warnings off on day one — measured against Microsoft's own comparison, 2026-11-06). Routes priced in `docs\COST.md` §2: Certum Open Source **€49/year** (cloud, CN "Open Source Developer <name>", but it signs only with a logged-in SimplySign session → persistent/self-hosted runner) or SSL.com IV **$129/year + eSigner $180/year** (their action runs on GitHub-hosted runners). The free SignPath route is closed to this product category (their code of conduct, verbatim in `docs\SIGNING.md` §6); Azure is not purchasable from Egypt. **Re-researched 2026-11-07 (D-036): the row no longer needs money** — `docs\SIGNING.md` records the two free routes (the Microsoft Store re-signing an MSIX; OSSign's project certificate at ~2027-04-27), so this row is now *packaging and a date*, not a purchase | **yes, and free** |
 | **ب6** | Public release: signed ZIP + installer, version, README updated | **yes** (needs ب5) |
 
 **ج — P5 trust and integrity**
@@ -845,9 +867,12 @@ what "next" means.
 
 - ~~**د4** `qa/report.html` + CI gate~~ — **done** (the checkbox was stale; see §0.3)
 - **د3** E2E against the built installer (**needs one UAC click from you**)
-- **ب5** the certificate — **no longer on the plan**: nothing is bought (D-035). The
-  wiring stays (two secrets, D-034), so the day a certificate is *donated* or a free
-  route accepts this product category it lands with **no code change**
+- **ب5** the certificate — **not bought, and free to obtain**: nothing is purchased
+  (D-035), and the re-research of 2026-11-07 (**D-036**, `docs/SIGNING.md`) found two
+  routes that sign for free — the Microsoft Store re-signing an MSIX (available today,
+  and it is **packaging work** plus the three unknowns in `SIGNING.md` §3) and OSSign's
+  project certificate (a date: ~2027-04-27). The wiring stays (two secrets, D-034), so a
+  **donated** certificate still lands with **no code change**
 - **ب6** publish `v0.1.0` — **one free click**, and the only thing between this project
   and a download
 - real-time file watching as a real subsystem
@@ -868,13 +893,15 @@ the acceptance run and after the certificate-store fix in §8.
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
 row that used to say "buy" now either has a free substitute or is written down as out
-of reach instead of pending.
+of reach instead of pending. Re-researched on 2026-11-07 (`docs/SIGNING.md`, D-036):
+"no budget" does **not** mean "no signature" — it means the signature has to come from
+somebody who signs for free.
 
 | # | What is missing | Free? | Blocked on | How it closes |
 |---|---|---|---|---|
 | 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
-| 3 | **A publicly trusted signature** (ب5) — Windows will show "Unknown publisher" and SmartScreen may warn, and it will keep doing that | ❌ not purchasable from here | **nothing — closed by decision, not pending (D-035)** | it does not "close": it is *answered* by row 4 plus the manifest self-check and the published `SHA256SUMS`, and D-034's two secrets make a **donated** certificate a drop-in |
+| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: our own packaging work**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide — build the package, then measure §3's three unknowns), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). Until either lands, the manifest self-check and the published `SHA256SUMS` still carry it, and D-034 makes a **donated** certificate a drop-in |
 | 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
 | 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
@@ -1065,6 +1092,50 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The signature stopped being impossible: two free routes, researched to the source
+  (2026-11-07, D-036)**
+  - **What was wrong in the previous conclusion.** D-035, earlier the same day, sent the
+    certificate to "not purchasable" after asking *which CA will give this project a free
+    certificate*. The answer to that is none — and it is the wrong question. The question
+    that has an answer is *who else can sign for us, for free*, and two organisations do.
+  - **Route A — the Microsoft Store, available today.** Microsoft's own comparison page
+    states that publishing an **MSIX** package makes code signing "free and handled for
+    you automatically — Microsoft re-signs the package after certification", with cost
+    **free**, availability **worldwide** and SmartScreen **"No warnings"**. The developer
+    account is free in the new flow: the $19 fee is waived, verification is a government
+    ID plus a selfie, and it covers "nearly 200 markets worldwide". What is missing is
+    ours, not theirs — an MSIX package — and `docs/SIGNING.md` §3 writes the three
+    unverified things *as unverified*: that Microsoft approves the two restricted
+    capabilities a LocalSystem service needs (`packagedServices` +
+    `localSystemServices`), that a packaged service can still write the real `hosts` file
+    and drive the Windows Firewall from inside the container, and that the product
+    category passes certification.
+  - **Route B — OSSign, from ~2027-04-27.** A certificate issued to the *project*, not to
+    a person, signed keyless over OIDC trusted publishing, so the repository stores **no
+    secret at all**: a workflow needs only `permissions: id-token: write`. The
+    requirements — OSI-approved license, actively developed, public repository — are met;
+    the one that is not is a project age of six months, and this repository was created
+    2026-10-27. Their applications were suspended as of 2026-09.
+  - **The closed routes now have their own words on record.** SignPath Foundation cannot
+    sign tools that "actively scan for and highlight exploitable vulnerabilities, e.g. by
+    identifying unprotected network ports, missing password protection" — which is what
+    the audit screen does — while their signed list (Fibratus, a Windows EDR with a
+    kernel driver; sniffnet, a traffic monitor) shows the line they draw is *breach
+    detection yes, posture audit no*, not "security is banned". Azure Artifact Signing is
+    paid, and its Public Trust geography lists neither Egypt nor any individual outside
+    the USA and Canada. The Store's MSI/EXE path still requires a certificate of our own
+    that chains to a Microsoft Trusted Root Program CA, and Sigstore means nothing to
+    Windows.
+  - **Where it is written down.** `docs/SIGNING.md` is the new single place for the
+    routes, their sources and dates, and the wording that closes each one. **D-036**
+    supersedes D-035's "the warning is permanent" under rule 7 and keeps D-035's core
+    rule that nothing is bought; §0.6 row 3 flips from ❌ to ✅ with both routes named;
+    the ROADMAP's **ب5** row reopens as free work and **ب6** stops saying the signed half
+    "is not coming"; `COST.md`'s "in one line" is corrected where it called the
+    certificate "the one purchase"; and the README, its Arabic mirror and the
+    troubleshooting row name both routes instead of calling the warning permanent. What
+    has **not** changed is today's download: still self-signed, and the release notes
+    still say so.
 - **The documents were audited against the code, and the acceptance run that needed a
   human ran (2026-11-07)**
   - **The audit.** Every count and claim in `README.md`, `docs/TODO.md`,
@@ -1085,9 +1156,11 @@ free publish click, one UAC-click acceptance run, and engineering that is free
     severity cell.
   - **The plan changed, and rule 7 was honoured.** The project is open source with **no
     budget**, which had never been written down, so the one paid item — the
-    code-signing certificate — is now **closed as not-purchased** rather than pending:
-    **D-035** (with an amendment recorded in D-002, whose "trusted certificate later"
-    assumption it supersedes). The free substitutes are named in D-035: the manifest the
+    code-signing certificate — is now **closed as not-purchased** rather than pending
+    (the *buying* half of that conclusion stands; the free-routes half is superseded by
+    the D-036 entry above) — **D-035** (with an amendment recorded in D-002, whose
+    "trusted certificate later" assumption it supersedes). The free substitutes are named
+    in D-035: the manifest the
     engine re-hashes at start-up, the published `SHA256SUMS`, a **reproducible build**
     (F-11, now load-bearing rather than a nicety) and the CI run record — plus D-034's
     two secrets, so a **donated** certificate is a drop-in with no code change.
@@ -4714,7 +4787,7 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 |---|---|---|---|
 | 1 | Rounded window corners | **done** (needs visual check on Win10 + HiDPI) | `lib/core/window/window_corners.dart` |
 | 2 | Translation as separate files with keys | **done** — **19** module files × 2 languages, **270** keys each (measured 2026-11-07), parity + no-hardcoded-copy tests | D-009 |
-| 3 | Code signing | **closed as not-purchased (D-035)** — the self-signed script works and names the publisher locally (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`), and the release takes a real certificate as two secrets with **no code change** (D-034); but nothing is bought, so the public half is answered by reproducible builds + published hashes instead of a certificate | D-002, D-034, D-035, `scripts/sign.ps1` |
+| 3 | Code signing | **not bought, and free to obtain (D-035 + D-036)** — the self-signed script works and names the publisher locally (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`), and the release takes a real certificate as two secrets with **no code change** (D-034). Nothing is purchased (D-035); `docs/SIGNING.md` records the two free routes that sign for us instead — the Microsoft Store re-signing an MSIX after certification (available today; packaging work plus the three unknowns in its §3) and OSSign's project certificate (~2027-04-27) — while the public half is carried meanwhile by reproducible builds + published hashes | D-002, D-034, D-035, D-036, `scripts/sign.ps1` |
 | 4 | Permissions asked once, publisher name | **code complete; one UAC click left** — the helper, its closed op set, the audit trail and the Settings card are shipped and proven unelevated, and the **installer** now creates the service (ب4, D-026), so one prompt covers product + helper; the per-machine run is §0.6 row 2. Publisher naming is the certificate, and it is not purchased (D-035) | D-007, D-026, `docs/PRIVILEGED-OPS.md` |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen. The signature check — and the thumbprint pin it needs (D-016) — is §0.6 row 5 | P3, P4 |
@@ -4953,7 +5026,7 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | **No public download, and no publicly trusted signature** — and the second half is now a decision rather than a debt. **(a) Nothing is published:** `v0.1.0` was built and verified by the Release workflow (run 42040718389) and sits in GitHub Releases as a **draft** (D-031), so the public page says "There aren't any releases here"; publishing it is **one free click** by the owner, and it is the highest-value remaining step (§0.6 row 1). The old "no installer" half of this row closed long ago: the NSIS installer exists, is per-machine by default, folds the privileged helper into its own elevation (ب4, D-026), ships 70 files of which 68 are described by the manifest inside the engine, refuses to orphan a helper (`/S _?=$INSTDIR` → 5), and `verify-installer.ps1` proves the per-user path in 126 s. Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, and the E2E acceptance on that per-machine artifact is §0.6 row 2. **(b) The signature will not be bought** (D-035): this is a free, open-source project with no budget, so ب5 is **closed as not-purchased**, not pending. `docs/COST.md` §2 keeps the researched routes, dated prices and each route's publisher name so the dead ends are not re-researched (Azure Artifact Signing is unavailable to an individual outside the USA/Canada; **no CA can issue `CN=MI CS Code Signing`** — CSCBR §9.2.2 — so the D-016 pin must move to a **thumbprint** in the same release that first carries a certificate, or `update.rs:128` refuses our own update; the free SignPath route is closed to this product category). What replaces it is free and checkable without trusting anybody: the manifest the engine re-hashes at start-up, the published `SHA256SUMS`, and a **reproducible build** (F-11, still unwritten — now the honest substitute for a certificate, §0.6 row 4). If a certificate is ever **donated**, D-034's two secrets install it with **no code change**. | `dist/`, `installer/`, `scripts/`, P4, D-035 |
+| HIGH | **No public download, and no publicly trusted signature** — and the second half is now a decision rather than a debt. **(a) Nothing is published:** `v0.1.0` was built and verified by the Release workflow (run 42040718389) and sits in GitHub Releases as a **draft** (D-031), so the public page says "There aren't any releases here"; publishing it is **one free click** by the owner, and it is the highest-value remaining step (§0.6 row 1). The old "no installer" half of this row closed long ago: the NSIS installer exists, is per-machine by default, folds the privileged helper into its own elevation (ب4, D-026), ships 70 files of which 68 are described by the manifest inside the engine, refuses to orphan a helper (`/S _?=$INSTDIR` → 5), and `verify-installer.ps1` proves the per-user path in 126 s. Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, and the E2E acceptance on that per-machine artifact is §0.6 row 2. **(b) The signature will not be bought — and no longer needs to be** (D-035, D-036): this is a free, open-source project with no budget, so nothing is purchased; the re-research of 2026-11-07 (`docs/SIGNING.md`) found the two routes that sign for free, so ب5 is **free work plus one date**, not a debt: **the Microsoft Store re-signs an MSIX package** after certification (free account, ID + selfie, worldwide, no SmartScreen warnings — the missing piece is packaging, plus the three unknowns in `SIGNING.md` §3), and **OSSign** issues the *project* a certificate once the repository is six months old (~2027-04-27). `docs/COST.md` §2 keeps the researched *paid* routes, dated prices and each route's publisher name so the dead ends are not re-researched (Azure Artifact Signing is paid and unavailable to an individual outside the USA/Canada; the free SignPath route is closed to this product category in their own words — they cannot sign tools that "actively scan for and highlight exploitable vulnerabilities", e.g. "identifying unprotected network ports"). **No CA can issue `CN=MI CS Code Signing`** — CSCBR §9.2.2 — so the D-016 pin must move to a **thumbprint** in the same release that first carries a certificate, or `update.rs:128` refuses our own update. What carries the claim until one of the free routes lands is free and checkable without trusting anybody: the manifest the engine re-hashes at start-up, the published `SHA256SUMS`, and a **reproducible build** (F-11, still unwritten, §0.6 row 4). If a certificate is ever **donated**, D-034's two secrets install it with **no code change**. | `dist/`, `installer/`, `scripts/`, P4, D-035 |
 | ~~HIGH~~ | ~~A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently~~ — **closed 2026-11-03 (و4) by evidence**: a package with `rules\` removed (and its own `SHA256SUMS` corrected, so nothing but the missing folder can fail) is refused by `verify-release.ps1`: 4 FAILs — `missing from the zip: rules\yara\starter.yar, rules\guard\starter.json`, `rules folder holds 0 file(s)` (the layout check, not just the file names), `the guard did not use the packaged rules: guard: 6 rule(s) from the built-in starter pack (rules/guard not found)` and `the scan did not use the packaged YARA rules (log line: YARA rules from the built-in starter pack (no rules\yara\starter.yar found))` — **exit code 1** (`RESULT: FAIL - the release artifact is not what it claims to be`). The silently-degraded copy the row described can no longer pass the gate, and the engine's own log names the source it used | `dist/`, `guard/mod.rs`, `scanner/mod.rs`, `scripts\verify-release.ps1` |
 | ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |

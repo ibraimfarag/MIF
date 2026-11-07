@@ -13,11 +13,18 @@ name: Release
 # configured it self-signs on the runner (CurrentUser\Root + TrustedPublisher, D-016):
 # that proves a file was not touched after the build, but it is NOT a publicly trusted
 # publisher identity, so Windows still says "Unknown publisher" and SmartScreen still
-# warns - that is row ب5 in docs/ROADMAP.md. The fix is a real certificate, and it is
-# *only* two repository secrets: make-release.ps1 reads MICS_PFX (a base64 PFX) with
+# warns - that is row ب5 in docs/ROADMAP.md. Two routes make that row free, and
+# docs/SIGNING.md carries the source and the date for each (D-036, 2026-11-07):
+#   A. the Microsoft Store re-signs an MSIX package after certification, with a free
+#      developer account - so publishing through the Store needs no certificate at all;
+#   B. OSSign issues the *project* a certificate once the repository is six months old
+#      (~2027-04-27) and signs it keyless over OIDC, so no secret is stored here.
+# Both are recorded rather than wired: route A is packaging work that does not live in
+# this workflow, and route B cannot apply before it is eligible. The paid route stays a
+# drop-in meanwhile: make-release.ps1 reads MICS_PFX (a base64 PFX) with
 # MICS_PFX_PASSWORD, or MICS_CERT_THUMBPRINT for a certificate already in a store
-# (a token or a signing agent), and prints the identity it chose. No step below has to
-# change on that day - see docs/COST.md §5.
+# (a token or a signing agent), and prints the identity it chose - so a *donated*
+# certificate still needs no step below to change (docs/COST.md §5, D-034).
 #
 # ARM64: `windows-11-arm` is a real runner (D-003's correction, 2026-11-04), so the
 # ARM64 legs are here - but they have never run, and Flutter's own Windows ARM64 SDK
@@ -432,11 +439,15 @@ jobs:
           and 8.1 cannot run it at all - the Flutter runtime the UI is built on
           requires Windows 10 1809+.
 
-          These builds are **not signed by a publicly trusted publisher**: no
-          certificate exists yet (docs/ROADMAP.md ب5), so Windows shows "Unknown
-          publisher" and SmartScreen warns. The binaries do carry the project's own
-          manifest signature and hash list - check the download against
-          `SHA256SUMS` and against the source commit below.
+          These builds are **not signed by a publicly trusted publisher**, so Windows
+          shows "Unknown publisher" and SmartScreen warns. This project buys nothing
+          (D-035), and two **free** routes to such a signature are researched with their
+          sources and dates in `docs/SIGNING.md` (D-036): the Microsoft Store re-signs an
+          MSIX package after certification, and OSSign issues the project a certificate
+          once the repository is six months old. Neither is in place for the asset you are
+          reading, so the binaries carry the project's own manifest signature and hash
+          list instead - check the download against `SHA256SUMS` and against the source
+          commit below.
 
           ## Evidence, not claims
 

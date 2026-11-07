@@ -19,15 +19,18 @@ explains, and suggests the next action instead of dumping raw data.
 > installer was taken through install → helper creation → a privileged operation with
 > no prompt → uninstall, one UAC prompt each, with the product, the service and the
 > shortcuts all gone afterwards and the state folder kept on purpose. Two things are
-> still missing: a **publicly trusted signature** (which is **not** a purchase, and
-> will not become one) and a download
+> still missing: a **publicly trusted signature** — which is **not** a purchase and will
+> not become one, and which now has two free routes on record
+> ([`docs/SIGNING.md`](docs/SIGNING.md): the Microsoft Store re-signs an MSIX package for
+> free and that route is open today; OSSign issues the project a certificate once the
+> repository is six months old, ~2027-04-27) — and a download
 > for Windows on ARM. This is a free,
-> open-source project with no budget, so the trust story is what a reader can check
+> open-source project with no budget, so the trust story is also what a reader can check
 > without trusting anybody: the manifest inside the engine, the hashes beside the
 > archive, and a build they can reproduce (see
-> [What MI CS does not do](#what-mi-cs-does-not-do), D-035). The release wiring
-> already accepts a certificate the day one exists — donated, or from a free route
-> that will take this kind of product — with no code change (D-034). The
+> [What MI CS does not do](#what-mi-cs-does-not-do), D-035 and D-036). The release wiring
+> already accepts a certificate the day one exists — donated, or from a free route —
+> with no code change (D-034). The
 > ARM64 engine builds, and GitHub's `windows-11-arm` runner runs its tests natively;
 > the ARM64 *app* download is a different question, because Flutter publishes no
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
@@ -51,7 +54,7 @@ developer machine — and it sits on the [Releases page](https://github.com/ibra
 as a **draft release** (D-031). A draft is invisible to everyone but the owner, so the page
 shows no releases at all until one click publishes it. That click is free and is the only
 thing between this project and a download; it is deliberately a human step, because the
-builds are not signed by a publicly trusted certificate (D-035) and a warning should not be
+builds are not signed by a publicly trusted certificate (D-035, D-036) and a warning should not be
 delivered to strangers by a robot.
 
 Until then, [build it from source](#building-from-source) — the same three commands the
@@ -76,9 +79,12 @@ the same run that built the bytes, so they also tell you the download arrived wh
 **Windows will say "Unknown publisher", and SmartScreen may warn.** That is expected, not a
 sign of a bad download: these builds carry the project's own signature and its manifest of
 every shipped file (which the app checks at start-up), but no *publicly trusted* certificate
-and therefore no public reputation. This project does not buy one — it is free and
-open-source with no budget (D-035), and no free route currently accepts a product in this
-category. The checks that replace it are the manifest, the published hashes and the build
+and therefore no public reputation. This project does not buy one (D-035), and two free
+routes for it are now on record (D-036, [`docs/SIGNING.md`](docs/SIGNING.md)): the Microsoft
+Store re-signs an MSIX package for free after certification — available today, the work is
+packaging — and OSSign issues a project-level certificate once the repository is six months
+old (~2027-04-27). Neither is in place yet, so the warning stands for now; the checks that
+replace it are the manifest, the published hashes and the build
 log. The run-anyway, hash-check and `Unblock-File` steps are in
 [Troubleshooting](#troubleshooting). GitHub also marks such a build as an unsigned binary on
 the release page; that label is the same missing certificate, not a missing file.
@@ -166,9 +172,11 @@ Honesty is a feature. Today, MI CS does **not**:
   certificate, and this project does not buy one: it is free and open-source with no
   budget (D-035). What it does instead is make the copy *checkable* — the signed
   manifest inside `mics-engine.exe`, the `SHA256SUMS` published beside the archive,
-  and the workflow log that produced both. The release wiring already takes a
-  certificate (two repository secrets, D-034), so the day one is donated or a free
-  route accepts this product category, no code changes;
+  and the workflow log that produced both. Two free routes for that certificate are
+  on record in [`docs/SIGNING.md`](docs/SIGNING.md) (D-036) — the Microsoft Store
+  re-signing an MSIX, and OSSign at ~2027-04-27 — and the release wiring already
+  takes a certificate the day one is donated (two repository secrets, D-034), so no
+  code changes when one arrives;
 - prevent a **repackager who has their own certificate**: the manifest makes a
   changed copy *visible*, not *impossible*. If somebody rebuilds `mics-engine.exe`,
   keeps the document in step and signs it with their own certificate, the app says
@@ -262,10 +270,11 @@ Then, either way:
 
 1. Run `mics_app.exe`. Windows may warn about an unknown publisher, or SmartScreen
    may say it **can't reach** its reputation service — the build is not signed by a
-   publicly trusted certificate, so there is nothing for it to verify. That is a
-   deliberate, permanent state for this project rather than a pending purchase: a
-   certificate is the one thing MI CS does not buy (D-035), and the [manifest check
-   in step 4](#install-and-first-run) is what you check instead. The
+   publicly trusted certificate, so there is nothing for it to verify. That is the
+   state today, and it is not a pending purchase: a certificate is the one thing MI
+   CS does not buy (D-035). Two free routes exist for it (D-036,
+   [`docs/SIGNING.md`](docs/SIGNING.md)) and neither is in place yet, so for now the
+   [manifest check in step 4](#install-and-first-run) is what you check instead. The
    [Troubleshooting](#troubleshooting) table has the run-anyway, hash-check and
    `Unblock-File` steps.
 2. The app starts the engine automatically, runs a first audit (~10 s) and shows
@@ -620,14 +629,14 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
 | `scripts/` | User-facing helpers and acceptance probes: code signing (identity discovered from the environment, `verify-signing.ps1`), the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
 | `qa/` | The QA registries and the committed report (`report.md` / `report.html`), the JSON-RPC contract harness and the UI fixtures/ledger. |
-| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
+| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `SIGNING.md` (every route to a trusted signature, free and paid, with the source and date for each), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
 
 | Symptom | Meaning / what to do |
 |---|---|
-| "Unknown publisher" / *Windows protected your PC* | Builds are not signed by a publicly trusted certificate, by design: this project buys nothing (D-035). Trust it the way you would any source build — check the `SHA256SUMS` beside the download, and read the **manifest** line in Settings → About, which re-hashes every shipped file against the document inside `mics-engine.exe`. For a build **you** made, name the publisher locally with a self-signed certificate trusted on your machine only: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (no admin, no purchase, no code change) — the block then stops on that machine. A *public* release would need an OV-class certificate; `docs\COST.md` §2 keeps the researched prices and eligibility on record for the day one is donated, and D-034's wiring takes it as two repository secrets. See [Building from source](#building-from-source). |
+| "Unknown publisher" / *Windows protected your PC* | Builds are not signed by a publicly trusted certificate, by design: this project buys nothing (D-035). Trust it the way you would any source build — check the `SHA256SUMS` beside the download, and read the **manifest** line in Settings → About, which re-hashes every shipped file against the document inside `mics-engine.exe`. For a build **you** made, name the publisher locally with a self-signed certificate trusted on your machine only: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (no admin, no purchase, no code change) — the block then stops on that machine. A *public* release needs either a certificate or somebody else's signature: bought certificates are off the plan (D-035), and the two **free** routes — the Microsoft Store re-signing an MSIX, and OSSign's project certificate from ~2027-04-27 — are written up with their sources in [`docs/SIGNING.md`](docs/SIGNING.md) (D-036). `docs\COST.md` §2 keeps the researched prices and eligibility on record for the day one is donated, and D-034's wiring takes it as two repository secrets. See [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | **Settings → About says `unverified`**, or a card says these files are not the published ones | The folder no longer matches the manifest inside `mics-engine.exe`: a shipped file changed (a partial copy, an antivirus shim feeding a modified DLL, a repackaged build). `powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path <folder>` names the file and refuses the folder; re-extract from the zip and check it against `SHA256SUMS`. A copy you *built* yourself has no manifest until `make-release.ps1 -Sign` writes one — which is why a development build shows this line and no card. |
@@ -779,7 +788,11 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 [`docs/ROADMAP.md`](docs/ROADMAP.md)، والجدول الكامل في [`docs/TODO.md`](docs/TODO.md)
 §0.6. وأول حاجة فيه مش شراء: **نشر نسخة `v0.1.0`** — هي مبنية ومتحققة بالفعل وواقفة
 في GitHub Releases كـ **draft**، والكليكة اللي بتنشرها مجانية (D-031)؛ ومفيش أي حاجة
-في المشروع محتاجة فلوس، لأن المشروع مفتوح المصدر وميزانيته صفر (D-035).
+في المشروع محتاجة فلوس، لأن المشروع مفتوح المصدر وميزانيته صفر (D-035). وحتى
+**الشهادة العامة** بقى لها طريقتين مجانيين مسجّلين في
+[`docs/SIGNING.md`](docs/SIGNING.md) (D-036): **Microsoft Store** بيعيد توقيع حزمة
+MSIX مجانًا (متاح من دلوقتي، والباقي شغل تغليف)، و**OSSign** بيدّي المشروع شهادة لما
+يبقى عمره 6 شهور (حوالي 2027-04-27).
 
 **صور الواجهة:** الصور الأربعة فوق (لوحة المعلومات، الفحص، الاستخبارات، الإعدادات)
 **مرسومة** من كود الواجهة نفسه ببيانات تجريبية — مش لقطات من جهاز حقيقي — وشغّال
@@ -829,6 +842,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 **محلية** بس — بيشيل الرسالة على جهازك، لكنه مش سمعة عامة، والمشروع ده **مش بيشتري**
 شهادة عامة (D-035): اللي بيحلّ مكانها إن النسخة تبقى **قابلة للفحص** — البيان
 الموقّع جوّه المحرك، والهاشات المنشورة جنب الأرشيف، ولوج البناء اللي طلّع الاتنين.
+وفيه كمان طريقتين **مجانيين** لشهادة عامة حقيقية اتسجّلوا في
+[`docs/SIGNING.md`](docs/SIGNING.md) (D-036)، ولسه ولا واحدة منهم اتنفّذت.
 
 
 **ولو الكروت مش بتظهر:** اتأكد من **Settings -> Notifications -> Desktop notifications**
@@ -852,9 +867,11 @@ draft مش باين لحد غير صاحب المستودع، فالصفحة ب�
 لحد ما تتضغط كليكة النشر، وهي مجانية وبيد بشر (D-031). لحد ساعتها ابنيها من السورس
 ([Building from source](#building-from-source)) — ولما تتنشر هتلاقي المثبّت
 `MICS-setup-0.1.0-x64.exe` والنسخة المحمولة `MICS-portable-0.1.0-x64.zip` مع
-`SHA256SUMS` و`report.md`. ومفيش توقيع عام بشهادة موثوقة — وده **مقصود** مش ناقص
-(D-035) — فـ ويندوز هيقول «ناشر غير معروف» وSmartScreen ممكن يحذّر؛ اللي بتعتمد
-عليه بدل الشهادة: البيان الموقّع جوّه المحرك والهاشات المنشورة جنب الأرشيف.
+`SHA256SUMS` و`report.md`. ولسه مفيش توقيع عام بشهادة موثوقة — المشروع **مش بيشتري**
+شهادة (D-035)، والطريقتين المجانيين اللي اتلقّوا (Microsoft Store و OSSign) لسه
+متنفّذوش (D-036) — فـ ويندوز هيقول «ناشر غير معروف» وSmartScreen ممكن يحذّر؛ اللي
+بتعتمد عليه دلوقتي بدل الشهادة: البيان الموقّع جوّه المحرك والهاشات المنشورة جنب
+الأرشيف.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة
@@ -866,7 +883,8 @@ draft مش باين لحد غير صاحب المستودع، فالصفحة ب�
 والإزالة بكليكة واحدة شالت المنتج والخدمة. **اللي فاضل بالفعل جدول واحد** في
 [`docs/TODO.md`](docs/TODO.md) §0.6: **نشر `v0.1.0`** (كليكة مجانية واحدة، وهو
 الوحيد HIGH)، وشغل هندسي مجاني (**بناء قابل لإعادة الإنتاج**، و**هـ1**، وصفوف
-السجل)، وتلات حاجات **مقفولة مش مستنية**: شهادة توقيع عامة (**مش هتتشرى** —
-D-035)، ونسخة Windows على ARM للتطبيق (Flutter مفيش عنده SDK لـ ARM64، والمحرّك
-بيتبني ويتفحص)، و**ز2-د** (توصيل تقارير الانهيار — محتاج قرار D-023). التفاصيل
-والترتيب في [`docs/ROADMAP.md`](docs/ROADMAP.md).
+السجل)، وحاجة واحدة **مفتوحة مجانًا**: **توقيع عام** — مش هيتم شراؤه (D-035)، وله
+طريقتين مجانيين (D-036) محتاجين شغل تغليف أو انتظار، مش فلوس؛ وحاجتين **مقفولتين
+مش مستنيتين**: نسخة Windows على ARM للتطبيق (Flutter مفيش عنده SDK لـ ARM64،
+والمحرّك بيتبني ويتفحص)، و**ز2-د** (توصيل تقارير الانهيار — محتاج قرار D-023).
+التفاصيل والترتيب في [`docs/ROADMAP.md`](docs/ROADMAP.md).

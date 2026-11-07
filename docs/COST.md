@@ -14,10 +14,15 @@ written (a code-signing certificate is now capped at 460 days, and EV stopped
 buying a SmartScreen bypass in 2024). Every figure names its source and the day it
 was read; re-read the source before spending.
 
-**In one line:** running and shipping MI CS costs **nothing** today, and exactly
-**one** thing has to be bought to hand it to strangers — a code-signing
-certificate. Everything else in the pipeline is free software, a free service, or
-a design decision that also happens to remove a bill.
+**In one line (revised 2026-11-07):** running and shipping MI CS costs **nothing**, and
+so does handing it to strangers — the certificate this file used to call "the one
+purchase" is **not** needed as a purchase, because two routes sign it for free
+(`docs/SIGNING.md`, D-036): the Microsoft Store re-signs an MSIX package after
+certification, and OSSign issues the project a certificate once the repository is six
+months old. §2 below keeps the paid routes on record for the day one is *donated*, and
+because a donor needs to know what a certificate would cost. Everything else in the
+pipeline is free software, a free service, or a design decision that also happens to
+remove a bill.
 
 ## 1. What this project pays today: nothing
 
@@ -43,7 +48,19 @@ worth naming as such:
   engine or a managed EDR backend — is where this kind of product normally starts
   to cost money per seat.
 
-## 2. The one purchase: a CA-issued code-signing certificate
+## 2. The purchase that turned out not to be needed: a CA-issued code-signing certificate
+
+> **Read this first (2026-11-07, D-036).** This section researches what a certificate
+> would *cost* and who can *issue* one — and it is still the right place for a donor or a
+> future session to see the prices. But the conclusion changed: the project does not need
+> to buy anything to be signed, because two free routes sign for it.
+> **`docs/SIGNING.md`** is where those live, with a source and a date for every claim:
+> the **Microsoft Store** re-signs an MSIX package after certification (free account,
+> ID + selfie, worldwide, no SmartScreen warnings) and **OSSign** issues the *project* a
+> certificate once the repository is six months old. Read §2 for prices, §2's "options"
+> table for what each paid route would print, and `SIGNING.md` for what to actually do.
+> This section's own hedging — "the one purchase" — is kept because deleting a
+> researched price is how a project pays twice.
 
 ### Why it is needed at all
 

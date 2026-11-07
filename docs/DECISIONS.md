@@ -1714,3 +1714,81 @@ prompts **on the machine that trusts it**, which is what the acceptance runs use
 - Saying so plainly wherever the product is described: the README, this log and
   the release notes state that nothing is purchased, rather than implying a
   certificate is coming.
+
+---
+
+## D-036 — The signature is free after all: two routes, one of them available now
+
+**Status:** accepted (2026-11-07). **Supersedes** the two claims in D-035 that the
+first-run warning is "**permanent**" and that ب5 is closed as *not purchased*.
+Keeps D-035's core rule — the project buys nothing — and leaves D-016 and D-034
+exactly as they are.
+
+**Decision.** "Nothing is bought" is still true, and it no longer follows that
+nothing can be *signed*. The re-research (`docs/SIGNING.md`, every source dated
+2026-11-07) found that the earlier pass asked the wrong question. It asked *which CA
+will give this project a free certificate* — answer: none. It never asked *who else
+can sign for us, for free* — answer: **Microsoft**, and **OSSign**:
+
+- **Route A — the Microsoft Store, available today.** Microsoft's own comparison
+  page states that publishing an **MSIX** package through the Store makes code
+  signing "free and handled for you automatically — Microsoft re-signs the package
+  after certification", with cost **Free**, availability **Worldwide**, SmartScreen
+  **"No warnings"**. The developer account is free too: the $19 fee is waived in the
+  new flow, verification is a government ID plus a selfie, and it covers "nearly 200
+  markets worldwide" — Egypt included, no payment step anywhere in it.
+- **Route B — OSSign, from ~2027-04-27.** A free certificate issued to the
+  *project* (not to a person), signing keyless over OIDC trusted publishing, so the
+  repository carries **no secret at all**. The requirements are an OSI-approved
+  license (GPL-3.0-or-later), actively developed, public repository — all met — and
+  a project age of at least **6 months**; the repository was created 2026-10-27.
+  Their applications were suspended as of 2026-09, so this is a queue, not a form.
+
+**Why this is not a reversal of D-035.** D-035 forbids *buying*. Neither route
+spends anything: the Store's certificate is Microsoft's and the OSSign certificate
+is OSSign's, and in both cases the publisher identity a stranger sees is the
+signing body's verified one — not a CN we invented. The substitutes D-035 made
+load-bearing (the in-binary manifest, the published `SHA256SUMS`, the reproducible
+build F-11) stay load-bearing, because a signature says who shipped a file and
+never that the file is safe.
+
+**Honest limits.**
+
+- **Route A is researched, not proven.** Three things are unverified and are
+  written as unverified in `docs/SIGNING.md` §3: that Microsoft approves the two
+  restricted capabilities a LocalSystem service needs (`packagedServices` +
+  `localSystemServices`), that a packaged service can still write the real `hosts`
+  file and drive the Windows Firewall from inside the MSIX container, and that the
+  product category passes Store certification. Until a package is built and
+  installed, this route is a well-sourced plan, not a result.
+- **Route A moves distribution.** The signed copy lives in the Store; the GitHub
+  release keeps the portable ZIP and the NSIS installer, self-signed as today. It is
+  not "the same download, now signed".
+- **Route B is a date, not an action.** Nobody can apply before ~2027-04-27, and
+  the queue was closed when this was written.
+- **SignPath stays closed**, and now on the record verbatim: their code of conduct
+  cannot sign tools that "actively scan for and highlight exploitable
+  vulnerabilities, e.g. by identifying unprotected network ports, missing password
+  protection" — which is what our audit screen does. Their signed list (Fibratus, a
+  Windows EDR; sniffnet, a traffic monitor) shows the line is *breach detection yes,
+  posture audit no*, not "security is banned".
+- **Nothing changes for a downloader today.** The release page still says the
+  binaries are self-signed with no trusted publisher, because that is still true.
+
+**Commits us to.**
+
+- **Building an MSIX package** (`installer/msix/`), with the helper declared as a
+  `desktop6:Service` running as `localSystem`, and measuring the three unknowns on a
+  real install before promising anyone a warning-free download.
+- **Writing the privacy policy** the Store requires (10.5.1 names Win32 products).
+  It is short and true — MI CS ships no telemetry (rule 8) — but it must exist at a
+  URL before a listing can.
+- **Queuing the OSSign application** rather than forgetting it: the row in
+  `docs/TODO.md` carries the ~2027-04-27 date and the age condition.
+- **Keeping `docs/SIGNING.md` as the single place** where routes, dates, prices and
+  the exact wording that closes a route are recorded, so the next session re-reads
+  the source instead of re-arguing the question.
+- **Correcting the record wherever it says the warning is permanent** — the README,
+  `docs/TODO.md` and the release notes — because D-035 wrote that before this
+  research existed, and a document that overstates a dead end is as wrong as one
+  that overstates a feature.
