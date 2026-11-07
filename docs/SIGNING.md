@@ -68,7 +68,8 @@ effective 2026-10-22; read 2026-11-07,
 | Certificate acquisition, "unless provided by Microsoft Store signing" (10.2) | this is the free part |
 | Product must uninstall cleanly, and remove what it installed (10.2.7) | already measured on 2026-11-07: product, service, shortcuts and registry row all go (the `%PROGRAMDATA%\MICS` state folder is kept on purpose and will be disclosed in the listing) |
 | Change Windows settings only through supported methods **and with user consent** (10.2.8) | already true: firewall and hosts changes happen only from an explicit user action in the UI, through documented APIs, and land in `logs\priv.log` |
-| A **privacy policy** (10.5.1 names Desktop Bridge and Win32 products) | **missing** — MI CS ships no telemetry (rule 8), so the policy is short and true, but a URL must exist |
+| A **privacy policy** (10.5.1 names Desktop Bridge and Win32 products) | **written 2026-11-07**: [`docs/PRIVACY.md`](PRIVACY.md) — short and true, because MI CS ships no telemetry (rule 8) — and it is written from `docs/THREAT-MODEL.md` §B6 rather than from marketing. The listing must point at its public URL: <https://github.com/ibraimfarag/MIF/blob/main/docs/PRIVACY.md> |
+| A support contact that a stranger can reach | `SECURITY.md` now names both a public issues page and a private advisory channel instead of "contact the maintainers", which was not reachable by anyone outside |
 | An IARC age rating (11.11.1) | missing; it is a questionnaire, not a review |
 | Individual account only if a consumer would not read the publisher name as a business (10.14) | a naming decision for the user, not a code change |
 

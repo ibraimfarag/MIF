@@ -1092,6 +1092,37 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The Store's other prerequisites are written: a privacy policy, and a contact that
+  exists (2026-11-07)**
+  - **Why now.** D-036 committed the project to the Store listing's prerequisites, and
+    the two that are documents rather than clicks were both missing. Store policy
+    **10.5.1** requires a privacy policy at a URL for Desktop Bridge and Win32
+    products; `SECURITY.md` said "report privately to the maintainers" with **no
+    channel**, which nobody outside the repository can use.
+  - **`docs/PRIVACY.md` is written from the threat model, not from marketing.** It
+    names the four things MI CS never does (no telemetry, no account, no
+    reputation upload — there is no VirusTotal client at all, D-019 — and no cloud),
+    the complete outbound table, what is stored on the machine and where, the honest
+    F-5 limit on `secrets.dat` (machine-scope DPAPI, so any local account can decrypt
+    it), the deletion story, and the rule that a new destination changes this file in
+    the same commit as the code.
+  - **Two corrections came out of writing it, both against my first draft.** The intel
+    feeds are **not** opt-in: `engine/src/sync/mod.rs` carries the StevenBlack hosts
+    URL and the CISA KEV URL as built-in defaults, and `sync_interval_hours` defaults
+    to **6**, so a fresh install does fetch both every six hours — the policy says so
+    in the row itself. And the UI has **no settings screen** for those switches
+    (grepped: `lib/` contains no feed or NVD string at all), so the draft's "the
+    settings screen shows what each switch does" was false and was replaced with where
+    the interval and the addresses actually live.
+  - **`SECURITY.md` now carries the private advisory link**, what to include in a
+    report, what to expect from a single-maintainer project, and the same commitments
+    as before plus the audit-log line: every privileged operation is written before it
+    runs.
+  - **Where it is written down.** The privacy-policy and support-contact rows of
+    `docs/SIGNING.md` §3 (which is the Store checklist), and the `docs/` table in the
+    README. The public URL to paste into Partner Center is
+    <https://github.com/ibraimfarag/MIF/blob/main/docs/PRIVACY.md>.
+
 - **The Store route's artifact exists, and Windows' two install rules are now measured
   rather than guessed (2026-11-07, D-037)**
   - **What was built.** `installer/msix/AppxManifest.xml` (a template whose tokens the
