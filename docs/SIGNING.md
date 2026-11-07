@@ -17,6 +17,48 @@ prices and programme rules move and a stale rule is worse than no rule.
 
 The certificate row is the one that used to look unbuyable. It is not.
 
+### How the first row is checked, mechanically (measured 2026-11-07)
+
+Whether a stranger's Windows would trust a given file is now a question with an exit code
+instead of an opinion: `scripts\verify-trust.ps1`.
+
+```powershell
+.\scripts\verify-trust.ps1 -SelfTest                          # prove the instrument
+.\scripts\verify-trust.ps1 -Path dist\MICS-0.1.0.0-x64.msix   # judge an artifact
+```
+
+Exit code **0 means yes** — the signer was issued by a CA and the chain ends in a root in this
+machine's machine-wide store, which is the store AppX and installers read. Everything else
+(unsigned, self-signed, a chain that stops at a root nobody trusts, or a file that no longer
+matches its own signature) exits non-zero with the reason printed.
+
+It exists because the obvious check is a trap: on this machine `Get-AuthenticodeSignature`
+reports **`Valid`** for the engine signed with our own self-signed certificate, because that
+certificate sits in the user's trust stores. `Status` alone is therefore never the answer —
+the script separates the cases by the certificate's issuer, the chain, and which root store
+the chain ends in, and says so out loud when a locally-`Valid` file is judged untrusted.
+
+Both controls, run 2026-11-07, are in `-SelfTest` and both belong there:
+
+| Control | Result |
+|---|---|
+| this repository's own engine (self-signed) | `self-signed`, exit 1 — *and* the raw status on this machine is `Valid`, which is exactly the trap |
+| `C:\Windows\System32\kernel32.dll` (Microsoft) | `public-ca`, exit 0 — chain of 3 to `Microsoft Root Certificate Authority 2010` in `LocalMachine\Root`, timestamped, 364-day validity, inside the 460-day limit |
+
+It reports the release requirements separately from the verdict, because a certificate can be
+publicly trusted and still make a bad release signature: the code-signing EKU, whether the
+signature carries a timestamp (so it outlives the certificate), and — for certificates issued
+on or after 2026-03-01 — the CA/Browser Forum's 460-day validity limit from §5.
+
+Three limits, stated rather than hidden. It never touches the network, so **revocation is not
+checked**. It cannot see where the private key lives, so the hardware-module requirement is out
+of reach. And for an AppX/MSIX it reads `signtool verify /pa /v`, because .NET's `SignedCms`
+refuses the encoding AppX uses (`ASN1 bad tag value met`, measured 2026-11-07); without the
+Windows SDK it reports the package as **unjudged**, never as trusted. An unsigned package is
+reported as unsigned, and a package signed with our test certificate is reported `self-signed`
+even though `make-msix.ps1` prints `trusted for install (CurrentUser\TrustedPeople): True` —
+another local-trust signal that is not the question.
+
 ## 2. Every route, as read on 2026-11-07
 
 | Route | Cost | Whose name the user sees | Ships where | Status for MI CS |
