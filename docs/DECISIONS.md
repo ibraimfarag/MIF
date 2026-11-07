@@ -1896,7 +1896,11 @@ being an edge case and becomes the first-run state. The engine was given the oth
 that story on the same day: `helper-status` now reports `stale` and `bin_path`
 (`docs/PRIVILEGED-OPS.md`), so a registration pointing into a folder a package update
 replaced is named, with the fix that works, instead of being reported as "installed but not
-answering". Nothing re-registers on its own, and that stays written as the open half.
+answering". Nothing re-registers on its own, and that stays written as the open half. The
+shape was then run for real on 2026-11-07 and the app half works end to end: `mics_app`
+started `mics-engine` from the package folder, the engine answered the app's heartbeat, and
+its integrity self-check passed from inside the container (`docs/SIGNING.md` §3). The helper
+across the container is still unmeasured, because installing one needs an administrator.
 
 **Supersedes** one clause of D-037 — "the Store edition needs an administrator to
 install". Any package that *declares a service* needs one, and that measurement stands;

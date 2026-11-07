@@ -191,6 +191,34 @@ What stays open is that nothing re-registers on its own — the UI shows no badg
 user meets it as a failed fix with a clear message — and the stable-location alternative
 is still just an option. That is the price of keeping the service out of the package.
 
+### The packaged app, run for real (measured 2026-11-07)
+
+Until now the `None` shape had been **registered** but never **run**. It was run, and the app
+half works:
+
+| | |
+|---|---|
+| how | `scripts\make-msix.ps1 -ServiceMode None -StageDir "$env:LOCALAPPDATA\mics-msix-stage"`, `Add-AppxPackage -Register …\AppxManifest.xml`, then launched through the shell (`shell:AppsFolder\MICS.Desktop_kbrfzxjj0fgk0!MICS`) |
+| processes | `mics_app` and, spawned by it, `mics-engine` — **both from the staged package folder** |
+| IPC | `\\.\pipe\mics_engine` came up; the engine logged the app's 15-second `ping`/`Ping received` heartbeat and answered `sync.status` |
+| self-check | `package integrity: ok - 68 file(s) hash as the manifest says (package 0.1.0)` — the manifest resource and the file hashes are readable **from inside the container** |
+| guard | `Guard loop started`, 6 guard rules loaded from the package folder, `Canary watchers armed over 3 decoy file(s)`; `ETW unavailable … Access is denied` and it fell back, which is what an unelevated process should do |
+| state | `data=C:\Users\…\AppData\Local\MICS` — the **real** profile path, not a package-private store; `%PROGRAMDATA%\MICS` was not touched (the packaged copy has no elevated install and no installer account) |
+| after | package removed, stage deleted, no process and no pipe left behind |
+
+Two limits on that table, stated before anyone reads more into it. First, this was a
+**development-mode loose registration**, so it describes the shape's behaviour rather than
+promising what a Store-signed install does; the virtualization line above is exactly the kind
+of thing to re-measure after certification (`STORE.md` §6). Second, it settles the app half
+only — **the helper across the container is still unmeasured**, because installing one needs
+an administrator.
+
+Where the package is staged decides whether any of this works, and the failure is silent:
+staged inside this workspace (`H:\`, which carries `Mandatory Label\Low Mandatory Level`), the
+same package launched, showed nothing, and never started its engine. The portable copy failed
+identically, which is how the folder — not the package — was identified as the cause. It is
+written up as trap 33 and as a §7 row in [`docs/TODO.md`](TODO.md).
+
 The step-by-step submission playbook — what Partner Center assigns, the listing copy, the
 certification notes, and the measurement that follows certification — is
 [`docs/STORE.md`](STORE.md). Two smaller facts from the same measurements: Windows refuses

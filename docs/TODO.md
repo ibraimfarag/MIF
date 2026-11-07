@@ -901,7 +901,7 @@ somebody who signs for free.
 |---|---|---|---|---|
 | 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
-| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: the free Store account, then Microsoft's certification — no administrator needed for the shape submitted first (D-038)**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions now belong to the `Packaged` shape only, and stay unmeasured until an administrator installs a trusted build of it (§8 traps 29 and 30); `-ServiceMode None` is the shape submitted first, measured on 2026-11-07 to register with no elevation at all (D-038) |
+| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: the free Store account, then Microsoft's certification — no administrator needed for the shape submitted first (D-038)**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions now belong to the `Packaged` shape only, and stay unmeasured until an administrator installs a trusted build of it (§8 traps 29 and 30); `-ServiceMode None` is the shape submitted first, measured on 2026-11-07 to register with no elevation at all (D-038). The app half of that shape was then **run for real** the same day: launched from a developer-mode registration it started `mics-engine` by itself, brought `\\.\pipe\mics_engine` up, answered the app's 15-second `ping` and `sync.status`, reported `package integrity: ok - 68 file(s) hash as the manifest says` from inside the container, and wrote its state to the real `%LOCALAPPDATA%\MICS` (`SIGNING.md` §3) — what remains unmeasured is the helper across the container, which needs an administrator |
 | 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
 | 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
@@ -1091,6 +1091,30 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 | P6 | Full QA harness + HTML report, malware lab (later) | **done except د3**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) is one UAC-click session away — §0.6 row 2. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **The Store-shaped package was run for real, and the app half works (2026-11-07, later
+  again)**
+  - The `None` shape had been *registered* before but never *run*. Run: staged with
+    `-StageDir "$env:LOCALAPPDATA\mics-msix-stage"`, registered in developer mode, launched
+    through the shell. `mics_app` started `mics-engine` **from the package folder**, the pipe
+    `\\.\pipe\mics_engine` came up, the engine answered the app's 15-second `ping` heartbeat and
+    `sync.status`, the guard started (6 rules, 3 canaries armed) with `ETW unavailable (Access is
+    denied)` falling back as an unelevated process should, and the self-check reported **`ok — 68
+    file(s) hash as the manifest says (package 0.1.0)`** from inside the container.
+  - **State landed in the real `%LOCALAPPDATA%\MICS`** (`data=C:\Users\…\AppData\Local\MICS`), not
+    in a package-private store, and `%PROGRAMDATA%\MICS` was not touched. Honest limit: this was a
+    developer-mode **loose** registration, so it describes the shape's behaviour and not a promise
+    about a Store-signed install — which is why `docs/STORE.md` §6 has it re-measured after
+    certification.
+  - **The hour it cost is written down as trap 33:** staged in this workspace (`H:\`, which carries
+    `Mandatory Label\Low Mandatory Level`), the same package launched, sat there and never started
+    its engine. The portable copy failed identically, which identified the folder rather than the
+    package as the cause: Windows gives a process the label of the folder its image is in, and the
+    engine refuses to serve below Medium. A new §7 row records what that costs a user — the engine's
+    explanation goes to a stderr that `ProcessStartMode.detached` discards, so the UI shows "engine
+    missing" and retries forever.
+  - Still unmeasured, and only an administrator can: the helper reached across the container. The
+    machine was left as found — package removed, stage deleted, no process and no pipe behind.
 
 - **Route B's date is not only a calendar question (2026-11-07, later again)**
   - Re-read the OSSign CLI repository instead of trusting the earlier note: the roadmap marks
@@ -5321,6 +5345,7 @@ signing certificate respectively), so this is the work that is always available.
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
 | ~~LOW~~ | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the reproducible-build note | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
+| LOW | **When the engine cannot start at all, the UI cannot say why.** The engine's refusal is one excellent sentence — `MI CS was started from a Low-integrity location (…): it cannot write its state database ("attempt to write a readonly database") or reach the privileged helper … run the installed copy in %LOCALAPPDATA%\MI CS, or extract the release ZIP outside a web root or sandbox folder` — and the app spawns it with `ProcessStartMode.detached`, so that text goes to a discarded stderr: the user sees "engine missing" and a retry that cannot succeed. Measured 2026-11-07 by staging the same package in a Low-labelled folder (trap 33), where the portable copy failed identically. **Fix direction:** capture the child's stderr on the first failed connect (normal mode, drain it, then let the process go), or have the engine leave the refusal where the app already reads — the log tail it shows on the crash screen | `lib\core\ipc\ipc_client.dart`, `engine\src\main.rs:199` |
 
 ## Icon sizes required for the application
 
@@ -5729,6 +5754,21 @@ settings and read environment variables only.
     `docs/SIGNING.md` §3 used, is developer-mode **registration** of the staged folder
     (`Add-AppxPackage -Register build\msix-stage\AppxManifest.xml`): no publisher trick, no
     signature, no administrator — for the shape that declares no service.
+33. **A Low-labelled staging folder makes a working package look broken, and it does it
+    silently.** This workspace (`H:\…`) carries `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`
+    — `icacls <dir>` prints the label — and Windows gives a process the label of the folder its
+    **image** is in, not of the user who launched it. Staged there, the packaged app started, sat
+    there and never spawned its engine; the **portable** copy failed identically, which is how the
+    folder was identified as the cause rather than the MSIX. The engine does explain itself —
+    `MI CS was started from a Low-integrity location (…): the engine cannot write its state
+    database ("attempt to write a readonly database") or reach the privileged helper … run the
+    installed copy in %LOCALAPPDATA%\MI CS, or extract the release ZIP outside a web root or
+    sandbox folder` — but it prints that to **stderr**, and the app spawns it with
+    `ProcessStartMode.detached`, so the text is thrown away and the UI only ever shows "engine
+    missing" (§7). Staging under `%LOCALAPPDATA%` fixes it outright, measured 2026-11-07:
+    `-StageDir "$env:LOCALAPPDATA\mics-msix-stage"` and the app, the engine, the pipe, the guard
+    and the integrity self-check all work. `MICS_ALLOW_LOW_INTEGRITY=1` runs the engine anyway, but
+    it is a diagnostic hook, not a fix.
 ---
 
 ## 9. Definition of done (per phase)
