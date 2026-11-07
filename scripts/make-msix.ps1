@@ -33,6 +33,14 @@ param(
     # certificate exactly, so with -SelfSigned it is taken from the certificate
     # instead of being passed in.
     [string]$Publisher,
+    # Which shape of the product to package. `Packaged` declares MICSHelper as a
+    # desktop6:Service (the full product, and the shape that needs an administrator
+    # to install and two restricted capabilities Microsoft approves per app).
+    # `None` declares no service at all (installs without an administrator, needs no
+    # restricted capability, and has no privileged half unless a helper is installed
+    # separately).
+    [ValidateSet("Packaged", "None")]
+    [string]$ServiceMode = "Packaged",
     [switch]$SelfSigned,
     [string]$Thumbprint,
     # Sign a copy and leave the machine's state alone unless this is passed.
@@ -84,7 +92,12 @@ if (-not $Publisher) {
     Write-Host "no -Publisher given: using the project's own subject '$Publisher' (only a package signed by that certificate will install)"
 }
 
-if (-not $Out) { $Out = Join-Path $repo ("dist\MICS-{0}-x64.msix" -f $Version) }
+if (-not $Out) {
+    # The two shapes are different products, so they get different file names and
+    # neither can silently overwrite the other.
+    $suffix = if ($ServiceMode -eq "None") { "-noservice" } else { "" }
+    $Out = Join-Path $repo ("dist\MICS-{0}-x64{1}.msix" -f $Version, $suffix)
+}
 $Out = [IO.Path]::GetFullPath($Out)
 $outDir = Split-Path -Parent $Out
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
@@ -153,6 +166,26 @@ $tokens = [ordered]@{
 }
 foreach ($key in $tokens.Keys) { $manifest = $manifest.Replace($key, $tokens[$key]) }
 if ($manifest -match '__[A-Z][A-Z_]*__') { throw "The manifest still contains an unreplaced token: $($Matches[0])" }
+
+# -ServiceMode None produces the other shape of the same product: a package that
+# declares no service, and therefore needs neither restricted capability and no
+# administrator to install (measured: 0x80073D28 applies to any package that
+# declares a service). The trade-off is stated where it matters rather than
+# discovered later: with no packaged service the app has no privileged half of its
+# own, so the firewall/hosts/hardening features only work if a helper is already
+# installed - by the NSIS installer, or by `mics-engine.exe install-helper` with one
+# UAC prompt - and the app has to say so instead of failing silently.
+if ($ServiceMode -eq "None") {
+    $manifest = [regex]::Replace($manifest, '(?s)\s*<Extensions>.*?</Extensions>', '')
+    $manifest = [regex]::Replace($manifest, '\s*<rescap:Capability Name="packagedServices" />', '')
+    $manifest = [regex]::Replace($manifest, '\s*<rescap:Capability Name="localSystemServices" />', '')
+    # Assert on elements, not on the text: the manifest's own header comment names
+    # these declarations, and a substring check would trip on its own explanation.
+    foreach ($forbidden in @('<Extensions', '<desktop6:Extension', '<desktop6:Service', '<rescap:Capability Name="packagedServices"', '<rescap:Capability Name="localSystemServices"')) {
+        if ($manifest -match [regex]::Escape($forbidden)) { throw "ServiceMode None left '$forbidden' in the manifest" }
+    }
+    if ($manifest -notmatch 'Name="runFullTrust"') { throw "ServiceMode None removed runFullTrust, which a packaged Win32 app still needs" }
+}
 $manifestPath = Join-Path $stage "AppxManifest.xml"
 [IO.File]::WriteAllText($manifestPath, $manifest, (New-Object System.Text.UTF8Encoding($false)))
 
@@ -175,6 +208,7 @@ Write-Host ("package : {0}" -f $Out)
 Write-Host ("size    : {0} MB" -f $sizeMb)
 Write-Host ("sha256  : {0}" -f $hash)
 Write-Host ("packed  : {0:N1} s for {1} files" -f $packSw.Elapsed.TotalSeconds, $fileCount)
+Write-Host ("service : {0}" -f $(if ($ServiceMode -eq "Packaged") { "MICSHelper declared as a packaged service (LocalSystem, auto) - the install needs an administrator" } else { "none declared - the install needs no administrator, and privileged features need a helper installed separately" }))
 
 # --- sign ---------------------------------------------------------------------
 

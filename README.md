@@ -82,7 +82,8 @@ every shipped file (which the app checks at start-up), but no *publicly trusted*
 and therefore no public reputation. This project does not buy one (D-035), and two free
 routes for it are now on record (D-036, [`docs/SIGNING.md`](docs/SIGNING.md)): the Microsoft
 Store re-signs an MSIX package for free after certification — available today, the work is
-packaging — and OSSign issues a project-level certificate once the repository is six months
+packaging, and the shape submitted first installs with no administrator at all (D-038) —
+and OSSign issues a project-level certificate once the repository is six months
 old (~2027-04-27). Neither is in place yet, so the warning stands for now; the checks that
 replace it are the manifest, the published hashes and the build
 log. The run-anyway, hash-check and `Unblock-File` steps are in

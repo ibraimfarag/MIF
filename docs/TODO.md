@@ -901,7 +901,7 @@ somebody who signs for free.
 |---|---|---|---|---|
 | 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
-| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: an administrator for the install + the free Store account, then Microsoft's certification**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions stay unmeasured until an admin installs a trusted build (§8 traps 29 and 30) |
+| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: the free Store account, then Microsoft's certification — no administrator needed for the shape submitted first (D-038)**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions now belong to the `Packaged` shape only, and stay unmeasured until an administrator installs a trusted build of it (§8 traps 29 and 30); `-ServiceMode None` is the shape submitted first, measured on 2026-11-07 to register with no elevation at all (D-038) |
 | 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
 | 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
@@ -1092,6 +1092,42 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **The Store submission stops needing an administrator, and the reason is measured
+  (2026-11-07, later again)**
+  - **Two shapes, one switch.** `scripts\make-msix.ps1` gained
+    `-ServiceMode Packaged|None` (default `Packaged`), and the two shapes get different
+    file names — `MICS-0.1.0.0-x64.msix` and `MICS-0.1.0.0-x64-noservice.msix` — so neither
+    can silently overwrite the other. `None` removes the `<Extensions>` block and the two
+    restricted capabilities from the generated manifest and refuses to continue if any of
+    them survives, if `runFullTrust` disappears with them, or if a token is left behind
+    (the first version of that guard tripped on the manifest's own header comment, which
+    *names* `desktop6:Service` while explaining it — the check now matches elements, not
+    text).
+  - **The A/B, same machine, same staged folder, minutes apart.** `Packaged` →
+    **0x80073D28** ("Administrator privileges required to install packaged service"),
+    refused. `None` → **registered with no elevation at all**: `MICS.Desktop 0.1.0.0`,
+    `Status Ok`, `IsDevelopmentMode True`, one declared capability (`runFullTrust`), then
+    removed cleanly — no package, no `MICSHelper` service, no stage directory left behind.
+    So this was never a property of our manifest: it is a property of declaring a service.
+  - **What the service-free package is, in numbers:** 75 files, 22.11 MB, 3.7 s,
+    `sha256 CF3E1BC4...`, 76 entries inside, `uap10:TrustLevel="mediumIL"` and
+    `uap10:RuntimeBehavior="packagedClassicApp"` intact, and exactly one capability.
+  - **Decision: D-038** — the first Store submission uses `None`. It supersedes one clause
+    of D-037 ("the Store edition needs an administrator to install") while keeping the rest
+    of it: any package that declares a service still needs one, and the `Packaged` shape
+    stays the full-product shape for a later submission or the direct download. The cost is
+    written down rather than discovered later — one UAC prompt before the first fix, and
+    "helper absent" becomes the first-run state instead of an edge case.
+  - **Two of the three unknowns leave the critical path**: no restricted capability for
+    Microsoft to approve, and no administrator needed to install. What remains on route A
+    is the free developer account and the product-category question. The container
+    questions survive only for the shape we are not submitting first — in `None` the
+    privileged writes happen outside any container, and the single cross-container question
+    left is whether a packaged app can reach the helper's pipe.
+  - Docs swept in the same commit: `docs/SIGNING.md` §3 (the two-shapes table, the A/B, and
+    the qualified unknown list) and §7, `docs/DECISIONS.md` (D-037's clause and D-038),
+    `docs/TODO.md` §7 register and trap 30, and the README status block.
+
 - **The free-route search is closed by independent sources, and the container risk is
   answered by Microsoft's own model (2026-11-07)**
   - **"No free CA certificate" is now confirmed from the outside.** Two independent
@@ -1210,9 +1246,11 @@ free publish click, one UAC-click acceptance run, and engineering that is free
     (`AllowDevelopmentWithoutDevLicense` was already 1, measured) fails with
     **0x80073D28 — "Administrator privileges required to install packaged service"**,
     which is Windows' rule for *any* package that declares a service, not a property of
-    our manifest. The product consequence is now written where a reader will meet it:
-    **the Store edition needs an administrator to install**, exactly as the NSIS
-    installer needs one UAC prompt (D-026).
+    our manifest. **The counterpart was measured the next round: the same call against
+    the same staged folder, with the service declaration and its two restricted
+    capabilities removed, registers with no elevation at all** (`MICS.Desktop 0.1.0.0`,
+    `Status Ok`, one declared capability, removed cleanly). That A/B is D-038, and it
+    makes the service-free shape the one to submit to the Store first.
   - **What was deliberately not measured.** Whether the packaged service can still write
     the real `hosts` file and drive the Windows Firewall — the container question —
     because that needs a trusted package installed by an administrator. It stays written
@@ -5555,9 +5593,14 @@ settings and read environment variables only.
     only wall either, because registering the **unsigned** staged folder in developer
     mode (`AllowDevelopmentWithoutDevLicense` was already 1 on this machine) fails with
     **0x80073D28 — "Administrator privileges required to install packaged service"**.
-    Two consequences: a sideloaded test of this package needs an elevated install *and*
-    machine-trusted signature, and any user who is not an administrator cannot install a
-    service-bearing MI CS from any source, Store included. Also worth knowing:
+    Two consequences: a sideloaded test of the *service-bearing* shape needs an elevated
+    install *and* a machine-trusted signature, and any user who is not an administrator
+    cannot install that shape from any source. **The A/B that changes the submission:**
+    the same call, same staged folder, with the service declaration and its two restricted
+    capabilities removed, **registers with no elevation at all** (`MICS.Desktop 0.1.0.0`,
+    `Status Ok`, one declared capability, removed cleanly) — D-038. So the shape a Store
+    user receives needs neither an administrator nor a restricted-capability approval.
+    Also worth knowing:
     `Get-AuthenticodeSignature` reports `UnknownError` for a **correctly signed** MSIX —
     the AppX signature is not a PE signature — so signtool, not .NET, is the tool that
     answers "is this package signed".

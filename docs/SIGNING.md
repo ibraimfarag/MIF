@@ -149,19 +149,51 @@ arguing about it:
   modal **"Security Warning"** that hangs an unattended run (§8 traps 29 and 30 in
   `docs/TODO.md`).
 
+### Two shapes of the same package, and the shape that needs no administrator (measured 2026-11-07)
+
+Everything above is a property of the *manifest*, and this product has two legal
+manifest shapes — `scripts\make-msix.ps1 -ServiceMode Packaged|None`:
+
+| | `Packaged` (default) | `None` |
+|---|---|---|
+| `MICSHelper` | declared: `desktop6:Service`, LocalSystem, auto | not in the package at all |
+| Capabilities | `runFullTrust`, `packagedServices`, `localSystemServices` | `runFullTrust` |
+| An administrator to install | **required** — 0x80073D28 | **not required** — measured |
+| A restricted capability Microsoft must approve | two of them | none |
+| What the user gets | the whole product from the Store | the app; privileged work needs a helper installed outside the package — the NSIS installer, or `mics-engine.exe install-helper`, one UAC prompt (D-026) |
+| The container questions above | apply to the packaged service | do not arise: the helper runs outside the container, exactly as D-026 already has it |
+
+Measured as an A/B on this machine, minutes apart, against the same staged folder and
+the same call — `Add-AppxPackage -Register build\msix-stage\AppxManifest.xml`, developer
+mode already on:
+
+- `Packaged` → **0x80073D28**, refused;
+- `None` → **registered with no elevation at all**, `Get-AppxPackage` reporting
+  `MICS.Desktop 0.1.0.0`, `Status Ok`, `IsDevelopmentMode True`, and one declared
+  capability (`runFullTrust`) — then removed cleanly, with no service and no leftover.
+
+That is why **`None` is the shape to submit first** (D-038): it takes the packaged
+service — and with it the capability approval and the administrator requirement, the two
+things that could have sunk the submission — off the critical path, in exchange for a
+first-use UAC prompt the project already ships and documents. `Packaged` stays the shape
+for the full product once that first submission is through, and for the direct download.
+
 **What is not verified, and must be measured before anyone promises this route
 works:**
 
 1. that Microsoft approves `packagedServices` + `localSystemServices` for a
    defensive security tool — **the local half is closed** (makeappx accepts the
    declaration, and Windows requires an administrator for it: 0x80073D28, measured
-   below); Microsoft's per-app approval is the half nobody here can measure;
+   below); Microsoft's per-app approval is the half nobody here can measure — and the
+   `None` shape does not need it at all;
 2. that a service inside the MSIX container can still write the real
    `C:\Windows\System32\drivers\etc\hosts` and drive the Windows Firewall COM API
    and `netsh` — container redirection is the risk, and our whole privileged op set
    (firewall/hosts/hardening) rides on it. **The documented model says it can**, for
    the reasons in "The container, documented" below; the empirical test is still the
-   only proof, and it needs an administrator;
+   only proof, and it needs an administrator. In the `None` shape the hosts half of
+   this question does not arise — the helper writes from outside the container — and
+   what is left to show is only that a packaged app can reach the helper's pipe;
 3. that a Store listing for a tool whose job is changing firewall and hosts
    settings passes certification at all.
 
@@ -228,7 +260,9 @@ Then remove both, uninstall the package, and delete the test root.
 caller (`engine/src/privileged/server.rs` refuses a client it cannot identify), so the
 op has to travel the product's own path — UI → engine → `\\.\pipe\mics_helper` — and a
 PowerShell script talking to the pipe would be testing its own privileges, not the
-container's.
+container's. In the `None` shape the same test shrinks to one question, because the
+privileged write then happens in a native process: can a packaged app reach the
+helper's pipe across the container boundary at all.
 
 ## 4. Route B — OSSign, which signs our GitHub binaries
 
@@ -371,9 +405,10 @@ is closed on eligibility and on money at the same time.
    row becomes two free routes with concrete dates and one product decision.
 2. **The Store route's artifact is built (D-037)**: `installer/msix/AppxManifest.xml`
    plus `scripts/make-msix.ps1` pack and sign an MSIX from the portable build, with the
-   numbers in §3. What is left on this route is a free developer account, an
-   **administrator** for the install measurement (Windows requires one for any packaged
-   service: 0x80073D28, measured), and Microsoft's answers to the two open unknowns.
+   numbers in §3. What is left on this route is a free developer account and Microsoft's
+   answers to the two open unknowns; the install measurement that used to need an
+   administrator no longer does, because the shape submitted first declares no service
+   (the A/B in §3, decided in D-038).
 3. **The OSSign route needs a calendar**, not code: eligibility ~2027-04-27.
 4. **Until either lands, nothing in the honesty story changes**: the release page
    says the binaries are self-signed, `SHA256SUMS` is published, the engine re-hashes

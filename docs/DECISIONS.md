@@ -1845,8 +1845,9 @@ package: a signed self-signed package is refused with **0x800B0109** (no trusted
 and user-level trust does not count, because AppX deployment reads machine trust), and
 registering the **unsigned** staged folder in developer mode — a path no signature can
 influence — fails with **0x80073D28**, "Administrator privileges required to install
-packaged service". So **the Store edition needs an administrator to install**, exactly
-as the NSIS installer needs one UAC prompt. The container questions (can a packaged
+packaged service". So **any package that declares a service needs an administrator to
+install** — and the shape this product submits first declares none (D-038). The container
+questions (can a packaged
 service write the real `hosts` file and drive the firewall) stay **unmeasured**, and
 they stay written as unmeasured in `docs/SIGNING.md` §3; the test machine was left with
 no package, no service and no extra trusted root.
@@ -1861,3 +1862,44 @@ the manifest, where a reviewer can see exactly why they are requested.
 **Does not commit us to:** a Store-only future, a paid account (the route is free), a
 Partner Center identity before one exists, or publishing an MSIX release asset that
 nobody has certified.
+
+## D-038 — The Store submission declares no service, so it installs without an administrator
+
+**Context.** D-037 packaged the full product — the helper included, as a
+`desktop6:Service` — and measured what Windows does with that: **0x80073D28,
+"Administrator privileges required to install packaged service"**, a rule that applies to
+any package declaring a service rather than a fault in our manifest. That shape also
+carries two restricted capabilities Microsoft approves per app, and the container
+questions in `docs/SIGNING.md` §3. Three risks riding on one submission.
+
+**Decision.** `scripts\make-msix.ps1` gains `-ServiceMode Packaged|None` (default
+`Packaged`), and **the first Store submission uses `None`**: no `desktop6:Service`, no
+`packagedServices`, no `localSystemServices` — `runFullTrust` alone. Privileged work is
+then done by a helper installed *outside* the package, which is the arrangement D-026
+already chose for the direct download (the NSIS installer's one UAC prompt, or
+**Settings → Engine → Install helper**).
+
+**Why.** Measured A/B, same staged folder, same call, minutes apart: `Packaged` →
+0x80073D28 refused; `None` → **registered with no elevation at all**, `Status Ok`,
+`IsDevelopmentMode True`, one declared capability, removed cleanly with no leftover. That
+takes the capability approval and the administrator requirement off the critical path,
+and it takes the container out of the hosts write entirely, because the process doing
+that write is no longer inside it. It also matches the architecture this project already
+chose: the app is the UI, the helper is a separately-consented privileged component
+(D-002, D-026).
+
+**What it costs, stated plainly.** A Store-edition user who has never installed the
+product gives one UAC prompt before any fix works; until then the app can scan, detect,
+guard and report, and must say so rather than fail silently. The package can no longer
+guarantee that the service binary is present, so the UI's "helper absent" state stops
+being an edge case and becomes the first-run state.
+
+**Supersedes** one clause of D-037 — "the Store edition needs an administrator to
+install". Any package that *declares a service* needs one, and that measurement stands;
+the shape submitted first declares none. The rest of D-037 — a third packaging rather
+than a replacement, the declarative service, publisher equal to certificate subject —
+stands untouched.
+
+**Does not commit us to:** never shipping the `Packaged` shape (it stays the full-product
+shape for a later submission or a direct download), or to installing a helper without the
+user's consent, which D-026 forbids.
