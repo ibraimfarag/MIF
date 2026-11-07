@@ -1792,3 +1792,59 @@ never that the file is safe.
   `docs/TODO.md` and the release notes — because D-035 wrote that before this
   research existed, and a document that overstates a dead end is as wrong as one
   that overstates a feature.
+
+## D-037 — The Store route gets a real MSIX package, and it is a third packaging, not a replacement
+
+**Status:** accepted (2026-11-07). Depends on D-036 (route A), leaves D-026 (the NSIS
+installer folds the helper's elevation in) and D-031 (`v0.1.0` is a draft) untouched.
+
+**Decision.** Route A of D-036 is now implemented as far as it can be without
+Microsoft: `installer/msix/AppxManifest.xml` declares the package, and
+`scripts/make-msix.ps1` stages `dist\MICS-portable`, generates the logo assets,
+substitutes the identity and publisher, packs, and signs when given an identity.
+Three things about it are decisions rather than details:
+
+1. **It is an addition to the release, not a new source of truth.** The portable ZIP
+   and the per-machine NSIS installer stay the primary distribution; the MSIX exists
+   so the Store can re-sign and distribute the same bytes. If the MSIX route dies,
+   nothing else changes.
+2. **The privileged helper is declared declaratively**, as
+   `desktop6:Service Name="MICSHelper" StartupType="auto"
+   StartAccount="localSystem" Arguments="helper-service"` — the same name, account
+   and arguments the installer creates with `sc create`, but created by the package
+   manager. That is the only reason the two restricted capabilities
+   (`packagedServices`, `localSystemServices`) are in the manifest, and Microsoft
+   approves those **per app**, so route A carries a certification risk that no local
+   test can remove.
+3. **The package's publisher must equal the signing certificate's subject**, which is
+   why `make-msix.ps1` takes the subject from the certificate in `-SelfSigned` mode
+   instead of letting a human type it, and why a Store submission must use the
+   identity Partner Center assigns.
+
+**Evidence, measured 2026-11-07:** makeappx 10.0.26100.0 packed 75 payload files into
+22.11 MB in 3.6 s (`sha256 FFA869F7...` unsigned, `D40AAE90...` signed); the ZIP holds
+79 entries including `[Content_Types].xml`, `AppxBlockMap.xml` and
+`AppxSignature.p7x`; unpacking it proves the manifest kept the identity, the publisher
+matching the certificate, the `desktop6:Service` declaration and all three
+capabilities; makeappx accepted the service extension and both restricted capabilities
+without a warning. The install then hit Windows' two rules rather than any fault in the
+package: a signed self-signed package is refused with **0x800B0109** (no trusted root,
+and user-level trust does not count, because AppX deployment reads machine trust), and
+registering the **unsigned** staged folder in developer mode — a path no signature can
+influence — fails with **0x80073D28**, "Administrator privileges required to install
+packaged service". So **the Store edition needs an administrator to install**, exactly
+as the NSIS installer needs one UAC prompt. The container questions (can a packaged
+service write the real `hosts` file and drive the firewall) stay **unmeasured**, and
+they stay written as unmeasured in `docs/SIGNING.md` §3; the test machine was left with
+no package, no service and no extra trusted root.
+
+**Commits us to:** keeping the manifest and the script in step with the payload (a new
+top-level file in the portable build must still pack); telling a Store user that an
+administrator is needed for the install, rather than discovering it in a review; not
+describing the MSIX route as working until a Store-signed build has been installed and
+the container behaviour measured; and keeping the two restricted capabilities visible in
+the manifest, where a reviewer can see exactly why they are requested.
+
+**Does not commit us to:** a Store-only future, a paid account (the route is free), a
+Partner Center identity before one exists, or publishing an MSIX release asset that
+nobody has certified.

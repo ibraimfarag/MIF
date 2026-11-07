@@ -100,11 +100,63 @@ through Store certification requests only `packagedServices` for a service runni
 as **Local Service** — the milder account — which is exactly the distinction that
 matters here: Local Service cannot configure the firewall or rewrite `hosts`.
 
+### What is measured so far (2026-11-07, later the same day)
+
+The first unknown got its **local** half answered by building the package rather than
+arguing about it:
+
+- **The artifact exists.** `installer/msix/AppxManifest.xml` is the manifest template
+  and `scripts/make-msix.ps1` stages `dist\MICS-portable`, generates the four logo
+  assets from `assets\icons\Desktop.png`, substitutes the identity/publisher/version
+  (and fails hard if a token survives), packs and optionally signs.
+- **Measured numbers.** makeappx 10.0.26100.0 packed **75 payload files** (the 70
+  shipped files, the four generated logos and the manifest) into **22.11 MB** in
+  **4.3 s**: `sha256 D40AAE90...`. The ZIP holds **79 entries**, including
+  `[Content_Types].xml`, `AppxBlockMap.xml` and `AppxSignature.p7x` after signing.
+- **The schema accepts the service.** makeappx validated the manifest with
+  `desktop6:Service Name="MICSHelper" StartupType="auto" StartAccount="localSystem"
+  Arguments="helper-service"` and both restricted capabilities
+  (`packagedServices`, `localSystemServices`) and packed it without a warning. So
+  **unknown 1's local half is closed**: the declaration is legal and buildable.
+  Microsoft's per-app *approval* during certification is still open, and nothing in
+  this repository can measure it.
+- **The install is blocked twice, and both blocks are measured.**
+  1. **Trust.** A signed self-signed package is refused with **0x800B0109** ("the
+     root certificate of the signature … must be trusted"). Adding our test
+     certificate to the *user's* root store does **not** clear it: AppX deployment
+     validates machine trust, so only a machine-wide root (administrator) or a
+     certificate that already chains to a public root helps. The Store route does
+     not have this problem, because Microsoft's signature chains publicly.
+  2. **The service needs an administrator, by Windows' own rule.** With developer
+     mode already on (`AllowDevelopmentWithoutDevLicense = 1`, measured),
+     registering the **unsigned** staged folder — the path a signature cannot
+     influence — fails with **0x80073D28: "Administrator privileges required to
+     install packaged service"**. So the manifest is not the problem and no
+     manifest change can remove it: **any package that declares a service needs an
+     administrator to install**. That is unknown 1's OS half, closed, and it
+     carries a product consequence worth writing into the Store listing: the Store
+     edition will need an administrator (or the Store's own elevated install), just
+     as the NSIS installer needs its single UAC prompt (D-026).
+- **So unknown 2 stays unmeasured, for a reason that is now precise:** it needs a
+  *trusted* package installed *by an administrator* — which arrives either from the
+  Store after certification, or from an administrator installing our self-signed test
+  package on a machine that trusts our root. Until then, nobody may claim the
+  container keeps `hosts` and firewall access.
+- **Two measured facts that are easy to get wrong.** `Get-AuthenticodeSignature`
+  reports `UnknownError` for a *correctly signed* MSIX — the AppX signature is not a
+  PE Authenticode signature, so signtool and the deployment API are the tools that
+  read it. And adding a certificate to `CurrentUser\Root`: `certutil -user -addstore
+  -f Root <file.cer>` completes silently, while the .NET `X509Store` path raises the
+  modal **"Security Warning"** that hangs an unattended run (§8 traps 29 and 30 in
+  `docs/TODO.md`).
+
 **What is not verified, and must be measured before anyone promises this route
 works:**
 
 1. that Microsoft approves `packagedServices` + `localSystemServices` for a
-   defensive security tool;
+   defensive security tool — **the local half is closed** (makeappx accepts the
+   declaration, and Windows requires an administrator for it: 0x80073D28, measured
+   below); Microsoft's per-app approval is the half nobody here can measure;
 2. that a service inside the MSIX container can still write the real
    `C:\Windows\System32\drivers\etc\hosts` and drive the Windows Firewall COM API
    and `netsh` — container redirection is the risk, and our whole privileged op set
@@ -217,8 +269,11 @@ is closed on eligibility and on money at the same time.
 
 1. **ب5 in `docs/ROADMAP.md` stops being "buy a certificate or do without".** The
    row becomes two free routes with concrete dates and one product decision.
-2. **The Store route needs an artifact we do not build yet**: an MSIX package. That
-   is the next real piece of work, and it is packaging, not signing.
+2. **The Store route's artifact is built (D-037)**: `installer/msix/AppxManifest.xml`
+   plus `scripts/make-msix.ps1` pack and sign an MSIX from the portable build, with the
+   numbers in §3. What is left on this route is a free developer account, an
+   **administrator** for the install measurement (Windows requires one for any packaged
+   service: 0x80073D28, measured), and Microsoft's answers to the two open unknowns.
 3. **The OSSign route needs a calendar**, not code: eligibility ~2027-04-27.
 4. **Until either lands, nothing in the honesty story changes**: the release page
    says the binaries are self-signed, `SHA256SUMS` is published, the engine re-hashes

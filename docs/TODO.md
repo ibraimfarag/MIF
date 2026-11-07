@@ -901,7 +901,7 @@ somebody who signs for free.
 |---|---|---|---|---|
 | 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
-| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: our own packaging work**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide — build the package, then measure §3's three unknowns), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). Until either lands, the manifest self-check and the published `SHA256SUMS` still carry it, and D-034 makes a **donated** certificate a drop-in |
+| 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: an administrator for the install + the free Store account, then Microsoft's certification**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions stay unmeasured until an admin installs a trusted build (§8 traps 29 and 30) |
 | 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
 | 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
@@ -1091,6 +1091,59 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 | P6 | Full QA harness + HTML report, malware lab (later) | **done except د3**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) is one UAC-click session away — §0.6 row 2. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **The Store route's artifact exists, and Windows' two install rules are now measured
+  rather than guessed (2026-11-07, D-037)**
+  - **What was built.** `installer/msix/AppxManifest.xml` (a template whose tokens the
+    script must replace, with a hard failure if one survives) and
+    `scripts\make-msix.ps1`, which stages `dist\MICS-portable`, generates the four MSIX
+    logo assets from `assets\icons\Desktop.png` at the exact sizes the manifest names
+    (aspect ratio kept, never stretched), substitutes identity/publisher/version, packs
+    with makeappx, and signs with signtool when given an identity — the project's own
+    self-signed one for local tests, or a thumbprint for a Store/donated certificate.
+    The script refuses a version that is not four numeric parts, refuses a source that
+    is not a portable build, and refuses to use the repository, its parent or the source
+    as a scratch directory.
+  - **Measured, not asserted.** 75 payload files became **22.11 MB** in **3.6 s**
+    (pack only) / **4.3 s** (pack + sign): `sha256 FFA869F7...` unsigned and
+    `D40AAE90...` signed. The ZIP holds **79 entries**, including `[Content_Types].xml`,
+    `AppxBlockMap.xml` and `AppxSignature.p7x`. Unpacking it back proves the manifest
+    survived with no token left, `Identity Name="MICS.Desktop"`, the publisher equal to
+    the certificate subject, `Version="0.1.0.0"`, x64,
+    `TargetDeviceFamily MinVersion="10.0.19044.0"`, the
+    `desktop6:Service Name="MICSHelper" StartupType="auto" StartAccount="localSystem"
+    Arguments="helper-service"` declaration, all three capabilities, and four logos at
+    exactly 150x150, 44x44, 50x50 and 310x150.
+  - **Unknown 1's local half is closed.** makeappx 10.0.26100.0 validated and packed a
+    manifest that declares a LocalSystem service and the restricted capabilities
+    `packagedServices` + `localSystemServices`, with no warning — the declaration is
+    legal and buildable. Whether Microsoft *approves* those capabilities for a
+    defensive security tool during certification stays open, and nothing here can
+    measure it.
+  - **Two OS rules, both hit and both reported verbatim.** (a) A signed but self-signed
+    package is refused by `Add-AppxPackage` with **0x800B0109** ("the root certificate
+    of the signature in the app package or bundle must be trusted"), and adding the test
+    certificate to `CurrentUser\Root` does **not** clear it — AppX deployment reads
+    machine trust. (b) Registering the **unsigned** staged folder in developer mode
+    (`AllowDevelopmentWithoutDevLicense` was already 1, measured) fails with
+    **0x80073D28 — "Administrator privileges required to install packaged service"**,
+    which is Windows' rule for *any* package that declares a service, not a property of
+    our manifest. The product consequence is now written where a reader will meet it:
+    **the Store edition needs an administrator to install**, exactly as the NSIS
+    installer needs one UAC prompt (D-026).
+  - **What was deliberately not measured.** Whether the packaged service can still write
+    the real `hosts` file and drive the Windows Firewall — the container question —
+    because that needs a trusted package installed by an administrator. It stays written
+    as unmeasured in `docs/SIGNING.md` §3 instead of being assumed either way.
+  - **The machine was left as it was found.** No package registered, no `MICSHelper`
+    service, the test certificate removed from `CurrentUser\Root` again (its
+    `TrustedPeople` entry stays, because `sign.ps1` needs it), both scratch directories
+    deleted. Two environment traps came out of it and are now §8 entries 29 and 30: the
+    .NET root-store call raises a modal "Security Warning" that `certutil` does not, and
+    an MSIX with a service cannot be installed by a non-administrator.
+  - **Where it is written down.** `docs/SIGNING.md` §3 (the measurement block and the
+    corrected unknowns) and §7, **D-037** ("a third packaging, not a replacement"),
+    the **ب5** row in `docs/ROADMAP.md`, and row 3 of §0.6 above.
 
 - **The signature stopped being impossible: two free routes, researched to the source
   (2026-11-07, D-036)**
@@ -5404,6 +5457,28 @@ settings and read environment variables only.
     machine had accumulated eight `MI CS Code Signing` certificates by the end of the
     day, which is harmless but makes "which one signed this?" a real question — ask the
     **file** (`Get-AuthenticodeSignature`), never the store.
+29. **Adding a certificate to `CurrentUser\Root` has exactly one unattended path.**
+    Measured 2026-11-07 while packaging the MSIX (D-037): `certutil -user -addstore -f
+    Root <file.cer>` completes silently in under a second and prints "added to store",
+    while the .NET route — `New-Object X509Store("Root","CurrentUser")` then `.Add()` —
+    raises the modal **"Security Warning"** dialog and hangs forever in a session where
+    nobody can click it (the dialog's owner had to be killed to get the desktop back).
+    So a script that needs user-level root trust must call `certutil`, never the store
+    API. Neither one is enough for MSIX deployment, which reads machine trust (trap 30).
+30. **An MSIX that declares a service refuses to install without an administrator —
+    and the error says so.** Measured 2026-11-07 on the package D-037 adds:
+    `Add-AppxPackage -Path <signed.msix>` fails with **0x800B0109** ("the root
+    certificate of the signature … must be trusted") because a self-signed chain ends in
+    a root nobody trusts, and a *user-level* root does not clear it; signing is not the
+    only wall either, because registering the **unsigned** staged folder in developer
+    mode (`AllowDevelopmentWithoutDevLicense` was already 1 on this machine) fails with
+    **0x80073D28 — "Administrator privileges required to install packaged service"**.
+    Two consequences: a sideloaded test of this package needs an elevated install *and*
+    machine-trusted signature, and any user who is not an administrator cannot install a
+    service-bearing MI CS from any source, Store included. Also worth knowing:
+    `Get-AuthenticodeSignature` reports `UnknownError` for a **correctly signed** MSIX —
+    the AppX signature is not a PE signature — so signtool, not .NET, is the tool that
+    answers "is this package signed".
 ---
 
 ## 9. Definition of done (per phase)

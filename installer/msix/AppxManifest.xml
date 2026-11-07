@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MI CS as an MSIX package - the artifact the free Microsoft Store signing route
+  needs (docs/SIGNING.md route A, D-036).
+
+  This is a template: scripts\make-msix.ps1 replaces every placeholder of the form
+  double-underscore NAME double-underscore below and refuses to pack while any of
+  them survives, so a package can never ship with a publisher that does not match
+  the certificate that signs it or with a version nobody passed in. Nothing else in
+  this file is generated.
+
+  Two details exist only for the privileged helper, and both are the reason this
+  route has to be measured before it is promised (docs/SIGNING.md section 3):
+
+    * desktop6:Service creates the service at install time, running as
+      LocalSystem with Arguments="helper-service" - the same service the NSIS
+      installer creates with `sc create` (installer/mics.nsi), and the same
+      arguments mics-engine.exe expects (its `helper-service` subcommand). The
+      point of the service is that the SCM starts it, so privileged operations
+      need no UAC prompt at run time.
+    * the two restricted capabilities the packaged-service APIs require,
+      packagedServices and localSystemServices. Microsoft grants restricted
+      capabilities per app during Store certification; a sideloaded package
+      declares them directly. Whether they are granted is unknown #1 in
+      docs/SIGNING.md section 3.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap desktop6">
+
+  <Identity
+    Name="__IDENTITY__"
+    Publisher="__PUBLISHER__"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>__DESCRIPTION__</Description>
+  </Properties>
+
+  <Dependencies>
+    <!-- 10.0.19044 is Windows 10 21H2, the floor the README states. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19044.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="MICS" Executable="mics_app.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="__DISPLAY_NAME__"
+        Description="__DESCRIPTION__"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <desktop6:Extension Category="windows.service" Executable="mics-engine.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop6:Service
+            Name="MICSHelper"
+            StartupType="auto"
+            StartAccount="localSystem"
+            Arguments="helper-service" />
+        </desktop6:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="packagedServices" />
+    <rescap:Capability Name="localSystemServices" />
+  </Capabilities>
+</Package>
