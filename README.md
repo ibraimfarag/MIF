@@ -7,20 +7,36 @@ multi-layer defense wall, malware scanner, real-time process monitor,
 vulnerability scanner and hardening center — with an interface that prioritises,
 explains, and suggests the next action instead of dumping raw data.
 
-> **Status: pre-release.** Every feature below is implemented and covered by
-> tests, the portable package and its installer are built and verified, and the
-> package now carries a signed manifest of itself that the app checks at start-up
-> (see *Is this copy the published one?*). **The first public build exists: `v0.1.0`
-> on the [Releases page](https://github.com/ibraimfarag/MIF/releases)** — see
-> [Download](#download). What is still missing is public code signing (it needs a
-> certificate to buy) and a download for Windows on ARM. The
+> **Status: pre-release, and nothing is published yet.** Every feature below is
+> implemented and covered by tests, the portable package and its installer are built
+> and verified, and the package carries a signed manifest of itself that the app
+> checks at start-up (see *Is this copy the published one?*). The first build,
+> `v0.1.0`, was built and verified by the
+> [Release workflow](.github/workflows/release.yml) and sits in GitHub Releases as a
+> **draft**: publishing it is one free click, and until that click there is nothing
+> to download — [Download](#download) lists the assets it will carry and how to check
+> them. The acceptance run that needed a human **ran on 2026-11-07**: the per-machine
+> installer was taken through install → helper creation → a privileged operation with
+> no prompt → uninstall, one UAC prompt each, with the product, the service and the
+> shortcuts all gone afterwards and the state folder kept on purpose. Two things are
+> still missing: a **publicly trusted signature** (which is **not** a purchase, and
+> will not become one) and a download
+> for Windows on ARM. This is a free,
+> open-source project with no budget, so the trust story is what a reader can check
+> without trusting anybody: the manifest inside the engine, the hashes beside the
+> archive, and a build they can reproduce (see
+> [What MI CS does not do](#what-mi-cs-does-not-do), D-035). The release wiring
+> already accepts a certificate the day one exists — donated, or from a free route
+> that will take this kind of product — with no code change (D-034). The
 > ARM64 engine builds, and GitHub's `windows-11-arm` runner runs its tests natively;
 > the ARM64 *app* download is a different question, because Flutter publishes no
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
-> 2026-11-04) — the release workflow now asks that runner for the x64 SDK and marks
+> 2026-11-04) — the release workflow asks that runner for the x64 SDK and marks
 > both ARM64 jobs informational until they have a green run — see *Requirements*).
-> What is left, with priorities and
-> estimates: [`docs/ROADMAP.md`](docs/ROADMAP.md). Live status:
+> What is left is short and entirely free: **publish the draft** (one click), a
+> **reproducible build**, and the register rows — priorities and estimates in
+> [`docs/ROADMAP.md`](docs/ROADMAP.md), and the one-table answer in
+> [`docs/TODO.md`](docs/TODO.md) §0.6. Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md). What is waiting on an
 > answer: [`docs/OPEN-DECISIONS.md`](docs/OPEN-DECISIONS.md).
@@ -29,10 +45,17 @@ explains, and suggests the next action instead of dumping raw data.
 
 ## Download
 
-**The first public build is [`v0.1.0`](https://github.com/ibraimfarag/MIF/releases)**,
-built and verified by the [Release workflow](.github/workflows/release.yml) on GitHub's own
-runners — never on a developer machine. Windows 10 21H2+ or Windows 11, x64
-(see [Requirements](#requirements) for ARM64 and 32-bit).
+**There is no published download yet.** The first build, `v0.1.0`, was built and verified by
+the [Release workflow](.github/workflows/release.yml) on GitHub's own runners — never on a
+developer machine — and it sits on the [Releases page](https://github.com/ibraimfarag/MIF/releases)
+as a **draft release** (D-031). A draft is invisible to everyone but the owner, so the page
+shows no releases at all until one click publishes it. That click is free and is the only
+thing between this project and a download; it is deliberately a human step, because the
+builds are not signed by a publicly trusted certificate (D-035) and a warning should not be
+delivered to strangers by a robot.
+
+Until then, [build it from source](#building-from-source) — the same three commands the
+workflow runs. When the draft is published, the release will carry:
 
 | File | What it is |
 |---|---|
@@ -51,10 +74,12 @@ The hash it prints has to be the hash `SHA256SUMS` lists for that file. Both wer
 the same run that built the bytes, so they also tell you the download arrived whole.
 
 **Windows will say "Unknown publisher", and SmartScreen may warn.** That is expected, not a
-sign of a bad download: these builds are not signed by a publicly trusted certificate yet
-(row ب5 in [`docs/ROADMAP.md`](docs/ROADMAP.md)) — the binaries carry the project's own
-signature and its manifest of every shipped file, which the app checks at start-up, but no
-public reputation. The run-anyway, hash-check and `Unblock-File` steps are in
+sign of a bad download: these builds carry the project's own signature and its manifest of
+every shipped file (which the app checks at start-up), but no *publicly trusted* certificate
+and therefore no public reputation. This project does not buy one — it is free and
+open-source with no budget (D-035), and no free route currently accepts a product in this
+category. The checks that replace it are the manifest, the published hashes and the build
+log. The run-anyway, hash-check and `Unblock-File` steps are in
 [Troubleshooting](#troubleshooting). GitHub also marks such a build as an unsigned binary on
 the release page; that label is the same missing certificate, not a missing file.
 
@@ -105,9 +130,14 @@ Honesty is a feature. Today, MI CS does **not**:
 - ship **ClamAV**, **CAPA** or a **Suricata/ET-Open** IDS engine; L4 is IOC
   hashes + YARA, and L2 is a hosts-file domain blocklist (documented as
   "minimal mode");
-- detect **any writer touch** on a canary file — decoys are monitored by
-  mtime/size polling, so a read-only open is not noticed (writes, renames and
-  deletes are);
+- detect a touch on a canary file **that Windows did not record**. Decoys are polled
+  for mtime/size — so writes, renames and deletes are caught — and for the file's
+  **last-access time**, so a read-only open is its own HIGH `canary_read` event
+  (D-032). The honest limit is the other direction: a volume that keeps no atime
+  cannot show a read, so the engine **probes the volume and reports the range** it
+  actually has instead of assuming it, and a decoy MI CS has just written stays
+  quiet for 90 s because the first thing to open a new file on Windows is usually
+  Defender or the indexer;
 - watch files **as they change**: a scheduled scan walks the folder you named
   every few hours (and only while the engine is running — the logon entry keeps it
   running), so a file that appears and is deleted between two runs is never seen.
@@ -118,15 +148,27 @@ Honesty is a feature. Today, MI CS does **not**:
   file — not even a hash — is ever looked up there. File reputation is local
   (IOC hash cache + YARA) only;
 - promise that an update is signed by *us* and not just by *someone*: the payload
-  must carry an embedded Authenticode signature from `CN=MI CS Code Signing` that
-  Windows trusts (`docs/THREAT-MODEL.md` F-3), but the pin is the signer's name, not
-  its thumbprint;
+  must carry an embedded Authenticode signature that Windows trusts
+  (`docs/THREAT-MODEL.md` F-3). Today that check pins the signer's **name**, and the
+  name cannot survive contact with a real certificate: CSCBR §9.2.2 requires the
+  subject CN to be the verified legal name, so **no CA can ever issue
+  `CN=MI CS Code Signing`** (measured 2026-11-06, `docs/COST.md` §2). The pin has to
+  move to the certificate's **thumbprint** — which is also the only version of the
+  check that means anything, because a name is claimable and a thumbprint is not —
+  in the same release that first carries a certificate, or `engine/src/update.rs`
+  refuses our own update (D-016);
 - guarantee that "fix" buttons work without administrator rights: firewall,
   hosts-file and hardening changes are privileged. The app installs its
   **privileged helper** with one Windows prompt the first time you use such a
   fix, and never asks again (see `docs/PRIVILEGED-OPS.md`);
-- hide the fact that **unsigned binaries show "Unknown publisher"** in Windows
-  dialogs. That needs a trusted Authenticode certificate and is planned;
+- hide the fact that **these binaries show "Unknown publisher"** in Windows dialogs
+  and may raise a SmartScreen warning. That is a publicly trusted Authenticode
+  certificate, and this project does not buy one: it is free and open-source with no
+  budget (D-035). What it does instead is make the copy *checkable* — the signed
+  manifest inside `mics-engine.exe`, the `SHA256SUMS` published beside the archive,
+  and the workflow log that produced both. The release wiring already takes a
+  certificate (two repository secrets, D-034), so the day one is donated or a free
+  route accepts this product category, no code changes;
 - prevent a **repackager who has their own certificate**: the manifest makes a
   changed copy *visible*, not *impossible*. If somebody rebuilds `mics-engine.exe`,
   keeps the document in step and signs it with their own certificate, the app says
@@ -179,8 +221,8 @@ flutter test --no-pub tool\write_screenshots_test.dart
 | | |
 |---|---|
 | **OS** | Windows 10 21H2+ or Windows 11 (x64) — that is the only download today. **Windows on ARM**: the engine compiles and links for ARM64 (`scripts\build-engine-arm64.ps1`, artifact checked as a hardened ARM64 PE) and GitHub's `windows-11-arm` runner **runs the engine's own tests natively**, but the Flutter app has no Windows ARM64 toolchain: the SDK is published for x64 only (0 of the 747 archives in Flutter's `releases_windows.json` mention arm64, measured 2026-11-04), and `flutter build windows` takes its target from the host platform. The release workflow now asks that runner for the x64 SDK (run under emulation) and keeps both ARM64 jobs informational until they have a green run — so an ARM64 download does not exist yet (D-003 and its 2026-11-04 correction). 32-bit Windows: not supported — Flutter has no 32-bit Windows desktop target. |
-| **CPU / RAM** | 4 cores / 8 GB. The engine idles at ~11 MB RAM. |
-| **Disk** | ~150 MB for the app + engine, plus whatever the quarantine and intel cache grow to. |
+| **CPU / RAM** | 4 cores / 8 GB. The engine idles at **~12 MB RAM** (measured 12.5 MB), against a **150 MB** budget the engine's own benchmark asserts — the number is enforced, not a wish. |
+| **Disk** | **~52 MB** for the unpacked package (70 files, 51.9 MB measured 2026-11-07; the archive is 21.5 MB and the installer 16 MB), plus whatever the quarantine and intel cache grow to. |
 | **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |
 | **Network** | optional. Everything core works offline; the network is used only for intel sync, NVD lookups and a local LM Studio instance (if you run one). |
 
@@ -189,7 +231,10 @@ flutter test --no-pub tool\write_screenshots_test.dart
 Today MI CS ships as a **portable folder and a portable archive**, and as an
 **installer** (`MICS-setup-<version>-x64.exe`, built with NSIS from the same
 package — one UAC prompt, a Start-Menu entry, a desktop icon, an entry in Apps &
-features, and an uninstaller). Both are on the [Releases page](#download). Pick one:
+features, and an uninstaller). **Neither is published yet** — the first release is a
+draft waiting for one click ([Download](#download)) — so build one first with
+[Building from source](#building-from-source); the steps below are the same either
+way. Pick one:
 
 **Installer (recommended).** Run `MICS-setup-<version>-x64.exe` and click through
 one UAC prompt. It installs for every user under `%ProgramFiles%\MI CS`, creates the
@@ -216,10 +261,13 @@ zip is the release.
 Then, either way:
 
 1. Run `mics_app.exe`. Windows may warn about an unknown publisher, or SmartScreen
-   may say it **can't reach** its reputation service — the build is unsigned, so
-   there is nothing for it to verify. The
+   may say it **can't reach** its reputation service — the build is not signed by a
+   publicly trusted certificate, so there is nothing for it to verify. That is a
+   deliberate, permanent state for this project rather than a pending purchase: a
+   certificate is the one thing MI CS does not buy (D-035), and the [manifest check
+   in step 4](#install-and-first-run) is what you check instead. The
    [Troubleshooting](#troubleshooting) table has the run-anyway, hash-check and
-   `Unblock-File` steps; signing is planned (see [What MI CS does not do](#what-mi-cs-does-not-do)).
+   `Unblock-File` steps.
 2. The app starts the engine automatically, runs a first audit (~10 s) and shows
    your score with the single most valuable fix to make.
 3. The first privileged fix asks once to install the helper
@@ -424,20 +472,27 @@ One entry point runs everything, in three tiers, and writes
 `build\pipeline-<tier>.json` with per-step seconds and exit codes:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast       # 4 steps, ~1 min
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast       # 4 steps, ~3 min
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier full       # + both release builds, the contract harness
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier release    # + the package gates (11 steps in all)
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only flutter.test
 ```
 
-**fast** is what runs before every commit: `flutter analyze` (no issues — an info
-is a failure), `flutter test` (**133** tests, including the two contrast audits and
-the i18n parity/lint gates), `cargo test` (**124** tests) and
-`cargo clippy --release -- -D warnings` (clean). **full** adds the release builds
-of the engine and the app, the engine's own benchmark (CPU/RAM budget) and the
-**contract harness**: `dart run qa\contract.dart` drives every one of the **65**
-JSON-RPC methods against a real engine on an isolated pipe — **78** cases, plus the
-methods it must *not* run, each with its reason. **release** runs against
+**fast** is what runs before every commit: **181 s** on the cold run at `173224a`, and
+**76.9 s** on the last green run (2026-11-07, warm caches, 150 engine tests).
+`flutter analyze` (no issues — an info is a failure), `flutter test`
+(**110 declared cases across 24 files**, including the two contrast audits and the
+i18n parity/lint gates over **19 module files / 270 keys per language**), `cargo test`
+(**150 declared cases across 19 modules**;
+64 s) and `cargo clippy --release -- -D warnings` (clean; 12 s). Those counts are
+floors — loops and generated cases add more at run time, and `qa\report.md` is the
+generated table that the fast tier itself refuses to let drift. **full** adds the
+release builds of the engine and the app, the engine's own benchmark (CPU/RAM budget)
+and the **contract harness**: `dart run qa\contract.dart` drives every one of the
+**66** JSON-RPC methods against a real engine on an isolated pipe — **67 declared
+cases**, 14 of them classified not to run, plus the harness's own scenarios (80
+executed on the last recorded run) — and every method is either run or carries its
+reason. **release** runs against
 `dist\MICS-portable`, never the build folder:
 
 - **`opsec.verify`** — no shipped file names the account that built it, and no
@@ -572,7 +627,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 
 | Symptom | Meaning / what to do |
 |---|---|
-| "Unknown publisher" / *Windows protected your PC* | Builds are unsigned by default. Sign them with a certificate trusted on your machine: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (self-signed, no admin, no purchase) — then the publisher is named and the block stops. A public release needs a real OV-class certificate (EV stopped buying a faster SmartScreen verdict in 2024, so it is not worth its premium); `docs\COST.md` §2 lists what those cost and who can buy one from Egypt. See [Building from source](#building-from-source). |
+| "Unknown publisher" / *Windows protected your PC* | Builds are not signed by a publicly trusted certificate, by design: this project buys nothing (D-035). Trust it the way you would any source build — check the `SHA256SUMS` beside the download, and read the **manifest** line in Settings → About, which re-hashes every shipped file against the document inside `mics-engine.exe`. For a build **you** made, name the publisher locally with a self-signed certificate trusted on your machine only: `powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign` (no admin, no purchase, no code change) — the block then stops on that machine. A *public* release would need an OV-class certificate; `docs\COST.md` §2 keeps the researched prices and eligibility on record for the day one is donated, and D-034's wiring takes it as two repository secrets. See [Building from source](#building-from-source). |
 | SmartScreen says *"SmartScreen can't be reached right now"* or *"Windows protected your PC"* | Not a virus report — Windows is saying it could not verify a publisher, and (when the message says *can't be reached*) the reputation check itself failed, e.g. behind a proxy, VPN or flaky link. Choose **More info → Run anyway**, or launch without the Explorer hook: `Start-Process "$env:LOCALAPPDATA\MI CS\mics_app.exe"`. Before running anything you downloaded, verify it: `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` and compare with `SHA256SUMS`. If the zip was downloaded, unblock it **before** extracting (`Unblock-File .\MICS-portable-0.1.0-x64.zip`) and the extracted files inherit no mark-of-the-web. |
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | **Settings → About says `unverified`**, or a card says these files are not the published ones | The folder no longer matches the manifest inside `mics-engine.exe`: a shipped file changed (a partial copy, an antivirus shim feeding a modified DLL, a repackaged build). `powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path <folder>` names the file and refuses the folder; re-extract from the zip and check it against `SHA256SUMS`. A copy you *built* yourself has no manifest until `make-release.ps1 -Sign` writes one — which is why a development build shows this line and no card. |
@@ -683,7 +738,9 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 وبيوقف النشر لو ناقص.
 
 **المتطلبات:** ويندوز 10 (21H2+) أو 11، 64-bit. معالج 4 أنوية و8 جيجا رام
-(المحرك بيستهلك ~11 ميجا في الخمول) وحوالي 150 ميجا مساحة. التطبيق بيفتح
+(المحرك بيستهلك **~12 ميجا** في الخمول — متقاس 12.5 — والميزانية اللي البنشمارك
+بيفرضها بنفسه 150 ميجا رام) وحوالي **52 ميجا مساحة** (70 ملف، متقاس 2026-11-07:
+الأرشيف 21.5 ميجا والمثبّت 16 ميجا). التطبيق بيفتح
 **من غير صلاحيات مدير**، وأول إصلاح إداري بيطلب ضغطة UAC **مرة واحدة** لتثبيت
 خدمة المساعدة وبعدها مفيش أي طلب تاني (ولنسخة المثبّت: الضغطة الوحيدة هي اللي
 بتثبّت البرنامج — التثبيت بيجيب الخدمة معاه والإزالة بتشيلها معاها)، والنت مش
@@ -704,18 +761,25 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 `mics_app.exe` — التفاصيل كاملة فوق في قسم *Building from source*.
 
 **الاختبارات:** نقطة دخول واحدة بتشغّل كل حاجة على تلات مستويات:
-`scripts\pipeline.ps1 -Tier fast` (4 خطوات، ~دقيقة: `flutter analyze` بدون
-ملاحظات، `flutter test` **133** اختبار، `cargo test` **124** اختبار، و`cargo
-clippy` نضيف)، وبعديه `-Tier full` (بناء النسختين + هارنس العقد اللي بيشغّل كل
-**65** دالة JSON-RPC على محرك حقيقي: **78** حالة) و`-Tier release` (بوابات الحزمة
+`scripts\pipeline.ps1 -Tier fast` (4 خطوات: **181 ثانية** في أول تشغيل بارد عند
+`173224a`، و**76.9 ثانية** في آخر تشغيل أخضر 2026-11-07: `flutter analyze` بدون
+ملاحظات، `flutter test` **110 حالة معلنة في 24
+ملف**، `cargo test` **150 حالة معلنة في 19 موديول**، و`cargo clippy` نضيف)، وبعديه
+`-Tier full` (بناء النسختين + هارنس العقد اللي بيشغّل كل
+**66** دالة JSON-RPC على محرك حقيقي: **67 حالة معلنة**، 14 منهم مصنّفين إنهم مايشتغلوش،
+والهارنس بيضيف سيناريوهات بنفسه — 80 حالة اتنفّذت في آخر تشغيل مسجّل) و`-Tier release` (بوابات الحزمة
 المنشورة: `opsec.verify` و`manifest.verify` و`tamper.verify` — 11 خطوة إجمالًا).
+الأرقام دي **حد أدنى**: الحلقات والبيانات المولّدة بتزوّدها وقت التشغيل، والجدول
+المولّد هو `qa\report.md`.
 والتباين اللوني **متقاس مش بالتقدير**: وضعين
 فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
 والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
 
-**اللي فاضل:** كل المتبقي لحد آخر المشروع — بالمراحل والأولوية والوقت التقريبي
-وترتيب الشغل — في [`docs/ROADMAP.md`](docs/ROADMAP.md)؛ واللي بيتوقف على حضرتك
-حاجتين بس: قبول خدمة المساعدة (٣ عمليات، ١٥ دقيقة) وشهادة التوقيع.
+**اللي فاضل:** كل المتبقي — بالمراحل والأولوية والوقت التقريبي وترتيب الشغل — في
+[`docs/ROADMAP.md`](docs/ROADMAP.md)، والجدول الكامل في [`docs/TODO.md`](docs/TODO.md)
+§0.6. وأول حاجة فيه مش شراء: **نشر نسخة `v0.1.0`** — هي مبنية ومتحققة بالفعل وواقفة
+في GitHub Releases كـ **draft**، والكليكة اللي بتنشرها مجانية (D-031)؛ ومفيش أي حاجة
+في المشروع محتاجة فلوس، لأن المشروع مفتوح المصدر وميزانيته صفر (D-035).
 
 **صور الواجهة:** الصور الأربعة فوق (لوحة المعلومات، الفحص، الاستخبارات، الإعدادات)
 **مرسومة** من كود الواجهة نفسه ببيانات تجريبية — مش لقطات من جهاز حقيقي — وشغّال
@@ -754,11 +818,17 @@ reached right now» أو «ناشر غير معروف») فالحل إنك تو�
 powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 ```
 
-ده بيعمل شهادة `CN=MI CS Code Signing` ويحطها في `CurrentUser\Root` و
-`CurrentUser\TrustedPublisher`، ويوقّع `mics_app.exe` و`mics-engine.exe` وكل
-الـ DLLs **قبل** الهاش والـ zip، فويّندوز بيبقى عنده ناشر يسمّيه بدل ما يرفض
-التطبيق. التوقيع الذاتي ثقة **محلية** بس — بيشيل الرسالة على جهازك، لكنه مش
-سمعة عامة؛ النشر للناس محتاج شهادة حقيقية (P4).
+ده بيعمل شهادة توقيع **ذاتية** بموضوع (subject)
+`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)` ويحطها في
+`CurrentUser\Root` و`CurrentUser\TrustedPublisher`، ويوقّع `mics_app.exe`
+و`mics-engine.exe` وكل الـ DLLs **قبل** الهاش والـ zip، فويّندوز بيبقى عنده ناشر
+يسمّيه بدل ما يرفض التطبيق. و`CN=MI CS Code Signing` ده **مقبول في شهادة ذاتية
+وعمره ما هيتكرر في شهادة CA**: CSCBR §9.2.2 بيفرض إن الـ CN يبقى الاسم القانوني
+المتحقَّق منه، فمفيش CA هتصدر الاسم ده — وعشان كده التثبيت (pin) بيتحوّل لـ
+**thumbprint** في نفس الإصدار اللي فيه شهادة (D-016/D-035). والتوقيع الذاتي ثقة
+**محلية** بس — بيشيل الرسالة على جهازك، لكنه مش سمعة عامة، والمشروع ده **مش بيشتري**
+شهادة عامة (D-035): اللي بيحلّ مكانها إن النسخة تبقى **قابلة للفحص** — البيان
+الموقّع جوّه المحرك، والهاشات المنشورة جنب الأرشيف، ولوج البناء اللي طلّع الاتنين.
 
 
 **ولو الكروت مش بتظهر:** اتأكد من **Settings -> Notifications -> Desktop notifications**
@@ -775,20 +845,28 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` وقارنه بالـ
 `SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه.
 
-**من فين تنزّل:** الإصدار الأول `v0.1.0` على
-[صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases) — المثبّت
-`MICS-setup-0.1.0-x64.exe` أو النسخة المحمولة `MICS-portable-0.1.0-x64.zip`. البناء
-والتوقيع والفحص كلهم بيتعملوا على runners جيت هاب نفسها، وإطلاق الإصدار للعامة بيد بشر بعد
-ما كل الفحوص تعدّي (D-031)؛ ولسه مفيش توقيع عام بشهادة موثوقة، فـ ويندوز هيقول
-"ناشر غير معروف" وSmartScreen ممكن يحذّر — والملفات نفسها بتتحقق من نفسها بالبيان الموقّع.
+**من فين تنزّل:** لسه **مفيش حاجة منزّلة للعامة**. الإصدار الأول `v0.1.0` اتبنى
+واتفحص على runners جيت هاب نفسها، وواقف على
+[صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases) كـ **draft** — والـ
+draft مش باين لحد غير صاحب المستودع، فالصفحة بتوريك «There aren't any releases here»
+لحد ما تتضغط كليكة النشر، وهي مجانية وبيد بشر (D-031). لحد ساعتها ابنيها من السورس
+([Building from source](#building-from-source)) — ولما تتنشر هتلاقي المثبّت
+`MICS-setup-0.1.0-x64.exe` والنسخة المحمولة `MICS-portable-0.1.0-x64.zip` مع
+`SHA256SUMS` و`report.md`. ومفيش توقيع عام بشهادة موثوقة — وده **مقصود** مش ناقص
+(D-035) — فـ ويندوز هيقول «ناشر غير معروف» وSmartScreen ممكن يحذّر؛ اللي بتعتمد
+عليه بدل الشهادة: البيان الموقّع جوّه المحرك والهاشات المنشورة جنب الأرشيف.
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة
 بتتحقق من نفسها بالبيان الموقّع اللي جوّه المحرك. النسخة بتطلع ZIP ومثبّت
 (`MICS-setup-<version>-x64.exe`) من نفس الحزمة، والاتنين متأكَّد منهم بسكريبتات.
 المثبّت بقى هو اللي بيثبّت خدمة المساعدة كمان (ب4) ويشيلها وقت الإزالة، يعني
-المنتج كله بيطلب UAC **مرة واحدة**؛ اللي فاضل: **القياس** على نسخة per-machine
-بكليكة منك، وشهادة توقيع عامة، وتشغيل E2E على المثبّت المبني (د3)، ونسخة
-Windows على ARM (المحرّك بيتبني ويتفحص، بس التطبيق محتاج جهاز ARM يبنيه) —
-كلها متتبَّعة في [`docs/ROADMAP.md`](docs/ROADMAP.md)
-و[`docs/TODO.md`](docs/TODO.md).
+المنتج كله بيطلب UAC **مرة واحدة** — وده **اتقاس خلاص (2026-11-07)**: تثبيت بكليكة
+واحدة، الخدمة اتعملت واشتغلت، والعمليات المميّزة اتنفّذت من غير أي برومبت تاني،
+والإزالة بكليكة واحدة شالت المنتج والخدمة. **اللي فاضل بالفعل جدول واحد** في
+[`docs/TODO.md`](docs/TODO.md) §0.6: **نشر `v0.1.0`** (كليكة مجانية واحدة، وهو
+الوحيد HIGH)، وشغل هندسي مجاني (**بناء قابل لإعادة الإنتاج**، و**هـ1**، وصفوف
+السجل)، وتلات حاجات **مقفولة مش مستنية**: شهادة توقيع عامة (**مش هتتشرى** —
+D-035)، ونسخة Windows على ARM للتطبيق (Flutter مفيش عنده SDK لـ ARM64، والمحرّك
+بيتبني ويتفحص)، و**ز2-د** (توصيل تقارير الانهيار — محتاج قرار D-023). التفاصيل
+والترتيب في [`docs/ROADMAP.md`](docs/ROADMAP.md).

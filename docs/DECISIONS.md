@@ -48,6 +48,16 @@ the release checklist, and documenting in `SECURITY.md` + README that unsigned
 or self-signed builds show "Unknown publisher" in UAC and may trigger
 SmartScreen warnings.
 
+**Amendment (2026-11-07, D-035 — the certificate is no longer "later").** The
+deferral above assumed the release phase would buy one. It will not: the project
+buys nothing, and a publicly trusted certificate is **closed as not-purchased**
+rather than postponed. Everything else in this entry stands — `sign.ps1`, the
+verify step, and the honest README wording — and the wiring is *better* than it
+was, because D-034 makes a donated certificate a two-secret drop-in with no code
+change. What replaces the certificate is the free, checkable evidence D-035
+names. Read D-035 before touching anything about signing, SmartScreen or the
+`CN=MI CS Code Signing` pin.
+
 ---
 
 ## D-003 — Architectures: x64 + ARM64, optional x86 CLI only
@@ -1631,3 +1641,76 @@ signer's common name, pinned in `platform\windows\signature.rs` (D-016), and mov
 pin to a thumbprint is decision (c) in `docs/OPEN-DECISIONS.md` - a separate question with
 its own cost, not something this entry decides.
 
+
+---
+
+## D-035 — Nothing is bought: trust is what a reader can verify by themselves
+
+**Status:** accepted (2026-11-07). Supersedes the "trusted certificate later"
+assumption in D-002, and closes **ب5** (the OV-class certificate) in
+`docs/ROADMAP.md` as *not purchased* rather than *pending*.
+
+**Decision.** MI CS buys nothing — no certificate, no signing service, no tool,
+no cloud, no paid tier. The one paid item the plan ever had (the code-signing
+certificate researched in `docs/COST.md` §2) is off the plan, and the public half
+of "can a stranger trust this download" is answered with evidence that costs
+nothing and that the reader can reproduce:
+
+- the **integrity manifest** signed inside `mics-engine.exe` and the start-up
+  self-check that re-hashes the folder and reports `ok` /
+  `untrusted-certificate` / `unverified` (ج2, ط2);
+- the published **`SHA256SUMS`** next to every asset, so a download can be
+  checked against something that was not the download;
+- a **reproducible build** (F-11) — the honest substitute for "a CA vouched for
+  the author", and now required work rather than a nice-to-have;
+- the **CI run record** for the release that produced the artifact;
+- the **source itself**, which is the only claim here that a certificate never
+  made.
+
+The signing wiring stays exactly as D-034 left it, so a **donated** certificate
+(no money changes hands) is still a two-secret drop-in with no code change. The
+`CN=MI CS Code Signing` pin of D-016 is unaffected in the meantime and *must* be
+moved to a thumbprint in the same release that first carries any certificate.
+
+**Why.** The measured, dated research is in `docs/COST.md` §2, and every free
+route closed for a reason that is not going to change:
+
+- this is a free, open-source project; the brief promises no cost to the user and
+  there is no budget behind it;
+- a certificate buys **reputation**, not a security property: it changes what a
+  first-run dialog says, and nothing about what the code does;
+- Azure Trusted Signing needs a three-year-verifiable organisation and
+  US/Canada residency (not available from Egypt); the free SignPath OSS
+  programme excludes this product category; and **no CA can issue our CN**
+  (CSCBR §9.2.2, an OV certificate must carry the verified legal name of a real
+  person or organisation), so the D-016 pin could never fire on a real
+  certificate anyway;
+- the substitutes above are the ones that survive a hostile reader: hashes,
+  a manifest, and a build anyone can repeat.
+
+**Honest limits.** This decision does **not** make the warning go away. A
+first-seen, unsigned binary has no reputation to look up, so Windows will keep
+showing "Unknown publisher" and SmartScreen may keep asking — measured on this
+machine on 2026-10-30 (unsigned, Smart App Control off, SmartScreen policy
+default, reputation endpoints reachable, and still "can't be reached right now" /
+"Unknown publisher"). That is **permanent**, and the README's troubleshooting row
+says permanent, not "waiting for a certificate". The local half is real and stays:
+`make-release.ps1 -Sign` with a self-signed certificate trusted in
+`CurrentUser\Root` + `TrustedPublisher` makes every binary `Valid` and stops the
+prompts **on the machine that trusts it**, which is what the acceptance runs use.
+
+**Commits us to.**
+
+- Not reopening the purchase without a **superseding** entry here (rule 7).
+  "Let's just buy one" is a decision, not a chore.
+- Keeping `docs/COST.md` §2 as the record of researched routes, dates and prices,
+  so no session spends an hour re-finding the same dead ends.
+- Not letting "we have no certificate" excuse missing evidence: the manifest,
+  `SHA256SUMS` and the reproducible build are now the *load-bearing* trust story,
+  so a release that ships without them is worse off than one that ships unsigned.
+- Keeping D-034's two-secret path working, documented and probed, so a donated
+  certificate (or a future maintainer who buys one for their own fork) needs no
+  code change.
+- Saying so plainly wherever the product is described: the README, this log and
+  the release notes state that nothing is purchased, rather than implying a
+  certificate is coming.

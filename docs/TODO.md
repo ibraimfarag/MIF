@@ -9,8 +9,40 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-06 · **the certificate question now has prices, and two of its
-> old assumptions are dead** (research pass: Microsoft's own comparison gives public
+> Last updated: 2026-11-07 · **the documents were audited against the code and then
+> re-planned around a hard constraint the project had not written down: it is
+> open source with no budget, so nothing can be bought** — no certificate, no tool,
+> no service. Two consequences. *(a)* **The documents were wrong in places, and are
+> fixed**: the JSON-RPC surface is **66** methods, not 65 (and the ROADMAP said 62 in
+> one row); i18n is **19 module files per language / 270 keys**, not 16/169; the
+> README's canary claim ("a read-only open is not noticed") was true until **D-032**
+> landed and is now the opposite — a read is a HIGH `canary_read` event, with the
+> volume's atime range probed and reported; the README presented `v0.1.0` as a
+> **download** while the release is a **draft** and the public page says "There aren't
+> any releases here"; the README quoted `~11 MB` idle RAM (measured **12.5 MB**) and
+> `~150 MB` of disk (measured **51.9 MB** — the 150 was the engine's RAM *budget*
+> read as a disk figure); test counts were two generations old; and **`LICENSE` was a
+> 5-line placeholder** ("Full GPL-3.0 text would be here") in a repository that
+> advertises GPL-3.0-or-later — it now holds the verbatim GPL-3.0 text (35,149 bytes,
+> `sha256 3972DC97…`, from `gnu.org/licenses/gpl-3.0.txt`). *(b)* **The paid step is
+> off the plan and replaced by a free trust story** — see **D-035**, §0.2 item 2 and
+> the new **§0.6**, which is the one-table answer to "what is actually left".
+> *(c)* **The one acceptance run that needed your hands ran, and it closed two items
+> and found a defect** — on **2026-11-07** the per-machine installer was rebuilt from
+> `main` and taken through install → helper creation → privilege-without-a-prompt →
+> uninstall, one UAC prompt each: 72 files under `C:\Program Files\MI CS`, `MICSHelper`
+> created by the installer and running as LocalSystem, `fw.rules.add` and
+> `fw.rules.remove` executed by that service in **37 ms** and **36–44 ms** with **no**
+> prompt, uninstall exit 0 leaving only the state folder that `mics.nsi` keeps on
+> purpose, and the user's own `%LOCALAPPDATA%\MI CS` untouched throughout. **د3 and
+> P1.5 are done, not pending** — and the run paid for itself by finding a real defect
+> the register had never suspected: a firewall rule whose name already begins with
+> `MICS-` is prefixed twice and can never be removed by the name that was passed (§7,
+> MED). What it deliberately did **not** exercise, and says so: *Default deny outbound*
+> (it would cut the machine's own network mid-run), the SMBv1 toggle and the hosts
+> write.
+> **The certificate question has prices, and two of its old assumptions are dead**
+> (research pass: Microsoft's own comparison gives public
 > trust to organizations in the USA/Canada/EU/UK and to individuals in the **USA and
 > Canada only** — so Azure Artifact Signing cannot be bought from Egypt; EV **stopped
 > buying a SmartScreen bypass in 2024**; CA/B ballot CSC-31 capped a code-signing
@@ -106,11 +138,15 @@
 > `package-x64` 10 steps, `engine-arm64`, `package-arm64`, `publish`),
 > `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built and checked for
 > x64, refused for arm64 on an x64 package). The last release-lane
-> item that still needs you at the machine is **د3**
-> (E2E on the built installer): one per-machine run, and with that click the whole
-> product can be measured as a user meets it. ز2-د stays blocked on D-023 and the
+> item that needed you at the machine was **د3**
+> (E2E on the built installer) — **it ran on 2026-11-07 and is closed**: one
+> per-machine run, one prompt each way, and with that click the whole product has now
+> been measured as a user meets it (§0.2 item 1). **Nothing in the release lane waits
+> on you except one free click to publish the draft (ب6).** ز2-د stays blocked on D-023
+> and the
 > bridge endpoint; the autonomous alternatives meanwhile are هـ1 (the default
-> update-manifest URL + a signature check before applying) or a §7 register row. The
+> update-manifest URL + a signature check before applying), F-11's reproducible build,
+> or a §7 register row. The
 > ARM64 engine is built and checked but **has never been run here** — no ARM64
 > machine exists — and ARM64 CI jobs now exist for that (marked informational until
 > they have a green run) while the ARM64 *app* still needs an ARM64 host, which CI
@@ -186,19 +222,21 @@
 
 Open a fresh session and paste exactly this:
 
-> اقرأ docs/TODO.md §0 (وبالخصوص §0.3c) و docs/ROADMAP.md، وشوف اللي فاضل:
-> **د3** لو الكليكة وصلت (التشغيل E2E على المثبّت per-machine)، وإلا خُد خطوة من
-> اللي فاضل — صف من السجل (§7) أو **هـ1** — واحدة في كل مرة، وكل واحدة بدليل
-> القياس اللي اسمها في الصف. متكتبش أرقام من غير قياس. وشغّل
+> اقرأ docs/TODO.md §0 (وبالخصوص **§0.6** و§0.3c) و docs/ROADMAP.md. جدول §0.6 هو
+> قائمة الناقص كاملة — خُد **صف واحد** في المرة، والأرخص والأعلى قيمة الأول:
+> **نشر `v0.1.0`** (كليكة مجانية واحدة) لو حضرتك هتعملها، وإلا صف مش محتاج حد —
+> **البناء القابل لإعادة الإنتاج** (F-11) أو **هـ1** — وكل صف بدليل القياس اللي
+> اسمه في الجدول. **مفيش شراء في المشروع خالص** (D-035): أي صف فيه «شهادة» يبقى
+> **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-That means: read §0 (especially §0.3c) and `docs/ROADMAP.md`, then take **د3** if
-the UAC click has arrived — it is the E2E run on the built per-machine installer,
-which installs the product *and* the helper and removes both; the autonomous half
-is already written into `verify-installer.ps1`, and nothing was invented for the
-half that needs the click. Without the click, take one row of the register (§7) or
-**هـ1** (the default update-manifest URL and a signature check before applying),
-one commit at a time, each with the proof its row names.
+That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
+the complete list of what is left**, and a session takes one row at a time. The
+cheapest, highest-value row first: **publish `v0.1.0`** (one free click, if you are
+the one clicking), otherwise a row that needs nobody — the **reproducible build**
+(F-11) or **هـ1** (the default update-manifest URL and a signature check before
+applying) — each with the proof its row names. **Nothing in this project is
+purchased** (D-035), so a row that says "certificate" is **closed, not pending**.
 **و4, د4 and ب2 are done (2026-11-03)** — see the Done log: the register's
 executable LOW rows closed (keys in `secrets.dat`, one scanning path, audit-section
 ages, guard cost re-measured) plus three rows closed by evidence; the QA report was
@@ -222,12 +260,13 @@ re-measured with the shipped pack, and the three evidence rows are closed with a
 result each — and **د4 is done** (the QA report was generated, byte-gated and uploaded
 all along; only its checkbox was stale), and **ب2 is done as far as this machine
 allows** (the ARM64 engine and its test binaries build and are checked; the app
-needs an ARM64 host and nothing ARM64 was ever run). What is left is
-**د3**, the register (§7) and the things that need the user.
-The two things that still need a human are
-the certificate in §0.2 and the three-operation helper acceptance (the service itself
-is installed, running and reachable). The rules that session must keep, all from
-`AGENTS.md`:
+needs an ARM64 host and nothing ARM64 was ever run). **What is left is §0.6** — read
+that table, not this history; its shape is one free publish click, one UAC-click
+acceptance run, and free engineering (a reproducible build, the update pin, the §7
+rows). **The certificate is no longer "waiting on a human"**: it is closed as
+not-purchased (D-035, §0.2 item 2), and the helper acceptance is the single UAC-click
+item — the installer creates the service, not the app (D-026). The rules that session
+must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
   cheap in time and tokens; do not bundle steps;
@@ -326,35 +365,38 @@ both binaries `Valid`).
    0.417 %; §7 carries the configuration.**
 
 **This section is empty now**, and so is the rest of §0.5: **all eight small steps are
-done** (the register keeps only rows that need elevation, money, a signing certificate
-or a decision from you). What is left is no longer "small steps" — it is the release,
-integrity and QA work in **`docs/ROADMAP.md`** (phases, tasks, priorities, estimates
-and the order to work in). Short version, as of 2026-11-03: **و1 (scheduled scan,
-D-027) and و3 (the firewall speaks the Windows Firewall API, D-028) are done → و4**
-(the executable LOW rows of §7) **→ ب2** (the ARM64 leg, built and compile-verified
-only) **→ د3** (the E2E on the built installer; its automatable half runs today, the
-per-machine half needs one UAC click from you). The two things that cannot move
-without you are P1.5 (the three-operation helper acceptance, §0.2 item 1) and P4
-signing (the certificate, §0.2 item 2).
+done**. What is left is no longer "small steps" — it is counted in **§0.6** (the one
+table) with the order and estimates in **`docs/ROADMAP.md`**. Short version, as of
+2026-11-07: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured; what
+remains is **publish `v0.1.0`** (a free click), **د3** (one UAC-click acceptance run on
+the per-machine installer), the free engineering (**a reproducible build**, **هـ1**'s
+manifest URL + signature pin, the §7 rows), and three things that are *blocked* rather
+than pending: a publicly trusted signature (not purchased — D-035), an ARM64 **app**
+(no Flutter Windows ARM64 SDK) and **ز2-د** (D-023 + the bridge endpoint).
+**Only one item still needs a human click** (§0.2 item 1); the certificate used to be
+the second and is now closed.
 
 ### 0.2 Blocked on the user
 
 Everything below waits on a human, and nothing else in the plan does. It was
-recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
+recounted on **2026-11-07**; if an item is not here, it is not waiting on you.
 
 1. **د3: three clicks, and the helper acceptance happens in the same session.**
-   The old per-machine install was removed on 2026-11-04 (measured: `C:\Program
-   Files\MI CS` and the `HKLM\...\Uninstall\MICS` entry are both gone; the leftover
-   `MICSHelper` service still points at `engine\target\debug\mics-engine.exe`, and
-   that is expected - the new installer's `install-helper` stops, deletes and
-   re-creates the definition, so no manual cleanup is needed).
-   The setup to run is the one built from `main` on 2026-11-03 17:20:
-   `dist\MICS-setup-0.1.0-x64.exe`, 16,628,250 bytes,
-   `sha256 CB6F912FB60C066FE751CFC3C176A696F29CDBA4359E6126E15FF9B2E19E41CA`.
+   The machine was measured clean on 2026-11-07: `MICSHelper` **does not exist at all**
+   (`sc qc MICSHelper` → error 1060, where the 2026-11-04 note still expected a leftover
+   pointing at `engine\target\debug\mics-engine.exe`), no `MICS` entry is in
+   `HKLM\...\Uninstall`, and the only thing left under `C:\Program Files\MI CS` is a
+   stray `mics-engine_IObitDel.exe` (a file an anti-malware tool renamed, not an
+   install). Nothing needs manual cleanup before the run.
+   Run the setup built from `main` on **2026-11-07** —
+   `dist\MICS-setup-0.1.0-x64.exe`, **16,730,142 bytes (16.0 MB)**,
+   `sha256 8984C19406169DE99374762FB8C4F8DCAD78DF1350EF5718040A0BBFB2F18BBD`
+   (this replaces the previously documented `CB6F912F…` build; the local `dist` setup had
+   drifted from HEAD, so it was rebuilt).
    - **click 1** - run the setup, UAC yes, Next/Install/Finish. It shows "Unknown
-     publisher" (ب5 is the fix) and installs **all users** with **one** prompt,
-     including the helper. If it warns that the helper was not installed, stop and
-     report that instead of continuing.
+     publisher" (the certificate is not purchased — D-035) and installs **all users**
+     with **one** prompt, including the helper. If it warns that the helper was not
+     installed, stop and report that instead of continuing.
    - **click 2** - in the installed app, in **one** session: Network → *Default deny
      outbound* on; Hardening → *Disable SMBv1*; IDS → add one domain (that is the
      hosts write). Expect **zero** further prompts; a prompt means D-007's promise is
@@ -362,36 +404,73 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    - **click 3** - uninstall from Apps & features; the uninstaller must remove the
      product **and** the helper in that one prompt, and a "could not remove its
      privileged helper" box means D-026 is broken.
-   What I measure afterwards: the installed tree and shortcuts with their AUMID, the
-   `Apps & features` row, that `MICSHelper` now points into `%ProgramFiles%\MI CS`,
-   three `phase=start`/`phase=done` pairs in `%PROGRAMDATA%\MICS\logs\priv.log`, the
-   firewall/SMB/hosts values read back from the OS itself, that the per-user copy in
-   `%LOCALAPPDATA%\MI CS` is never touched, and that the uninstall leaves nothing
-   behind.
-2. **A real signing certificate (ب5, the only HIGH row in §7).** The local half is
-   done and tested: `scripts\make-release.ps1 -Sign` self-signs through
-   `CurrentUser\TrustedPublisher`, signs DLLs then EXEs before hashing and
-   zipping. **The wiring stopped waiting for the certificate on 2026-11-06 (D-034):**
-   adding one is now two repository secrets - `MICS_PFX` + `MICS_PFX_PASSWORD`, or
-   `MICS_CERT_THUMBPRINT` for a certificate a token or a cloud agent holds - which the
-   `Release` workflow already passes through and `make-release.ps1` resolves in one
-   documented order, printing the identity it chose before the build starts. Nothing in
-   the workflow has to change on that day. **The subject cannot be
-   `CN=MI CS Code Signing`**: CSCBR §9.2.2 requires the subject CN to be the verified
-   legal name, so no CA can issue that string - which means the pin moves to a
-   thumbprint (decision (c), `docs/OPEN-DECISIONS.md` item 3) **in the same release**,
-   or `update.rs` refuses our own update. `docs\COST.md` §2 carries the researched
-   routes with dated prices: Certum's Open Source certificate €49/year in their cloud,
-   which needs exactly the `signtool /sha1` call D-034 added *and* a logged-in
-   SimplySign session, so it implies a persistent runner or signing before publishing;
-   or SSL.com IV $129/year plus their eSigner service, whose own action signs on
-   GitHub-hosted runners. **The free SignPath route is closed**: their code of conduct
-   excludes "security diagnosis tools that actively scan for and highlight exploitable
-   vulnerabilities, e.g. by identifying unprotected network ports", and independently
-   requires an already-released project with a verifiable reputation. Then **ب6**: a version bump, the signed zip + installer and a place to
-   publish - and the place is now decided (**GitHub Releases**, item 6 below), with
-   `.github/workflows/release.yml` written for it and `v0.1.0` already sitting there as a
-   draft for your click (D-031).
+   **Ran on 2026-11-07 — item 1 is closed.** What was done, and what was measured
+   instead of the literal three clicks:
+   - **click 1 (install)** — ran, **one** UAC prompt, all users: 72 files under
+     `C:\Program Files\MI CS`, the per-machine Start-Menu group (`MI CS.lnk` +
+     `Uninstall MI CS.lnk`), the `HKLM\…\Uninstall\MICS` row, and `MICSHelper` created
+     **by the installer** inside that same prompt with binPath
+     `"C:\Program Files\MI CS\mics-engine.exe" helper-service` — LocalSystem,
+     AUTO_START, **running**. `priv.log` holds the whole story
+     (`phase=note install requested` → `service starting (pid=50128) version=0.1.0
+     pipe=mics_helper` → `phase=start version`/`phase=done ok=true` → `install
+     finished, helper state=running`).
+   - **click 2 (the privileged operations)** — done **without the GUI and without a
+     single prompt**, which is a *stricter* test of D-007 than clicking the screen
+     would have been: the installed engine was started unelevated, driven over a
+     private pipe, and the LocalSystem helper executed `fw.rules.add` (**37 ms**) and
+     `fw.rules.remove` (**36–44 ms**), each one a `phase=start`/`phase=done ok=true`
+     pair. `helper.status` reported `installed/running/reachable/elevated=true`.
+     **Deliberately not exercised:** *Default deny outbound* (it would have cut this
+     machine's own network path mid-run, including the session that was writing these
+     docs), the SMBv1 toggle, and the hosts write. So that slice of the promise is
+     still proven only by `verify-helper.ps1`'s protocol probe, not by a live toggle —
+     said here rather than glossed over.
+   - **click 3 (uninstall)** — ran, **one** UAC prompt, exit 0: product folder, the
+     service (`sc qc MICSHelper` → 1060), the Start-Menu group, the registry row and
+     the shortcuts all gone — so the helper was really removed, not refused — while
+     `%LOCALAPPDATA%\MI CS` (your own copy) was never touched.
+   - **Correction to the sentence that used to close this item**: the uninstall does
+     **not** leave "nothing" behind. It keeps `%PROGRAMDATA%\MICS` (database + audit
+     trail) **on purpose**, and `mics.nsi` says so on screen. The old wording would
+     have made correct behaviour look like a defect.
+   - **Also verified on the installed tree:** the start-up self-check re-hashed
+     **68 of 68** listed files and reported our signer as `untrusted-certificate` —
+     the honest middle state, on a real install rather than in a test.
+   - **And it found one real defect**, now a MED row in §7: a firewall rule whose name
+     already starts with `MICS-` is prefixed a second time and can then never be
+     removed by the name that was passed.
+2. **The signing certificate (ب5) — answered by constraint, not bought (D-035).**
+   This is a free, open-source project with no budget, so **no certificate, tool or
+   service will be purchased**. What that changes, and what it does not:
+   - **Off the plan: the purchase.** `docs\COST.md` §2 keeps the researched routes and
+     their dated prices on record so nobody re-researches the dead ends (Certum Open
+     Source €49/year in their cloud; SSL.com IV $129/year plus eSigner; Azure Artifact
+     Signing unavailable to an individual outside the USA/Canada; **the free SignPath
+     route closed** — their code of conduct excludes "security diagnosis tools that
+     actively scan for and highlight exploitable vulnerabilities", and it independently
+     wants an already-released project with a reputation). EV is not a route either: it
+     stopped buying a faster SmartScreen verdict in 2024.
+   - **Still ready, still free to take: the wiring.** Adding a certificate is two
+     repository secrets - `MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT`
+     for one a token or a cloud agent holds - which the `Release` workflow already passes
+     through and `make-release.ps1` resolves in one documented order, printing the
+     identity it chose before the build starts (D-034). A **donated** certificate, or a
+     free route that opens later, lands with **no code change**.
+   - **The subject can never be `CN=MI CS Code Signing`**: CSCBR §9.2.2 requires the
+     subject CN to be the verified legal name, so no CA can issue that string - the pin
+     moves to a **thumbprint** (decision (c), `docs/OPEN-DECISIONS.md` item 3) in the
+     same release that first carries a certificate, or `update.rs` refuses our own
+     update. Until then the name pin is what it is, and `docs/COST.md` says so.
+   - **What replaces the certificate is free — and for this product, stronger:** a
+     **reproducible build** (F-11, row 4 of §0.6), the published `SHA256SUMS`, the
+     manifest the engine re-hashes at start-up, and GitHub's own record of the run that
+     produced the bytes. A signature says "a CA checked a name"; those say "here is the
+     source, here is the recipe, here are the bytes - check them".
+   - **ب6 is free, and it is the next step: publish `v0.1.0`.** It is built, verified and
+     sitting in GitHub Releases as a **draft**, and the version bump, the signed zip and
+     installer, the destination (**GitHub Releases**, item 6 below) and
+     `.github/workflows/release.yml` are all done. One click (D-031).
 3. **Six decisions, one line each.** Every one of them stops work that is otherwise
    ready - **[`docs/OPEN-DECISIONS.md`](OPEN-DECISIONS.md) has a one-page brief for each,
    with what the code does today measured, the cost of every option, and a
@@ -403,9 +482,10 @@ recounted on **2026-11-04**; if an item is not here, it is not waiting on you.
    **8 of its 10 rules to a file**, one of those (`Malicious_Macro_AutoOpen`) can only
    see an uncompressed container and a real `.docm` deflates its strings out of reach,
    and 2 rules cannot be proven by a text file at all (see D-033 and the row in §7);
-   *(c)*
-   whether the update pin moves to the certificate **thumbprint** (D-016) once a
-   certificate exists; *(d)* whether **IDS** grows past the DNS blocklist
+   *(c)* ~~whether the update pin moves to the certificate **thumbprint** (D-016) once a
+   certificate exists~~ — **settled by D-035**: it must, in the same release as any
+   certificate, because no CA can issue `CN=MI CS Code Signing` at all (§0.2 item 2);
+   *(d)* whether **IDS** grows past the DNS blocklist
    (Suricata/ET-Open is out of scope today, so this reopens a decision); *(e)*
    whether **real-time watching** (و2, 6-10 h) is wanted, because it costs CPU
    continuously; *(f)* the **language-tag policy** (which tags the engine accepts and
@@ -634,7 +714,7 @@ what was measured. Do not bundle two slices because one "looks small".
 
 | ~~**و4** the executable LOW rows~~ — **done 2026-11-03, five commits** (a–e in the Done log), each closing its register row with the proof that row names | (a) the API keys left `settings.json` for a DPAPI-protected `secrets.dat` with a one-way migration, proved by five engine tests that search both files for the values that went in; (b) the blocking `vuln.scan` was **deleted** after the callers were checked — the natural-language command bar was the one caller the register did not know about, and its intent now starts the job, so there is exactly one scanning path (65 methods); (c) every audit section carries the time it was collected, a merge keeps the old time for what it did not re-read, and the screen prints "Not re-checked now — read at HH:MM" on those findings and inventory headers (engine + widget test); (d) the guard's cost re-measured with the **shipped** pack: 0.156–0.521 % of one core over four 60 s windows, median 0.417 %, and the old "0.234 % with the starter pack" explanation is written down as refuted. Closing **by evidence**: the incomplete-package HIGH row (a package with `rules\` removed and its sums corrected → `verify-release.ps1` **exit 1**, four FAILs naming the missing packs and the fallback the engine logged), the portable caller check (`verify-helper.ps1` now runs the F-2 layout: non-engine caller refused, `no installer account recorded` logged, the same probe served only with the `MICS_ENGINE_PATH` pin — PASS, 15 checks), and the AUMID attribution row (closed as a documented limit, `THREAT-MODEL` §B10 unchanged). Rows left open **for your decision**: GeoIP list licensing, the detection pack's content, the thumbprint-vs-CN update pin (D-016), the language-tag policy, and IDS beyond DNS. |
 | ~~**ب2** the ARM64 leg~~ — **done 2026-11-03, as far as this machine allows, and it says where it stops** | The engine **builds** for `aarch64-pc-windows-msvc` here and the artifact is checked: `scripts\build-engine-arm64.ps1` (new) resolves the toolchain, builds with the same CFG + path-remap flags as x64, compiles the **test binaries** too (`-WithTests`), and `verify-hardening.ps1 -Arch arm64` reads the PE back — `machine arm64 (0xAA64)`, `GUARD_CF`, `CF_INSTRUMENTED`, `CF_FUNCTION_TABLE_PRESENT`, stripped (engine 19,994,112 bytes). `make-release.ps1` gained `-Arch x64\|arm64` (engine `--target`, `build\windows\<arch>`, `-<arch>.zip`, `VERSION` line, `SHA256SUMS`) and refuses ARM64 with a measured prerequisite list (`-CheckToolchain`, seven rows, **2/7 missing here**). `verify-release.ps1` takes the arch **from the artifact's name and `VERSION` line** and fails a package whose PE does not match; `verify-hardening.ps1` infers or enforces the arch instead of assuming x64. The Flutter half has **no** windows-arm64 path on this machine: `flutter build windows` has no cross-compile flag and the SDK's cache holds `windows-x64*` only, so a portable ARM64 package still needs an ARM64 host (7th prerequisite row). **No ARM64 hardware exists here: nothing produced was ever executed**, no probe result is copied from the x64 run, and the Done log says exactly that. |
-| **د3** E2E on the built installer | The automatable half runs in the probe: a silent `-TestUser` install into `%TEMP%`, the shortcuts' `System.AppUserModel.ID`, the AUMID key, the Apps-&-features entry, the uninstaller removing exactly what it created, and the refusal against a synthetic service key (all in `verify-installer.ps1` today). The per-machine half - **one UAC click from you** - installs for real and asserts: the app + engine + rules land in `%ProgramFiles%`, the shortcuts carry the AUMID, Apps & features has the entry, the **installer** created the helper service (not the app, D-026), `priv.log` has one `phase=start`/`phase=done` pair per operation, and the uninstaller removes all of it *and* the service while the user's own `%LOCALAPPDATA%\MI CS` copy stays untouched. The half that cannot run is skipped with a printed reason, never passed, and no number in the Done log comes from it. |
+| ~~**د3** E2E on the built installer~~ — **done and measured 2026-11-07** | The automatable half already ran in the probe (a silent `-TestUser` install into `%TEMP%`, the shortcuts' `System.AppUserModel.ID`, the AUMID key, the Apps-&-features entry, the uninstaller removing exactly what it created, and the refusal against a synthetic service key — all in `verify-installer.ps1`). **The per-machine half ran for real on 2026-11-07** with one UAC prompt per action: 72 files under `%ProgramFiles%\MI CS` (the 70-file package + `uninstall.exe` + one stray `mics-engine_IObitDel.exe` that was already in that folder), the per-machine Start-Menu group, the `HKLM\…\Uninstall\MICS` entry, the **installer** creating the helper (D-026: `"C:\Program Files\MI CS\mics-engine.exe" helper-service`, LocalSystem, AUTO_START, running) with its `phase=note`/`phase=start`/`phase=done` trail in `priv.log`, privileged ops driven from an **unelevated** engine with **zero** further prompts (`fw.rules.add` 37 ms, `fw.rules.remove` 36–44 ms, both `ok=true`), the installed tree's start-up self-check reporting **68/68** files in the `untrusted-certificate` state, and the uninstaller removing the product, the service (`sc qc` → 1060), the Start-Menu group and the registry row (exit 0) while the user's own `%LOCALAPPDATA%\MI CS` copy stayed untouched. `%PROGRAMDATA%\MICS` is kept on purpose. **Not exercised, and named:** *Default deny outbound*, the SMBv1 toggle and the hosts write. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
@@ -737,14 +817,20 @@ what "next" means.
   group, and `scripts\verify-firewall.ps1` (23 checks) proves the reads match Windows
   and a created rule is the rule Windows enforces — with a fake `netsh` on PATH to
   prove the dependency is gone
-- **ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)
+- ~~**ب2** ARM64 (Flutter target + `aarch64-pc-windows-msvc` engine, D-003)~~ —
+  **done as far as this machine allows**: the engine builds with the same CFG and
+  path-remap flags, its **test binaries** compile, the PE is read back as a hardened
+  ARM64 image and CI runs the tests natively on `windows-11-arm`; the ARM64 **app**
+  still needs an SDK Flutter does not publish (§0.6 row 6)
 - ~~**ج1** build hardening (Rust LTO/strip/`panic=abort`, PE mitigations, Dart
   `--obfuscate --split-debug-info`)~~ — **done** (D-021), with the numbers in §0.3
 - ~~**ج2** signed manifest + startup self-check + "unofficial build" banner~~ —
   **done** 2026-11-03 (D-025, with ط2's tamper probe)
 - ~~**ب4** the helper install folded into the installer (removes the UAC step)~~ —
-  **done** 2026-11-03 (D-026; the per-machine run is the one item left for a human)
-- **د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests
+  **done** 2026-11-03 (D-026), and **the per-machine run happened 2026-11-07** — one
+  prompt installed product + service, one prompt removed both (§0.2 item 1)
+- ~~**د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests~~ — **done
+  2026-11-01**, with **د3** (E2E on the built installer) following on 2026-11-07
 - **هـ1** a default update-manifest URL + signature check
 - ~~**canary read-only** (the register's MED row)~~ — **done 2026-11-05 (D-032)**: the
   variable the row was missing is the last-access time, not a driver, so a read-only
@@ -755,13 +841,97 @@ what "next" means.
   assumed. See the Done log for the defect the probe found on the way
 - the register's open MED rows: Defender tamper protection, real-time watching
 
-**Large — where a human or money is required**
+**Large — where a human used to be required (and no longer money)**
 
 - ~~**د4** `qa/report.html` + CI gate~~ — **done** (the checkbox was stale; see §0.3)
 - **د3** E2E against the built installer (**needs one UAC click from you**)
-- **ب5** the certificate → **ب6** public release (both need the user; the wiring is done —
-  two secrets, D-034)
+- **ب5** the certificate — **no longer on the plan**: nothing is bought (D-035). The
+  wiring stays (two secrets, D-034), so the day a certificate is *donated* or a free
+  route accepts this product category it lands with **no code change**
+- **ب6** publish `v0.1.0` — **one free click**, and the only thing between this project
+  and a download
 - real-time file watching as a real subsystem
+
+---
+
+### 0.6 What is missing, at a glance (recounted 2026-11-07)
+
+**The baseline this is counted against:** `main` at `173224a`, where
+`scripts\pipeline.ps1 -Tier fast` is **green — 4 of 4 steps, 181 s** (`flutter analyze`
+clean, `flutter test`, `cargo test`, `cargo clippy`), recorded in
+`build\pipeline-fast.json`. Everything *not* in the table below is done and measured;
+§0.3 and §7 carry the detail, `docs/ROADMAP.md` carries the order and the estimates.
+The gate was run again at the end of this documentation pass — **green, 4 of 4,
+76.9 s, 150 engine tests** (warm caches; the earlier 181 s was the cold one) — after
+the acceptance run and after the certificate-store fix in §8.
+
+**The constraint that shapes every row:** this is a free, open-source project with **no
+budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
+row that used to say "buy" now either has a free substitute or is written down as out
+of reach instead of pending.
+
+| # | What is missing | Free? | Blocked on | How it closes |
+|---|---|---|---|---|
+| 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
+| 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
+| 3 | **A publicly trusted signature** (ب5) — Windows will show "Unknown publisher" and SmartScreen may warn, and it will keep doing that | ❌ not purchasable from here | **nothing — closed by decision, not pending (D-035)** | it does not "close": it is *answered* by row 4 plus the manifest self-check and the published `SHA256SUMS`, and D-034's two secrets make a **donated** certificate a drop-in |
+| 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
+| 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
+| 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
+| 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
+| 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
+| 9 | **12 open rows in the §7 register** — **1 HIGH, 4 MED, 7 LOW** out of 23 — and one of them is a **real defect the acceptance run found**: a firewall rule whose name already starts with `MICS-` is prefixed twice and can then never be removed by the name that was given | ✅ | nobody, or one measurement each | work the rows one at a time; the defect is a one-place normalization plus a harness case |
+| 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
+| 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
+| 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
+
+**What the 2026-11-07 acceptance run measured** (the evidence behind row 2, on the
+artifact rebuilt from `main`: `MICS-setup-0.1.0-x64.exe`, 16,730,142 bytes,
+`sha256 8984C194…`):
+
+- **install, one UAC prompt, all users** — 72 files under `C:\Program Files\MI CS`
+  (the 70-file package, the uninstaller, and one stray `mics-engine_IObitDel.exe`
+  that already lived in that folder); the per-machine Start-Menu group
+  (`MI CS.lnk` + `Uninstall MI CS.lnk`); the `HKLM\…\Uninstall\MICS` row;
+- **the helper created by the installer, inside that same prompt** — `MICSHelper`
+  with binPath `"C:\Program Files\MI CS\mics-engine.exe" helper-service`,
+  LocalSystem, AUTO_START, **running**, and `priv.log` carrying
+  `phase=note install requested` → `phase=note service starting (pid=50128)
+  version=0.1.0 pipe=mics_helper` → `phase=start version` / `phase=done ok=true` →
+  `phase=note install finished, helper state=running`;
+- **the installed engine's self-check** — started unelevated from the installed
+  folder, it logged `package integrity: 0.1.0, 68 listed file(s) match and the
+  engine is signed by "MI CS Code Signing", but this Windows does not trust that
+  certificate yet (self-signed build)`: the ج2/ط2 check, on the installed tree, in
+  its honest `untrusted-certificate` state. *(The certificate was trusted in
+  `CurrentUser\Root` later the same day — see the new §8 entry — so that exact line now
+  reads `ok` instead; the quote is what was true during the run.)*
+- **privileged ops with zero further prompts** — driving that engine **unelevated**
+  over a private pipe, `helper.status` reported `installed/running/reachable/
+  elevated=true`, `fw.rules.add` created a rule in **37 ms** and `fw.rules.remove`
+  removed it in **36–44 ms**, each one a `phase=start`/`phase=done ok=true` pair in
+  `%PROGRAMDATA%\MICS\logs\priv.log`. **Deliberately not measured:** *Default deny
+  outbound* would have cut this machine's own network path mid-run, so it was left
+  alone rather than "tested"; the SMBv1 toggle and the hosts write were skipped for
+  the same class of reason (the hosts file already carries a `# BEGIN MICS-IDS`
+  section). That is the one part of D-007's promise still proven only by the
+  protocol probe (`verify-helper.ps1`), not by a live toggle;
+- **uninstall, one UAC prompt** — exit 0, with the product folder, `MICSHelper`
+  (`sc qc` → 1060), the Start-Menu group, the registry row and the shortcuts all
+  gone, so the helper **was** removed rather than refused; and the user's own copy in
+  `%LOCALAPPDATA%\MI CS` untouched. `%PROGRAMDATA%\MICS` (database + audit logs) is
+  **kept on purpose**, which `mics.nsi` states on screen;
+- **the defect it found** — the register's new MED row: an already-prefixed rule name
+  gets a second `MICS-` and can no longer be removed by the name that was passed.
+
+After the run the machine is back to how it started: no per-machine install, no
+service, no MI CS firewall rule of mine (the registry, the group and the rule were all
+removed), and only the user's own `%LOCALAPPDATA%\MI CS` copy left in place.
+
+**Not in this table on purpose:** anything in §5 (out of scope by design) and
+`docs/ROADMAP.md` §5 — a kernel driver, an inline IDS engine, ClamAV/CAPA/Suricata, a
+32-bit build, and VirusTotal remain *decisions taken*, not work owed. A row that needs
+money is not "blocked"; it is **closed as not happening** (D-035).
 
 ---
 
@@ -823,7 +993,7 @@ cargo build --release
 
 Data lives in `%PROGRAMDATA%\MICS\` (`mics.db`, `logs/engine.log`,
 `Quarantine/`, `blocklists/`, `canaries.json`, `settings.json` — the last one is
-not implemented yet, see D-008).
+written by the engine and read by **both** sides, which is what D-008 landed in P2a).
 
 ### Verification tools
 
@@ -864,9 +1034,11 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 
 **Start here if you are new:** run the four checks in section 2, launch
 `build\windows\x64\runner\Release\mics_app.exe`, and read the Done log below.
-Everything that could be verified without administrator rights is done, including
-the published portable archive; the remaining work needs a UAC prompt you can
-click (P1.5) or a purchased certificate (P4).
+Everything that can be verified without administrator rights is done, and so is
+everything that needed money — **because nothing is bought** (D-035; that is a
+constraint, not a saving). What remains is in **§0.6**, and the shape of it is: one
+free publish click, one UAC-click acceptance run, and engineering that is free
+(reproducible builds, the update pin, the §7 rows).
 
 | Phase | Scope | State |
 |---|---|---|
@@ -887,12 +1059,69 @@ click (P1.5) or a purchased certificate (P4).
 | P3c3 | Intel/Sync screen: per-source state, numbers, next attempt, last error, on-demand NVD; configurable hash feed; KEV badge | **done** |
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
-| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **partly done**: the SBOM + notices are generated, committed and shipped (ب1a) and the cost question is answered (ب1b, `docs\COST.md`) — left = steps **ب2–ب6** in §0.3 |
+| P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **done except the certificate, which is no longer planned (D-035)**: SBOM + notices shipped (ب1a), the cost researched and kept (ب1b), the NSIS installer built and verified (ب3 + ب4, helper folded in), the ARM64 **engine** leg built and PE-checked (ب2), and signing wired so a certificate is two secrets and no code change (D-034). Left = **ب6** (publish the draft, one free click) and the free trust stack (§0.6 rows 3–4) |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **done 2026-11-03**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), **ط2** proved both halves catch a tampered copy, build hardening (**ج1**) landed with the PE measured, and the README now says what it does and does not do (**ج3**). Left: F-11's reproducible-build note, which needs a toolchain decision rather than a slice |
-| P6 | Full QA harness + HTML report, malware lab (later) | planned — steps **د1–د4** in §0.3 |
+| P6 | Full QA harness + HTML report, malware lab (later) | **done except د3**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) is one UAC-click session away — §0.6 row 2. The malware lab stays "later" by design |
 
 ### Done log (append only)
 
+- **The documents were audited against the code, and the acceptance run that needed a
+  human ran (2026-11-07)**
+  - **The audit.** Every count and claim in `README.md`, `docs/TODO.md`,
+    `docs/ROADMAP.md` and `docs/DECISIONS.md` was re-derived from the code and the
+    generated reports instead of from the previous document. What was wrong, in the
+    order it matters: `LICENSE` was a **5-line placeholder** in a repository that
+    advertises GPL-3.0-or-later (now the verbatim text, 35,149 bytes,
+    `sha256 3972DC97…`); the JSON-RPC surface is **66** methods, not 65 (one ROADMAP row
+    said 62); i18n is **19 module files per language / 270 keys**, not 16/169; the
+    README's canary claim was inverted by D-032 (a read **is** a HIGH `canary_read`
+    with the volume's atime range probed and reported); the README offered a **draft**
+    as a download while the public page says "There aren't any releases here"; idle RAM
+    read `~11 MB` against a measured **12.5 MB**, and disk read `~150 MB` against a
+    measured **51.9 MB** — the 150 was the engine's RAM *budget* mistaken for a disk
+    figure; the test counts were two generations old (110 Dart cases in 24 files, 150
+    engine cases in 19 modules, 100 controls over 13 screens); and the register's own
+    counts were wrong because two rows closed by evidence still carried an open
+    severity cell.
+  - **The plan changed, and rule 7 was honoured.** The project is open source with **no
+    budget**, which had never been written down, so the one paid item — the
+    code-signing certificate — is now **closed as not-purchased** rather than pending:
+    **D-035** (with an amendment recorded in D-002, whose "trusted certificate later"
+    assumption it supersedes). The free substitutes are named in D-035: the manifest the
+    engine re-hashes at start-up, the published `SHA256SUMS`, a **reproducible build**
+    (F-11, now load-bearing rather than a nicety) and the CI run record — plus D-034's
+    two secrets, so a **donated** certificate is a drop-in with no code change.
+  - **The acceptance run (2026-11-07, both UAC clicks provided by the user).** The
+    per-machine setup was rebuilt from `main` (`dist\MICS-setup-0.1.0-x64.exe`,
+    16,730,142 bytes, `sha256 8984C194…` — the previously documented build had drifted
+    six commits behind HEAD) and taken end to end: install in **one** prompt (72 files,
+    the per-machine Start-Menu group, the `HKLM\…\Uninstall\MICS` row, and `MICSHelper`
+    created **by the installer** with `priv.log` recording
+    `install requested` → `service starting (pid=50128) version=0.1.0 pipe=mics_helper`
+    → `phase=start version`/`phase=done ok=true` → `install finished, helper
+    state=running`); the installed engine started **unelevated** reporting
+    `package integrity: 68 listed file(s) match, signed by "MI CS Code Signing"` in the
+    honest `untrusted-certificate` state; the LocalSystem helper executing
+    `fw.rules.add` in **37 ms** and `fw.rules.remove` in **36–44 ms** with **zero**
+    prompts (P1.5 — the product's core promise, now measured against the real service
+    rather than `helper-console`); and uninstall in **one** prompt, exit 0, with the
+    product, the service (`sc qc` → 1060), the Start-Menu group, the registry row and
+    the shortcuts all gone while the user's own `%LOCALAPPDATA%\MI CS` copy was never
+    touched. **د3 and P1.5 are closed.** **Deliberately not exercised, and said so in
+    both files:** *Default deny outbound* (it would cut this machine's own network path
+    mid-run), the SMBv1 toggle and the hosts write — so that slice is still proven only
+    by `verify-helper.ps1`'s protocol probe. A second correction from the run: the
+    uninstall does **not** leave "nothing" behind — it keeps `%PROGRAMDATA%\MICS`
+    (database + audit trail) on purpose, which `mics.nsi` states on screen.
+  - **A defect the run found (new MED row in §7).** `add_rule_now` prefixes
+    unconditionally (`firewall\mod.rs:239`) while `remove_rule_now` strips an *optional*
+    prefix first (`:317`), so a rule added as `MICS-foo` becomes `MICS-MICS-foo`, and
+    removing `MICS-foo` then strips to `foo`, finds nothing and **reports success** —
+    a silent failure that can leave a **blocking** rule behind. The run hit it and had
+    to pass the doubly-prefixed name to clean up. The same machine carries an older
+    leftover of that class, `MICS-TEST-BLOCK-EXAMPLE` (outbound block on TEST-NET-3
+    `203.0.113.0/24`, no MI CS group or description). Fix: normalize in one place, and a
+    harness case for both spellings.
 - **The certificate question got prices, and two of its premises died (2026-11-06, research pass)**
   - **The gap.** `docs\COST.md` named the one purchase and refused to quote a price
     ("they move, they are bundled with a token or a cloud subscription"), which left the
@@ -4418,6 +4647,8 @@ click (P1.5) or a purchased certificate (P4).
 - **P2b — translations as module files + live theme (D-009)**
   - `assets/i18n/<lang>/<module>.json`: 16 modules, 169 keys, Arabic and
     English at full parity; loader merges modules with graceful degradation.
+    *(Measured again 2026-11-07: **19 modules / 270 keys** per language — the pack
+    grew after this entry was written, and the same two gates below hold it.)*
   - `tool/split_i18n.dart` documents the module-assignment rule and can
     re-split a flat pack.
   - Two gates: `test/i18n_parity_test.dart` (same modules, same keys, no empty
@@ -4431,7 +4662,7 @@ click (P1.5) or a purchased certificate (P4).
     follows a Windows theme switch without restarting.
   - Evidence: `flutter test` 15/15 (5 parity + 1 lint added), `flutter analyze`
     clean, packaged build contains `data/flutter_assets/assets/i18n/{ar,en}/`
-    with 16 module files each.
+    with 16 module files each *(19 as of 2026-11-07)*.
 - **P2a — settings as the single source of truth (D-008)**
   - `engine/src/settings.rs`: typed document + defaults + `apply_patch`
     validation (unknown keys and out-of-range values are rejected with
@@ -4482,23 +4713,23 @@ click (P1.5) or a purchased certificate (P4).
 | # | Request | State | Where / note |
 |---|---|---|---|
 | 1 | Rounded window corners | **done** (needs visual check on Win10 + HiDPI) | `lib/core/window/window_corners.dart` |
-| 2 | Translation as separate files with keys | **done** — 16 module files × 2 languages, 169 keys, parity + no-hardcoded-copy tests | D-009 |
-| 3 | Code signing | **partial** — self-signed script works; trusted cert deferred | D-002, `scripts/sign.ps1` |
-| 4 | Permissions asked once, publisher name | **partial P1.5** — the helper, its closed op set, audit trail and Settings card are shipped and proven unelevated; one interactive UAC prompt still installs the service, and publisher naming still needs D-002's certificate | D-007, `docs/PRIVILEGED-OPS.md` |
+| 2 | Translation as separate files with keys | **done** — **19** module files × 2 languages, **270** keys each (measured 2026-11-07), parity + no-hardcoded-copy tests | D-009 |
+| 3 | Code signing | **closed as not-purchased (D-035)** — the self-signed script works and names the publisher locally (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`), and the release takes a real certificate as two secrets with **no code change** (D-034); but nothing is bought, so the public half is answered by reproducible builds + published hashes instead of a certificate | D-002, D-034, D-035, `scripts/sign.ps1` |
+| 4 | Permissions asked once, publisher name | **code complete; one UAC click left** — the helper, its closed op set, the audit trail and the Settings card are shipped and proven unelevated, and the **installer** now creates the service (ب4, D-026), so one prompt covers product + helper; the per-machine run is §0.6 row 2. Publisher naming is the certificate, and it is not purchased (D-035) | D-007, D-026, `docs/PRIVILEGED-OPS.md` |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
-| 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen | P3, P4 |
+| 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen. The signature check — and the thumbprint pin it needs (D-016) — is §0.6 row 5 | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
 | 8 | ~~Dark/light mode~~ | **done** — palette, System mode follows live OS switches; **both** palettes are audited and fixed (**29 of 29** pairs clear WCAG 2.2 each, pinned by a test — `docs/CONTRAST.md`; dark closed in small step 4) | P2, أ2–أ3 |
 | 9 | Not hackable / not reverse-engineerable | **partial** — hardening landed (ج1, D-021): CFG on both binaries, LTO/stripped engine, obfuscated Dart snapshot, and `verify-hardening.ps1` gates the release on the PE. The start-up self-check landed with ج2 (2026-11-03): the engine re-hashes the files beside it against the manifest inside its own signed image and says so in About. What no local check can do stays open: a from-source rebuild re-signed with another key is indistinguishable, and the reproducible-build note is not written | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
-| 11 | x64 / x86 / ARM64 | **decided** — x64 + ARM64; 32-bit UI impossible (Flutter), ARM64 build legs pending | D-003; P4 |
+| 11 | x64 / x86 / ARM64 | **decided, and half-built** — x64 + ARM64; the 32-bit UI is impossible (Flutter has no 32-bit Windows desktop target); the ARM64 **engine** builds and its PE is checked (ب2), and GitHub's `windows-11-arm` runner runs its tests natively. Pending: the ARM64 **app**, because Flutter publishes no Windows ARM64 SDK — §0.6 row 6 | D-003; §0.6 |
 | 12 | Protection types | **done** — `docs/PROTECTION-MATRIX.md`: layer → sees / detects / blocks / misses, plus the evidence table (verified in small step 7) | `docs/PROTECTION-MATRIX.md` |
-| 13 | Full test walk-through with a report | **todo P6** — two smoke tools exist; no feature-wide harness/report | P6 |
+| 13 | Full test walk-through with a report | **done except the installer E2E** — **د1** the `qa/` contract harness over all 66 methods, **د2** every screen and control swept with a committed ledger, **د4** the generated `qa/report.md`/`report.html` (byte-gated so the fast tier fails when it drifts). Left: **د3**, §0.6 row 2 | P6, `qa/` |
 | 14 | Malware corpus for testing | **deferred** — EICAR only, and only inside a VM lab | P6 (later) |
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
 | 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
-| 18 | Cheapen the project + licenses | **partial** — GPL-3 shipped; SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); the cost sheet exists and names the single purchase (ب1b, `docs\COST.md`) | P4 |
+| 18 | Cheapen the project + licenses | **answered, and it got cheaper than planned** — GPL-3 **text** now really ships (`LICENSE` was a placeholder until 2026-11-07); SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); `docs\COST.md` still records the researched prices, but the single purchase it named is **off the plan** (D-035) — the project's running cost is **zero**, which was always the point of this row | D-035, `docs\COST.md` |
 | 19 | Professional README | **done** — see row 10 | `README.md` |
 | 20 | L5 wording vs reality (LLM) | **decided** — optional local LLM + templates; wording fix in P5 | D-005 |
 | 21 | Living TODO/handoff file | **done** — this file | — |
@@ -4529,11 +4760,21 @@ UAC prompt (finishing P1.5) or money (P4 signing certificate).
       per-operation `Start-Process -Verb RunAs` calls are gone from
       `firewall/mod.rs`, `ids/mod.rs`, `hardening/mod.rs`, and with them the
       "Relaunch as administrator" stop gap in the Settings screen.
-- [ ] **Acceptance (needs you):** install the helper once from
+- [x] ~~**Acceptance (needs you):** install the helper once from
       **Settings → Engine → Install helper** (one prompt), then enable Default-Deny,
       turn SMBv1 off and import a hosts list in one session: **zero** further
       prompts, and `logs\priv.log` carries one `phase=start`/`phase=done` pair per
-      operation. Everything below that step is already proven unelevated by
+      operation.~~ — **done and measured 2026-11-07**, against the **real** service
+      rather than `helper-console`, and after the installer (ب4) became the thing that
+      creates the helper: one UAC prompt installed product + service, and then three
+      privileged operations were driven from an **unelevated** engine over its pipe
+      with **zero** prompts — `helper.status` (`installed/running/reachable/elevated`),
+      `fw.rules.add` (**37 ms**) and `fw.rules.remove` (**36–44 ms**), each one a
+      `phase=start`/`phase=done ok=true` pair in `%PROGRAMDATA%\MICS\logs\priv.log`.
+      **Not** exercised, deliberately: *Default deny outbound* (it would have cut this
+      machine's own network path mid-run), the SMBv1 toggle and the hosts write — so
+      that slice is still proven only by the protocol probe below.
+      Everything below that step is already proven unelevated by
       `scripts\verify-helper.ps1`.
 - Note: the prompt shows "MI CS" as publisher only with a trusted certificate
   (D-002) — until then it shows the helper's unsigned identity.
@@ -4605,29 +4846,42 @@ signing certificate respectively), so this is the work that is always available.
       plus a configurable hash feed (`ioc_feed_url`/`ioc_feed_key`) — P3c3.
 
 ### P4 — release engineering
-- [ ] Authenticode: an OV-class certificate bought as an individual (routes and
-      prices in `docs\COST.md` §2; Azure Artifact Signing is not purchasable from
-      Egypt); sign DLLs then EXEs;
-      timestamp; `signtool verify` in CI; document SmartScreen reality.
-      *Reality measured 2026-10-30:* the app is `NotSigned`, Smart App Control is
-      off, SmartScreen policy is default, and the reputation endpoints are
-      reachable — yet Windows still shows "SmartScreen can't be reached right now"
-      / "Unknown publisher", because an unsigned first-seen binary has no
-      reputation to look up. Even a working lookup would only say "unknown".
-      => The **local** half is solved (`make-release.ps1 -Sign` with a self-signed
-      certificate trusted in `CurrentUser\Root` + `TrustedPublisher`: all binaries
-      `Valid`, `signtool verify /pa` passes, prompts stop on this machine). What
-      remains in this item is only the **public** half: a real OV-class certificate
-      (the routes, prices and the publisher name each one prints are in
-      `docs\COST.md` §2, researched 2026-11-06 — Azure Artifact Signing is not
-      purchasable from Egypt, and no CA can issue our CN, so decision (c) ships with
-      it), timestamping through the certificate-store path a cloud agent needs
-      (`-Thumbprint`), and
-      CI wiring — the scripts already take it.
-- [ ] Build legs: x64 (primary) + ARM64 (app + `aarch64-pc-windows-msvc` engine);
-      optional x86 **CLI** build only (D-003).
-- [ ] NSIS installer (bundled engine + rules + offline intel) next to the portable
-      ZIP; regenerate ZIP + `SHA256SUMS` from the current build.
+- [x] ~~Authenticode: an OV-class certificate bought as an individual~~ — **closed
+      2026-11-07 as not-purchased (D-035)**: this is a free, open-source project with
+      no budget, so no certificate is bought. What the row got right and is kept:
+      `docs\COST.md` §2 carries the researched routes, dated prices and per-route
+      publisher names (Azure Artifact Signing is not purchasable from Egypt; **no CA can
+      issue our `CN=MI CS Code Signing`**, CSCBR §9.2.2; the free SignPath route is
+      closed to this product category), so nobody re-researches the dead ends. What the
+      row wanted is now met by free means: the PE hardening and manifest the release
+      already gates on, plus a **reproducible build** (§0.6 row 4) and the published
+      `SHA256SUMS`. The signing itself — DLLs then EXEs, timestamping, `signtool verify`
+      in CI — is wired (D-034): a certificate is `MICS_PFX` + `MICS_PFX_PASSWORD`, or
+      `MICS_CERT_THUMBPRINT` for a token/cloud agent, resolved in one documented order
+      and printed before the build, so a **donated** certificate lands with no code
+      change. *Reality measured 2026-10-30, still true:* the app is `NotSigned`, Smart
+      App Control is off, SmartScreen policy is default, and the reputation endpoints
+      are reachable — yet Windows still shows "SmartScreen can't be reached right now" /
+      "Unknown publisher", because a first-seen unsigned binary has no reputation to look
+      up, and a working lookup would only say "unknown". The **local** half has been
+      solved since `make-release.ps1 -Sign` (self-signed certificate trusted in
+      `CurrentUser\Root` + `TrustedPublisher`: all binaries `Valid`, `signtool verify /pa`
+      passes, prompts stop on this machine).
+- [x] ~~Build legs: x64 (primary) + ARM64 (app + `aarch64-pc-windows-msvc` engine);
+      optional x86 **CLI** build only (D-003)~~ — **the engine half is done** (ب2,
+      2026-11-03): `scripts\build-engine-arm64.ps1` builds the ARM64 engine **and its
+      test binaries**, the PE is read back as a hardened ARM64 image, and GitHub's
+      `windows-11-arm` runner runs the tests natively. **The app half is blocked
+      upstream**: Flutter publishes no Windows ARM64 SDK (0 of 747 archives, measured
+      2026-11-04) — §0.6 row 6. The optional x86 CLI stays optional.
+- [x] ~~NSIS installer (bundled engine + rules + offline intel) next to the portable
+      ZIP; regenerate ZIP + `SHA256SUMS` from the current build~~ — **done** (ب3 steps
+      1–3 + ب4, 2026-11-01/03): `installer\mics.nsi` + `scripts\make-installer.ps1`
+      build `dist\MICS-setup-<version>-x64.exe` from the same package, per-machine by
+      default with the **helper install folded in**, and `scripts\verify-installer.ps1`
+      proves install/uninstall, both shortcuts' AUMID and the untagged-helper refusal.
+      Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, 70 files shipped,
+      68 of them described by the manifest inside the engine.
 - [x] ~~SBOM (CycloneDX), `THIRD-PARTY-NOTICES`, dependency-license audit~~ — done
       (ب1a, D-018): `tool\sbom.dart` generates both from the lockfiles, the pair is
       committed, shipped in the package and freshness-checked before a release.
@@ -4658,23 +4912,38 @@ signing certificate respectively), so this is the work that is always available.
       LTO/stripped engine, obfuscated Dart, and `scripts\verify-hardening.ps1`
       gates the release on what the PE says.
 - [x] ~~README rewrite: what it does / **does not do**, requirements (Win10 21H2+/
-      Win11, x64 or ARM64, 4 cores, 8 GB, ~500 MB, one UAC at install), privacy,
+      Win11, x64 or ARM64, 4 cores, 8 GB, 52 MB, one UAC at install), privacy,
       data locations, uninstall, screenshots, build instructions, GPL notice~~ —
       done (ج3, 2026-11-03): the does/does-not pair now carries the manifest, the
       start-up self-check and their honest limits, and every number in it is the one
-      the pipeline measured.
+      the pipeline measured. **Re-measured 2026-11-07** after this pass's audit: the
+      disk figure is 52 MB unpacked (was written as "~150 MB", which was the engine's
+      RAM budget read as disk), the idle figure is 12.5 MB (was 11), the canary claim
+      was inverted by D-032, and "Download" now says the release is a draft.
 - [ ] Fix L5/assistant wording everywhere (README, About, brief): "event
       correlation + optional local-LLM explanations", command bar is regex.
 
 ### P6 — QA
 - [x] Pipeline entry point: `scripts/pipeline.ps1` (ز0) — tiers, JSON report, and
       the CI workflow calls it instead of repeating the checks.
-- [ ] `qa/` contract harness: every JSON-RPC method (happy path, invalid params,
+- [x] ~~`qa/` contract harness: every JSON-RPC method (happy path, invalid params,
       unknown method, schema) driven from `dispatcher.rs` so a new method cannot go
       unregistered (د1), then the same fixtures drive a `FakeEngine` for every
-      screen and every interactive control (د2).
-- [ ] CI runs the harness; a feature that is not registered fails the build (د5).
-- [ ] E2E on the built artifact (د3) and `qa/report.html` + `.md` (د5).
+      screen and every interactive control (د2)~~ — **done, 2026-11-01**: `qa/methods.json`
+      holds **66** rows and `qa/report.md` records **66 dispatched**, so a new method
+      cannot go unregistered in either direction; every screen (13) and control (100)
+      is swept against the fixtures with a committed ledger.
+- [x] ~~CI runs the harness; a feature that is not registered fails the build (د5)~~ —
+      **done**: the fast tier fails when the registry and the code disagree
+      (`test/qa_registry_test.dart`, `test/ui_screens_test.dart`).
+- [x] ~~**د3** — E2E on the built **per-machine** artifact~~ — **done and measured
+      2026-11-07**: install (one UAC), the installer-created `MICSHelper`, privileged
+      ops driven unelevated with **zero** further prompts, uninstall (one UAC) removing
+      product + service + shortcuts, and the installed engine's self-check reporting
+      `68/68` files. The full measurements are the د3 row in `docs/ROADMAP.md` §2 and
+      §0.2 item 1 here. The report half (~~`qa/report.html` + `.md`~~, د4) was already
+      done 2026-11-02: generated from the registries, byte-gated by
+      `test/qa_report_test.dart`, uploaded next to the contract log by CI.
 - [ ] Malware lab (later): isolated VM + snapshots, EICAR/AMTSO first, samples
       never in the repo, detection-efficacy report.
 
@@ -4684,18 +4953,19 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | **No real signing certificate and no published download**: the NSIS installer exists and is verified (ب3, `dist\MICS-setup-<version>-x64.exe`, 70 files, untagged-helper refusal, `verify-installer.ps1` in 126 s) and is signed with a *locally* issued certificate, but nothing is signed by a CA a stranger's Windows trusts and nothing is published, so the register's original "no installer" half is closed and this row is now about ب5/ب6. **The code half closed 2026-11-06 (D-034)**: a certificate is now two repository secrets (`MICS_PFX` + `MICS_PFX_PASSWORD`, or `MICS_CERT_THUMBPRINT` for a token/cloud agent), resolved in one documented order and printed before the build - so nothing in `release.yml` has to change on the day, and `scripts\verify-signing.ps1` (18 checks, PASS) holds the refusals. What stays open is the purchase and the click: a certificate nobody has bought, and `v0.1.0` sitting in GitHub Releases as a **draft** (D-031). The **research pass of 2026-11-06** replaced "buy a certificate" with a list and a price: Microsoft's own comparison gives public trust to organizations in the USA/Canada/EU/UK and to individuals in the **USA and Canada only**, so Azure Artifact Signing cannot be bought from Egypt at all; the OV-class routes for an individual with no company are **Certum's Open Source product (€49/year in the cloud, whose documented `signtool /sha1` call is exactly what D-034 already does — but whose session needs a logged-in SimplySign desktop agent, so it implies a persistent/self-hosted runner or signing before publishing)** or **SSL.com IV ($129/year) plus their eSigner service ($180/year, and their own action signs on GitHub-hosted runners)**, while the free SignPath route is **closed to this product category**: their code of conduct excludes "security diagnosis tools that actively scan for and highlight exploitable vulnerabilities, e.g. by identifying unprotected network ports", with a carve-out only for malware/breach detection, and independently requires an already-released project with a verifiable reputation — this repository has 0 releases. One measured fact makes part of this a code change: **CSCBR §9.2.2 requires the subject CN to be the verified legal name**, so no CA can issue `CN=MI CS Code Signing` — the pin must move to the thumbprint (decision (c), ~1 h) *in the same release*, or `update.rs:128` refuses our own signed update. Prices, sources and the publisher name per route: `docs/COST.md` §2 | `dist/`, `installer/`, `scripts/`, P4 |
+| HIGH | **No public download, and no publicly trusted signature** — and the second half is now a decision rather than a debt. **(a) Nothing is published:** `v0.1.0` was built and verified by the Release workflow (run 42040718389) and sits in GitHub Releases as a **draft** (D-031), so the public page says "There aren't any releases here"; publishing it is **one free click** by the owner, and it is the highest-value remaining step (§0.6 row 1). The old "no installer" half of this row closed long ago: the NSIS installer exists, is per-machine by default, folds the privileged helper into its own elevation (ب4, D-026), ships 70 files of which 68 are described by the manifest inside the engine, refuses to orphan a helper (`/S _?=$INSTDIR` → 5), and `verify-installer.ps1` proves the per-user path in 126 s. Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, and the E2E acceptance on that per-machine artifact is §0.6 row 2. **(b) The signature will not be bought** (D-035): this is a free, open-source project with no budget, so ب5 is **closed as not-purchased**, not pending. `docs/COST.md` §2 keeps the researched routes, dated prices and each route's publisher name so the dead ends are not re-researched (Azure Artifact Signing is unavailable to an individual outside the USA/Canada; **no CA can issue `CN=MI CS Code Signing`** — CSCBR §9.2.2 — so the D-016 pin must move to a **thumbprint** in the same release that first carries a certificate, or `update.rs:128` refuses our own update; the free SignPath route is closed to this product category). What replaces it is free and checkable without trusting anybody: the manifest the engine re-hashes at start-up, the published `SHA256SUMS`, and a **reproducible build** (F-11, still unwritten — now the honest substitute for a certificate, §0.6 row 4). If a certificate is ever **donated**, D-034's two secrets install it with **no code change**. | `dist/`, `installer/`, `scripts/`, P4, D-035 |
 | ~~HIGH~~ | ~~A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently~~ — **closed 2026-11-03 (و4) by evidence**: a package with `rules\` removed (and its own `SHA256SUMS` corrected, so nothing but the missing folder can fail) is refused by `verify-release.ps1`: 4 FAILs — `missing from the zip: rules\yara\starter.yar, rules\guard\starter.json`, `rules folder holds 0 file(s)` (the layout check, not just the file names), `the guard did not use the packaged rules: guard: 6 rule(s) from the built-in starter pack (rules/guard not found)` and `the scan did not use the packaged YARA rules (log line: YARA rules from the built-in starter pack (no rules\yara\starter.yar found))` — **exit code 1** (`RESULT: FAIL - the release artifact is not what it claims to be`). The silently-degraded copy the row described can no longer pass the gate, and the engine's own log names the source it used | `dist/`, `guard/mod.rs`, `scanner/mod.rs`, `scripts\verify-release.ps1` |
 | ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
-| ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is 65 methods again | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
+| ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is **66** methods since و1 added its own (65 until then) | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
 | ~~LOW~~ | ~~A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS"~~ — **closed 2026-11-03 (و4) by evidence, as a documented limit rather than a defect**: `verify-aumid.ps1` PASSes — `DisplayName` is `MI CS`, its `IconUri` names a file that exists, **both** shortcuts carry `System.AppUserModel.ID = MICS`, and the Shell files `MI CS` under AppID `MICS` — which is exactly what the AUMID was for (the app is filed by name instead of by exe path). The row's *substance* is not fixable in the app and `docs/THREAT-MODEL.md` §B10 already says it: a card is UI, not proof of origin, because the AppUserModelID is not an authenticator. Nothing in the product reads a card as evidence of anything; the register row existed to stop that reading | `notify/toast.rs`, THREAT-MODEL §B10 |
+| MED | **A rule added with a name that already starts with `MICS-` gets a second prefix and can never be removed by the name the caller used** — `add_rule_now` prefixes unconditionally (`firewall\mod.rs:239`, `format!("{}{}", RULE_PREFIX, req.name)`) while `remove_rule_now` strips an *optional* prefix first (`:317`). So `fw.rules.add {name:"MICS-foo"}` creates **`MICS-MICS-foo`**, and `fw.rules.remove {name:"MICS-foo"}` then strips to `foo`, looks for `MICS-foo`, finds nothing and **reports success** (removing a missing rule is deliberately idempotent). Found by the 2026-11-07 acceptance run, which had to pass the doubly-prefixed name to clean up after itself. The UI's add dialog is reachable this way (a user may type the prefix) and the failure is silent, so a stray **blocking** rule can outlive the removal that claimed to do it — the same class of leftover already on this machine: `MICS-TEST-BLOCK-EXAMPLE`, outbound block on TEST-NET-3 `203.0.113.0/24`, no MI CS group and no description, so an older build made it and nothing ever cleaned it. **Fix:** normalize in one place — strip then re-add, or refuse an already-prefixed name while naming the reason — and add a harness case for both spellings in `qa/methods.json`. | `engine\src\firewall\mod.rs`, `qa/methods.json` |
 | MED | **No real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection between runs (Windows Defender is the real-time layer, and the audit says so loudly when it is off). **The scheduled half is done** (و1, 2026-11-03, D-027): the engine runs a scan by itself every `scan_interval_hours` (opt-in, off by default) over `scan_target`, report-only, and `scripts\verify-scan-schedule.ps1` proves it starts, finds, and leaves the file in place — but a schedule is a moment, not a monitor: what changed *between* two runs is still only seen by Defender | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it. **The "checks that packs load, not what they catch" half closed 2026-11-05 (D-033)**: `scripts\verify-rules.ps1` holds the pack a package ships to files — `engine\testdata\detection`, 8 vectors each written for one rule plus a clean control, **35 checks PASS** — and every rule the pack declares must either be caught by one of them or be named as unreachable with its reason. That ratchet immediately found the pack's one impossible rule: `Malicious_Macro_AutoOpen` compared `uint16(0)` against `0x504B`, which little-endian is `"KP"`, so it could never fire on any container that exists (a real `.docm` starts `50 4B` = `0x4B50`) — fixed, with the measured pair pinned by a test and re-measured through the probe. Measured reach of the 10 rules: **8 held to a file**, 2 named unreachable by a text vector (`EICAR_Test_File` — the string is what Defender quarantines; `Tiny_Packed_Pe_Installer` — needs a binary PE). **What stays open is the content decision, not the mechanism**: the macro rule's container test is two magic bytes plus substrings, and a real `.docm` deflates those substrings out of any pattern's reach (measured: `AutoOpen`, `CreateObject` and `Shell` are absent from the file's bytes), so document-borne malware needs an OOXML/OLE parser rather than another rule — which is decision (b) of the six in §0.2 | `engine/rules/yara/starter.yar`, `engine/testdata/detection/`, `scripts/verify-rules.ps1`, `scripts/verify-release.ps1`, `docs/PROTECTION-MATRIX.md` §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |
 | MED | IDS = hosts-file blocklist (DNS only); no Suricata/ET-Open | `ids/mod.rs` |
 | ~~MED~~ | ~~Canaries detect mtime/size changes by polling; a read-only open is not detected~~ — **closed 2026-11-05 (D-032) by evidence**: the snapshot carries the file's last-access time, so a read-only open is its own HIGH `canary_read` event under rule id `CANARY_READ` — a separate id on purpose, so a user can quiet reads without losing the ones that mean their decoy was overwritten — while a write still wins as CRITICAL `canary_triggered`/`CANARY`. `scripts\verify-canary.ps1` (**20 checks, PASS**) drives a real engine over a private pipe with a private `USERPROFILE` and measures: a decoy MI CS had just written is settled silently inside the 90 s window (`READ_SETTLE`, and the engine's log says `canary settling` instead of hiding it), a decoy that was already on disk raises `canary_read` with its size and SHA-256 unchanged, one appended byte raises `canary_triggered`/critical, fifty metadata queries in a row move no last-access time and raise nothing (the poll cannot trip its own trap), and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell. **Found while measuring:** the verdict had been probed on the *previous* decoy folder, so on a machine whose decoys live on another volume it would have named the wrong disk — the probe now asserts `probed_on` is the decoys' own folder, and the engine re-measures when they move. What remains is honest and named: only a volume that keeps a last-access time can show a read, so `canary.status`/`guard.status` and the Canaries screen report the measured verdict (with the `fsutil behavior set disablelastaccess 0` that turns it on) instead of implying coverage, and the engine still cannot name the reader without the kernel event source | `guard/canary.rs`, `guard/mod.rs`, `dispatcher.rs`, `docs/PROTECTION-MATRIX.md` §4.2, `scripts\verify-canary.ps1` |
-| MED | ~~**Firewall uses `netsh`, not FirewallAPI COM**~~ — closed by **و3** (2026-11-03, D-028): the engine speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, so there is no child process to hang, no English console text to parse and no locale to depend on. `scripts\verify-firewall.ps1` (23 checks) compares the reads with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, creates and removes one real rule, and proves the `netsh` dependency is gone by putting a fake `netsh.exe` first on PATH. **What stays open**: a country-sized `RemoteAddresses` string has no documented ceiling and was not measured, so `block_country` still sends one rule per country | `firewall/mod.rs`, PROTECTION-MATRIX §3.2 |
+| ~~MED~~ | ~~**Firewall uses `netsh`, not FirewallAPI COM**~~ — closed by **و3** (2026-11-03, D-028): the engine speaks `INetFwPolicy2`/`INetFwRules`/`INetFwRule` in-process, so there is no child process to hang, no English console text to parse and no locale to depend on. `scripts\verify-firewall.ps1` (23 checks) compares the reads with `Get-NetFirewallProfile`/`Get-NetFirewallRule`, creates and removes one real rule, and proves the `netsh` dependency is gone by putting a fake `netsh.exe` first on PATH. **What stays open**: a country-sized `RemoteAddresses` string has no documented ceiling and was not measured, so `block_country` still sends one rule per country | `firewall/mod.rs`, PROTECTION-MATRIX §3.2 |
 | LOW | Country CIDR lists are read from disk only (public country-list licences are unclear), so GeoIP stays empty on a fresh install until lists are placed in `rules\blocklists` or `%PROGRAMDATA%\MICS\blocklists` | `ids/geoip.rs` |
 | ~~LOW~~ | ~~The guard's idle cost is **0.156 % of one core / 0.0028 % of this 56-thread machine** with one inert rule in force; with the shipped starter pack the earlier runs measured 0.234 %~~ — **closed 2026-11-03 (و4)**: re-measured with the **shipped pack** actually loaded (`measure-guard-cpu.ps1 -RealRules`, four 60 s windows, 56 logical cores, guard on minus `MICS_NO_GUARD=1`): **0.156–0.521 % of one core, median 0.417 % = 0.0028–0.0093 % of the machine, median 0.0074 %**. The engine was unelevated, so ETW was denied and the 2 s poll loop is what ran (`on.err` names it); the guard-off half measured 0.000 % in every window — below the 15.6 ms process-timer resolution, i.e. < 0.03 % of one core. The earlier "with the starter pack it is 0.234 %, the difference is one-time startup matching" is **not supported by this measurement**: the lowest shipped-pack window equals the inert-rule number, so the spread is run-to-run noise on a busy 56-thread box, not a rule-count effect. The row's *number* was stale; the `< 1 %` budget holds under either definition | `guard/mod.rs`, `platform/windows/pids.rs`, `scripts/measure-guard-cpu.ps1` |
 | LOW | No key-free sha256 hash feed exists any more (abuse.ch needs an Auth-Key), so `ioc_hashes` reports `not_configured` until the user pastes a URL + key in Settings → Intelligence (env hooks `MICS_IOC_FEED_URL`/`MICS_IOC_FEED_KEY` still work) | `sync/mod.rs` |
@@ -4704,7 +4974,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **A language folder that `pubspec.yaml` does not declare renders every key raw, silently**: the pack loader swallows a failed asset read on purpose ("a module that has not been translated yet must not break the app"), so nothing logs or fails when a whole language is missing from the asset list. `test/lang_registry_test.dart` now fails instead, and the app itself gates its first frame on the settings *and* the packs (`lib/main.dart`), so this cannot reach a user who is running a correct build | `pubspec.yaml`, `test/lang_registry_test.dart`, `lib/main.dart` |
 | LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
-| LOW | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
+| ~~LOW~~ | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the reproducible-build note | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
 
 ## Icon sizes required for the application
@@ -5041,7 +5311,26 @@ settings and read environment variables only.
     free to clean between sessions, so read the *first* error: if it is that cascade,
     re-run before believing anything is broken, and point `CARGO_TARGET_DIR` outside
     `%TEMP%` if it keeps happening.
-
+28. **The fast tier's colour depends on `dist\` — which is gitignored — and on the
+    certificate store.** Three `engine` tests in `platform::windows::signature` read
+    `dist\MICS-portable\mics-engine.exe` (the artifact `make-release.ps1 -Sign` leaves
+    behind) and require its chain to **build**, because `signer_name()` is
+    `WinVerifyTrust` and anything but `ERROR_SUCCESS` becomes `None`. Measured
+    2026-11-07: the fast tier was green at 12:58 with the older package sitting in
+    `dist\`, then went **red** after a `-Sign` run replaced it — because
+    `sign.ps1 -SelfSigned` deliberately does **not** add its certificate to
+    `CurrentUser\Root` (that import blocks on a dialog a runner cannot answer: the
+    2026-11-05 measurement recorded inside `sign.ps1`), so a freshly signed package is
+    `UnknownError` and those tests read it as unsigned. Two ways out, and only one of
+    them changes bytes: **trust the signer** — export the certificate from
+    `CurrentUser\TrustedPeople` and `certutil -user -addstore -f Root <file.cer>` needs
+    no elevation, shows no dialog and touches nothing (measured today: the same engine
+    went `UnknownError` → `Valid` and all three tests passed) — or delete `dist\`, and
+    the tests **skip** with a printed reason instead of failing. Also note that `-Sign`
+    mints a **new** certificate on every run and leaves the old ones in the store: this
+    machine had accumulated eight `MI CS Code Signing` certificates by the end of the
+    day, which is harmless but makes "which one signed this?" a real question — ask the
+    **file** (`Get-AuthenticodeSignature`), never the store.
 ---
 
 ## 9. Definition of done (per phase)
