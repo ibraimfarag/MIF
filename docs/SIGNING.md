@@ -319,6 +319,19 @@ No "no security tools" clause appeared anywhere in what was read; the stated fil
 is *free software for other users*, with commercial-licensed projects considered
 case by case.
 
+**What the CLI repository says as of 2026-11-07, and why the date is not only a calendar
+question** (read from <https://github.com/OSSign/OSSign>): the roadmap marks PE/COFF, MSI
+and PowerShell as signable, with JAR/APK/DMG still open, and its verify command is
+documented for PE/COFF, MSI, CAB, **APPX/MSIX** and PowerShell — so the artifacts this
+project would hand it (the engine, the app, the MSI) are the ones it was built for. But the
+**OSSign Server** path, the one that is free and keyless, is still marked **TBA** for
+trusted signing with the GitHub Action, and the documented example uses
+`trustedSigningKey: test-certificate` — the tool's own `verify` exits 2 when a file was
+signed with an "OSSign Server **test-mode** certificate". So route B needs two things to
+line up, not one: this repository to reach six months, **and** OSSign to put the production
+server into service. The suspended applications and the TBA marker are consistent with each
+other, and neither is under this project's control.
+
 ## 5. Route C — a donated certificate
 
 Certum's "Open Source Code Signing" is the only certificate product aimed at an
@@ -449,7 +462,7 @@ is closed on eligibility and on money at the same time.
 | Public Trust geography excludes Egypt | <https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart> |
 | SignPath's code of conduct, verbatim | <https://signpath.org/terms> |
 | SignPath's signed projects (Fibratus, sniffnet …) | <https://signpath.org/projects> |
-| OSSign scope and keyless OIDC signing | <https://ossign.org/> and <https://github.com/OSSign/OSSign> |
+| OSSign scope and keyless OIDC signing | <https://ossign.org/> and <https://github.com/OSSign/OSSign> (CLI README re-read 2026-11-07: server path TBA, test-mode certificate) |
 | OSSign terms as tracked (≥ 6 months, project-level, applications paused) | <https://foropensource.com/company/ossign/> |
 | Certum Open Source is €49/€69, not free | <https://foropensource.com/company/certum/> and <https://shop.certum.eu/open-source-code-signing.html> |
 | The three-route comparison, including Sigstore's uselessness on Windows | <https://my-ssl.com/learn/open-source-code-signing-certificate> (published 2026-07-23, last updated 2026-10-22) |

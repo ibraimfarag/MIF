@@ -1092,6 +1092,22 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 
 ### Done log (append only)
 
+- **Route B's date is not only a calendar question (2026-11-07, later again)**
+  - Re-read the OSSign CLI repository instead of trusting the earlier note: the roadmap marks
+    PE/COFF, MSI and PowerShell signable (JAR/APK/DMG still open) and `verify` is documented
+    for PE/COFF, MSI, CAB, **APPX/MSIX** and PowerShell — so the artifacts this project would
+    hand it are exactly the ones it was built for, which also means an OSSign-signed MSIX is
+    on their roadmap even though route A does not need it.
+  - The half that changes the plan: the **OSSign Server** — the free, keyless,
+    trusted-publishing path — is still marked **TBA** for signing together with the GitHub
+    Action, the example configuration uses `trustedSigningKey: test-certificate`, and their
+    own `verify` exits 2 for a file signed with an "OSSign Server **test-mode** certificate".
+    So route B waits on **two** things: this repository reaching six months (~2027-04-27) and
+    OSSign putting the production server into service. That is consistent with the suspended
+    applications, and only the first half is under this project's control — which is why the
+    README and the ROADMAP keep route A as the one that is open today.
+  - Recorded with the date in `docs/SIGNING.md` §4 and its source row.
+
 - **The Store submission has a playbook, so the free account is the only thing left
   (2026-11-07, later again)**
   - [`docs/STORE.md`](STORE.md) is the operational half of route A, kept separate from
