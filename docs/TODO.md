@@ -1147,6 +1147,16 @@ free publish click, one UAC-click acceptance run, and engineering that is free
     questions survive only for the shape we are not submitting first — in `None` the
     privileged writes happen outside any container, and the single cross-container question
     left is whether a packaged app can reach the helper's pipe.
+  - **What the service-free shape still owes**, written down now instead of found later: the
+    helper's `binPath` is the engine's own path (`install-helper` rewrites it) and a
+    package's install folder carries its version, so a Store-edition helper points into a
+    folder the next update does not keep — re-registration after an update, or a stable
+    install location like the NSIS installer's, is an **open design item** (`docs/SIGNING.md`
+    §3), and the UI's helper-status check has to notice a stale `binPath`.
+  - **`-AllowUnsigned` is not a way around a missing certificate**: measured **0x80073D2C**,
+    "its publisher is not in the unsigned namespace", for both our real subject and a bare
+    `CN=MI CS (dev)`. Developer-mode *registration* of the staged folder is the unelevated
+    test path that does work, and it is what the A/B used (trap 32).
   - Docs swept in the same commit: `docs/SIGNING.md` §3 (the two-shapes table, the A/B, and
     the qualified unknown list) and §7, `docs/DECISIONS.md` (D-037's clause and D-038),
     `docs/TODO.md` §7 register and trap 30, and the README status block.
@@ -5643,6 +5653,16 @@ settings and read environment variables only.
     how many earlier certificates are still trusted; removing them is a person's decision,
     not a build step, and this keeps only the newest:
     `$all = Get-ChildItem Cert:\CurrentUser\TrustedPeople, Cert:\CurrentUser\TrustedPublisher | Where-Object Subject -like '*MI CS Code Signing*'; $keep = ($all | Sort-Object NotBefore -Descending | Select-Object -First 1).Thumbprint; $all | Where-Object Thumbprint -ne $keep | Remove-Item`.
+32. **`Add-AppxPackage -AllowUnsigned` does not mean "any unsigned package".** The
+    parameter exists on this machine, and it refuses the service-free package with
+    **0x80073D2C — "The package deployment failed because its publisher is not in the
+    unsigned namespace"** — measured 2026-11-07 with both our real subject
+    (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`) and a bare `CN=MI CS (dev)`. An
+    unsigned package has to carry a publisher OID that marks it unsigned, so this is not a
+    way around a missing certificate. What *does* work unelevated, and is what the A/B in
+    `docs/SIGNING.md` §3 used, is developer-mode **registration** of the staged folder
+    (`Add-AppxPackage -Register build\msix-stage\AppxManifest.xml`): no publisher trick, no
+    signature, no administrator — for the shape that declares no service.
 ---
 
 ## 9. Definition of done (per phase)

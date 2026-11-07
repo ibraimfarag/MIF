@@ -178,6 +178,21 @@ things that could have sunk the submission — off the critical path, in exchang
 first-use UAC prompt the project already ships and documents. `Packaged` stays the shape
 for the full product once that first submission is through, and for the direct download.
 
+**What the `None` shape still owes, written down before it is discovered in the field.**
+The helper's `binPath` is whichever path the engine ran from — `install-helper` rewrites
+it (`engine/src/privileged/service.rs`) — and a package's install location carries its
+version, so the helper a Store-edition user installs points into a folder that the next
+package update does not keep. The `None` shape therefore has to expect a **re-registration
+after every update** (one UAC prompt), or install the helper to a stable location the way
+the NSIS installer does, and the UI's helper-status check has to see a stale `binPath` and
+say so. That is an open design item, not a solved one, and it is the price of keeping the
+service out of the package. Two smaller facts from the same measurements: Windows refuses
+the *unsigned* install path for us — `Add-AppxPackage -AllowUnsigned` exists on this
+machine but answers **0x80073D2C**, "its publisher is not in the unsigned namespace", for
+both our real subject and a bare `CN=MI CS (dev)` (the publisher has to carry a special OID
+marking it unsigned) — and developer-mode *registration* of the staged folder, which is
+what the A/B above used, needs no publisher trick, no signature and no administrator.
+
 **What is not verified, and must be measured before anyone promises this route
 works:**
 
