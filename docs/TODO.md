@@ -237,8 +237,8 @@
 > exits 0 only for an artifact a stranger's Windows would trust (its `-SelfTest` proves the
 > instrument against a self-signed control and `kernel32.dll`). What waits on the owner is **one
 > publish click and the answers**, not a purchase. §0.2 and the register count were reconciled on
-> 2026-11-08 with what actually ran; the register is **13 open rows (1 HIGH, 4 MED, 8 LOW) out of
-> 24**, and no page any longer describes a *run* as waiting on a human.
+> 2026-11-08 with what actually ran; the register is **12 open rows (1 HIGH, 3 MED, 8 LOW) out of
+> 24** (counted from the table on 2026-11-08, not carried over), and no page any longer describes a *run* as waiting on a human.
 
 ## 0. Resume here — a new session starts with this section
 
@@ -260,9 +260,11 @@ Open a fresh session and paste exactly this:
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-**Resume point (2026-11-08, after the WFP slice).** The working tree carries the
-**WFP slice (a)** commit on top of the Explorer-verb chain (`git log -4 --oneline` names
-them). The register is **11 open rows** (1 HIGH, 3 MED, 7 LOW); §0.6 rows 14, 15 and 16 are
+**Resume point (2026-11-08, after the WFP slice).** The last two commits are the
+**WFP slice (a)** (`9c353e5`) and a one-line-doc correction of the §7 register count above it
+(`git log -5 --oneline` names the chain, with Explorer's verb under them).
+The register is **12 open rows** (1 HIGH, 3 MED, 8 LOW, counted from §7 on 2026-11-08); §0.6 rows
+14, 15 and 16 are
 **closed with measurements** (D-039, D-040, D-041), and **row 17 slice (a) is landed but not
 closed**: MI CS now owns a WFP provider, sublayer and persistent filters, with 12 new unit
 tests, four registered methods (72 methods, 107 controls) and `scripts\verify-wfp.ps1` — and
@@ -273,9 +275,10 @@ installed helper predates D-042, so it refuses the new ops with the reason the p
 (`unknown variant firewall.wfp.block, …`) — reinstalling it from Settings → Engine opens the
 write path without a second UAC prompt. `flutter test` is
 **158**, `cargo test` is **174**, the QA ledger is **107 controls** over **72 methods** (the
-panel still swept as `surfaces.trayPanel`, 6 controls). **Four commits are unpushed**
-(`git rev-list --count '@{u}..HEAD'` -> 4); the sixteen before them are **on `origin/main`**
-at `067caf5`, so a single `git push` publishes all four rows.
+panel still swept as `surfaces.trayPanel`, 6 controls), and the fast tier is green at **4 of 4,
+154.4 s**. **Five commits are unpushed**
+(`git rev-list --count '@{u}..HEAD'` -> 5); the sixteen before them are **on `origin/main`**
+at `067caf5`, so a single `git push` publishes all five.
 
 That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
 the complete list of what is left**, and a session takes one row at a time. The order
@@ -747,7 +750,7 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries **13 open rows (1 HIGH, 4 MED, 8 LOW)** out of 24 —
+`docs/TODO.md` §7 carries **12 open rows (1 HIGH, 3 MED, 8 LOW)** out of 24 —
 recounted from the table itself on 2026-11-03, after و4 closed six of them (the
 incomplete package, the merged-audit ages, the blocking `vuln.scan`, the plaintext
 keys, the guard cost, the portable caller check, the AUMID attribution) and the
@@ -1003,7 +1006,7 @@ somebody who signs for free.
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
-| 9 | **11 open rows in the §7 register** — **1 HIGH, 3 MED, 7 LOW** out of 24 — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; the closed one is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall |
+| 9 | **12 open rows in the §7 register** — **1 HIGH, 3 MED, 8 LOW** out of 24 (counted 2026-11-08) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; the closed one is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall |
 | 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
@@ -1287,6 +1290,10 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
     `ROADMAP` و): **13 open rows — 1 HIGH, 4 MED, 8 LOW — out of 24**, counted on 2026-11-08 by
     walking §7. Three copies had drifted to 12/23, 12/22 and 12/23; the eighth LOW row is the one
     this session added — what a user sees when the engine refuses to start at all.
+    **Later the same day the count became 12 — 1 HIGH, 3 MED, 8 LOW** — when the MED row about a
+    doubly-prefixed `MICS-` rule name closed (the paragraph above); the number was corrected in
+    every place that states it, and it was re-derived from §7 with a script rather than adjusted
+    by hand.
   - Every pointer that still described د3 as pending was swept: the release-lane blockquote, both
     "what is left" summaries (§0.1 and §0.3), the P6 phase row, the 21-point list row 13, and the
     §0.2 item 1 references in §0.5. No page now says a *run* waits on you; what waits are answers
