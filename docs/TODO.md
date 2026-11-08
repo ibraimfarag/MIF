@@ -156,8 +156,8 @@
 > on you except one free click to publish the draft (ب6).** ز2-د stays blocked on D-023
 > and the
 > bridge endpoint; the autonomous alternatives meanwhile are هـ1 (the default
-> update-manifest URL + a signature check before applying), F-11's reproducible build,
-> or a §7 register row. The
+> update-manifest URL + a signature check before applying), the §0.6 row 13 remainder
+> (the engine's manifest covering content instead of signatures), or a §7 register row. The
 > ARM64 engine is built and checked but **has never been run here** — no ARM64
 > machine exists — and ARM64 CI jobs now exist for that (marked informational until
 > they have a green run) while the ARM64 *app* still needs an ARM64 host, which CI
@@ -249,24 +249,34 @@ Open a fresh session and paste exactly this:
 > اقرأ docs/TODO.md §0 (وبالخصوص **§0.6** و§0.3c) و docs/ROADMAP.md. جدول §0.6 هو
 > قائمة الناقص كاملة — خُد **صف واحد** في المرة، والأرخص والأعلى قيمة الأول:
 > **نشر `v0.1.0`** (كليكة مجانية واحدة) لو حضرتك هتعملها، وإلا صف مش محتاج حد —
-> **البناء القابل لإعادة الإنتاج** (F-11) أو **هـ1** — وكل صف بدليل القياس اللي
+> **هـ1** أو **صف 13** (بيان المحرك يسجّل المحتوى بدل التوقيعات) — وكل صف بدليل القياس اللي
 > اسمه في الجدول. **مفيش شراء في المشروع خالص** (D-035): أي صف فيه «شهادة» يبقى
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-**Resume point (2026-11-08).** `main` at **`c42ba32`**, working tree clean,
-`scripts\pipeline.ps1 -Tier fast` green — 4 of 4, **135.2 s**, 151 engine tests. **Thirteen
-commits are local only** (`.git`: `git rev-list --count '@{u}..HEAD'` → 13), so one `git push`
+**Resume point (2026-11-08).** Working tree clean at the **reproducible-build**
+commit — the one whose parent is `3ac3f3e` (`git log -2 --oneline` names both) —
+and `scripts\pipeline.ps1 -Tier fast` green: 4 of 4, **385.3 s** (cold during the
+work it was first run in: 402.8 s, after the reproducibility measurement had cleaned
+`engine\target`, which is why both numbers are from-scratch ones), 151 engine tests.
+The report is `build\pipeline-fast.json`, and its `head` field names the commit as it
+stood before these lines were folded in — the last edits before it were documents,
+not scripts. **F-11 is closed** (§0.6 row 4,
+`docs\REPRODUCIBLE.md`): `scripts\verify-reproducible.ps1 -Reference <zip>` rebuilds a
+published archive and compares it, and it was run end to end — 60 files byte for
+byte, 7 on content, 2 explained, 0 unexpected. What that left behind is **§0.6 row
+13** (the engine's manifest records signed hashes). **Fifteen
+commits are local only** (`.git`: `git rev-list --count '@{u}..HEAD'` → 15), so one `git push`
 publishes this session's work: the `scripts\verify-trust.ps1` acceptance check, `docs\STORE.md`,
-the packaged-app measurement and the `§0.2` reconciliation. Nothing is uncommitted, so a new
-session can start from any row of §0.6.
+the packaged-app measurement, the `§0.2` reconciliation and the reproducible build.
+Nothing is uncommitted, so a new session can start from any row of §0.6.
 
 That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
 the complete list of what is left**, and a session takes one row at a time. The
 cheapest, highest-value row first: **publish `v0.1.0`** (one free click, if you are
-the one clicking), otherwise a row that needs nobody — the **reproducible build**
-(F-11) or **هـ1** (the default update-manifest URL and a signature check before
-applying) — each with the proof its row names. **Nothing in this project is
+the one clicking), otherwise a row that needs nobody — **هـ1** (the default
+update-manifest URL and a signature check before applying), the §0.6 row 13 remainder,
+or a §7 register row — each with the proof its row names. **Nothing in this project is
 purchased** (D-035), so a row that says "certificate" is **closed, not pending**. When work
 touches signing, **do not re-research the routes** — they are closed, with sources and dates, in
 `docs/SIGNING.md` (D-036); judge artifacts with `scripts\verify-trust.ps1` (exit 0 means a
@@ -297,8 +307,8 @@ all along; only its checkbox was stale), and **ب2 is done as far as this machin
 allows** (the ARM64 engine and its test binaries build and are checked; the app
 needs an ARM64 host and nothing ARM64 was ever run). **What is left is §0.6** — read
 that table, not this history; its shape is one free publish click, the answers to §0.2
-items 3–5, and free engineering (a reproducible build, the update pin, the §7
-rows). **The certificate is no longer "waiting on a human"**: it is closed as
+items 3–5, and free engineering (the update pin, the §7 rows, and §0.6 row 13 —
+the reproducible build landed 2026-11-08). **The certificate is no longer "waiting on a human"**: it is closed as
 not-purchased (D-035, §0.2 item 2), and the helper acceptance — which used to be the single
 UAC-click item — **ran on 2026-11-07** (§0.2 item 1, closed; the installer creates the
 service, not the app, D-026). The rules that session must keep, all from `AGENTS.md`:
@@ -404,8 +414,9 @@ done**. What is left is no longer "small steps" — it is counted in **§0.6** (
 table) with the order and estimates in **`docs/ROADMAP.md`**. Short version, as of
 2026-11-07: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured; what
 remains is **publish `v0.1.0`** (a free click), the answers in §0.2 items 3–5, the free
-engineering (**a reproducible build**, **هـ1**'s
-manifest URL + signature pin, the §7 rows), and three things that are *blocked* rather
+engineering (**هـ1**'s
+manifest URL + signature pin, the §7 rows, and §0.6 row 13 — the reproducible build
+itself landed 2026-11-08 and left only the engine's manifest behind), and three things that are *blocked* rather
 than pending: a publicly trusted signature (not purchased — D-035), an ARM64 **app**
 (no Flutter Windows ARM64 SDK) and **ز2-د** (D-023 + the bridge endpoint).
 **No item in §0.2 is a click away any more** — the helper acceptance ran on 2026-11-07
@@ -515,7 +526,8 @@ the record of a run that happened, kept where the run used to be requested, not 
      same release that first carries a certificate, or `update.rs` refuses our own
      update. Until then the name pin is what it is, and `docs/COST.md` says so.
    - **What replaces the certificate is free — and for this product, stronger:** a
-     **reproducible build** (F-11, row 4 of §0.6), the published `SHA256SUMS`, the
+     **reproducible build** (F-11, row 4 of §0.6 — **landed 2026-11-08**,
+     `docs/REPRODUCIBLE.md`), the published `SHA256SUMS`, the
      manifest the engine re-hashes at start-up, and GitHub's own record of the run that
      produced the bytes. A signature says "a CA checked a name"; those say "here is the
      source, here is the recipe, here are the bytes - check them".
@@ -922,7 +934,13 @@ clean, `flutter test`, `cargo test`, `cargo clippy`), recorded in
 §0.3 and §7 carry the detail, `docs/ROADMAP.md` carries the order and the estimates.
 The gate was run again at the end of this documentation pass — **green, 4 of 4,
 76.9 s, 150 engine tests** (warm caches; the earlier 181 s was the cold one) — after
-the acceptance run and after the certificate-store fix in §8.
+the acceptance run and after the certificate-store fix in §8. **Re-run 2026-11-08**
+for row 4 (the reproducible build): **green, 4 of 4, 402.8 s, 151 engine tests** —
+cold, because the reproducibility measurement had just cleaned `engine\target`, so
+that number is a from-scratch one and not comparable with the 76.9 s beside it —
+and once more when the work was finished, **green, 4 of 4, 385.3 s, 151 tests** —
+the report `build\pipeline-fast.json` holds (its `head` is the commit before the
+last documentation-only amend).
 
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
@@ -936,7 +954,7 @@ somebody who signs for free.
 | 1 | **A published download** — `v0.1.0` is built, verified and **draft**; the public Releases page says "There aren't any releases here" | ✅ | **one click by you** | publish the draft (D-031); the assets and `SHA256SUMS` are already attached and checksummed |
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
 | 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: the free Store account, then Microsoft's certification — no administrator needed for the shape submitted first (D-038)**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions now belong to the `Packaged` shape only, and stay unmeasured until an administrator installs a trusted build of it (§8 traps 29 and 30); `-ServiceMode None` is the shape submitted first, measured on 2026-11-07 to register with no elevation at all (D-038). The app half of that shape was then **run for real** the same day: launched from a developer-mode registration it started `mics-engine` by itself, brought `\\.\pipe\mics_engine` up, answered the app's 15-second `ping` and `sync.status`, reported `package integrity: ok - 68 file(s) hash as the manifest says` from inside the container, and wrote its state to the real `%LOCALAPPDATA%\MICS` (`SIGNING.md` §3) — what remains unmeasured is the helper across the container, which needs an administrator. **The acceptance check for this row now exists**: `scripts\verify-trust.ps1` exits 0 only for an artifact a stranger's Windows would trust, with `-SelfTest` proving the instrument against both controls (`SIGNING.md` §1) — so the day the Store signs the package, "ب5 is done" is one command instead of an opinion |
-| 4 | **Reproducible builds** (threat-model F-11) — a stranger cannot re-derive our bytes and compare them, which with D-035 is now the **load-bearing** trust claim rather than a nicety | ✅ engineering only | a toolchain decision (the build must be made repeatable) + the work | `make-release.ps1` grows a verify mode that rebuilds and compares, and a document says how a reader repeats it |
+| 4 | ~~**Reproducible builds** (threat-model F-11)~~ | ✅ | — | **closed and measured 2026-11-08.** `make-release.ps1 -Reproducible` takes the build time from the revision (`SOURCE_DATE_EPOCH`), asks both linkers for `/Brepro`, writes the archive with one fixed timestamp and puts the signature-independent content hashes in `VERSION`; `scripts\verify-reproducible.ps1 -Reference <zip-or-folder>` rebuilds from source (signed with a locally minted self-signed identity, so no certificate is needed) and compares (file hash exactly, PE files on their content hash, and the two rows the signature legitimately moves — `mics-engine.exe` and the `VERSION` line that records its hash — proved rather than waved through), and **`docs/REPRODUCIBLE.md`** is the recipe a stranger follows. Measured: two from-scratch app builds matched byte for byte after `/Brepro` over the whole 63-file output tree (`mics_app.exe` `4d5cafba…` both times — before it `604152af…` then `03bcfac2…`, and every plugin DLL moved too), the obfuscated Dart snapshot matched all along (`51c2ab76…`), the same 70-file tree zipped twice by the new writer gave one hash where `Compress-Archive` stored per-file times, and `-SelfTest` is **17** checks. The one file a rebuild cannot match byte for byte is `mics-engine.exe`, and **row 13** is that remainder |
 | 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | compile the URL in as the default, verify the manifest's signature before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
@@ -945,6 +963,7 @@ somebody who signs for free.
 | 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
+| 13 | **The engine is the one file a rebuild cannot match** — `MICS_MANIFEST` records the SHA-256 of every other shipped file *as signed*, so a rebuild signed with another key changes that document and therefore `mics-engine.exe` (this is F-11's remaining half, and `verify-reproducible.ps1` accepts it only after proving the difference is the signature) | ✅ engineering only | a **D-025 revision** + the work | make the document cover **content** instead of signatures: inject the payload hash `Get-MicsUnsignedHash` already computes, make the engine's start-up self-check hash the same way (the certificate table, the optional-header checksum and the security directory are not the code), record in D-025 why, and then delete the "explained" verdict from `verify-reproducible.ps1` because the engine matches too |
 
 **What the 2026-11-07 acceptance run measured** (the evidence behind row 2, on the
 artifact rebuilt from `main`: `MICS-setup-0.1.0-x64.exe`, 16,730,142 bytes,
@@ -1099,7 +1118,8 @@ Everything that can be verified without administrator rights is done, and so is
 everything that needed money — **because nothing is bought** (D-035; that is a
 constraint, not a saving). What remains is in **§0.6**, and the shape of it is: one
 free publish click, the answers to §0.2 items 3–5, and engineering that is free
-(reproducible builds, the update pin, the §7 rows).
+(the update pin, the §7 rows, and §0.6 row 13 — reproducible builds landed
+2026-11-08).
 
 | Phase | Scope | State |
 |---|---|---|
@@ -1121,10 +1141,58 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | **P7** | Desktop alert cards: one alert gate (`toast_enabled` + DND + severity), guard/scan/protection coverage, ar/en copy, history-based acceptance probe (D-013) | **done — `3859901`** |
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **done except the certificate, which is no longer planned (D-035)**: SBOM + notices shipped (ب1a), the cost researched and kept (ب1b), the NSIS installer built and verified (ب3 + ب4, helper folded in), the ARM64 **engine** leg built and PE-checked (ب2), and signing wired so a certificate is two secrets and no code change (D-034). Left = **ب6** (publish the draft, one free click) and the free trust stack (§0.6 rows 3–4) |
-| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **done 2026-11-03**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), **ط2** proved both halves catch a tampered copy, build hardening (**ج1**) landed with the PE measured, and the README now says what it does and does not do (**ج3**). Left: F-11's reproducible-build note, which needs a toolchain decision rather than a slice |
+| P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **done 2026-11-03**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), **ط2** proved both halves catch a tampered copy, build hardening (**ج1**) landed with the PE measured, and the README now says what it does and does not do (**ج3**). Left: nothing — **F-11's reproducible build landed 2026-11-08** (the toolchain decision it waited on was `SOURCE_DATE_EPOCH` + `/Brepro` + a clock-free ZIP writer), leaving only the engine's manifest to make content-based (§0.6 row 13) |
 | P6 | Full QA harness + HTML report, malware lab (later) | **the harness is done**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) **ran on 2026-11-07 and is closed** — §0.6 row 2, §0.2 item 1. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **A reproducible build, and the check a stranger runs on it (F-11, §0.6 row 4) — 2026-11-08**
+  - **What was wrong.** With no certificate purchased (D-035) the trust story rests on
+    "the published bytes can be re-derived from this source", and nothing measured that.
+    Two from-scratch app builds differed (`mics_app.exe` `604152af…` then `03bcfac2…`, and
+    every plugin DLL with it); two from-scratch engine builds differed (`e5c1ef1d…` then
+    `118084ae…`); `Compress-Archive` stored each file's own timestamp, so the same tree
+    zipped twice differed; and the shipped engine's PE header carried its own link time
+    (`1794050817` = 2026-11-07T11:26:57Z).
+  - **What was done.** The build time comes from the revision, not the clock
+    (`SOURCE_DATE_EPOCH`, the revision's committer date in UTC at an even second, which a
+    ZIP entry can store); `/Brepro` is set for both linkers (`windows\CMakeLists.txt`
+    before the Profile copies, so Release and Profile and the plugin subdirectories inherit
+    it, and both MSVC target sections of `engine\.cargo\config.toml`);
+    `New-MicsDeterministicZip` replaces `Compress-Archive` (ordinal paths, forward slashes,
+    no directory entries, one fixed timestamp); `make-release.ps1 -Reproducible` refuses a
+    tree with uncommitted changes and writes the *content* hashes into `VERSION`;
+    `Get-MicsUnsignedHash` is the PE hash with the signature taken out; and
+    `scripts\verify-reproducible.ps1` rebuilds a published archive - signed with a
+    locally minted self-signed identity, which needs no certificate - and compares it
+    file by file, with `-SelfTest` covering the primitives and
+    `docs\REPRODUCIBLE.md` as the recipe.
+  - **What was measured.** With `/Brepro`, two from-scratch `flutter clean` builds produced
+    an identical **63-file output tree**, `mics_app.exe` = `4d5cafba…` both times; two
+    `cargo clean` + release builds of the engine produced one file
+    (`6afc16b7…`, 24,184,832 bytes, 742 s and 696 s, `TimeDateStamp` `3544384635` =
+    `0xD343047B` in both — a hash-derived value, not a clock, where the pre-change pair had
+    differed); `data\app.so` was `51c2ab76…` throughout; the same 70-file tree zipped twice
+    gave `266B627B…`; and `-SelfTest` is **17** checks. The pipeline is green — 4 of 4,
+    **402.8 s**, 151 engine tests (cold, because the measurement had just cleaned
+    `engine\target`).
+  - **And the check itself ran end to end.** A reference package was built the way a
+    release is built (`make-release.ps1 -Reproducible -Sign -Version 0.1.0-repro`,
+    295 s), and `verify-reproducible.ps1 -Reference` then rebuilt it from the same
+    source with its own self-signed key in 239 s: **60 files byte for byte identical,
+    7 identical on their content hash, 2 explained, 0 unexpected** — exit 0. The
+    explanation is the one in §3, and the two explained rows are the engine and the
+    `VERSION` line that repeats its content hash. Comparing the two package file
+    lists afterwards also explained `69` versus the published archive's `70`: the one
+    differing name is `native_assets.json`, which Flutter's native-assets step wrote
+    for the 2026-11-06 CI build and does not write after a local `flutter clean`
+    (recorded in `docs\REPRODUCIBLE.md` §6).
+  - **What it does not claim.** The Authenticode blobs themselves are not reproducible (a
+    timestamp and a random RSA value), and the engine carries `MICS_MANIFEST`, which
+    records the other files' hashes *as signed* - so `mics-engine.exe` and the one `VERSION`
+    line that repeats its content hash are **proved** different rather than required
+    equal, and a rebuild re-signed with another key is still indistinguishable to a local
+    check. Making the manifest content-based is its own slice, **§0.6 row 13**.
 
 - **§0.2 reconciled with what actually ran, and the register count corrected (2026-11-08)**
   - The first item in "Blocked on the user" still read *"د3: three clicks, and the helper
@@ -1539,7 +1607,7 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
     "trusted certificate later" assumption it supersedes). The free substitutes are named
     in D-035: the manifest the
     engine re-hashes at start-up, the published `SHA256SUMS`, a **reproducible build**
-    (F-11, now load-bearing rather than a nicety) and the CI run record — plus D-034's
+    (F-11 — **landed 2026-11-08**, `docs/REPRODUCIBLE.md`) and the CI run record — plus D-034's
     two secrets, so a **donated** certificate is a drop-in with no code change.
   - **The acceptance run (2026-11-07, both UAC clicks provided by the user).** The
     per-machine setup was rebuilt from `main` (`dist\MICS-setup-0.1.0-x64.exe`,
@@ -5170,7 +5238,7 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | 6 | App update paths | **partial** — the manifest URL + channel are real settings and `update.check`/`download`/`apply` work; no compiled-in default manifest, no signature check on the manifest, no rollback screen. The signature check — and the thumbprint pin it needs (D-016) — is §0.6 row 5 | P3, P4 |
 | 7 | CVE/intel update paths | **done** — per-source scheduled sync with state/backoff (D-012), Intel screen with per-source results and last errors, vulnerability scan as a cancellable job with live progress, KEV badge on exploited CVEs | D-012, P3c1–P3c3 |
 | 8 | ~~Dark/light mode~~ | **done** — palette, System mode follows live OS switches; **both** palettes are audited and fixed (**29 of 29** pairs clear WCAG 2.2 each, pinned by a test — `docs/CONTRAST.md`; dark closed in small step 4) | P2, أ2–أ3 |
-| 9 | Not hackable / not reverse-engineerable | **partial** — hardening landed (ج1, D-021): CFG on both binaries, LTO/stripped engine, obfuscated Dart snapshot, and `verify-hardening.ps1` gates the release on the PE. The start-up self-check landed with ج2 (2026-11-03): the engine re-hashes the files beside it against the manifest inside its own signed image and says so in About. What no local check can do stays open: a from-source rebuild re-signed with another key is indistinguishable, and the reproducible-build note is not written | P5 |
+| 9 | Not hackable / not reverse-engineerable | **partial** — hardening landed (ج1, D-021): CFG on both binaries, LTO/stripped engine, obfuscated Dart snapshot, and `verify-hardening.ps1` gates the release on the PE. The start-up self-check landed with ج2 (2026-11-03): the engine re-hashes the files beside it against the manifest inside its own signed image and says so in About. What no local check can do stays open: a from-source rebuild re-signed with another key is indistinguishable (a stranger can now at least *rebuild ours and compare* — F-11 landed 2026-11-08, `docs/REPRODUCIBLE.md`; the engine is the one file that needs the explanation in §0.6 row 13) | P5 |
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided, and half-built** — x64 + ARM64; the 32-bit UI is impossible (Flutter has no 32-bit Windows desktop target); the ARM64 **engine** builds and its PE is checked (ب2), and GitHub's `windows-11-arm` runner runs its tests natively. Pending: the ARM64 **app**, because Flutter publishes no Windows ARM64 SDK — §0.6 row 6 | D-003; §0.6 |
 | 12 | Protection types | **done** — `docs/PROTECTION-MATRIX.md`: layer → sees / detects / blocks / misses, plus the evidence table (verified in small step 7) | `docs/PROTECTION-MATRIX.md` |
@@ -5304,7 +5372,8 @@ signing certificate respectively), so this is the work that is always available.
       issue our `CN=MI CS Code Signing`**, CSCBR §9.2.2; the free SignPath route is
       closed to this product category), so nobody re-researches the dead ends. What the
       row wanted is now met by free means: the PE hardening and manifest the release
-      already gates on, plus a **reproducible build** (§0.6 row 4) and the published
+      already gates on, plus a **reproducible build** (§0.6 row 4, landed 2026-11-08:
+      `docs/REPRODUCIBLE.md` + `scripts\verify-reproducible.ps1`) and the published
       `SHA256SUMS`. The signing itself — DLLs then EXEs, timestamping, `signtool verify`
       in CI — is wired (D-034): a certificate is `MICS_PFX` + `MICS_PFX_PASSWORD`, or
       `MICS_CERT_THUMBPRINT` for a token/cloud agent, resolved in one documented order
@@ -5403,7 +5472,7 @@ signing certificate respectively), so this is the work that is always available.
 
 | Sev | Issue | Where |
 |---|---|---|
-| HIGH | **No public download, and no publicly trusted signature** — and the second half is now a decision rather than a debt. **(a) Nothing is published:** `v0.1.0` was built and verified by the Release workflow (run 42040718389) and sits in GitHub Releases as a **draft** (D-031), so the public page says "There aren't any releases here"; publishing it is **one free click** by the owner, and it is the highest-value remaining step (§0.6 row 1). The old "no installer" half of this row closed long ago: the NSIS installer exists, is per-machine by default, folds the privileged helper into its own elevation (ب4, D-026), ships 70 files of which 68 are described by the manifest inside the engine, refuses to orphan a helper (`/S _?=$INSTDIR` → 5), and `verify-installer.ps1` proves the per-user path in 126 s. Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, and the E2E acceptance on that per-machine artifact is §0.6 row 2. **(b) The signature will not be bought — and no longer needs to be** (D-035, D-036): this is a free, open-source project with no budget, so nothing is purchased; the re-research of 2026-11-07 (`docs/SIGNING.md`) found the two routes that sign for free, so ب5 is **free work plus one date**, not a debt: **the Microsoft Store re-signs an MSIX package** after certification (free account, ID + selfie, worldwide, no SmartScreen warnings — the missing piece is packaging, plus the three unknowns in `SIGNING.md` §3), and **OSSign** issues the *project* a certificate once the repository is six months old (~2027-04-27). `docs/COST.md` §2 keeps the researched *paid* routes, dated prices and each route's publisher name so the dead ends are not re-researched (Azure Artifact Signing is paid and unavailable to an individual outside the USA/Canada; the free SignPath route is closed to this product category in their own words — they cannot sign tools that "actively scan for and highlight exploitable vulnerabilities", e.g. "identifying unprotected network ports"). **No CA can issue `CN=MI CS Code Signing`** — CSCBR §9.2.2 — so the D-016 pin must move to a **thumbprint** in the same release that first carries a certificate, or `update.rs:128` refuses our own update. What carries the claim until one of the free routes lands is free and checkable without trusting anybody: the manifest the engine re-hashes at start-up, the published `SHA256SUMS`, and a **reproducible build** (F-11, still unwritten, §0.6 row 4). If a certificate is ever **donated**, D-034's two secrets install it with **no code change**. | `dist/`, `installer/`, `scripts/`, P4, D-035 |
+| HIGH | **No public download, and no publicly trusted signature** — and the second half is now a decision rather than a debt. **(a) Nothing is published:** `v0.1.0` was built and verified by the Release workflow (run 42040718389) and sits in GitHub Releases as a **draft** (D-031), so the public page says "There aren't any releases here"; publishing it is **one free click** by the owner, and it is the highest-value remaining step (§0.6 row 1). The old "no installer" half of this row closed long ago: the NSIS installer exists, is per-machine by default, folds the privileged helper into its own elevation (ب4, D-026), ships 70 files of which 68 are described by the manifest inside the engine, refuses to orphan a helper (`/S _?=$INSTDIR` → 5), and `verify-installer.ps1` proves the per-user path in 126 s. Rebuilt from `main` on 2026-11-07: 16.0 MB, `sha256 8984C194…`, and the E2E acceptance on that per-machine artifact is §0.6 row 2. **(b) The signature will not be bought — and no longer needs to be** (D-035, D-036): this is a free, open-source project with no budget, so nothing is purchased; the re-research of 2026-11-07 (`docs/SIGNING.md`) found the two routes that sign for free, so ب5 is **free work plus one date**, not a debt: **the Microsoft Store re-signs an MSIX package** after certification (free account, ID + selfie, worldwide, no SmartScreen warnings — the missing piece is packaging, plus the three unknowns in `SIGNING.md` §3), and **OSSign** issues the *project* a certificate once the repository is six months old (~2027-04-27). `docs/COST.md` §2 keeps the researched *paid* routes, dated prices and each route's publisher name so the dead ends are not re-researched (Azure Artifact Signing is paid and unavailable to an individual outside the USA/Canada; the free SignPath route is closed to this product category in their own words — they cannot sign tools that "actively scan for and highlight exploitable vulnerabilities", e.g. "identifying unprotected network ports"). **No CA can issue `CN=MI CS Code Signing`** — CSCBR §9.2.2 — so the D-016 pin must move to a **thumbprint** in the same release that first carries a certificate, or `update.rs:128` refuses our own update. What carries the claim until one of the free routes lands is free and checkable without trusting anybody: the manifest the engine re-hashes at start-up, the published `SHA256SUMS`, and a **reproducible build** (F-11 — **landed 2026-11-08**, `scripts\verify-reproducible.ps1` + `docs/REPRODUCIBLE.md`, §0.6 row 4). If a certificate is ever **donated**, D-034's two secrets install it with **no code change**. | `dist/`, `installer/`, `scripts/`, P4, D-035 |
 | ~~HIGH~~ | ~~A user who copies the package by hand can drop `rules\` and get the compiled-in starter pack silently~~ — **closed 2026-11-03 (و4) by evidence**: a package with `rules\` removed (and its own `SHA256SUMS` corrected, so nothing but the missing folder can fail) is refused by `verify-release.ps1`: 4 FAILs — `missing from the zip: rules\yara\starter.yar, rules\guard\starter.json`, `rules folder holds 0 file(s)` (the layout check, not just the file names), `the guard did not use the packaged rules: guard: 6 rule(s) from the built-in starter pack (rules/guard not found)` and `the scan did not use the packaged YARA rules (log line: YARA rules from the built-in starter pack (no rules\yara\starter.yar found))` — **exit code 1** (`RESULT: FAIL - the release artifact is not what it claims to be`). The silently-degraded copy the row described can no longer pass the gate, and the engine's own log names the source it used | `dist/`, `guard/mod.rs`, `scanner/mod.rs`, `scripts\verify-release.ps1` |
 | ~~LOW~~ | ~~A merged re-read keeps the audit complete, but the merged report's non-refreshed sections are only as fresh as the last full audit; the UI never shows that age~~ — **closed 2026-11-03 (و4)**: every section now carries the unix time it was collected (`AuditPass::stamps`), a merge keeps the base's time for the sections it did not re-read and takes the re-read's own time for the ones it did (a section whose collector failed loses its stamp instead of inheriting a fresh one), each finding names its **section id** (the display name is not unique — `rdp` and `remote_tools` both read "Remote Access"), and the audit screen prints "Not re-checked now — read at HH:MM" on every finding and inventory header whose section this report did not re-read. Localised in ar/en; the widget test proves 3 such lines on a merged report and none on the refreshed finding | `traits.rs`, `audit_models.dart`, `audit_screen.dart` |
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
@@ -5425,7 +5494,7 @@ signing certificate respectively), so this is the work that is always available.
 | LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
 | ~~LOW~~ | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
-| ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the reproducible-build note | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
+| ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the engine's manifest recording signed hashes rather than content (§0.6 row 13) | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
 | LOW | **When the engine cannot start at all, the UI cannot say why.** The engine's refusal is one excellent sentence — `MI CS was started from a Low-integrity location (…): it cannot write its state database ("attempt to write a readonly database") or reach the privileged helper … run the installed copy in %LOCALAPPDATA%\MI CS, or extract the release ZIP outside a web root or sandbox folder` — and the app spawns it with `ProcessStartMode.detached`, so that text goes to a discarded stderr: the user sees "engine missing" and a retry that cannot succeed. Measured 2026-11-07 by staging the same package in a Low-labelled folder (trap 33), where the portable copy failed identically. **Fix direction:** capture the child's stderr on the first failed connect (normal mode, drain it, then let the process go), or have the engine leave the refusal where the app already reads — the log tail it shows on the crash screen | `lib\core\ipc\ipc_client.dart`, `engine\src\main.rs:199` |
 
 ## Icon sizes required for the application

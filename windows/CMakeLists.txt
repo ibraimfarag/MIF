@@ -23,6 +23,17 @@ else()
       "Debug" "Profile" "Release")
   endif()
 endif()
+# Deterministic PE headers (F-11, docs/REPRODUCIBLE.md): `/Brepro` makes the
+# linker write a hash of its own output into the PE `TimeDateStamp` field instead
+# of the wall clock, so two builds of the same source agree there. Measured
+# 2026-11-08: without it `mics_app.exe` and every plugin DLL carried the second
+# they were linked and two from-scratch builds differed in exactly those bytes.
+# Set before the PROFILE copy below so Profile - which ships - inherits it, and
+# the plugin subdirectories inherit it from this directory. Debug keeps the real
+# clock on purpose: a debugger uses that field to tell builds apart.
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /Brepro")
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /Brepro")
+
 # Define settings for the Profile build mode.
 set(CMAKE_EXE_LINKER_FLAGS_PROFILE "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
 set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")

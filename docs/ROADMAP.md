@@ -13,12 +13,16 @@ stated where it is real.
 
 ## Where we are
 
-`main`, **2026-11-07** (`173224a`; the four-step fast tier is green: 181 s). Everything
+`main`, **2026-11-08**. Everything
 that needed neither elevation nor money is implemented **and** measured: the eight small
 steps of §0.5 are closed (dead
 VirusTotal client deleted, names frozen, both contrast modes audited at 29 of 29
 pairs, four light-theme renders, icon set verified, `PROTECTION-MATRIX.md` given
-the product's layer numbers, the two cheap register rows written up), and **the
+the product's layer numbers, the two cheap register rows written up), the **reproducible
+build landed** (F-11, §0.6 row 4 — two from-scratch builds of the whole app tree agree
+file for file, and `scripts\verify-reproducible.ps1`, run end to end, rebuilt a
+published archive and matched 60 files byte for byte, 7 on content and 2 explained;
+[`REPRODUCIBLE.md`](REPRODUCIBLE.md)), and **the
 release is hardened** (ج1, D-021): Control Flow Guard on both binaries — which was
 *not* on before, measured from the PE — the engine LTO'd and stripped
 (35.7 → 24.0 MB), the Dart snapshot obfuscated, and `scripts\verify-hardening.ps1`
@@ -36,9 +40,10 @@ awaited a click even under `/S`, so the documented exit level 5 never arrived fo
 scripted uninstall (measured at 532 s on the pre-change build too) — both are now
 `${IfNot} ${Silent}` and the verifier's 141 s run proves it.
 **What is left is one table — `docs/TODO.md` §0.6** — and it is short: **ب6, publish the
-draft** (one free click, and the only HIGH row left), free engineering (**F-11's
-reproducible build**, **هـ1**, the §7 rows — one of which is a real defect the acceptance
-run found), one item that is **free but not yet built** — a publicly trusted signature,
+draft** (one free click, and the only HIGH row left), free engineering (**هـ1**, the §7
+rows — one of which is a real defect the acceptance run found — and §0.6 row 13, the
+engine's manifest covering signatures instead of content), one item that is **free but
+not yet built** — a publicly trusted signature,
 which is no longer "not purchasable": **D-036** found two free routes and
 [`docs/SIGNING.md`](SIGNING.md) records both with their sources (route A, the Microsoft
 Store re-signing an MSIX, is available today and is packaging work; route B, OSSign's
@@ -79,10 +84,12 @@ lying. The *does* table gained **"Is this copy the published one?"** (the 68 fil
 document inside the engine's own signature, the three verdicts, the About line, the
 card and the gate), the *does not* list replaced the stale "there is still no integrity
 manifest" with the real limit — a changed copy is made **visible**, not impossible, a
-rebuild signed by somebody else is reported and not blocked, and there is no
+rebuild signed by somebody else is reported and not blocked, and there was no
 reproducible build yet — and the install steps, troubleshooting, testing numbers and
 the whole Arabic half were brought to the same measured truth. Every number in it is
-one a pipeline step prints.
+one a pipeline step prints. (The "no reproducible build yet" half of that list was
+the last thing to go stale: it was replaced on 2026-11-08, in the same pass as the
+build it described.)
 
 On 2026-11-01 the user approved the QA and reliability track (§3), and eight of its
 slices have landed: the pipeline entry point (ز0), the contract harness over all
@@ -107,7 +114,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
 | **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **done except one click** — portable ZIP + installer + local signing work, the signing wiring waits for nothing (**D-034**: a certificate is two repository secrets), and the **certificate is not purchased** (**D-035**) but is no longer *closed*: **D-036** (2026-11-07) found two free routes in [`docs/SIGNING.md`](SIGNING.md) — the Store re-signing an MSIX, available today, and OSSign at ~2027-04-27 — while the free substitutes (the manifest, the hashes, a reproducible build) stay load-bearing; `v0.1.0` sits in GitHub Releases as a **draft** | 🔴 **HIGH** (the register's only HIGH row: nothing is published) | one click | **one publish click: you**; nothing else |
-| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **done** — build hardening (ج1, D-021), the integrity manifest end to end (ج2, 2026-11-03), the tamper proof (ط2, 2026-11-03), the threat model and protection matrix, and the README rewrite (**ج3**, 2026-11-03); **verified on the installed artifact 2026-11-07**: the engine in `C:\Program Files\MI CS` re-hashed **68 of 68** listed files at start-up and reported our signer as `untrusted-certificate` (the honest middle state). The one thing left is F-11's reproducible build — now the **substitute** for a certificate (D-035), not a nicety | ✅ (bar F-11) | — | nothing |
+| **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **done** — build hardening (ج1, D-021), the integrity manifest end to end (ج2, 2026-11-03), the tamper proof (ط2, 2026-11-03), the threat model and protection matrix, and the README rewrite (**ج3**, 2026-11-03); **verified on the installed artifact 2026-11-07**: the engine in `C:\Program Files\MI CS` re-hashed **68 of 68** listed files at start-up and reported our signer as `untrusted-certificate` (the honest middle state). **F-11's reproducible build landed 2026-11-08** — the phase's last open piece, and the **substitute** for a certificate (D-035) rather than a nicety: `make-release.ps1 -Reproducible` takes the build time from the revision, asks both linkers for `/Brepro` and writes the archive without the clock, `scripts\verify-reproducible.ps1 -Reference <zip>` rebuilds and compares every file (PE files on their signature-independent content hash), and [`docs/REPRODUCIBLE.md`](REPRODUCIBLE.md) is the recipe. Run end to end on the same day: a rebuild signed with its own self-signed key matched **60 of 69 files byte for byte, 7 on content, and left 2 explained** — the engine and the `VERSION` line that repeats its content hash — with 0 unexpected differences. Unchanged by it: `mics-engine.exe` alone is not byte-comparable, because `MICS_MANIFEST` records the other files' hashes *as signed* — TODO §0.6 row 13 | ✅ | — | nothing |
 | **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), the committed QA report with coverage gates **[done]** (د4/د5), E2E on the built artifact **[done 2026-11-07]** (د3) | **done** — see the د3 row for the measured install/uninstall/privileged-op run | ✅ | — | nothing |
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
 | **ط — P9 opsec** | fingerprint sweep over the shipped files, `--remap-path-prefix`, an allowlist with a written reason per entry, tamper tests (byte flip, DLL swap, manifest edit) | **done** — ط1 and ط3 landed 2026-11-02 (the account name is gone, the counts ratchet, `-Tier release` refuses a bad package) and **ط2 landed 2026-11-03** (`scripts\verify-tamper.ps1`, the `tamper.verify` release step), which also closed a hole in the manifest gate it was written to test | ✅ | — | nothing |
@@ -115,7 +122,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 | **و — the register** | rows in §7 that are real work rather than accepted gaps | **13 open rows** (1 HIGH, 4 MED, 8 LOW) out of 24 — recounted 2026-11-08 by walking the table in `docs/TODO.md` §7; the MED row is the firewall name-prefix asymmetry the acceptance run found, and the newest LOW row is what a user sees when the engine refuses to start | 🟡 LOW–MED, per row | 5–11 h | some rows need a decision from you |
 | **P1.5** | helper acceptance: privileged operations with **zero** prompts | **done, measured 2026-11-07** — against the **real** LocalSystem service (not `helper-console`): `helper-status` reported `installed/running/reachable/elevated`, `fw.rules.add` created `MICS-MICS-e2e-acceptance` in **37 ms** and `fw.rules.remove` removed it in **36–44 ms**, each a `phase=start`/`phase=done ok=true` pair in `%PROGRAMDATA%\MICS\logs\priv.log`, and **no UAC prompt appeared for any of it**. Proved by the 2026-11-01 attempts fixing two engine bugs first (netsh argument shape, PowerShell quoting) | ✅ | — | nothing |
 
-Total: the rows still open in §2 come to **~13–24 h of free work** (هـ1 + the register + ز2-د), plus F-11's reproducible build and the correctness work of the new register row, neither of which is estimated yet — and **no money at all**: the certificate this line used to name is off the plan (D-035), and since D-036 it is off the plan *and* reachable for free — two routes, one of them available today (`docs/SIGNING.md`).
+Total: the rows still open in §2 come to **~13–24 h of free work** (هـ1 + the register + ز2-د), plus the correctness work of the new register row and §0.6 row 13 (the engine's manifest covering content instead of signatures), neither of which is estimated yet — and **no money at all**: the certificate this line used to name is off the plan (D-035), and since D-036 it is off the plan *and* reachable for free — two routes, one of them available today (`docs/SIGNING.md`).
 
 ## 2. Tasks
 
@@ -227,7 +234,9 @@ what is left is **one free click** (ب6) plus the six decisions in item 3.
    purchasable from Egypt). The subject can never stay `CN=MI CS Code Signing`
    (CSCBR §9.2.2), so the D-016 pin must move to a thumbprint in the same release that
    first carries any certificate. The certificate's job is done instead by the manifest
-   self-check, the published `SHA256SUMS` and F-11's reproducible build; and if one is
+   self-check, the published `SHA256SUMS` and F-11's reproducible build (**landed
+   2026-11-08**: `scripts\verify-reproducible.ps1` rebuilds the published archive and
+   compares it, `docs/REPRODUCIBLE.md` is the recipe); and if one is
    ever **donated**, D-034's two secrets install it with no code change. **What replaces
    this item is ب6 — one free click to publish the draft.**
 3. **Six decisions that each stop ready work** - one-page briefs, with the cost of every

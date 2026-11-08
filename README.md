@@ -36,8 +36,9 @@ explains, and suggests the next action instead of dumping raw data.
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
 > 2026-11-04) — the release workflow asks that runner for the x64 SDK and marks
 > both ARM64 jobs informational until they have a green run — see *Requirements*).
-> What is left is short and entirely free: **publish the draft** (one click), a
-> **reproducible build**, and the register rows — priorities and estimates in
+> What is left is short and entirely free: **publish the draft** (one click), **هـ1**
+> (the update manifest's URL and signature pin), the engine manifest's signed hashes,
+> and the register rows — priorities and estimates in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md), and the one-table answer in
 > [`docs/TODO.md`](docs/TODO.md) §0.6. Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
@@ -182,10 +183,16 @@ Honesty is a feature. Today, MI CS does **not**:
   changed copy *visible*, not *impossible*. If somebody rebuilds `mics-engine.exe`,
   keeps the document in step and signs it with their own certificate, the app says
   `unverified` and names why — it cannot refuse to run, because MI CS is the thing
-  that would be doing the refusing. The same is true of our own bytes from the
-  other direction: there is no **reproducible build** yet, so a stranger cannot
-  re-derive our binaries from this source and compare them
-  (`docs/THREAT-MODEL.md`, F-11, records that as the open half). What *is* proved:
+  that would be doing the refusing. The other direction is now checkable too: the
+  build is **reproducible** ([`docs/REPRODUCIBLE.md`](docs/REPRODUCIBLE.md)) —
+  `make-release.ps1 -Reproducible` takes the build time from the revision instead of
+  the clock and asks both linkers for `/Brepro`, and
+  `scripts\verify-reproducible.ps1 -Reference <the published zip>` rebuilds from
+  source and compares every file, on the unsigned content hash where a signature is
+  involved. Two documented exceptions remain, both measured and named by that
+  script rather than waved through: the Authenticode blobs themselves, and
+  `mics-engine.exe`, whose embedded `MICS_MANIFEST` records the hashes of the files
+  *as signed* (`docs/THREAT-MODEL.md`, F-11). What *is* proved:
   both binaries carry **Control Flow Guard**, ASLR/DEP/high-entropy VA and no
   symbols or PDB paths, the Dart snapshot ships obfuscated (D-021), and
   `scripts\verify-hardening.ps1` reads all of it back out of the PE while the
@@ -515,6 +522,14 @@ reason. **release** runs against
   engine and a copied install, each refused by the gate above and reported by the
   engine itself (**41** checks, with the untouched package as the control).
 
+The **reproducible-build** check stands beside those rather than inside a tier,
+because it pays for a full rebuild by design:
+`scripts\verify-reproducible.ps1 -Reference <the published zip>` rebuilds the
+package from this source and compares it file by file
+([`docs/REPRODUCIBLE.md`](docs/REPRODUCIBLE.md)). Its primitives are cheap and
+checked on their own: `scripts\verify-reproducible.ps1 -SelfTest` (**17** checks,
+seconds, no build).
+
 ```powershell
 cd engine
 cargo test                                # 124 tests
@@ -550,6 +565,12 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-hardening.ps1 -Path dist
 # The package describes itself, and a tampered copy is refused and reported
 powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1
+
+# The published bytes are the ones this source produces (rebuilds, then compares):
+# point it at an archive cut reproducibly - the v0.1.0 draft predates this, so it
+# reports real differences rather than the signature-shaped ones (REPRODUCIBLE.md 6)
+powershell -ExecutionPolicy Bypass -File scripts\verify-reproducible.ps1 -Reference <the published zip>
+powershell -ExecutionPolicy Bypass -File scripts\verify-reproducible.ps1 -SelfTest
 
 # The firewall goes through Windows' own API: reads match Windows, a created rule
 # is the rule Windows enforces, and a fake netsh on PATH proves the dependency is gone
@@ -628,9 +649,9 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | `assets/i18n/<lang>/<module>.json` | Translation packs — one file per module, one folder per language. |
 | `assets/sounds/` | In-house notification cues. |
 | `assets/icons/` | Icon sources (`task.svg`, `Desktop.svg`) and the generated `.ico` files. |
-| `scripts/` | User-facing helpers and acceptance probes: code signing (identity discovered from the environment, `verify-signing.ps1`), the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
+| `scripts/` | User-facing helpers and acceptance probes: code signing (identity discovered from the environment, `verify-signing.ps1`), the release and installer builds, `verify-manifest.ps1`, `verify-tamper.ps1`, `verify-opsec.ps1`, `verify-reproducible.ps1`, `verify-toast.ps1`, `verify-helper.ps1`, `verify-pipe-acl.ps1`, `pipeline.ps1`. |
 | `qa/` | The QA registries and the committed report (`report.md` / `report.html`), the JSON-RPC contract harness and the UI fixtures/ledger. |
-| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `SIGNING.md` (every route to a trusted signature, free and paid, with the source and date for each), `PRIVACY.md` (the complete outbound list and everything stored on this computer — the Store requires it, and it is shorter than you expect), `STORE.md` (the submission playbook: what Partner Center assigns, the listing copy, the certification notes and the measurement that follows), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`. |
+| `docs/` | `ROADMAP.md` (what is left, priorities and estimates), `TODO.md` (live status and the done log), `OPEN-DECISIONS.md` (the six answers that are waiting for you, with the measured cost of each option), `SIGNING.md` (every route to a trusted signature, free and paid, with the source and date for each), `PRIVACY.md` (the complete outbound list and everything stored on this computer — the Store requires it, and it is shorter than you expect), `STORE.md` (the submission playbook: what Partner Center assigns, the listing copy, the certification notes and the measurement that follows), `DECISIONS.md` (why things are the way they are), `THREAT-MODEL.md` + `PROTECTION-MATRIX.md` (what is defended, what is not, and the evidence), `PRIVILEGED-OPS.md` (the helper's complete operation list), `CONTRAST.md`, `REPRODUCIBLE.md` (how a stranger rebuilds the published bytes and compares them). |
 | `tool/` | Developer probes, icon pipeline and one-off helpers (not shipped). |
 
 ## Troubleshooting
@@ -741,8 +762,13 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 **حدود الحكاية دي (بصراحة):** البيان بيخلّي النسخة المتغيّرة **ظاهرة** مش
 **مستحيلة** — اللي يعيد بناء المحرك ويوقّعه بشهادته هو، التطبيق هيقول `unverified`
 وهيسمّي السبب، لكنه مش هيقدر يمنعه إنه يشتغل، لأن MI CS هو اللي بيعمل الفحص.
-وكمان مفيش **بناء قابل لإعادة الإنتاج** لسه، يعني حد برّه مايقدرش يبني نفس
-البايتات من السورس ويقارنها (ده النص المفتوح في F-11 في `docs/THREAT-MODEL.md`).
+وكمان البناء بقى **قابلاً لإعادة الإنتاج** ([`docs/REPRODUCIBLE.md`](docs/REPRODUCIBLE.md)):
+`make-release.ps1 -Reproducible` بياخد وقت البناء من الـ revision مش من الساعة
+وبيطلب `/Brepro` من الرابطين، و`scripts\verify-reproducible.ps1 -Reference <الأرشيف
+المنشور>` بيعيد البناء من السورس ويقارن كل ملف — بالـ hash بتاع المحتوى من غير
+التوقيع لما يكون فيه توقيع. فضلت استثناءان متقاسان والاسكربت بيقولهم بالاسم مش
+بيعدّيهم: التوقيعات نفسها، و`mics-engine.exe` لأن `MICS_MANIFEST` جواه بيسجّل
+هاشات الملفات **وهي موقّعة** (`docs/THREAT-MODEL.md`، F-11).
 اللي **مُثبَت**: الملفين عليهم Control Flow Guard وASLR/DEP وبدون symbols، وكود
 Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس ده من الـ PE
 وبيوقف النشر لو ناقص.
@@ -781,6 +807,11 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 المنشورة: `opsec.verify` و`manifest.verify` و`tamper.verify` — 11 خطوة إجمالًا).
 الأرقام دي **حد أدنى**: الحلقات والبيانات المولّدة بتزوّدها وقت التشغيل، والجدول
 المولّد هو `qa\report.md`.
+وفحص **إعادة الإنتاج** جنب المستويات دي مش جواهم، لأنه بيدفع تمن بناء كامل:
+`scripts\verify-reproducible.ps1 -Reference <الأرشيف المنشور>` بيعيد بناء الحزمة من
+السورس ويقارنها ملف ملف ([`docs/REPRODUCIBLE.md`](docs/REPRODUCIBLE.md))، وأدواته
+الأساسية ليها فحص سريع لوحدها: `scripts\verify-reproducible.ps1 -SelfTest`
+(**17** فحص في ثواني، من غير أي بناء).
 والتباين اللوني **متقاس مش بالتقدير**: وضعين
 فاتح وغامق كل واحد فيهم 29 زوج لون بيتقاسوا ضد WCAG 2.2 (4.5:1 للنص و3:1 للحدود
 والأيقونات) وبيتفشّلوا لو أي زوج نزل تحت الحد — الأرقام كلها في `docs/CONTRAST.md`.
@@ -883,8 +914,8 @@ draft مش باين لحد غير صاحب المستودع، فالصفحة ب�
 واحدة، الخدمة اتعملت واشتغلت، والعمليات المميّزة اتنفّذت من غير أي برومبت تاني،
 والإزالة بكليكة واحدة شالت المنتج والخدمة. **اللي فاضل بالفعل جدول واحد** في
 [`docs/TODO.md`](docs/TODO.md) §0.6: **نشر `v0.1.0`** (كليكة مجانية واحدة، وهو
-الوحيد HIGH)، وشغل هندسي مجاني (**بناء قابل لإعادة الإنتاج**، و**هـ1**، وصفوف
-السجل)، وحاجة واحدة **مفتوحة مجانًا**: **توقيع عام** — مش هيتم شراؤه (D-035)، وله
+الوحيد HIGH)، وشغل هندسي مجاني (**هـ1**، وصفوف السجل، وبيان المحرك اللي بيسجّل
+هاشات موقّعة بدل المحتوى)، وحاجة واحدة **مفتوحة مجانًا**: **توقيع عام** — مش هيتم شراؤه (D-035)، وله
 طريقتين مجانيين (D-036) محتاجين شغل تغليف أو انتظار، مش فلوس؛ وحاجتين **مقفولتين
 مش مستنيتين**: نسخة Windows على ARM للتطبيق (Flutter مفيش عنده SDK لـ ARM64،
 والمحرّك بيتبني ويتفحص)، و**ز2-د** (توصيل تقارير الانهيار — محتاج قرار D-023).

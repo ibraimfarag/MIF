@@ -518,7 +518,9 @@ is closed on eligibility and on money at the same time.
 4. **Until either lands, nothing in the honesty story changes**: the release page
    says the binaries are self-signed, `SHA256SUMS` is published, the engine re-hashes
    its own manifest at start-up, and F-11 (reproducible builds) is the load-bearing
-   substitute. What changes is that "no certificate can ever exist" is no longer the
+   substitute — and it landed 2026-11-08, so a reader can now rebuild the published
+   bytes and compare them (`scripts\verify-reproducible.ps1`, `docs\REPRODUCIBLE.md`).
+   What changes is that "no certificate can ever exist" is no longer the
    truth, so no document may say it.
 
 ## 8. Sources, all read 2026-11-07

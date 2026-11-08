@@ -15,8 +15,17 @@
 #   * /CETCOMPAT - the shadow-stack marker cannot be verified on this machine
 #     (no way to run the process under a shadow stack without elevation), and a
 #     promise nobody measured is exactly what this project does not ship.
+#
+# /Brepro is here for the other reason a PE is not reproducible (F-11): without it
+# link.exe writes the wall clock into the `TimeDateStamp` header field, so two
+# builds of the same source differ in those four bytes forever. Measured
+# 2026-11-08 on the shipped engine: the field held 2026-11-07T11:26:57, its own
+# link time, and a second from-scratch build produced a different hash. With
+# /Brepro two from-scratch builds produced one file (6afc16b7..., 742 s and
+# 696 s, the field 0xD343047B in both). `docs/REPRODUCIBLE.md` is the
+# recipe; the app's C++ half asks for the same flag in windows\CMakeLists.txt.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "control-flow-guard=yes"]
+rustflags = ["-C", "control-flow-guard=yes", "-C", "link-arg=/Brepro"]
 
 # The same hardening for the ARM64 leg. It is a separate section because cargo
 # picks rustflags by target triple: without it an ARM64 engine would silently ship
@@ -25,4 +34,4 @@ rustflags = ["-C", "control-flow-guard=yes"]
 # produced at all depends on the toolchain, not on this file:
 # `scripts\make-release.ps1 -Arch arm64 -CheckToolchain` reports what is missing.
 [target.aarch64-pc-windows-msvc]
-rustflags = ["-C", "control-flow-guard=yes"]
+rustflags = ["-C", "control-flow-guard=yes", "-C", "link-arg=/Brepro"]

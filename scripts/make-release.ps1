@@ -76,7 +76,17 @@ param(
   [ValidateSet("x64", "arm64")]
   [string]$Arch = "x64",
   # Report what the ARM64 leg needs and stop, instead of trying to build it.
-  [switch]$CheckToolchain
+  [switch]$CheckToolchain,
+  # F-11 (docs/REPRODUCIBLE.md): take the build time from the revision instead of
+  # the clock, zip with fixed entry timestamps, write the signature-independent
+  # content hashes into VERSION, and refuse a tree with uncommitted changes - a
+  # build nobody else can check out is a build nobody else can reproduce. This is
+  # the mode a release is built in, and the mode scripts\verify-reproducible.ps1
+  # compares against.
+  [switch]$Reproducible,
+  # The one timestamp a reproducible build uses, ISO 8601. Default: the
+  # SOURCE_DATE_EPOCH convention, then the committer date of HEAD.
+  [string]$BuildTime = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,6 +99,36 @@ $buildDir = Join-Path $root "build\windows\$Arch\runner\$Configuration"
 $portable = Join-Path $root "dist\MICS-portable"
 $rulesSrc = Join-Path $root "engine\rules"
 $flutterArchDir = Join-Path $root "build\windows\$Arch"
+
+# The one timestamp a build carries (F-11, docs/REPRODUCIBLE.md). A reproducible
+# build takes it from the revision and refuses a tree with uncommitted changes -
+# a build nobody else can check out is a build nobody else can reproduce - and
+# the value is normalised here, not in three places later: UTC, and truncated to
+# an even second, because a ZIP entry cannot store an odd one and VERSION and the
+# archive must say the same thing. A normal build keeps the wall clock.
+#
+# It is `$buildStamp`, not `$BuildTime`: the `-BuildTime` parameter is typed
+# `[string]`, and PowerShell variables are case-insensitive, so a `$buildTime`
+# assigned here would be coerced back to a string on the way in - and a string
+# has no `ToString("yyyy-MM-dd HH:mm:ss zzz")`.
+. (Join-Path $PSScriptRoot "reproducible.ps1")
+if ($Reproducible) {
+  $buildStamp = Get-MicsBuildTime -Repo $root -BuildTime $BuildTime
+  $buildStamp = [DateTimeOffset]::new([int64]([math]::Floor($buildStamp.UtcDateTime.Ticks / 20000000) * 20000000), [TimeSpan]::Zero)
+  $revision = @(& git -C $root rev-parse --short HEAD 2>$null) | Select-Object -First 1
+  if (-not $revision) { $revision = "unknown" }
+  $dirty = @(& git -C $root status --porcelain --untracked-files=no 2>$null)
+  if ($dirty.Count -gt 0) {
+    Write-Output ("RESULT: FAIL - {0} uncommitted change(s) to tracked files; a reproducible build must come from a revision a stranger can check out" -f $dirty.Count)
+    exit 1
+  }
+  $epoch = [int64](($buildStamp.UtcDateTime - [datetime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)).TotalSeconds)
+  $env:SOURCE_DATE_EPOCH = [string]$epoch
+  Write-Host ("reproducible build: {0} (revision {1}), SOURCE_DATE_EPOCH {2}" -f $buildStamp.ToString("yyyy-MM-dd HH:mm:ss zzz"), $revision, $epoch)
+} else {
+  $buildStamp = [DateTimeOffset]::Now
+  $revision = ""
+}
 
 # What an ARM64 build needs, read off the disk instead of assumed. `ring` compiles
 # assembly with clang for `aarch64-pc-windows-msvc`, and the MSVC ARM64 toolset
@@ -674,22 +714,43 @@ $signer = (Get-AuthenticodeSignature $app).SignerCertificate.Subject
 $engineName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
   (Join-Path $staging "mics-engine.exe")).FileDescription
 if (-not $engineName) { $engineName = "(none - Task Manager will show mics-engine.exe)" }
-$built = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
+
+# What VERSION records (F-11, docs/REPRODUCIBLE.md). A reproducible build writes
+# the clock out of the package: `built` becomes the revision's own timestamp, and
+# the two hashes become the signature-independent content hashes - Authenticode
+# embeds a timestamp and a random RSA value, so two signatures over the same code
+# never match, while the code does. A normal build keeps the wall clock and the
+# hashes of the files as they sit on disk, which is also what SHA256SUMS lists.
+$built = if ($Reproducible) { "$($buildStamp.ToString("yyyy-MM-dd HH:mm:ss zzz")) (source revision $revision)" }
+         else { (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz") }
+$engineRecorded = if ($Reproducible) { Get-MicsUnsignedHash -Path $engine } else { $engineHash }
+$appRecorded = if ($Reproducible) { Get-MicsUnsignedHash -Path $app } else { $appHash }
 
 $versionFile = Join-Path $staging "VERSION"
-@(
+$versionLines = @(
   "MI CS $Version (portable, $Arch)",
   "built   $built",
-  "engine  $engineHash",
-  "app     $appHash",
+  "engine  $engineRecorded",
+  "app     $appRecorded",
   "rules   $ruleCount file(s) hot-reloaded from rules\",
   "hardened CFG + ASLR/DEP, engine LTO and stripped, app obfuscated (symbols not shipped)"
-) | Set-Content -Path $versionFile -Encoding ASCII
+)
+if ($Reproducible) {
+  # Two extra lines, because a reader comparing this file with a rebuild has to
+  # know why these hashes are not the ones in SHA256SUMS beside the archive.
+  $versionLines += "content the engine and app hashes above cover the unsigned bytes (signing"
+  $versionLines += "        appends the Authenticode blob, which cannot be reproduced)"
+}
+$versionLines | Set-Content -Path $versionFile -Encoding ASCII
 
 $zip = Join-Path $root ("dist\MICS-portable-$Version-$Arch.zip")
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Write-Host "zipping $zip ..."
-Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip -CompressionLevel Optimal
+# New-MicsDeterministicZip, not Compress-Archive (F-11): Compress-Archive stores
+# each file's own LastWriteTime, so the same tree zipped twice produced different
+# bytes. This one writes the entries in ordinal path order with one fixed
+# timestamp, which makes the archive a function of its content.
+New-MicsDeterministicZip -Source $staging -Destination $zip -Timestamp $buildStamp
 
 $sums = Join-Path $root "dist\SHA256SUMS"
 $lines = @()
@@ -749,6 +810,11 @@ Write-Output "MI CS $Version portable release"
 Write-Output ("  zip    : {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
 Write-Output ("  sums   : {0}" -f $sums)
 Write-Output ("  engine : {0}" -f $engineHash)
+if ($Reproducible) {
+  Write-Output ("  built  : {0} (revision {1}) - reproducible" -f $buildStamp.ToString("yyyy-MM-dd HH:mm:ss zzz"), $revision)
+  Write-Output ("  content: engine {0}" -f $engineRecorded)
+  Write-Output ("           app    {0}  (unsigned bytes; the signature is what a rebuild cannot repeat)" -f $appRecorded)
+}
 Write-Output "  rules  : $ruleCount file(s)"
 Write-Output "  hardened: CFG + ASLR/DEP + stripped (checked from the PE, not the flags)"
 Write-Output ("  symbols: {0}  (kept out of the package on purpose)" -f $symbolsDir)
