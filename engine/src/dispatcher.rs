@@ -384,6 +384,19 @@ impl Dispatcher {
                     return detailed_error(req, "fw.wfp.reset", e);
                 }
             },
+            // The tamper watch (D-044), on demand: the guard thread polls it
+            // about every 30 s, and this is the same look a caller can ask for —
+            // including raising the alert when something recorded is gone.
+            "fw.wfp.watch" => match crate::firewall::watch::poll() {
+                Ok(report) => Some(
+                    serde_json::to_value(report)
+                        .unwrap_or_else(|e| json!({"state": "unknown", "detail": e.to_string()})),
+                ),
+                Err(e) => {
+                    error!("fw.wfp.watch failed: {e:#}");
+                    return detailed_error(req, "fw.wfp.watch", e);
+                }
+            },
             // A second launch, and the Explorer verb's `--scan` (D-041): the
             // window that is already open comes forward, scanning the handed
             // over path when there is one. `delivered` is the caller's answer —

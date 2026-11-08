@@ -255,8 +255,14 @@ pub fn guard_event(ev: &crate::guard::GuardEvent) {
     // opened. (`canary_read` = opened for reading, `canary_triggered` =
     // written/renamed/deleted.)
     let canary = ev.r#type == "canary_triggered" || ev.r#type == "canary_read";
+    // Our own filtering layer losing an object is not "suspicious activity" by
+    // some process: it is MI CS' protection being dismantled (D-044), so it gets
+    // its own card instead of the generic guard one.
+    let tamper = ev.r#type == "wfp_tamper";
     let title = if canary {
         text("guard.canary.title")
+    } else if tamper {
+        text("guard.wfp.title")
     } else {
         text("guard.suspicious.title")
     };
@@ -265,9 +271,16 @@ pub fn guard_event(ev: &crate::guard::GuardEvent) {
     } else {
         format!("{} — {}", ev.process, ev.rule_name)
     };
+    let body = if tamper { ev.detail.clone() } else { body };
     let actions = [text("guard.action.open")];
     show(
-        if canary { "canary" } else { "guard" },
+        if canary {
+            "canary"
+        } else if tamper {
+            "firewall"
+        } else {
+            "guard"
+        },
         &ev.severity,
         title,
         &body,
@@ -303,6 +316,11 @@ pub fn report_filed(bug_id: &str, report_kind: &str, message: &str) {
 /// follows the language the user picked instead of always shouting in English.
 const COPY: &[(&str, &str, &str)] = &[
     ("guard.suspicious.title", "🛡️ MI CS — نشاط مشبوه", "🛡️ MI CS — Suspicious activity"),
+    (
+        "guard.wfp.title",
+        "🧱 MI CS — طبقة الحجب اتشالت!",
+        "🧱 MI CS — the filtering layer was removed!",
+    ),
     ("guard.canary.title", "🥚 MI CS — ملف الطُعم اتغيّر!", "🥚 MI CS — Canary file modified!"),
     ("guard.action.open", "افتح MI CS", "Open MI CS"),
     ("scan.threat.title", "🛡️ MI CS — لقينا تهديد", "🛡️ MI CS — Threat found"),
@@ -415,6 +433,7 @@ mod tests {
         for key in [
             "guard.suspicious.title",
             "guard.canary.title",
+            "guard.wfp.title",
             "guard.action.open",
             "scan.threat.title",
             "scan.threat.action",

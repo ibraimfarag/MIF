@@ -137,6 +137,16 @@ pointed at an object Windows or another product owns. The helper's token and the
 per-user pipe ACL are unchanged, and the engine holds no WFP privilege of its own: it
 asks, the helper writes.
 
+**When that protection is removed** (D-044): the objects are persistent on purpose, so a
+token that is already an administrator can delete MI CS' sublayer or one of its filters
+without MI CS being involved at all. That is not preventable in usermode, and it is not
+pretended away — a record of what MI CS wrote (`meta` row `wfp_baseline`) is compared
+against the BFE by a ~30 s poll, and a loss raises one HIGH incident and card naming what
+is gone. It is deliberately **not** self-healing: re-creating an object an administrator
+deleted would fight the machine's owner. The limits are stated with it — a delete-and-re-add
+inside one poll window is invisible, an unelevated engine with no helper can only answer
+`unknown`, and the alert cannot say *who* removed the object.
+
 ### B5 — Elevation
 
 One UAC prompt, at helper installation (D-007). The UI stays `asInvoker`; when an

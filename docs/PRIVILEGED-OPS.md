@@ -45,6 +45,13 @@ MI CS. The engine builds that spec, so the UI never assembles a filter out of
 what a row happens to display; a row with no peer port (UDP, a listener) or no
 image path carries no spec at all and the UI offers no button for it.
 
+D-044 (same row, slice c) uses **only `firewall.wfp.status`**: the tamper watch
+compares a record of what MI CS wrote against that read, so it needs no new
+privileged op and never writes. Unelevated with no helper the read is refused,
+and the watch reports `unknown` rather than an empty machine — the same
+`needs_elevation` answer, used as a third state instead of being flattened into
+"nothing is there".
+
 Every op names its effect on the machine; nothing is implicit, nothing is
 "best effort and hope".
 

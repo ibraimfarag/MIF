@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::ffi::c_void;
 use std::path::Path;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::elevated;
 use windows::core::{Error, GUID, HRESULT, PCWSTR, PWSTR};
@@ -747,23 +747,7 @@ impl WfpManager {
     /// helper, and if there is no helper say "unknown, needs an administrator"
     /// rather than showing an empty filter list.
     pub async fn status() -> Result<WfpStatus> {
-        match Engine::open().and_then(|engine| engine.status()) {
-            Ok(status) => Ok(status),
-            Err(e) if needs_elevation(&e) => {
-                match crate::privileged::run_op(&crate::privileged::Op::FirewallWfpStatus) {
-                    Ok(value) => Ok(serde_json::from_value(value)
-                        .context("the privileged helper sent a status we cannot read")?),
-                    Err(helper) => Ok(WfpStatus {
-                        sublayer: false,
-                        filters: 0,
-                        names: Vec::new(),
-                        needs_elevation: true,
-                        detail: helper.to_string(),
-                    }),
-                }
-            }
-            Err(e) => Err(e),
-        }
+        status_blocking()
     }
 
     pub async fn block(spec: &FilterSpec) -> Result<BlockOutcome> {
@@ -771,34 +755,80 @@ impl WfpManager {
         // caller gets the same refusal whether the write would have happened
         // here or in the helper.
         validate(spec)?;
-        if elevated() {
-            return block_now(spec);
+        let outcome = if elevated() {
+            block_now(spec)?
+        } else {
+            let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpBlock {
+                spec: spec.clone(),
+            })?;
+            serde_json::from_value(value)
+                .context("the privileged helper sent a result we cannot read")?
+        };
+        // The tamper watch's record (D-044). Best effort on purpose: the filter
+        // is on the machine either way, and failing the call here would report a
+        // write that did happen as an error.
+        if let Err(e) = crate::firewall::watch::remember(&filter_name(spec)) {
+            warn!("the WFP record could not be updated after a block: {e:#}");
         }
-        let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpBlock {
-            spec: spec.clone(),
-        })?;
-        serde_json::from_value(value).context("the privileged helper sent a result we cannot read")
+        Ok(outcome)
     }
 
     pub async fn unblock(spec: &FilterSpec) -> Result<UnblockOutcome> {
         validate(spec)?;
-        if elevated() {
-            return unblock_now(spec);
+        let outcome = if elevated() {
+            unblock_now(spec)?
+        } else {
+            let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpUnblock {
+                spec: spec.clone(),
+            })?;
+            serde_json::from_value(value)
+                .context("the privileged helper sent a result we cannot read")?
+        };
+        if let Err(e) = crate::firewall::watch::forget(&filter_name(spec)) {
+            warn!("the WFP record could not be updated after an unblock: {e:#}");
         }
-        let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpUnblock {
-            spec: spec.clone(),
-        })?;
-        serde_json::from_value(value).context("the privileged helper sent a result we cannot read")
+        Ok(outcome)
     }
 
     /// The undo for everything this module ever added. It names no filter, so
     /// it can only ever remove our own objects (the provider key is ours).
     pub async fn reset() -> Result<usize> {
-        if elevated() {
-            return reset_now();
+        let removed = if elevated() {
+            reset_now()?
+        } else {
+            let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpReset)?;
+            outcome_count(&value, "removed")?
+        };
+        // Our own cleanup must never read as a tamper: the record goes when the
+        // filters go (D-044).
+        if let Err(e) = crate::firewall::watch::forget_all() {
+            warn!("the WFP record could not be cleared after a reset: {e:#}");
         }
-        let value = crate::privileged::run_op(&crate::privileged::Op::FirewallWfpReset)?;
-        outcome_count(&value, "removed")
+        Ok(removed)
+    }
+}
+
+/// [`WfpManager::status`] without a runtime.
+///
+/// Reading the BFE is a blocking Windows call, and the tamper watch runs on the
+/// guard's own OS thread (D-044), where there is no tokio reactor to borrow.
+pub fn status_blocking() -> Result<WfpStatus> {
+    match Engine::open().and_then(|engine| engine.status()) {
+        Ok(status) => Ok(status),
+        Err(e) if needs_elevation(&e) => {
+            match crate::privileged::run_op(&crate::privileged::Op::FirewallWfpStatus) {
+                Ok(value) => Ok(serde_json::from_value(value)
+                    .context("the privileged helper sent a status we cannot read")?),
+                Err(helper) => Ok(WfpStatus {
+                    sublayer: false,
+                    filters: 0,
+                    names: Vec::new(),
+                    needs_elevation: true,
+                    detail: helper.to_string(),
+                }),
+            }
+        }
+        Err(e) => Err(e),
     }
 }
 

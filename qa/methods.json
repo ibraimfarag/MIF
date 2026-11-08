@@ -414,6 +414,13 @@
       "note": "The undo needs an administrator like the write; the helper addresses MI CS' own provider key only."
     },
     {
+      "method": "fw.wfp.watch",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "The tamper watch (D-044) compares the record of what MI CS wrote against the machine: state is guarded / tampered / clear / unrecorded, and unknown when neither this process nor the helper may read the BFE. It raises a HIGH guard event only on a tamper."
+    },
+    {
       "method": "report.export",
       "class": "sandbox",
       "params": null,

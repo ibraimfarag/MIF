@@ -2322,3 +2322,117 @@ filter, then that it is gone again. The UI's own click is proved only up to the 
 state or byte counters, reverse DNS, a process tree in the list, blocking by process *name*,
 automatic blocking from a heuristic or a feed (the click is the human's), or an un-block from the
 row — removal stays the Firewall tab's rule list, where the filter's own name is shown.
+
+## D-044 — The filtering layer watches itself, and an administrator's deletion is an incident
+
+**Status:** accepted (2026-11-09)
+
+**Context.** §0.6 row 17 slice (c) asked for the last piece of a real-time firewall: MI CS should
+notice when what it wrote is taken away. D-042's objects are **persistent** in the Base Filtering
+Engine on purpose — that is what makes a block outlive the app — and the same property makes them
+deletable by anything holding an administrator token, with the result that MI CS would go on
+reporting `fw.wfp.status` for a machine whose protection is gone. Nothing watched it: the guard's
+events were process starts and canaries, and the status call was a request the UI made when it felt
+like it, not a poll with memory.
+
+The obvious design — a subscription — is not available to us. `FwpmFilterSubscribeChanges0` needs
+the same access the write path needs, and the write path is the wall D-042 and D-043 both hit: an
+unelevated engine can only ask the helper, and the helper reads the BFE for it. A kernel callout
+driver would see the deletion immediately and is exactly what `SECURITY.md` forbids (usermode
+only). So the feature is a **record plus a poll**, and its honesty depends on saying what a poll
+cannot see rather than on pretending it is a subscription.
+
+**Decision.**
+
+1. **A record beside the objects, never a second source of truth.** `meta` row `wfp_baseline`
+   holds the filter names MI CS wrote and whether it created the sublayer. `WfpManager::block`
+   writes it after the outcome is known — on both privilege paths, so it is the engine's own
+   bookkeeping rather than the helper's — `unblock` removes that one name, and `reset` clears the
+   record, because a cleanup MI CS performed itself must never come back as a tamper. A **refused**
+   write records nothing: memory of a filter that was never created would be a tamper alarm on the
+   next poll.
+
+2. **The judgement is pure and has five answers.** `verdict(baseline, live)` returns
+   `WatchReport { state, recorded, live, missing, extra, sublayer, needs_elevation, detail, at }`:
+   `clear` (nothing recorded, and the machine agrees it holds nothing of ours), `unrecorded` (our
+   filters are on the machine with no record beside them — the state before D-044's first write, or
+   after a data-directory wipe), `guarded`, `tampered` (a recorded filter or the sublayer is gone,
+   named in `missing` and in the sentence a user reads), and `unknown`. `needs_elevation` **wins
+   over every other answer** — an administrator is the difference between "nothing is there" and
+   "I may not look", and a detector that guessed would either cry wolf or claim protection it
+   cannot see. Every branch is a unit test, including the two that must never be a tamper.
+
+3. **One alert per change, into the surfaces that already exist.** `should_alert` compares a
+   signature (the missing names plus the sublayer) against the last one alerted, so the 30 s poll
+   is silent while the state stands and speaks again only when something *else* disappears; a
+   `Tampered` report after an `unknown` one is new information and alerts, an `unknown` never
+   alerts. The event rides the guard bus as `wfp_tamper`/HIGH with rule id `wfp.tamper`, so it
+   lands in the incidents list (title: "MI CS' filtering layer was tampered with: <detail>"), the
+   correlator's timeline, and a desktop card with its own copy and its own icon and route — the
+   connection list, which is where a block is written and the engine's filtering status is read.
+   The alert is the **whole** feature: it never re-creates the object, because silently fighting
+   the machine's owner is a worse failure than reporting them.
+
+4. **The poll lives in the guard thread, on its own counter.** `watch::poll()` runs on the guard
+   loop's own `watch_ticks` (every 15th 2 s tick, ≈30 s) in **both** the ETW and the poll loop —
+   the loop `continue`s early when ETW is live, so a counter at the top is the only place that
+   works for both. It is also `fw.wfp.watch`, so a person (or a probe) can ask now. The guard
+   thread has no tokio reactor, so `WfpManager::status` was split: `status_blocking()` is the same
+   helper-or-BFE decision without a runtime, and both callers share it.
+
+5. **Detect, do not restore, and say what the poll cannot see.** The window is the poll interval:
+   a delete-and-re-add inside it is invisible. `unknown` is not "fine" — an unelevated engine with
+   no helper genuinely cannot read the BFE (D-042), and the watch reports that rather than an empty
+   machine as `guarded`. The record is best-effort by construction: a crash between a successful
+   write and its record leaves one filter of ours listed as `extra`, and `extra` is never a tamper.
+   A deliberate administrator cleanup and an attacker read as the same sentence; the alert names
+   *what* is gone, not *who* removed it.
+
+6. **Two test hooks, both labelled where they can be read.** `MICS_WFP_WATCH_SEED` fills the record
+   **only when none exists**, so a machine's real history is never overwritten by a test, and
+   `MICS_WFP_WATCH_LIVE` supplies the status to compare against. An injected status appends a note
+   naming the hook to the report's `detail` and logs it, so a test's answer can never be mistaken
+   for a measurement of the machine — the same discipline D-042's probe follows when it reports
+   `needs_elevation` instead of a number.
+
+**Measured on this machine, 2026-11-09** (unelevated, against `engine\target\debug\mics-engine.exe`):
+
+- `cargo test` **190** (180 before): 10 new in `watch` — the five states, the unreadable machine
+  that must never be a tamper, the sublayer lost with every filter present, a filter nobody
+  recorded counted as `extra`, the once-per-change rule (including "a different loss alerts
+  again"), the seed hook filling only an empty record, and the injected status being labelled.
+  `cargo clippy --release -- -D warnings` clean, fast tier as one run: **green, 4 of 4, 113.6 s**.
+- `scripts\verify-wfp-watch.ps1` (new), five engines on private pipes over their own data
+  directories: **PASS, 38 checks, 1 skipped, 0 failed, 4 s**. Part 1 asked the real machine with an
+  empty record and got `unknown`, `recorded=0`, `needs_elevation=true` and the running helper's own
+  refusal quoted in `detail` (`unknown variant firewall.wfp.status, expected one of ping, version,
+  …`) — the installed `MICSHelper` predates D-042, exactly as D-042/D-043 recorded, so the probe
+  **skips** its "an elevated shell should have read this" check loud instead of passing it. Part 2
+  seeded two names and injected a status holding one: state `tampered`, `missing=["MICS-probe-beta"]`,
+  the sentence naming it, `alerted_at` stamped, **an `incident.list` entry titled "filtering layer
+  was tampered with" with severity HIGH carrying the filter's name**, and a `WFP tamper:` line in
+  the engine's own log marked as injected; a second poll left the state and `alerted_at` identical
+  and filed no second incident. Part 3 judged a filter nobody recorded as `guarded` with it listed
+  as `extra`, and a missing sublayer as `tampered` with `missing` empty and the sublayer named.
+  Part 4 refused a block (no administrator, no helper) and proved the record stayed empty and could
+  not turn into a tamper.
+- App and harness side: `flutter analyze` clean, **162 tests** (160 before) — 2 new in
+  `test\alert_card_test.dart`, that the card's `firewall` kind wears its own icon rather than the
+  catch-all bell and opens `/network`; `qa\methods.json` gained `fw.wfp.watch` and the report was
+  regenerated (**73 methods, 109 controls**) with the RPC contract re-run against the same binary:
+  **87 cases, 0 failed**.
+
+**Not measured, and the row stays `[~]`.** No **real** deletion was performed behind the engine's
+back: that needs an administrator, so what part 2 proves is the detector, the alert and the
+once-per-change rule against an injected status, not a measurement of the machine. The guard
+thread's own 30 s poll was not observed firing either — the probe and the contract call
+`fw.wfp.watch` directly, which is the same function on a timer. Elevated (or with the helper
+reinstalled from Settings → Engine), part 1 answers from the real BFE, and the same probe then
+reports a real `guarded`; deleting one of MI CS' own filters with `netsh wfp` or the WFP API while
+it runs is the missing experiment, and `scripts\verify-wfp.ps1 -Keep` already writes such a filter
+for it to delete.
+
+**Advances** §0.6 row 17 (slice c). **Does not commit us to:** a WFP change subscription, a kernel
+callout driver, self-healing re-creation of a deleted filter, attribution of the deletion, watching
+anything other than MI CS' own objects, or treating `unknown` as a healthy state anywhere in the
+UI.

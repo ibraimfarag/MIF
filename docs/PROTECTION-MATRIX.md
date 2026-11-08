@@ -34,6 +34,7 @@ so they keep their own names. This sheet's section numbers (§2 scanner, §3 net
 | L2 IDS | DNS-name sinkhole in the hosts file | helper applies, every app consumes | yes (helper) | nothing — it is a pure block | listed domains resolve to `0.0.0.0` |
 | L1 firewall | Windows Firewall API (`INetFwPolicy2`) rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
 | L1 filtering engine (WFP) | MI CS' own provider, sublayer and persistent filters in the Base Filtering Engine | helper (or the engine when it is elevated) | yes (helper) | nothing | a persistent per-application/port `FWP_ACTION_BLOCK` at the ALE connect layers, enforced by the BFE with MI CS not running — **written and unit-tested 2026-11-08 (D-042), not yet measured on a real connection (`scripts\verify-wfp.ps1` skips the write checks unelevated)** |
+| L1 tamper watch (WFP) | a record of our filter names and sublayer compared against the BFE by a poll (~30 s) | engine | no | our own sublayer or filter leaving the BFE while MI CS did not remove it | nothing — one HIGH incident and card naming what is gone (D-044); it never re-creates the object |
 | L3 guard | process-start rules (ETW, or a 2 s poll unelevated) | engine | ETW yes, poll no | process starts matching JSON rules (image, parent, command line) | kills the process tree for rules marked `kill` — after the start |
 | L3 canaries | decoy files | engine poll | no | decoys whose mtime/size changed | nothing |
 | L3 correlator + noise learner | analysis over guard events | engine | no | kill-chain grouping; mute suggestions for events you keep dismissing | nothing |
@@ -167,9 +168,37 @@ for the application path it was given, so traffic that never reaches them — ke
 mode, raw sockets, a callout in a heavier sublayer, or the same binary reached through
 a renamed copy — is outside it. The list it is driven from is a **snapshot** of the
 kernel's tables, not a push feed: a connection that opens and closes between two reads
-is never seen. There is no alert when someone deletes our sublayer: that is §0.6 row 17
-slice (c). And the write path itself is **not yet measured on a real connection**:
+is never seen. A deletion of our sublayer or filters is noticed by §3.5 (D-044), and
+only on its own poll — a delete-and-re-add inside that window is invisible to it. And
+the write path itself is **not yet measured on a real connection**:
 `scripts\verify-wfp.ps1` needs an administrator (D-042).
+
+### 3.5 The tamper watch (`firewall/watch.rs`, D-044)
+
+**Sees.** Whether the objects §3.3 wrote are still in the Base Filtering Engine: a
+record of our filter names and of the sublayer (`meta` row `wfp_baseline`, written
+after a successful block, removed by `unblock`, cleared by `reset`) compared against
+what the machine holds — `guarded`, `tampered` naming the sublayer and every filter
+that is gone, `clear`, `unrecorded` for filters of ours with no record beside them, and
+`unknown` when neither this process nor the helper may read the BFE. The comparison
+itself is pure, so every one of those states is a unit test. The guard thread polls it
+about every 30 s, and `fw.wfp.watch` is the same look on demand.
+
+**Blocks.** Nothing: re-adding what an administrator deleted would fight the machine's
+owner, so the alert is the feature. A tamper raises **one** HIGH guard event per
+change — an incident titled "MI CS' filtering layer was tampered with", a desktop card
+with its own copy and icon, the event in the correlator's timeline — and a repeat poll
+of the same loss is silent instead of a drumbeat.
+
+**Misses.** It is a poll, not a subscription, so a delete-and-re-add between two polls
+is never seen, and it cannot tell a deliberate administrator cleanup from an attacker:
+both read as the same sentence. `unknown` is not "fine" — an unelevated engine with no
+helper genuinely cannot read the BFE (D-042), and the watch says so rather than
+reporting an empty machine as `guarded`. The record is best-effort by construction: a
+crash between the write and the record leaves one filter of ours listed as `extra`,
+which is never a false tamper. The real deletion is unmeasured:
+`scripts\verify-wfp-watch.ps1` proves the detector and the alert unelevated over an
+injected status, and reading a real machine needs an administrator.
 
 ### 3.4 Live connections and the one-click block (`windows/conns.rs`, D-043)
 

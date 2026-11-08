@@ -67,6 +67,9 @@ class AlertCard {
         'quarantine' => Icons.lock_outline,
         'protection' => Icons.shield_outlined,
         'integrity' => Icons.gpp_bad_outlined,
+        // The filtering layer losing an object (D-044): the layer itself is what
+        // was removed, so the card wears the firewall's own shield, not a bug.
+        'firewall' => Icons.security,
         _ => Icons.notifications_none,
       };
 
@@ -80,6 +83,9 @@ class AlertCard {
         'crash' => '/settings',
         // The manifest verdict is explained in Settings → About (ج2, D-025).
         'integrity' => '/settings',
+        // The connection list is where a block is written and where the engine's
+        // filtering status is read, so that is where a removed layer is acted on.
+        'firewall' => '/network',
         _ => '/guard',
       };
 }

@@ -210,10 +210,26 @@ pub fn start_guard() {
         // fresh set, so nothing outside this thread needs to see it.
         let mut known: HashSet<u32> = HashSet::new();
         let mut ticks: u32 = 0;
+        // Its own counter, because the watch has to run in both loops below —
+        // including the ETW one, which never touches `ticks`.
+        let mut watch_ticks: u32 = 0;
         loop {
             if !guard().running.load(Ordering::SeqCst) {
                 info!("Guard loop stopped");
                 break;
+            }
+            // The filtering layer's tamper watch (D-044), at the top so it runs in
+            // both loops: our sublayer and filters are *persistent* objects in the
+            // BFE, so noticing one deleted behind our back is a poll, and a
+            // delete-and-re-add inside two of them is the blind spot D-044 writes
+            // down. About every 30 s, and cheap when there is nothing to ask: an
+            // unelevated engine with no helper gets "unknown" back at once and
+            // never a false alarm.
+            watch_ticks = watch_ticks.wrapping_add(1);
+            if watch_ticks.is_multiple_of(15)
+                && let Err(e) = crate::firewall::watch::poll()
+            {
+                warn!("WFP watch: {e:#}");
             }
             if etw_live && !first {
                 // ETW delivers process events as they happen, so re-reading every
