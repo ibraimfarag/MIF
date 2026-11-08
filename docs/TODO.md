@@ -247,36 +247,41 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص **§0.6** و§0.3c) و docs/ROADMAP.md. جدول §0.6 هو
-> قائمة الناقص كاملة — خُد **صف واحد** في المرة، والأرخص والأعلى قيمة الأول:
-> **نشر `v0.1.0`** (كليكة مجانية واحدة) لو حضرتك هتعملها، وإلا صف مش محتاج حد —
-> **هـ1** أو **صف 13** (بيان المحرك يسجّل المحتوى بدل التوقيعات) — وكل صف بدليل القياس اللي
+> قائمة الناقص كاملة — خُد **صف واحد** في المرة. الأربعة اللي طلبها المستخدم 2026-11-08
+> هي **صفوف 14–17**: حياة المحرك (**X يقفل والمحرك يخرج**، مع إعداد «خلّيه في الخلفية»)،
+> بانل التراي المصمم، «افحص بـ MI CS» من قائمة الويندوز، والجدار اللحظي (WFP) — وأول
+> شريحة منهم (باج اسم قاعدة الجدار) **خلصت** في 2026-11-08. وفيه كمان **نشر `v0.1.0`**
+> (كليكة مجانية واحدة) لو حضرتك هتعملها، و**هـ1**، و**صف 13**. وكل صف بدليل القياس اللي
 > اسمه في الجدول. **مفيش شراء في المشروع خالص** (D-035): أي صف فيه «شهادة» يبقى
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-**Resume point (2026-11-08).** Working tree clean at the **reproducible-build**
-commit — the one whose parent is `3ac3f3e` (`git log -2 --oneline` names both) —
-and `scripts\pipeline.ps1 -Tier fast` green: 4 of 4, **385.3 s** (cold during the
-work it was first run in: 402.8 s, after the reproducibility measurement had cleaned
-`engine\target`, which is why both numbers are from-scratch ones), 151 engine tests.
-The report is `build\pipeline-fast.json`, and its `head` field names the commit as it
-stood before these lines were folded in — the last edits before it were documents,
-not scripts. **F-11 is closed** (§0.6 row 4,
-`docs\REPRODUCIBLE.md`): `scripts\verify-reproducible.ps1 -Reference <zip>` rebuilds a
-published archive and compares it, and it was run end to end — 60 files byte for
-byte, 7 on content, 2 explained, 0 unexpected. What that left behind is **§0.6 row
-13** (the engine's manifest records signed hashes). **Fifteen
-commits are local only** (`.git`: `git rev-list --count '@{u}..HEAD'` → 15), so one `git push`
+**Resume point (2026-11-08).** Working tree clean at the **firewall rule-name** commit —
+the one whose parent is the reproducible-build commit (`git log -2 --oneline` names both)
+— and `scripts\pipeline.ps1 -Tier fast` green: 4 of 4, **91.3 s** (warm; the first run of
+this work was 385.3 s cold, because the reproducibility measurement had just cleaned
+`engine\target`), **152 engine tests**, in `build\pipeline-fast.json` — its `head` field
+names the commit as it stood before the last documentation-only edits. The register is
+**12 open rows** (1 HIGH, 3 MED, 8 LOW), and the MED defect the 2026-11-07 acceptance run
+found is **closed with measurements**: `owned_rule_name` decides a rule name in one place,
+`cargo test` is 152 passed / 0 failed, and `scripts\verify-firewall.ps1` is **27 checks,
+0 skipped, 0 failures** against this machine's firewall — it creates a rule under the
+prefixed spelling, proves Windows has no `MICS-MICS-<rule>` and removes it by the
+unprefixed one. **Sixteen
+commits are local only** (`.git`: `git rev-list --count '@{u}..HEAD'` → 16), so one `git push`
 publishes this session's work: the `scripts\verify-trust.ps1` acceptance check, `docs\STORE.md`,
-the packaged-app measurement, the `§0.2` reconciliation and the reproducible build.
-Nothing is uncommitted, so a new session can start from any row of §0.6.
+the packaged-app measurement, the `§0.2` reconciliation, the reproducible build and the
+firewall fix. Nothing is uncommitted, so a new session can start from any row of §0.6.
 
 That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
-the complete list of what is left**, and a session takes one row at a time. The
-cheapest, highest-value row first: **publish `v0.1.0`** (one free click, if you are
-the one clicking), otherwise a row that needs nobody — **هـ1** (the default
-update-manifest URL and a signature check before applying), the §0.6 row 13 remainder,
-or a §7 register row — each with the proof its row names. **Nothing in this project is
+the complete list of what is left**, and a session takes one row at a time. The order
+the user set on 2026-11-08 is **rows 14–17** — the engine's life tied to the app (X
+quits and the engine exits; a setting keeps it in the background), the designed tray
+panel, "Scan with MI CS" in Explorer's context menu, then the real-time firewall (WFP) —
+and row 14 is next. Independently: **publish `v0.1.0`** (one free click, if you are
+the one clicking), **هـ1** (the default update-manifest URL and a signature check before
+applying), the §0.6 row 13 remainder, or a §7 register row — each with the proof its row
+names. **Nothing in this project is
 purchased** (D-035), so a row that says "certificate" is **closed, not pending**. When work
 touches signing, **do not re-research the routes** — they are closed, with sources and dates, in
 `docs/SIGNING.md` (D-036); judge artifacts with `scripts\verify-trust.ps1` (exit 0 means a
@@ -940,7 +945,10 @@ cold, because the reproducibility measurement had just cleaned `engine\target`, 
 that number is a from-scratch one and not comparable with the 76.9 s beside it —
 and once more when the work was finished, **green, 4 of 4, 385.3 s, 151 tests** —
 the report `build\pipeline-fast.json` holds (its `head` is the commit before the
-last documentation-only amend).
+last documentation-only amend). **Re-run 2026-11-08 for the firewall rule-name fix:
+green, 4 of 4, 91.3 s, 152 engine tests** — warm, with the release profile and the
+Flutter caches already built, which is why it is not comparable with the cold runs
+above.
 
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
@@ -959,11 +967,15 @@ somebody who signs for free.
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
-| 9 | **13 open rows in the §7 register** — **1 HIGH, 4 MED, 8 LOW** out of 24 — and one of them is a **real defect the acceptance run found**: a firewall rule whose name already starts with `MICS-` is prefixed twice and can then never be removed by the name that was given | ✅ | nobody, or one measurement each | work the rows one at a time; the defect is a one-place normalization plus a harness case |
+| 9 | **12 open rows in the §7 register** — **1 HIGH, 3 MED, 8 LOW** out of 24 — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; the closed one is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall |
 | 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
 | 13 | **The engine is the one file a rebuild cannot match** — `MICS_MANIFEST` records the SHA-256 of every other shipped file *as signed*, so a rebuild signed with another key changes that document and therefore `mics-engine.exe` (this is F-11's remaining half, and `verify-reproducible.ps1` accepts it only after proving the difference is the signature) | ✅ engineering only | a **D-025 revision** + the work | make the document cover **content** instead of signatures: inject the payload hash `Get-MicsUnsignedHash` already computes, make the engine's start-up self-check hash the same way (the certificate table, the optional-header checksum and the security directory are not the code), record in D-025 why, and then delete the "explained" verdict from `verify-reproducible.ps1` because the engine matches too |
+| 14 | **The engine is not tied to the app's lifetime** — the app starts it `detached` and never stops it (`lib\core\ipc\ipc_client.dart`), and closing the window only hides to tray, so "quit" leaves `mics-engine.exe` running (the brief's "Closing the UI → tray; engine keeps protecting" is why) | ✅ | nobody | the user's choice, 2026-11-08: **X quits and the engine exits**, with a setting to keep it in the background instead — a `shutdown` RPC, a bounded wait, a kill fallback on the process it started, a **decision entry** (the brief's sentence is reversed), and the README/THREAT-MODEL claims that rest on "the engine keeps protecting after the window closes" rewritten to say what still holds: Windows-enforced rules and filters stay, the live watchers do not |
+| 15 | **The tray menu is two labels** (`Open MI CS`, `Quit`) — `tray_manager 0.5.2` builds it with `AppendMenuW`, which renders labels, separators and check marks only: no icons, no styling (measured 2026-11-08 in the plugin's `windows\tray_manager_plugin.cpp`) | ✅ | nobody | a Flutter popup panel anchored to the tray (frameless, styled, carrying live state — guard, firewall mode, connection count — and quick actions), with the native menu kept as the fallback; the plugin's C++ is why a "designed" native menu is not on the table |
+| 16 | **Nothing scans a file from Explorer** — there is no context-menu verb anywhere in the tree, and the app has no single-instance mutex to receive a path with | ✅ | nobody | `HKCU\Software\Classes\{*,\Directory,Directory\Background}\shell\MICS` written by the installer and removed by the uninstaller, an `--scan "<path>"` entry point that hands the path to the running window (single-instance + argument handoff), and the result shown in the scanner screen |
+| 17 | **The firewall is Windows' rule list, not an enforcement engine of ours** — blocking is real and Windows-enforced, but there are no per-connection decisions, no live feed and no one-click block, and the brief's "ETW + WFP usermode" is unimplemented | ✅ | nobody | WFP in three slices: (a) a usermode `FwpmFilterAdd` sublayer — persistent filters the BFE enforces, so they outlive the engine, (b) live connections and one-click block, (c) a tamper alert when our sublayer or filters are removed; the honest limit is that an allow/block *prompt* per new connection needs a kernel callout driver, and `SECURITY.md` says usermode only |
 
 **What the 2026-11-07 acceptance run measured** (the evidence behind row 2, on the
 artifact rebuilt from `main`: `MICS-setup-0.1.0-x64.exe`, 16,730,142 bytes,
@@ -1146,6 +1158,11 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 
 ### Done log (append only)
 
+- **One name, one rule: the firewall cannot be told to remove something it created under another name (§7 register, MED — found by the 2026-11-07 acceptance run) — 2026-11-08**
+  - **What was wrong.** `add_rule_now` prefixed the name unconditionally while `remove_rule_now` stripped an *optional* prefix first, so `fw.rules.add {name:"MICS-foo"}` created `MICS-MICS-foo` and `fw.rules.remove {name:"MICS-foo"}` then looked for `MICS-foo`, found nothing and **reported success** - removing a missing rule is deliberately idempotent - leaving a stray *blocking* rule. The acceptance run had to pass the doubly-prefixed name to clean up after itself, and the same class of leftover is on this machine: `MICS-TEST-BLOCK-EXAMPLE`, an outbound block on `203.0.113.0/24` with no MI CS group and no description.
+  - **What was done.** One function decides a rule name. `owned_rule_name` strips *every* leading `MICS-` (repeated, ASCII-case-insensitive, surrounding space trimmed) and re-adds exactly one, so `foo`, `MICS-foo` and `MICS-MICS-foo` all name the rule `MICS-foo`; a name that is only the prefix is refused with a sentence that quotes the prefix; `add_rule_now` and `remove_rule_now` both go through it, so a name an older build doubled is removable by either spelling; and `FirewallManager::add_rule`/`remove_rule` validate it *in front of* the privilege split, so an unelevated caller gets the name refusal instead of "no helper" - which is also what makes the new contract case meaningful on any machine. D-028 holds: no signature changed.
+  - **What was measured.** `cargo test`: **152 passed, 0 failed** (the new test walks five spellings of one name and four non-names through the pure function, so it touches no firewall). `qa\report.md` + `.html` regenerated: **69 declared contract cases** (67 + the two new refusal cases - `fw.rules.add` and `fw.rules.remove`, each with `name: "MICS-"`), and `test/qa_report_test.dart` is green. `scripts\verify-firewall.ps1`: **27 checks, 0 skipped, 0 failures, 29.9 s** against the running `MICSHelper` - part 3's new cycle creates a rule under the *prefixed* spelling, asserts the engine reports it as `MICS-<rule>`, asserts Windows has **no** `MICS-MICS-<rule>`, then removes it by the *unprefixed* spelling and asks Windows to confirm it is gone (23 checks before; the four new ones are the ones the register asked for). No probe rule was left behind - `MICS-*` on this machine is still only the old `MICS-TEST-BLOCK-EXAMPLE`.
+  - **What it does not claim.** The stray `MICS-TEST-BLOCK-EXAMPLE` is not removed: one call fixes it now, but that is a change to a user's firewall and this phase is a code fix. And the *real-time* firewall (WFP filters, live connections, one-click block) is **§0.6 row 17**, not this: this phase only stops the rule list from lying about what MI CS owns.
 - **A reproducible build, and the check a stranger runs on it (F-11, §0.6 row 4) — 2026-11-08**
   - **What was wrong.** With no certificate purchased (D-035) the trust story rests on
     "the published bytes can be re-derived from this source", and nothing measured that.
@@ -1639,7 +1656,11 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
     to pass the doubly-prefixed name to clean up. The same machine carries an older
     leftover of that class, `MICS-TEST-BLOCK-EXAMPLE` (outbound block on TEST-NET-3
     `203.0.113.0/24`, no MI CS group or description). Fix: normalize in one place, and a
-    harness case for both spellings.
+    harness case for both spellings. **Closed 2026-11-08** (Done log): `owned_rule_name`
+    decides the name in one place, `cargo test` is 152 passed / 0 failed, and
+    `scripts\verify-firewall.ps1` is 27 checks, 0 skipped, 0 failures — part 3 creates the
+    rule under the prefixed spelling, proves Windows has no `MICS-MICS-<rule>` and removes
+    it by the unprefixed one.
 - **The certificate question got prices, and two of its premises died (2026-11-06, research pass)**
   - **The gap.** `docs\COST.md` named the one purchase and refused to quote a price
     ("they move, they are bundled with a token or a cloud subscription"), which left the
@@ -5478,7 +5499,7 @@ signing certificate respectively), so this is the work that is always available.
 | MED | Defender **tamper protection** refuses programmatic preference writes, so `Set-MpPreference -PUAProtection` can fail even when the engine is elevated; `hardening.apply` now detects the no-op and points at the Windows Security switch instead of claiming success | `hardening/mod.rs` |
 | ~~LOW~~ | ~~`vuln.scan` (the blocking variant) still exists for probes and scripts~~ — **closed 2026-11-03 (و4)**: callers were checked first, and the register's "for probes and scripts" was wrong in one place — the natural-language command bar's `vuln_scan` intent dispatched it, so a spoken "scan for vulnerabilities" blocked the request for minutes with no progress and no cancel. That intent now points at `vuln.scan.start` (the command bar answers at once and the job reports through `progress`/`job_finished`), and with its last caller gone the blocking method, `VulnScanner::scan`, its `qa/methods.json` row and its registry entry are deleted: **one scanning path** — the durable job. The surface is **66** methods since و1 added its own (65 until then) | `vulns/mod.rs`, `dispatcher.rs`, `llm/mod.rs` |
 | ~~LOW~~ | ~~A **registered** AUMID still only names the source: any same-token process can raise a card under `MICS` and Windows will attribute it to "MI CS"~~ — **closed 2026-11-03 (و4) by evidence, as a documented limit rather than a defect**: `verify-aumid.ps1` PASSes — `DisplayName` is `MI CS`, its `IconUri` names a file that exists, **both** shortcuts carry `System.AppUserModel.ID = MICS`, and the Shell files `MI CS` under AppID `MICS` — which is exactly what the AUMID was for (the app is filed by name instead of by exe path). The row's *substance* is not fixable in the app and `docs/THREAT-MODEL.md` §B10 already says it: a card is UI, not proof of origin, because the AppUserModelID is not an authenticator. Nothing in the product reads a card as evidence of anything; the register row existed to stop that reading | `notify/toast.rs`, THREAT-MODEL §B10 |
-| MED | **A rule added with a name that already starts with `MICS-` gets a second prefix and can never be removed by the name the caller used** — `add_rule_now` prefixes unconditionally (`firewall\mod.rs:239`, `format!("{}{}", RULE_PREFIX, req.name)`) while `remove_rule_now` strips an *optional* prefix first (`:317`). So `fw.rules.add {name:"MICS-foo"}` creates **`MICS-MICS-foo`**, and `fw.rules.remove {name:"MICS-foo"}` then strips to `foo`, looks for `MICS-foo`, finds nothing and **reports success** (removing a missing rule is deliberately idempotent). Found by the 2026-11-07 acceptance run, which had to pass the doubly-prefixed name to clean up after itself. The UI's add dialog is reachable this way (a user may type the prefix) and the failure is silent, so a stray **blocking** rule can outlive the removal that claimed to do it — the same class of leftover already on this machine: `MICS-TEST-BLOCK-EXAMPLE`, outbound block on TEST-NET-3 `203.0.113.0/24`, no MI CS group and no description, so an older build made it and nothing ever cleaned it. **Fix:** normalize in one place — strip then re-add, or refuse an already-prefixed name while naming the reason — and add a harness case for both spellings in `qa/methods.json`. | `engine\src\firewall\mod.rs`, `qa/methods.json` |
+| ~~MED~~ | ~~**A rule added with a name that already starts with `MICS-` gets a second prefix and can never be removed by the name the caller used**~~ — **closed 2026-11-08**: one function decides the name. `owned_rule_name` strips *every* leading `MICS-` (repeated, ASCII-case-insensitive, surrounding space trimmed) and re-adds exactly one, so `foo`, `MICS-foo` and `MICS-MICS-foo` are the one rule `MICS-foo`; a name that is only the prefix is refused with a sentence that quotes the prefix; `add_rule_now` and `remove_rule_now` both go through it, and `FirewallManager::add_rule`/`remove_rule` check it *in front of* the privilege split so an unelevated caller gets the name refusal rather than "no helper" (D-028 kept: no signature changed). Measured 2026-11-08: `cargo test` **152 passed / 0 failed** (the new unit test walks five spellings of one name and four non-names), and `scripts\verify-firewall.ps1` **27 checks, 0 skipped, 0 failures, 29.9 s** against the running `MICSHelper` — part 3 now creates a rule under the *prefixed* spelling, proves `MICS-<rule>` is what Windows got (not `MICS-MICS-<rule>`), that no doubly-prefixed rule exists, and that the unprefixed spelling removes the rule the prefixed spelling created. The stray `MICS-TEST-BLOCK-EXAMPLE` on this machine is now removable by its own spelling; it was left in place, because removing it is a firewall change on the user's machine and not a code fix | `engine\src\firewall\mod.rs`, `qa\methods.json`, `scripts\verify-firewall.ps1` |
 | MED | **No real-time file watching**: the hash + YARA dimensions only apply while a scan job is running, so a machine nobody scans has no file-level detection between runs (Windows Defender is the real-time layer, and the audit says so loudly when it is off). **The scheduled half is done** (و1, 2026-11-03, D-027): the engine runs a scan by itself every `scan_interval_hours` (opt-in, off by default) over `scan_target`, report-only, and `scripts\verify-scan-schedule.ps1` proves it starts, finds, and leaves the file in place — but a schedule is a moment, not a monitor: what changed *between* two runs is still only seen by Defender | `scanner/mod.rs`, PROTECTION-MATRIX §2 |
 | LOW | The bundled detection content is a **starter pack** (6 guard rules, 10 YARA rules): the mechanism is complete and hot-reloadable, but the shipped rules demonstrate it rather than protect with it. **The "checks that packs load, not what they catch" half closed 2026-11-05 (D-033)**: `scripts\verify-rules.ps1` holds the pack a package ships to files — `engine\testdata\detection`, 8 vectors each written for one rule plus a clean control, **35 checks PASS** — and every rule the pack declares must either be caught by one of them or be named as unreachable with its reason. That ratchet immediately found the pack's one impossible rule: `Malicious_Macro_AutoOpen` compared `uint16(0)` against `0x504B`, which little-endian is `"KP"`, so it could never fire on any container that exists (a real `.docm` starts `50 4B` = `0x4B50`) — fixed, with the measured pair pinned by a test and re-measured through the probe. Measured reach of the 10 rules: **8 held to a file**, 2 named unreachable by a text vector (`EICAR_Test_File` — the string is what Defender quarantines; `Tiny_Packed_Pe_Installer` — needs a binary PE). **What stays open is the content decision, not the mechanism**: the macro rule's container test is two magic bytes plus substrings, and a real `.docm` deflates those substrings out of any pattern's reach (measured: `AutoOpen`, `CreateObject` and `Shell` are absent from the file's bytes), so document-borne malware needs an OOXML/OLE parser rather than another rule — which is decision (b) of the six in §0.2 | `engine/rules/yara/starter.yar`, `engine/testdata/detection/`, `scripts/verify-rules.ps1`, `scripts/verify-release.ps1`, `docs/PROTECTION-MATRIX.md` §2 |
 | LOW | The guard's ETW callback loads the IOC hash list and never uses it (deliberate: hashing every process start was judged too hot), so a known-bad process hash that matches no behavioural rule is not flagged at start | `guard/etw.rs`, PROTECTION-MATRIX §4.1 |

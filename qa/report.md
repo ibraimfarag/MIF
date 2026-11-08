@@ -13,14 +13,14 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
 | JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 67 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| Contract cases | 69 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 100 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 24 files | 110 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 19 modules | 151 declared cases | `engine.test` step |
+| Engine tests | 19 modules | 152 declared cases | `engine.test` step |
 | Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
@@ -54,9 +54,9 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `fw.default_deny.disable` | `mutating` | 0 | yes |
 | `fw.default_deny.enable` | `mutating` | 0 | yes |
 | `fw.default_deny.status` | `read` | 1 |  |
-| `fw.rules.add` | `mutating` | 1 |  |
+| `fw.rules.add` | `mutating` | 2 |  |
 | `fw.rules.list` | `read` | 1 |  |
-| `fw.rules.remove` | `mutating` | 1 |  |
+| `fw.rules.remove` | `mutating` | 2 |  |
 | `geoip.lookup` | `read` | 2 |  |
 | `guard.event.dismiss` | `sandbox` | 2 |  |
 | `guard.rules.add` | `mutating` | 1 |  |
@@ -250,9 +250,9 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/secrets.rs` | 5 |
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 8 |
-| `engine/src/tests.rs` | 50 |
+| `engine/src/tests.rs` | 51 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **151** in 19 modules |
+| **total** | **152** in 19 modules |
 
 ## What runs where
 

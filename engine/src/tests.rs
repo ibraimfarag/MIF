@@ -780,6 +780,54 @@ mod tests {
         );
     }
 
+    /// The `MICS-` prefix marks ownership of a rule, so it is added exactly once
+    /// however the caller spelled the name - and a name an older build doubled is
+    /// still removable by either spelling. Before this, `add` prefixed
+    /// unconditionally while `remove` stripped an *optional* prefix, so the two
+    /// spellings named two different rules and a stray **blocking** rule could
+    /// outlive the removal that reported success (register 7, MED).
+    #[test]
+    fn a_rule_name_carries_one_prefix_however_it_is_spelled() {
+        use crate::firewall::{owned_rule_name, RULE_PREFIX};
+
+        let canonical = "MICS-guard-test";
+        for spelling in [
+            "guard-test",
+            "MICS-guard-test",
+            "mics-guard-test",
+            "MICS-MICS-guard-test",
+            "  mics-MICS-guard-test  ",
+        ] {
+            assert_eq!(
+                owned_rule_name(spelling).expect(spelling),
+                canonical,
+                "`{spelling}` names the rule `{canonical}`"
+            );
+        }
+
+        // Every other rule is untouched: the prefix is the engine's, the rest of
+        // the name belongs to the caller.
+        assert_eq!(
+            owned_rule_name("BLOCK-RU").expect("a country rule"),
+            "MICS-BLOCK-RU"
+        );
+        assert_eq!(
+            owned_rule_name("MICS-BLOCK-RU").expect("already canonical"),
+            "MICS-BLOCK-RU"
+        );
+
+        // A name that is only the prefix is not a name: refused with a sentence
+        // that quotes the prefix. The check runs before any COM call, so this
+        // test touches no firewall.
+        for empty in ["MICS-", "mics-", "MICS-MICS-", "   "] {
+            let refused = owned_rule_name(empty).expect_err("not a name");
+            assert!(
+                format!("{refused:#}").contains(RULE_PREFIX),
+                "the refusal quotes the prefix that needs a name after it: {refused:#}"
+            );
+        }
+    }
+
     /// Compiles each script with `[scriptblock]::Create` in one PowerShell
     /// process (a parse, never an execution) and reports every one that fails.
     fn assert_scripts_parse(scripts: &[(String, String)]) {

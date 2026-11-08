@@ -234,9 +234,47 @@ pub fn set_default_deny_now(enabled: bool) -> Result<()> {
     Ok(())
 }
 
-/// Creates one `MICS-`-prefixed rule. Shared by the engine and the helper.
+/// The name of the rule MI CS owns for `name`: exactly one `MICS-` prefix.
+///
+/// The prefix marks ownership, so it is a property of the *rule* and not of the
+/// string the caller happened to type: `guard-test`, `MICS-guard-test` and
+/// `MICS-MICS-guard-test` all name the one rule `MICS-guard-test`. This is the
+/// single place that decides it, because the two callers used to disagree -
+/// `add_rule_now` prefixed unconditionally while `remove_rule_now` stripped an
+/// *optional* prefix, so `fw.rules.add {name: "MICS-foo"}` created
+/// `MICS-MICS-foo` and `fw.rules.remove {name: "MICS-foo"}` then looked for
+/// `MICS-foo`, found nothing and reported success (removing a missing rule is
+/// deliberately idempotent) - a stray **blocking** rule outliving the removal
+/// that claimed to have done it (register 7, MED).
+///
+/// The strip repeats and ignores ASCII case, so a name an older build doubled
+/// can be removed by either of its spellings instead of needing the doubled one.
+pub fn owned_rule_name(name: &str) -> Result<String> {
+    let mut rest = name.trim();
+    loop {
+        let stripped = rest
+            .get(..RULE_PREFIX.len())
+            .filter(|head| head.eq_ignore_ascii_case(RULE_PREFIX))
+            .map(|_| &rest[RULE_PREFIX.len()..]);
+        match stripped {
+            Some(next) => rest = next.trim_start(),
+            None => break,
+        }
+    }
+    if rest.is_empty() {
+        anyhow::bail!(
+            "a firewall rule needs a name beyond MI CS' own `{RULE_PREFIX}` prefix - \
+             a rule called `{RULE_PREFIX}` is the prefix, not a name"
+        );
+    }
+    Ok(format!("{RULE_PREFIX}{rest}"))
+}
+
+/// Creates one `MICS-` rule under its canonical name (`owned_rule_name`), so the
+/// name it returns is the name to remove it by - whatever the request spelled.
+/// Shared by the engine and the helper.
 pub fn add_rule_now(req: &AddRuleRequest) -> Result<String> {
-    let name = format!("{}{}", RULE_PREFIX, req.name);
+    let name = owned_rule_name(&req.name)?;
     let direction = direction_of(&req.direction).with_context(|| {
         format!(
             "`{}` is not a firewall direction (use `in` or `out`)",
@@ -309,13 +347,15 @@ pub fn add_rule_now(req: &AddRuleRequest) -> Result<String> {
     Ok(name)
 }
 
-/// Removes one `MICS-` rule (the prefix is optional in the argument).
+/// Removes one `MICS-` rule by its canonical name (`owned_rule_name`), so the
+/// prefixed and unprefixed spellings of a name reach the same rule.
 ///
 /// Removing a rule that is already gone is a success, not an error: the caller
-/// asked for it to not be there, and `block_country` removes before it adds.
+/// asked for it to not be there, and `block_country` removes before it adds. A
+/// name that is only the prefix is still refused, because that is a caller
+/// mistake rather than a rule that happens to be absent.
 pub fn remove_rule_now(name: &str) -> Result<()> {
-    let name = name.strip_prefix(RULE_PREFIX).unwrap_or(name);
-    let full = format!("{}{}", RULE_PREFIX, name);
+    let full = owned_rule_name(name)?;
     let firewall = Firewall::open()?;
     let rules = firewall.rules()?;
     // SAFETY: a collection call with an owned string.
@@ -439,6 +479,11 @@ impl FirewallManager {
     }
 
     pub async fn add_rule(req: &AddRuleRequest) -> Result<String> {
+        // The name is checked in front of the privilege split on purpose: a
+        // caller gets the same refusal whether the write would have happened in
+        // this process or in the helper, instead of "no helper" on an
+        // unelevated machine and "not a name" on an elevated one.
+        owned_rule_name(&req.name)?;
         if elevated() {
             return add_rule_now(req);
         }
@@ -453,6 +498,9 @@ impl FirewallManager {
     }
 
     pub async fn remove_rule(name: &str) -> Result<()> {
+        // Same reason as `add_rule`: the name rule is the caller's business, not
+        // the privilege split's. The helper re-checks it in `remove_rule_now`.
+        owned_rule_name(name)?;
         if elevated() {
             return remove_rule_now(name);
         }

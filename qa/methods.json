@@ -69,13 +69,15 @@
       "method": "fw.rules.add",
       "class": "mutating",
       "missing": true,
-      "note": "No params means no rule object: refused before Windows is touched."
+      "invalid": { "name": "MICS-", "direction": "out", "action": "block" },
+      "note": "No params means no rule object, and a name that is only the `MICS-` prefix is not a name: both are refused before Windows is touched, and before the helper is asked."
     },
     {
       "method": "fw.rules.remove",
       "class": "mutating",
       "missing": true,
-      "note": "Refused without a name, before Windows is touched."
+      "invalid": { "name": "MICS-" },
+      "note": "Refused without a name, and refused for a name that is only the prefix, before Windows or the helper is touched."
     },
     {
       "method": "fw.default_deny.status",

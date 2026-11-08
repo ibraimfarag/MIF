@@ -1293,7 +1293,12 @@ moment, not a monitor, and `و2` stays open with its CPU-cost decision.
 ## D-028 — The firewall is driven through Windows' own API, not `netsh`
 
 **Status:** decided (2026-11-03); implemented in `engine\src\firewall\mod.rs`, proved
-by `scripts\verify-firewall.ps1` (23 checks).
+by `scripts\verify-firewall.ps1` (23 checks). The probe grew to **27 checks** on
+2026-11-08, when the rule-name defect the acceptance run found was closed without
+touching a signature: `owned_rule_name` decides a rule's name in one place (one
+`MICS-` prefix, however the caller spelled it), and the new cycle in part 3 creates a
+rule under the *prefixed* spelling, proves Windows has no `MICS-MICS-<rule>`, and
+removes it by the *unprefixed* spelling.
 
 **Context.** Every firewall change went through `netsh advfirewall` and every read
 came back as English console text the engine parsed — with a 20 s deadline per call,

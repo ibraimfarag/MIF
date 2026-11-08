@@ -19,6 +19,10 @@
        read back from Windows with the exact fields that were asked for, then
        removed, and Windows is asked again - the rule is gone. The cleanup runs
        even when a check fails, so a broken run does not leave a rule behind;
+       and then the same rule is created again under the *prefixed* spelling to
+       prove the two spellings name one rule: `MICS-<rule>` is created as
+       `MICS-<rule>` (not `MICS-MICS-<rule>`), and the unprefixed spelling
+       removes it (register 7, MED);
     4. nothing in the engine's log mentions `netsh`.
 
   Writes need either an elevated shell or a running `MICSHelper` service (D-007).
@@ -234,6 +238,30 @@ try {
     Check ($gone.Count -eq 0) "Windows no longer has it"
     $removeAgain = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.rules.remove" -params @{ name = $ruleName } -id 6
     Check ($null -ne $removeAgain -and $null -eq $removeAgain.error) "removing it twice is a no-op, not an error"
+
+    # The prefix marks ownership, not spelling. Adding `MICS-<rule>` must create
+    # the one rule `MICS-<rule>` - never `MICS-MICS-<rule>` - and the unprefixed
+    # spelling must then remove that same rule (register 7, MED). Without this,
+    # the removal above can report success while a stray blocking rule stays.
+    $prefixed = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.rules.add" -params @{
+      name      = $fullName
+      direction = "out"
+      action    = "block"
+      protocol  = "tcp"
+      local_port = "59999"
+      program   = $program
+    } -id 7
+    Check ($null -ne $prefixed -and $null -eq $prefixed.error -and $prefixed.result.name -eq $fullName) `
+      "a name that already carries the prefix is created as one prefix ($fullName)"
+    $created = $true
+    $doubled = @(Get-NetFirewallRule -PolicyStore ActiveStore -DisplayName "MICS-$fullName" -ErrorAction SilentlyContinue)
+    Check ($doubled.Count -eq 0) "Windows has no doubly-prefixed rule"
+    $byShortName = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.rules.remove" -params @{ name = $ruleName } -id 8
+    Check ($null -ne $byShortName -and $null -eq $byShortName.error -and $byShortName.result.status -eq "removed") `
+      "the unprefixed spelling removed the rule the prefixed spelling created"
+    $created = $false
+    $goneTwice = @(Get-NetFirewallRule -PolicyStore ActiveStore -DisplayName $fullName -ErrorAction SilentlyContinue)
+    Check ($goneTwice.Count -eq 0) "Windows no longer has it after that removal"
   }
 
   # ---- 4. no netsh anywhere ------------------------------------------------
@@ -254,7 +282,7 @@ try {
   }
   $env:PATH = $savedPath
   Remove-Item Env:MICS_DATA_DIR, Env:MICS_PIPE_NAME, Env:MICS_NO_SINGLETON, Env:MICS_NO_GUARD, Env:MICS_NO_AUTO_RESUME, Env:MICS_NO_SCAN_SCHEDULE -ErrorAction SilentlyContinue
-  $left = @(Get-NetFirewallRule -PolicyStore ActiveStore -DisplayName "MICS-PROBE-*" -ErrorAction SilentlyContinue)
+  $left = @(Get-NetFirewallRule -PolicyStore ActiveStore -DisplayName "MICS-*PROBE-*" -ErrorAction SilentlyContinue)
   if ($left.Count -gt 0) {
     Write-Output "WARN  a probe rule is still on this machine, remove it by hand:"
     $left | ForEach-Object { Write-Output ("      " + $_.DisplayName) }
