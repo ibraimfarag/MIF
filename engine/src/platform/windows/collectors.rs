@@ -5,16 +5,10 @@ use crate::platform::traits::{
 use crate::platform::windows::process::ToolCall;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use tracing::warn;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::ERROR_SUCCESS;
-use windows::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPROW_OWNER_PID, MIB_UDPROW_OWNER_PID,
-    TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
-};
-use windows::Win32::Networking::WinSock::AF_INET as AF;
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE,
     KEY_READ, KEY_WOW64_32KEY, REG_VALUE_TYPE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ,
@@ -668,96 +662,9 @@ impl PlatformCollectors for WindowsCollectors {
     }
 
     async fn get_network_connections(&self) -> Result<Vec<NetworkConnection>> {
-        // Process id -> name map via sysinfo (single refresh, reused by TCP+UDP).
-        let mut sys = sysinfo::System::new();
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-
-        let mut connections = Vec::new();
-
-        unsafe {
-            // ---- TCP ----
-            let mut size: u32 = 0;
-            let _ = GetExtendedTcpTable(
-                None,
-                &mut size,
-                false,
-                AF.0 as u32,
-                TCP_TABLE_OWNER_PID_ALL,
-                0,
-            );
-            let mut buf = vec![0u8; size as usize];
-            let err = GetExtendedTcpTable(
-                Some(buf.as_mut_ptr() as *mut _),
-                &mut size,
-                false,
-                AF.0 as u32,
-                TCP_TABLE_OWNER_PID_ALL,
-                0,
-            );
-            if err == 0 {
-                let base = buf.as_ptr() as *const u32;
-                let n = *base;
-                let rows = base.add(1) as *const MIB_TCPROW_OWNER_PID;
-                for i in 0..n as usize {
-                    let r = *rows.add(i);
-                    let state = tcp_state_name(r.dwState);
-                    let pid = r.dwOwningPid;
-                    connections.push(NetworkConnection {
-                        local_address: format_ipv4_port(r.dwLocalAddr, r.dwLocalPort),
-                        remote_address: format_ipv4_port(r.dwRemoteAddr, r.dwRemotePort),
-                        protocol: "TCP".to_string(),
-                        state,
-                        process_id: pid,
-                        process_name: process_name(&sys, pid),
-                        country: crate::ids::geoip::lookup(&format_ipv4_ip(r.dwRemoteAddr)),
-                    });
-                }
-            } else {
-                warn!("GetExtendedTcpTable failed with error {err}");
-            }
-
-            // ---- UDP ----
-            let mut size: u32 = 0;
-            let _ = GetExtendedUdpTable(
-                None,
-                &mut size,
-                false,
-                AF.0 as u32,
-                UDP_TABLE_OWNER_PID,
-                0,
-            );
-            let mut buf = vec![0u8; size as usize];
-            let err = GetExtendedUdpTable(
-                Some(buf.as_mut_ptr() as *mut _),
-                &mut size,
-                false,
-                AF.0 as u32,
-                UDP_TABLE_OWNER_PID,
-                0,
-            );
-            if err == 0 {
-                let base = buf.as_ptr() as *const u32;
-                let n = *base;
-                let rows = base.add(1) as *const MIB_UDPROW_OWNER_PID;
-                for i in 0..n as usize {
-                    let r = *rows.add(i);
-                    let pid = r.dwOwningPid;
-                    connections.push(NetworkConnection {
-                        local_address: format_ipv4_port(r.dwLocalAddr, r.dwLocalPort),
-                        remote_address: "*:*".to_string(),
-                        protocol: "UDP".to_string(),
-                        state: "-".to_string(),
-                        process_id: pid,
-                        process_name: process_name(&sys, pid),
-                        country: String::new(),
-                    });
-                }
-            } else {
-                warn!("GetExtendedUdpTable failed with error {err}");
-            }
-        }
-
-        Ok(connections)
+        // The walk over Windows' four connection tables lives in `conns`, which
+        // is also where the one-click block spec for a row is derived (D-043).
+        Ok(crate::platform::windows::conns::snapshot())
     }
 
     async fn get_software_inventory(&self) -> Result<Vec<SoftwareEntry>> {
@@ -1003,52 +910,4 @@ fn enum_subkeys_values(root: HKEY, subkey: &str) -> Vec<String> {
         let _ = RegCloseKey(hkey);
     }
     names
-}
-
-fn format_ipv4_ip(addr: u32) -> String {
-    Ipv4Addr::new(
-        (addr & 0xFF) as u8,
-        ((addr >> 8) & 0xFF) as u8,
-        ((addr >> 16) & 0xFF) as u8,
-        ((addr >> 24) & 0xFF) as u8,
-    )
-    .to_string()
-}
-
-pub fn format_ipv4_port(addr: u32, port_net_order: u32) -> String {
-    let ip = Ipv4Addr::new(
-        (addr & 0xFF) as u8,
-        ((addr >> 8) & 0xFF) as u8,
-        ((addr >> 16) & 0xFF) as u8,
-        ((addr >> 24) & 0xFF) as u8,
-    );
-    // The port arrives in network byte order inside the low 16 bits.
-    let port = (port_net_order & 0xFFFF) as u16;
-    let port = port.swap_bytes();
-    format!("{ip}:{port}")
-}
-
-fn tcp_state_name(state: u32) -> String {
-    match state {
-        1 => "CLOSED",
-        2 => "LISTENING",
-        3 => "SYN_SENT",
-        4 => "SYN_RCVD",
-        5 => "ESTABLISHED",
-        6 => "FIN_WAIT1",
-        7 => "FIN_WAIT2",
-        8 => "CLOSE_WAIT",
-        9 => "CLOSING",
-        10 => "LAST_ACK",
-        11 => "TIME_WAIT",
-        12 => "DELETE_TCB",
-        _ => "UNKNOWN",
-    }
-    .to_string()
-}
-
-fn process_name(sys: &sysinfo::System, pid: u32) -> String {
-    sys.process(sysinfo::Pid::from_u32(pid))
-        .map(|p| p.name().to_string_lossy().to_string())
-        .unwrap_or_else(|| "System/Unknown".into())
 }

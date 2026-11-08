@@ -51,7 +51,7 @@
       "class": "read",
       "params": null,
       "expect": "array",
-      "note": "Enumerates live TCP/UDP connections."
+      "note": "Enumerates live TCP/UDP connections (all four tables, IPv4 and IPv6) with each row's image path, protocol number and peer port, and the block spec a one-click block would send - or null for a row that cannot become one (D-043). A snapshot, not a feed."
     },
     {
       "method": "fw.default_deny.enable",

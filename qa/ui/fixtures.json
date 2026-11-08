@@ -188,7 +188,16 @@
         "state": "ESTABLISHED",
         "process_name": "chrome.exe",
         "process_id": 4242,
-        "direction": "Out"
+        "country": "US",
+        "process_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "protocol_number": 6,
+        "remote_port": 443,
+        "block": {
+          "app": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "port": 443,
+          "protocol": 6,
+          "note": "chrome-exe"
+        }
       },
       {
         "local_address": "0.0.0.0:445",
@@ -197,7 +206,11 @@
         "state": "LISTENING",
         "process_name": "System",
         "process_id": 4,
-        "direction": "In"
+        "country": "",
+        "process_path": "",
+        "protocol_number": 6,
+        "remote_port": 0,
+        "block": null
       },
       {
         "local_address": "127.0.0.1:53000",
@@ -206,7 +219,16 @@
         "state": "ESTABLISHED",
         "process_name": "mics-engine.exe",
         "process_id": 9001,
-        "direction": "Out"
+        "country": "",
+        "process_path": "C:\\Program Files\\MI CS\\mics-engine.exe",
+        "protocol_number": 6,
+        "remote_port": 8080,
+        "block": {
+          "app": "C:\\Program Files\\MI CS\\mics-engine.exe",
+          "port": 8080,
+          "protocol": 6,
+          "note": "mics-engine-exe"
+        }
       }
     ],
     "fw.default_deny.status": {

@@ -1,12 +1,18 @@
 {
+    "network.block":  "احجب الاتصال ده",
+    "network.blockBody":  "بيحجب {app} من الاتصال ببورت {port} بفلتر MI CS في محرك الفلترة بتاع ويندوز. الفلتر بيفضل شغال بعد ما MI CS يقفل، وشيله محتاج نفس صلاحية الأدمن.",
     "network.blockCountry":  "حجب دولة (محتاج قائمة محجوبات متزامنة)",
     "network.blockCountryHint":  "بيعمل قاعدة MICS-BLOCK-\u003cCC\u003e من rules/blocklists/\u003cCC\u003e.cidr",
+    "network.blockFailed":  "الحجب اترفض: {reason}",
+    "network.blockTitle":  "أحجب الاتصال ده؟",
+    "network.blocked":  "اتحجب {app} على بورت {port} — ويفضل محجوب بعد ما MI CS يقفل.",
     "network.connections":  "{count} اتصال",
     "network.countryHint":  "مثال RU",
     "network.defaultDeny":  "منع الخروج افتراضيًا",
     "network.defaultDenyOff":  "مقفول — الخروج مسموح (افتراضي ويندوز)",
     "network.defaultDenyOn":  "مفعّل — كل الخروج محجوب إلا اللي قاعدة بتسمح بيه (L1)",
     "network.firewall":  "جدار الحماية",
+    "network.noBlock":  "الصف ده ملهوش بورت للطرف التاني (سوكيت UDP أو مستمع)، فمفيش فلتر دقيق يكتب. احجب البرنامج من تاب جدار الحماية بدل كده.",
     "network.rules":  "قواعد MI CS ({count})",
     "network.suspicious":  "{count} مريب",
     "network.noRules":  "مفيش قواعد MICS-* لسه. أي قاعدة تتcreate من MI CS هتظهر في wf.msc ببادئة MICS-."

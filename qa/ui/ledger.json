@@ -46,6 +46,8 @@
       "FilledButton(Sync now)"
     ],
     "screens.network": [
+      "IconButton(Block this connection)",
+      "IconButton(Block this connection)#2",
       "IconButton(Remove)",
       "IconButton(Remove)#2",
       "OutlinedButton(Refresh)",

@@ -1,12 +1,18 @@
 {
+    "network.block":  "Block this connection",
+    "network.blockBody":  "Blocks {app} from connecting to port {port} with a MI CS filter in Windows' filtering engine. The filter persists after MI CS closes, and removing it needs the same administrator.",
     "network.blockCountry":  "Block a country (needs synced blocklist)",
     "network.blockCountryHint":  "Creates a MICS-BLOCK-\u003cCC\u003e rule from rules/blocklists/\u003cCC\u003e.cidr",
+    "network.blockFailed":  "The block was refused: {reason}",
+    "network.blockTitle":  "Block this connection?",
+    "network.blocked":  "Blocked {app} on port {port} — it stays blocked after MI CS closes.",
     "network.connections":  "{count} connections",
     "network.countryHint":  "e.g. RU",
     "network.defaultDeny":  "Default-Deny Outbound",
     "network.defaultDenyOff":  "OFF — outbound traffic allowed (Windows default)",
     "network.defaultDenyOn":  "ON — all outbound traffic blocked unless a rule allows it (L1)",
     "network.firewall":  "Firewall",
+    "network.noBlock":  "This row has no peer port to match (a UDP socket or a listener), so there is no exact filter to write. Block the program from the Firewall tab instead.",
     "network.rules":  "MI CS rules ({count})",
     "network.suspicious":  "{count} suspicious",
     "network.noRules":  "No MICS-* rules yet. Rules created from MI CS appear in wf.msc with the MICS- prefix."

@@ -47,6 +47,24 @@ impl FindingStatus {
     }
 }
 
+/// What a one-click block sends to `fw.wfp.block` for a live connection (D-043).
+///
+/// The engine builds it, so the UI forwards an object the engine already
+/// validated instead of assembling a spec out of display strings. The field
+/// names are the ones the `fw.wfp.block` params are read by - `NetworkBlock`
+/// serialises straight into them, which a unit test holds in place.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct NetworkBlock {
+    /// The owning process's image path, as Windows reports it.
+    pub app: String,
+    /// The peer port the filter matches.
+    pub port: u16,
+    /// 6 (TCP) or 17 (UDP); nothing else is blockable here.
+    pub protocol: u8,
+    /// A short word for the filter's display name.
+    pub note: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkConnection {
     pub local_address: String,
@@ -57,6 +75,21 @@ pub struct NetworkConnection {
     pub process_name: String,
     #[serde(default)]
     pub country: String,
+    /// The owning process's image path, empty when this token may not query it
+    /// (a kernel connection, or a protected process).
+    #[serde(default)]
+    pub process_path: String,
+    /// The IP protocol number (6 TCP, 17 UDP), so a row can be sent to the
+    /// filtering engine without parsing `protocol` back.
+    #[serde(default)]
+    pub protocol_number: u8,
+    /// The peer port, 0 when the row has no peer (a UDP listener).
+    #[serde(default)]
+    pub remote_port: u16,
+    /// The spec a one-click block would send, or `None` when this row cannot be
+    /// blocked - see `platform::windows::conns::block_for`.
+    #[serde(default)]
+    pub block: Option<NetworkBlock>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

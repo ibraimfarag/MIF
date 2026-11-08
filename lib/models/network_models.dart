@@ -1,3 +1,41 @@
+/// The spec a one-click block sends, built by the engine (`NetworkBlock` in
+/// `traits.rs`). The UI forwards it untouched: the field names are the ones
+/// `fw.wfp.block` reads, and the engine already validated them, so nothing here
+/// turns a display string back into a filter.
+class NetworkBlock {
+  final String app;
+  final int port;
+  final int protocol;
+  final String note;
+
+  const NetworkBlock({
+    required this.app,
+    required this.port,
+    required this.protocol,
+    required this.note,
+  });
+
+  factory NetworkBlock.fromJson(Map<String, dynamic> j) => NetworkBlock(
+        app: j['app'] as String? ?? '',
+        port: (j['port'] as num?)?.toInt() ?? 0,
+        protocol: (j['protocol'] as num?)?.toInt() ?? 0,
+        note: j['note'] as String? ?? '',
+      );
+
+  /// Exactly the params `fw.wfp.block` takes.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'app': app,
+        'port': port,
+        'protocol': protocol,
+        'note': note,
+      };
+
+  String get appName {
+    final parts = app.split(RegExp(r'[\\/]'));
+    return parts.isEmpty ? app : parts.last;
+  }
+}
+
 /// Mirrors engine JSON for net.connections (traits.rs NetworkConnection).
 class NetworkConnection {
   final String localAddress;
@@ -8,6 +46,20 @@ class NetworkConnection {
   final String processName;
   final String country;
 
+  /// The owning process's image path, empty when the token could not query it.
+  final String processPath;
+
+  /// 6 (TCP) or 17 (UDP), so a row can be sent to the filtering engine without
+  /// parsing [protocol] back.
+  final int protocolNumber;
+
+  /// The peer port, 0 when the row has no peer (UDP, or a TCP listener).
+  final int remotePort;
+
+  /// The block this row would become, or null when it cannot become one - the
+  /// tile then says why instead of offering a button that fails.
+  final NetworkBlock? block;
+
   NetworkConnection({
     required this.localAddress,
     required this.remoteAddress,
@@ -16,6 +68,10 @@ class NetworkConnection {
     required this.processId,
     required this.processName,
     this.country = '',
+    this.processPath = '',
+    this.protocolNumber = 0,
+    this.remotePort = 0,
+    this.block,
   });
 
   factory NetworkConnection.fromJson(Map<String, dynamic> j) =>
@@ -27,6 +83,12 @@ class NetworkConnection {
         processId: (j['process_id'] as num?)?.toInt() ?? 0,
         processName: j['process_name'] as String? ?? '',
         country: j['country'] as String? ?? '',
+        processPath: j['process_path'] as String? ?? '',
+        protocolNumber: (j['protocol_number'] as num?)?.toInt() ?? 0,
+        remotePort: (j['remote_port'] as num?)?.toInt() ?? 0,
+        block: j['block'] == null
+            ? null
+            : NetworkBlock.fromJson(j['block'] as Map<String, dynamic>),
       );
 
   bool get isLoopback =>

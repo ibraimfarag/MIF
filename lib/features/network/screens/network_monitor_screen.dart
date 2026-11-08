@@ -31,6 +31,19 @@ class ConnectionsNotifier
       state = AsyncValue.error(e, st);
     }
   }
+
+  /// Sends the spec the engine built for one row (D-043). Returns null when the
+  /// machine accepted it, or the engine's own sentence when it refused it -
+  /// "needs an administrator" included, because that is a real answer and not a
+  /// failure of the click.
+  Future<String?> block(NetworkBlock block) async {
+    try {
+      await ref.read(engineIpcProvider).request('fw.wfp.block', block.toJson());
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
 }
 
 final firewallProvider =
@@ -173,11 +186,69 @@ class _NetworkMonitorScreenState extends ConsumerState<NetworkMonitorScreen> {
   }
 }
 
-class _ConnectionsView extends ConsumerWidget {
+class _ConnectionsView extends ConsumerStatefulWidget {
   const _ConnectionsView();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ConnectionsView> createState() => _ConnectionsViewState();
+}
+
+class _ConnectionsViewState extends ConsumerState<_ConnectionsView> {
+  @override
+  void initState() {
+    super.initState();
+    // A snapshot is fetched when the screen opens, so the list is never the
+    // empty state of a live machine. It is a microtask because the provider is
+    // read after the first frame, not while it is being built.
+    Future.microtask(() => ref.read(connectionsProvider.notifier).refresh());
+  }
+
+  /// Confirms, then sends the engine's own block spec for this row, then says
+  /// what happened. The confirmation is not decoration: the filter persists after
+  /// MI CS closes, so one click must be one deliberate act with its scope on
+  /// screen.
+  Future<void> _block(NetworkConnection conn) async {
+    final block = conn.block;
+    if (block == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('network.blockTitle')),
+        content: Text(ctx
+            .tr('network.blockBody')
+            .replaceAll('{app}', conn.processName)
+            .replaceAll('{port}', '${block.port}')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(ctx.tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(ctx.tr('network.block')),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    final err = await ref.read(connectionsProvider.notifier).block(block);
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(
+      content: Text(err == null
+          ? context
+              .tr('network.blocked')
+              .replaceAll('{app}', conn.processName)
+              .replaceAll('{port}', '${block.port}')
+          : context.tr('network.blockFailed').replaceAll('{reason}', err)),
+    ));
+    if (err == null) {
+      await ref.read(connectionsProvider.notifier).refresh();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(connectionsProvider);
     return async.when(
       data: (conns) {
@@ -213,11 +284,18 @@ class _ConnectionsView extends ConsumerWidget {
             ]),
             const SizedBox(height: 8),
             if (suspicious.isNotEmpty) ...[
-              for (final c in suspicious.take(20)) _ConnTile(conn: c, highlight: true),
+              for (final c in suspicious.take(20))
+                _ConnTile(
+                    conn: c,
+                    highlight: true,
+                    onBlock: () => _block(c)),
               const SizedBox(height: 8),
             ],
             for (final c in conns.where((c) => !c.suspicious).take(300))
-              _ConnTile(conn: c, highlight: false),
+              _ConnTile(
+                  conn: c,
+                  highlight: false,
+                  onBlock: () => _block(c)),
           ],
         );
       },
@@ -229,9 +307,11 @@ class _ConnectionsView extends ConsumerWidget {
 }
 
 class _ConnTile extends StatelessWidget {
-  const _ConnTile({required this.conn, required this.highlight});
+  const _ConnTile(
+      {required this.conn, required this.highlight, required this.onBlock});
   final NetworkConnection conn;
   final bool highlight;
+  final VoidCallback onBlock;
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +356,21 @@ class _ConnTile extends StatelessWidget {
               style: TextStyle(color: AppColors.text, fontSize: 11),
               overflow: TextOverflow.ellipsis),
         ),
+        // One click to a persistent filter - only for rows that can become one
+        // (the engine derives the spec, and answers null when it cannot). A row
+        // that cannot shows the reason instead of a button that fails.
+        if (conn.block != null)
+          IconButton(
+            icon: const Icon(Icons.block, size: 16),
+            color: AppColors.orange,
+            tooltip: context.tr('network.block'),
+            onPressed: onBlock,
+          )
+        else
+          Tooltip(
+            message: context.tr('network.noBlock'),
+            child: Icon(Icons.block, size: 16, color: AppColors.border),
+          ),
       ]),
     );
   }

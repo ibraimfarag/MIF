@@ -165,10 +165,36 @@ line records the display name and key but never the directory the application si
 **Misses.** This is a *usermode* filter, not a driver: it decides at the ALE layers
 for the application path it was given, so traffic that never reaches them — kernel
 mode, raw sockets, a callout in a heavier sublayer, or the same binary reached through
-a renamed copy — is outside it. There is no live connection feed, no one-click block
-from the UI, and no alert when someone deletes our sublayer: those are §0.6 row 17
-slices (b) and (c). And the write path itself is **not yet measured on a real
-connection**: `scripts\verify-wfp.ps1` needs an administrator (D-042).
+a renamed copy — is outside it. The list it is driven from is a **snapshot** of the
+kernel's tables, not a push feed: a connection that opens and closes between two reads
+is never seen. There is no alert when someone deletes our sublayer: that is §0.6 row 17
+slice (c). And the write path itself is **not yet measured on a real connection**:
+`scripts\verify-wfp.ps1` needs an administrator (D-042).
+
+### 3.4 Live connections and the one-click block (`windows/conns.rs`, D-043)
+
+**Sees.** Windows' four connection tables in usermode — `TCP_TABLE_OWNER_PID_ALL` and
+`UDP_TABLE_OWNER_PID` for IPv4 and IPv6 — each row joined with its owning process (name
+from a single `sysinfo` refresh, image path from one `OpenProcess` + 
+`QueryFullProcessImageNameW` per pid, cached for the call) and, for TCP peers, the
+country of the remote address from the local GeoIP table. IPv6 rows are carried, not
+dropped, because a block on `[2001:db8::1]:443` has to be expressible.
+
+**Blocks.** One click on a row sends the spec the **engine** built for it — the row's own
+image path, its peer port and its protocol — to `fw.wfp.block`, so the filter matches
+exactly what was on screen and nothing wider. The click is confirmed first, and the
+confirmation says the filter outlives MI CS. Rows that cannot become a filter say so
+instead of offering the button: a UDP socket (Windows keeps no peer for it), a TCP
+listener (no peer port), a kernel connection or a process this token may not query (no
+image path).
+
+**Misses.** It is a snapshot taken when the screen opens or Refresh is pressed, so it can
+be seconds stale by the time a row is clicked — the block is still written, but a
+connection that has already moved on will not be caught by it. There is no per-row
+traffic counter, no reverse DNS and no process tree next to a row (the UI shows country,
+name and path only), and a block cannot be removed from the list itself: removal is the
+Firewall tab's rule list. UDP rows carry no peer at all, which is Windows' limitation,
+not a simplification.
 
 ## 4. L3 — process guard, canaries, correlation
 
@@ -335,3 +361,4 @@ administrator can delete it (F-10).
 | Reading and writing are told apart in one place | the six `guard::canary::tests` cases over `classify` (untouched, read-only, read-that-also-writes, deleted, a volume without atime, and the probe leaving nothing behind) |
 | What the shipped detection pack *catches*, not that it loads | `scripts\verify-rules.ps1` (**35 checks, PASS, 2026-11-05**) scans the 9 vectors in `engine\testdata\detection` with the pack a package ships and requires each one to be caught under the rule it was written for, the clean control to stay silent, and every declared rule to be either caught or named as unreachable — plus the same table as a unit test (`scanner::yara_engine::tests`, 4 cases), which is what found `Malicious_Macro_AutoOpen` comparing the zip magic against `"KP"`. `verify-release.ps1` runs the probe against the packaged pack with `-InPlace`, so the artifact's own `rules\` is what catches the vectors |
 | MI CS' own WFP objects exist, and writing them needs an administrator | `firewall\wfp`'s 8 unit tests: the canonical name, four refusals in `validate`, one spec → one derived key, a known spec → the measured key `B051BA44-F5BF-454C-8D09-B8F1F8D5680E`, two layers → two version-4 GUIDs — and, live on this machine, `FwpmEngineOpen0` succeeding unelevated while `FwpmProviderAdd0` answers `0x80070005`, which the code names as `needs_elevation`. `scripts\verify-wfp.ps1` measured the live surface unelevated (**PASS, 7 checks, 3 skipped**): `fw.wfp.status` answered `sublayer=false filters=0 needs_elevation=true` with the running helper's own refusal as `detail`. **Not measured here:** an actual persistent filter, its effect on a connection, and its survival of a reboot — the three checks the probe skips until it runs with an administrator (D-042) |
+| The connection list is Windows' own table, and what a row offers to block is exact | `windows\conns`'s 6 unit tests hold the parts a test can: a spec is offered only with a peer port and an image path, the note is one the helper's validator accepts, and both address families format the way Windows writes them. `scripts\verify-connections.ps1` (new, D-043) measured the live list unelevated against the debug engine: **PASS, 23 checks, 0 skipped, 0 failed** — 490 rows, every row carrying path/protocol/peer port and a block decision, 139 rows offering a spec whose app path, port and protocol match the row (and whose file exists), no row with an empty peer port offering one, Windows agreeing with every owner it names (343 rows had already vanished, 0 contradictions), IPv6 and UDP rows present, and the spec handed to `fw.wfp.block` refused **with a reason** and `fw.wfp.status` unchanged afterwards. **Not measured here:** a spec that is actually *accepted*, and therefore a click that really blocks — the installed `MICSHelper` predates the WFP ops, so the write path is the same one `verify-wfp.ps1` skips until a helper is reinstalled or the probe runs elevated |

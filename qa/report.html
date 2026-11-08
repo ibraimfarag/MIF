@@ -57,7 +57,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Controls</td>
-      <td>107 in the ledger</td>
+      <td>109 in the ledger</td>
       <td>the sweep fails when a control appears or disappears unannounced</td>
       <td><code>qa&#47;ui&#47;harness.dart</code>, <code>qa&#47;ui&#47;ledger.dart</code></td>
     </tr>
@@ -81,14 +81,14 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Dart tests</td>
-      <td>26 files</td>
-      <td>128 declared cases (a floor: loops add more at run time)</td>
+      <td>27 files</td>
+      <td>130 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
       <td>Engine tests</td>
-      <td>23 modules</td>
-      <td>174 declared cases</td>
+      <td>24 modules</td>
+      <td>180 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -687,7 +687,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The screens: 13 screens and the shell, 107 controls</h2>
+<h2>The screens: 13 screens and the shell, 109 controls</h2>
 <p>The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with <code>qa&#47;ui&#47;ledger.json</code>. The ledger is a ratchet in both directions.</p>
 <ul>
   <li><code>screens.audit</code> - 8 controls</li>
@@ -698,7 +698,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <li><code>screens.ids</code> - 5 controls</li>
   <li><code>screens.incidents</code> - 1 control</li>
   <li><code>screens.intel</code> - 1 control</li>
-  <li><code>screens.network</code> - 6 controls</li>
+  <li><code>screens.network</code> - 8 controls</li>
   <li><code>screens.reports</code> - 1 control</li>
   <li><code>screens.scanner</code> - 9 controls</li>
   <li><code>screens.settings</code> - 34 controls</li>
@@ -966,6 +966,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>3</td>
     </tr>
     <tr>
+      <td><code>test&#47;network_connections_test.dart</code></td>
+      <td>2</td>
+    </tr>
+    <tr>
       <td><code>test&#47;opsec_baseline_test.dart</code></td>
       <td>5</td>
     </tr>
@@ -1023,7 +1027,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**128** in 26 files</td>
+      <td>**130** in 27 files</td>
     </tr>
   </tbody>
 </table>
@@ -1069,6 +1073,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>engine&#47;src&#47;platform&#47;windows&#47;caller.rs</code></td>
       <td>8</td>
+    </tr>
+    <tr>
+      <td><code>engine&#47;src&#47;platform&#47;windows&#47;conns.rs</code></td>
+      <td>6</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;platform&#47;windows&#47;integrity.rs</code></td>
@@ -1128,7 +1136,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**174** in 23 modules</td>
+      <td>**180** in 24 modules</td>
     </tr>
   </tbody>
 </table>

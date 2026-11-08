@@ -2217,3 +2217,108 @@ machine. **Does not commit us to:** a kernel driver, WinDivert or Mullvad-Lib, D
 resolution interception, stateful callouts or the stream layer, per-connection state, blocking
 by package SID, or any UI surface of its own — this slice is the enforcement layer the rest of
 the product can now build on.
+
+---
+
+## D-043 — The connection list offers one block, and the engine writes the filter it implies
+
+**Status:** accepted (2026-11-08)
+
+**Context.** §0.6 row 17 slice (b) asked for the half of a real-time firewall a user actually
+touches: the live connection list, and a way to block one line of it. `net.connections`
+existed and was **IPv4 TCP only** — `GetExtendedTcpTable`/`GetExtendedUdpTable` for
+`AF_INET` alone, no IPv6 at all, so a block on `[2001:db8::1]:443` was not expressible and a
+machine whose traffic had moved to IPv6 could be watched and then not acted on. The walk lived
+in `platform\windows\collectors.rs`, in an `unsafe` block that no unit test can reach, next to
+`format_ipv4_port` and `tcp_state_name` which are pure and were testable but untested. And the
+UI had no action on a row: `fw.wfp.block` (D-042) existed with no caller.
+
+The tempting shortcut is for the UI to build the spec: the row already *shows* a peer
+`address:port` and a process name, so `{app: row.processName, port: <parsed>, ...}` looks like
+enough. It is not. `fw.wfp.block` matches an **image path**, not a process name — a name is
+spoofable and a path is what the filter compares — and the displayed port is a *string in a
+column*, which can be a listener's local port, a UDP socket's local port, or `*:*`. A UI-side
+parser would be a second, weaker copy of the engine's own knowledge, and its mistakes would be
+silent: a filter that blocks the wrong thing still reports success.
+
+**Decision.** Slice (b): the walk and the block decision move into a module of their own, and
+the **engine** derives the filter spec a row implies.
+
+1. **`platform\windows\conns.rs` (new; `collectors.rs` keeps only the trait wiring).** All four
+   tables — `TCP_TABLE_OWNER_PID_ALL` and `UDP_TABLE_OWNER_PID` for `AF_INET` **and**
+   `AF_INET6` — are walked, so both address families are in the list. A row is IPv6 when the
+   table it came from is, and its addresses are formatted the way Windows writes them
+   (`[2001:db8::1]:443`, `[::]:135`), not as bare hex. The process name comes from one
+   `sysinfo` refresh; the **image path** comes from one `OpenProcess` +
+   `QueryFullProcessImageNameW` per pid, cached across all four tables for the call, and
+   `OpenProcess` failing is a `None` path rather than an error or a guessed name. `tcp_state_name`,
+   the two address formatters and the peer-port rule are `pub` and unit-tested in this module.
+
+2. **The spec is derived, once, in the engine** (`block_for`). A row becomes
+   `NetworkBlock { app, port, protocol, note }` — the row's own `process_path` as the filter's
+   application, its `remote_port`, its protocol number, and a note built by `note_for`, which is
+   filtered to the character set, and the 40-character ceiling, the helper's validator accepts.
+   It is `None` when the filter would not mean what a click implies: **no peer port** (a UDP
+   socket — Windows keeps no peer for it — or a TCP listener), **no image path** (a kernel
+   connection, or a process this token may not query), or a protocol we do not filter. The field
+   is serialised either way — a row that cannot be blocked arrives with `block: null`, which is a
+   statement in itself — and the UI offers the button only when it is there.
+
+3. **The UI forwards, it does not assemble.** `NetworkConnection` carries `process_path`,
+   `protocol_number`, `remote_port` and the `NetworkBlock?`, and the block button sends
+   `block.toJson()` — the engine's own object — to `fw.wfp.block`. One click is confirmed first,
+   and the confirmation names the program and the port and says the filter outlives MI CS,
+   because a persistent block is a deliberate act and not a view setting. The screen fetches a
+   snapshot when it opens (it previously listed nothing until Refresh was pressed), and the
+   engine's own refusal is shown as its sentence: unelevated, "needs an administrator" is a real
+   answer, not a failed click.
+
+4. **What it is not.** The list is a snapshot of the kernel's tables, not a push feed: a
+   connection that opens and closes between two reads is never seen, and a row can be seconds
+   stale by the time it is clicked. There is no per-row traffic counter, no reverse DNS, no
+   process tree, and no un-block from the row itself. UDP rows still have no peer, because
+   Windows has none to give.
+
+**Measured on this machine, 2026-11-08** (unelevated, against `engine\target\debug\mics-engine.exe`):
+
+- `cargo test` **180** (174 before): 6 new in `conns` — a spec is offered only with a peer port
+  and an image path, the note fits the helper's validator, both families format the way Windows
+  writes them, and the running process resolves to a real image path — plus the moved
+  `format_ipv4_port` case. `cargo clippy --release -- -D warnings` clean, and the fast tier as
+  one run: **green, 4 of 4, 66.4 s warm** — which is where the analyzer's `--fatal-infos` and the
+  control ledger's ratchet were both seen turning over.
+- `scripts\verify-connections.ps1` (new) against a real engine on a private pipe: **PASS, 23
+  checks, 0 skipped, 0 failed**. It found what a unit test cannot: **490 rows**, every one
+  carrying path, protocol number, peer port and a block decision; **139** offering a spec whose
+  application path, peer port and protocol match the row it came from *and* whose file exists;
+  no row with an empty peer port offering one; IPv6 rows present on a machine that has IPv6
+  connections; UDP rows present with `*:*` instead of an invented peer; **0** rows naming an
+  owner Windows disagrees with, out of the 147 whose socket was still in `Get-NetTCPConnection`
+  / `Get-NetUDPEndpoint` when the probe looked (343 had already vanished — a snapshot ages, and
+  the probe counts that rather than failing). Two behaviours this probe had to learn from the
+  machine, and now encodes: Windows reports pid 0 for a socket that is closing while MI CS still
+  has the owner (D-042's table read), and the two Windows APIs name *different* binders for the
+  same shared wildcard UDP socket (WS-Discovery, mDNS, SSDP), so those rows are counted as
+  ambiguous instead of being called wrong.
+- The write path: the spec a row offers was handed to `fw.wfp.block` as the UI sends it, refused
+  **with a reason** (`unknown variant firewall.wfp.block, expected one of ping, version, ...`) —
+  the installed `MICSHelper` predates the WFP ops, exactly as D-042 recorded — and
+  `fw.wfp.status` was unchanged after the refusal, so nothing was left behind (D-007).
+- App side: `flutter analyze` clean, 2 new widget tests (the click sends the engine's own spec
+  and reports the refusal; cancelling writes nothing), `qa\ui\fixtures.json` moved to the real
+  engine shape with the blockable and unblockable rows both present, the control ledger
+  regenerated (**+2 controls, 109**), and the RPC contract re-run against the same binary:
+  **86 cases, 0 failed**, with `net.connections` answering in the new shape.
+
+**Not measured, and the row stays `[~]`.** No click actually blocked anything on this machine: a
+block needs an administrator or a helper that knows the WFP ops, and neither was available (the
+same wall D-042 hit). So the claim "the spec a row offers, once accepted, blocks exactly that
+row's connection" is **written and reasoned but unproven**, and `verify-connections.ps1` records
+it as the refusal path until it is run elevated or the helper is reinstalled from Settings →
+Engine — at which point its part 3 takes the write branch and asserts the BFE holds one more
+filter, then that it is gone again. The UI's own click is proved only up to the wire.
+
+**Advances** §0.6 row 17 (slice b). **Does not commit us to:** a packet-level view, per-connection
+state or byte counters, reverse DNS, a process tree in the list, blocking by process *name*,
+automatic blocking from a heuristic or a feed (the click is the human's), or an un-block from the
+row — removal stays the Firewall tab's rule list, where the filter's own name is shown.

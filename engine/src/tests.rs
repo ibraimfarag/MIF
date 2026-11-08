@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::platform::windows::collectors::format_ipv4_port;
+    use crate::platform::windows::conns::format_ipv4_port;
     use crate::scanner::triage_score;
     use std::path::Path;
 

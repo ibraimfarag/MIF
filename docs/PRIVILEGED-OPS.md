@@ -38,6 +38,13 @@ delete: `reset` addresses our own provider key, so it cannot be pointed at
 anything Windows or another product owns. A spec needs an application or a
 remote port (`validate`), so the set cannot express "block everything".
 
+D-043 (same row, slice b) is the caller: the connection list derives a spec from
+the row the user clicked — the row's own image path, its peer port and its
+protocol — and the UI confirms it before it is sent, because the filter outlives
+MI CS. The engine builds that spec, so the UI never assembles a filter out of
+what a row happens to display; a row with no peer port (UDP, a listener) or no
+image path carries no spec at all and the UI offers no button for it.
+
 Every op names its effect on the machine; nothing is implicit, nothing is
 "best effort and hope".
 
