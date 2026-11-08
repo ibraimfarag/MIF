@@ -9,7 +9,7 @@
 > anything discovered into "Known issues", and keep "Next up" accurate. Never
 > rewrite history — append.
 >
-> Last updated: 2026-11-07 · **the documents were audited against the code and then
+> Last updated: 2026-11-08 · **the documents were audited against the code on 2026-11-07 and then
 > re-planned around a hard constraint the project had not written down: it is
 > open source with no budget, so nothing can be bought** — no certificate, no tool,
 > no service. Two consequences. *(a)* **The documents were wrong in places, and are
@@ -228,6 +228,18 @@
 
 ---
 
+> **2026-11-08 — what changed since that audit, and where the next session starts.** The
+> certificate question is answered and **closed rather than open**: two free routes are on
+> record with their sources and dates ([`docs/SIGNING.md`](SIGNING.md), D-036), the Store-shaped
+> package exists, installs without an administrator and was **run for real** — its app half
+> reaches its engine inside the container — the submission playbook is
+> [`docs/STORE.md`](STORE.md), and the acceptance check now exists: `scripts\verify-trust.ps1`
+> exits 0 only for an artifact a stranger's Windows would trust (its `-SelfTest` proves the
+> instrument against a self-signed control and `kernel32.dll`). What waits on the owner is **one
+> publish click and the answers**, not a purchase. §0.2 and the register count were reconciled on
+> 2026-11-08 with what actually ran; the register is **13 open rows (1 HIGH, 4 MED, 8 LOW) out of
+> 24**, and no page any longer describes a *run* as waiting on a human.
+
 ## 0. Resume here — a new session starts with this section
 
 ### 0.0 How to start the next session
@@ -242,13 +254,24 @@ Open a fresh session and paste exactly this:
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
+**Resume point (2026-11-08).** `main` at **`c42ba32`**, working tree clean,
+`scripts\pipeline.ps1 -Tier fast` green — 4 of 4, **135.2 s**, 151 engine tests. **Thirteen
+commits are local only** (`.git`: `git rev-list --count '@{u}..HEAD'` → 13), so one `git push`
+publishes this session's work: the `scripts\verify-trust.ps1` acceptance check, `docs\STORE.md`,
+the packaged-app measurement and the `§0.2` reconciliation. Nothing is uncommitted, so a new
+session can start from any row of §0.6.
+
 That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
 the complete list of what is left**, and a session takes one row at a time. The
 cheapest, highest-value row first: **publish `v0.1.0`** (one free click, if you are
 the one clicking), otherwise a row that needs nobody — the **reproducible build**
 (F-11) or **هـ1** (the default update-manifest URL and a signature check before
 applying) — each with the proof its row names. **Nothing in this project is
-purchased** (D-035), so a row that says "certificate" is **closed, not pending**.
+purchased** (D-035), so a row that says "certificate" is **closed, not pending**. When work
+touches signing, **do not re-research the routes** — they are closed, with sources and dates, in
+`docs/SIGNING.md` (D-036); judge artifacts with `scripts\verify-trust.ps1` (exit 0 means a
+stranger's Windows trusts the file, and `-SelfTest` proves the instrument) and follow
+`docs/STORE.md` for the Store submission itself.
 **و4, د4 and ب2 are done (2026-11-03)** — see the Done log: the register's
 executable LOW rows closed (keys in `secrets.dat`, one scanning path, audit-section
 ages, guard cost re-measured) plus three rows closed by evidence; the QA report was
