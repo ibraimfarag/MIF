@@ -2428,9 +2428,13 @@ once-per-change rule against an injected status, not a measurement of the machin
 thread's own 30 s poll was not observed firing either — the probe and the contract call
 `fw.wfp.watch` directly, which is the same function on a timer. Elevated (or with the helper
 reinstalled from Settings → Engine), part 1 answers from the real BFE, and the same probe then
-reports a real `guarded`; deleting one of MI CS' own filters with `netsh wfp` or the WFP API while
-it runs is the missing experiment, and `scripts\verify-wfp.ps1 -Keep` already writes such a filter
-for it to delete.
+reports a real `guarded`. The missing experiment is a **real** removal while the engine watches:
+create one filter (the connection list's block button, or `fw.wfp.block`), then take it out of the
+BFE **behind the engine's back**, which the engine's own ops cannot do without also clearing the
+record — the available route is the helper's `firewall.wfp.unblock`, called on the helper pipe
+directly so the engine's bookkeeping is untouched. `scripts\verify-wfp.ps1 -Keep` is *not* that
+filter: it keeps the scratch directory, and its teardown unblocks what it created either way, which
+is why this experiment still needs its own script or a WFP-API tool.
 
 **Advances** §0.6 row 17 (slice c). **Does not commit us to:** a WFP change subscription, a kernel
 callout driver, self-healing re-creation of a deleted filter, attribution of the deletion, watching
