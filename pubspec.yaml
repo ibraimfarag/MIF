@@ -43,6 +43,10 @@ dependencies:
   shared_preferences: ^2.5.6
   ffi: ^2.2.0
   tray_manager: 0.5.2
+  # Where the tray panel sits (D-040): the work area it clamps itself into. It
+  # already arrives transitively with `window_manager`; naming it here is what
+  # the analyzer asks for before an import of it is allowed.
+  screen_retriever: ^0.2.2
   audioplayers: ^6.8.1
 
 dev_dependencies:

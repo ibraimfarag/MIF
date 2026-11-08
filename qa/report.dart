@@ -137,18 +137,31 @@ QaReport buildReport() {
   final ledger = readJsonMap(ledgerPath);
   final entries = (ledger['entries'] as Map).cast<String, dynamic>();
   final screens = <String, int>{};
+  // Surfaces that are not screens: the tray panel paints over whatever route is
+  // up (D-040), so it is swept and ledgered like a screen but is not one, and
+  // the row below says which is which.
+  final surfaces = <String, int>{};
   var shellControls = 0;
   for (final entry in entries.entries) {
     final count = (entry.value as List).length;
     if (entry.key == 'shell') {
       shellControls = count;
+    } else if (entry.key.startsWith('surfaces.')) {
+      surfaces[entry.key] = count;
     } else {
       screens[entry.key] = count;
     }
   }
   final screenNames = screens.keys.toList()..sort();
+  final surfaceNames = surfaces.keys.toList()..sort();
   final controls =
-      screens.values.fold<int>(0, (sum, count) => sum + count) + shellControls;
+      screens.values.fold<int>(0, (sum, count) => sum + count) +
+          surfaces.values.fold<int>(0, (sum, count) => sum + count) +
+          shellControls;
+  final surfaceNote = surfaceNames.isEmpty
+      ? ''
+      : ', ${surfaceNames.length} '
+          'surface${surfaceNames.length == 1 ? '' : 's'}';
 
   // --------------------------------------------------------- the languages
   final languages = <String, int>{};
@@ -262,7 +275,7 @@ QaReport buildReport() {
         ],
         [
           'Screens',
-          '${screenNames.length} screens and the shell',
+          '${screenNames.length} screens$surfaceNote and the shell',
           'every screen swept, `qa/ui/ledger.json` agrees',
           '`test/ui_screens_test.dart`',
         ],

@@ -7,6 +7,7 @@ import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 import 'package:mics_app/core/window/app_identity.dart';
+import 'package:mics_app/core/window/tray_panel.dart';
 import 'package:mics_app/core/window/window_corners.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -41,8 +42,10 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     _init();
   }
 
-  /// The tray menu stays deliberately small until the tray panel lands: open,
-  /// and a quit that means quit — including the engine this app started.
+  /// The icon's right-click menu: the native fallback (D-040). It stays two
+  /// labels because that is all `AppendMenuW` can draw — the styled surface is
+  /// the tray panel a left click opens, and this is what a right click has
+  /// always meant on Windows.
   Future<void> _setupTray() async {
     await trayManager.setIcon('assets/icons/mics.ico');
     await trayManager.setToolTip(appDisplayName);
@@ -61,16 +64,14 @@ class _BootstrapState extends ConsumerState<Bootstrap>
 
   /// Ends this app on purpose: ask the engine it started to stop, then close
   /// the window. The engine also holds a handle to this process, so an answer
-  /// that never arrives still takes it with us.
-  Future<void> _quit() async {
-    await ref.read(engineIpcProvider).stopOwnEngine();
-    await windowManager.destroy();
-  }
+  /// that never arrives still takes it with us. The panel's `Quit` and the
+  /// native menu's are this same method (D-040).
+  Future<void> _quit() => ref.read(trayPanelProvider.notifier).quit();
 
   @override
   void onTrayIconMouseDown() {
-    windowManager.show();
-    windowManager.focus();
+    // A left click: the app when it is already on screen, else the panel.
+    ref.read(trayPanelProvider.notifier).clickedTray();
   }
 
   @override
@@ -79,10 +80,19 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   }
 
   @override
+  void onWindowBlur() {
+    // The panel behaves like a flyout: clicking anywhere else puts it away
+    // (without quitting — the engine keeps running, which is the whole point of
+    // reaching the tray instead of Task Manager).
+    if (ref.read(trayPanelProvider).open) {
+      ref.read(trayPanelProvider.notifier).close();
+    }
+  }
+
+  @override
   void onTrayMenuItemClick(MenuItem item) {
     if (item.key == 'show') {
-      windowManager.show();
-      windowManager.focus();
+      ref.read(trayPanelProvider.notifier).showApp();
     } else if (item.key == 'quit') {
       _quit();
     }
@@ -219,6 +229,11 @@ class _MicsAppState extends ConsumerState<MicsApp>
       darkTheme: AppTheme.darkTheme,
       themeMode: settings.value?.themeMode ?? ThemeMode.dark,
       routerConfig: appRouter,
+      // The tray panel paints over whatever route is up, rather than replacing
+      // it: same window, same router, so closing the panel returns to the page
+      // the user was reading (D-040).
+      builder: (context, child) =>
+          TrayPanelHost(child: child ?? const SizedBox.shrink()),
       locale: lang.locale,
       supportedLocales: [for (final l in AppLang.all) l.locale],
       localizationsDelegates: const [

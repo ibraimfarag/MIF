@@ -370,7 +370,8 @@ One screen, eight sections; every field is validated and persisted by the engine
 - **Appearance / language** — dark, light, follow system (live), AR/EN.
 - **Protection** — guard autostart, resume interrupted scans, default
   auto-quarantine, **scheduled scan** (off / 6 / 12 / 24 / 72 / 168 hours, and the
-  folder it walks — empty means your profile folder), canary paths.
+  folder it walks — empty means your profile folder), canary paths, and
+  **keep running in the background** (close to tray).
 - **Notifications & sounds** — desktop cards on/off, do-not-disturb, sounds
   on/off, volume, test toast, test sound.
 - **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
@@ -382,6 +383,16 @@ One screen, eight sections; every field is validated and persisted by the engine
 - **About** — version, license, tagline, and the **integrity line**: whether the
   files next to the engine are the ones this package describes (see the *What MI CS
   does* table).
+
+**The tray icon** is the way in without the window. A **left click** opens a styled
+panel — whether the engine is up, whether the guard is running, the firewall's mode,
+how many connections are open, and the switches for the guard, do-not-disturb and
+*keep running in the background* — with **Open MI CS** and **Quit** under it, and
+`Escape` (or a click anywhere else) to put it away. A **right click** still opens the
+plain Windows menu, which is what the panel is built on top of rather than instead of
+(D-040). With *keep running in the background* on, closing the window hides MI CS and
+leaves the engine protecting; with it off — the default — closing the window stops the
+engine with it (D-039).
 
 ## Building from source
 

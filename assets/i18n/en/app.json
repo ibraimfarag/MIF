@@ -1,7 +1,26 @@
-﻿{
+{
   "app.name": "MI CS",
   "app.tagline": "Smart. Transparent. Open-source defense.",
   "shell.theme": "Theme",
+  "shell.tray.guard": "Guard",
+  "shell.tray.on": "On",
+  "shell.tray.off": "Off",
+  "shell.tray.strict": "Strict",
+  "shell.tray.firewall": "Firewall",
+  "shell.tray.connections": "Connections",
+  "shell.tray.guardToggle": "Process guard",
+  "shell.tray.guardHint": "Watch every process that starts",
+  "shell.tray.dnd": "Do not disturb",
+  "shell.tray.dndHint": "Silence notifications for now",
+  "shell.tray.background": "Keep running",
+  "shell.tray.backgroundHint": "Closing the window hides MI CS instead of quitting",
+  "shell.tray.open": "Open MI CS",
+  "shell.tray.quit": "Quit",
+  "shell.tray.close": "Close the panel",
+  "shell.tray.engineUp": "Engine up",
+  "shell.tray.engineWait": "Connecting",
+  "shell.tray.engineMissing": "Engine missing",
+  "shell.tray.engineDown": "Engine down",
   "card.dismiss": "Dismiss notification",
   "card.crashNotSent": "Not sent anywhere — delivery is off"
 }

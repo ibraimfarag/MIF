@@ -1,7 +1,26 @@
-﻿{
+{
   "app.name": "مركز MI CS للدفاع السيبراني",
   "app.tagline": "حماية ذكية، شفافة، ومفتوحة المصدر",
   "shell.theme": "المظهر",
+  "shell.tray.guard": "الحماية",
+  "shell.tray.on": "شغّال",
+  "shell.tray.off": "مقفول",
+  "shell.tray.strict": "صارم",
+  "shell.tray.firewall": "الفايروول",
+  "shell.tray.connections": "الاتصالات",
+  "shell.tray.guardToggle": "حارس العمليات",
+  "shell.tray.guardHint": "يراقب كل عملية بتشتغل",
+  "shell.tray.dnd": "من غير إزعاج",
+  "shell.tray.dndHint": "اسكت الإشعارات مؤقتًا",
+  "shell.tray.background": "فضل شغّال",
+  "shell.tray.backgroundHint": "قفل الشباك يخفي MI CS بدل ما يقفل البرنامج",
+  "shell.tray.open": "افتح MI CS",
+  "shell.tray.quit": "اقفل البرنامج",
+  "shell.tray.close": "اقفل اللوحة",
+  "shell.tray.engineUp": "المحرك شغّال",
+  "shell.tray.engineWait": "بيتصل",
+  "shell.tray.engineMissing": "المحرك مش موجود",
+  "shell.tray.engineDown": "المحرك واقف",
   "card.dismiss": "اقفل الإشعار",
   "card.crashNotSent": "ما اتبعتش في أي حتة — التسليم مقفول"
 }

@@ -51,13 +51,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Screens</td>
-      <td>13 screens and the shell</td>
+      <td>13 screens, 1 surface and the shell</td>
       <td>every screen swept, <code>qa&#47;ui&#47;ledger.json</code> agrees</td>
       <td><code>test&#47;ui_screens_test.dart</code></td>
     </tr>
     <tr>
       <td>Controls</td>
-      <td>101 in the ledger</td>
+      <td>107 in the ledger</td>
       <td>the sweep fails when a control appears or disappears unannounced</td>
       <td><code>qa&#47;ui&#47;harness.dart</code>, <code>qa&#47;ui&#47;ledger.dart</code></td>
     </tr>
@@ -81,8 +81,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Dart tests</td>
-      <td>24 files</td>
-      <td>111 declared cases (a floor: loops add more at run time)</td>
+      <td>25 files</td>
+      <td>116 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
@@ -652,7 +652,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The screens: 13 screens and the shell, 101 controls</h2>
+<h2>The screens: 13 screens and the shell, 107 controls</h2>
 <p>The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with <code>qa&#47;ui&#47;ledger.json</code>. The ledger is a ratchet in both directions.</p>
 <ul>
   <li><code>screens.audit</code> - 8 controls</li>
@@ -959,8 +959,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>2</td>
     </tr>
     <tr>
+      <td><code>test&#47;tray_panel_test.dart</code></td>
+      <td>4</td>
+    </tr>
+    <tr>
       <td><code>test&#47;ui_screens_test.dart</code></td>
-      <td>7</td>
+      <td>8</td>
     </tr>
     <tr>
       <td><code>test&#47;ui_shell_test.dart</code></td>
@@ -980,7 +984,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**111** in 24 files</td>
+      <td>**116** in 25 files</td>
     </tr>
   </tbody>
 </table>

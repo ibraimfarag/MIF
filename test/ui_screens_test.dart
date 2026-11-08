@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/window/tray_panel.dart';
 import 'package:mics_app/features/audit/screens/audit_screen.dart';
 import 'package:mics_app/features/canaries/screens/canaries_screen.dart';
 import 'package:mics_app/features/dashboard/screens/dashboard_screen.dart';
@@ -58,6 +59,14 @@ final Map<String, Widget Function()> screens = {
   'settings': () => const SettingsScreen(),
 };
 
+/// Surfaces that are not routes. The tray panel (D-040) is one: it paints over
+/// whatever route is up rather than having a page of its own, but its controls
+/// are exactly as droppable as a screen's — so it is swept and ledgered like
+/// one, under its own key.
+final Map<String, Widget Function()> surfaces = {
+  'trayPanel': () => const TrayPanel(),
+};
+
 void main() {
   test('the screen list is the router list', () {
     final routes = File('lib/core/router/app_router.dart').readAsStringSync();
@@ -89,6 +98,27 @@ void main() {
           reason: '${entry.key} exposed no interactive control at all');
 
       await expectLedger('screens.${entry.key}', result.found);
+    });
+  }
+
+  for (final entry in surfaces.entries) {
+    testWidgets('${entry.key}: renders and every control is tappable',
+        (tester) async {
+      final mounted = await openScreen(tester, entry.value());
+      expect(tester.takeException(), isNull,
+          reason: '${entry.key} threw while rendering');
+
+      final result = await sweep(tester, mounted);
+
+      expect(mounted.engine.unanswerable, isEmpty,
+          reason: '${entry.key} asked for methods neither the fixtures nor the '
+              'registry could answer: ${mounted.engine.unanswerable}');
+      expect(result.errors, isEmpty,
+          reason: '${entry.key}: taps failed\n${result.errors.join('\n')}');
+      expect(result.found, isNotEmpty,
+          reason: '${entry.key} exposed no interactive control at all');
+
+      await expectLedger('surfaces.${entry.key}', result.found);
     });
   }
 

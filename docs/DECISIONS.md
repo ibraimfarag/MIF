@@ -1973,3 +1973,67 @@ machine) is untouched, and is what makes ownership checkable at all.
 **Does not commit us to:** stopping an engine this app did not start, hiding a running
 protection engine from the user, or removing the autostart entry — 24/7 protection stays
 one explicit switch away (Settings -> Engine -> Start with Windows).
+
+---
+
+## D-040 — The tray's styled surface is a Flutter panel in the app's own window
+
+**Context.** The tray icon offered two labels — `Open MI CS`, `Quit` — because §0.6 row 15
+measured what `tray_manager 0.5.2` can build on Windows: `AppendMenuW`, which draws labels,
+separators and check marks and nothing else (read in the plugin's `tray_manager_plugin.cpp`
+on 2026-11-08). No icons, no colours, no typography, at any amount of effort. The user asked
+for a tray surface that is styled — "شيك … كريتف و احترافي" — so the styled surface had to be
+Flutter's, and the native menu had to become the fallback rather than the product.
+
+**Decision.** A left click on the icon opens a **Flutter panel, painted in the app's own
+window**: 392×486 logical pixels (360×420 floor), non-resizable, always-on-top, out of the
+taskbar, positioned above the notification area, closed by `Escape`, by its ✕, or by
+clicking anywhere else. The right click still opens the native menu: D-040 supersedes the
+"deliberately small" reading of that menu, not the menu. Three consequences, all deliberate:
+
+1. **One window, not two.** A second window means a second Flutter engine and a second
+   Riverpod container, and every number in the panel would have to be synced between them.
+   The panel *borrows* the window the app already has and reads the providers the screens
+   read (`guardProvider`, `firewallProvider`, `connectionsProvider`, `settingsProvider`), so
+   its state is live by construction. `MaterialApp.router`'s `builder` paints the panel over
+   the router rather than replacing it, so closing the panel returns to the page the user
+   was reading.
+2. **Placement is measured, not guessed.** `tray_manager.getBounds()` reports the icon in
+   **logical** pixels (the plugin divides its device pixels down) and `screen_retriever`
+   reports the work area in the same units, so the panel sits above the icon and is clamped
+   into the work area; when neither answers (a stripped build, a test) it falls back to the
+   bottom-right corner of the work area — where Windows puts its own tray flyouts.
+3. **The panel is a view of the engine, never a second source of truth.** The guard switch
+   asks `guard.start`/`guard.stop` and then re-reads `guard.status`; the other two switches
+   write the same settings Settings -> Protection writes (`dnd`, `close_to_tray`); `Quit` is
+   the D-039 quit — `shutdown`, then the window — from the panel and the native menu alike.
+   Every window call is best-effort, so a platform without `window_manager` still leaves the
+   panel's content usable instead of throwing out of a tray click.
+
+**What it costs, stated plainly.** While the panel is open it *is* the app window: opening
+it resizes and moves the window, and closing it hides the window rather than revealing the
+app. A left click therefore shows the app when the app is already on screen and the panel
+when it is not. The panel has no title bar to click (the window is `TitleBarStyle.hidden`),
+so `Escape` and clicking away are the ways out. `screen_retriever` is now named in
+`pubspec.yaml` instead of arriving transitively through `window_manager`: no new code was
+fetched for it, and the analyzer requires the name before an import of it is allowed.
+
+**Measured.** `scripts\pipeline.ps1 -Tier fast`: **PASS, 4 of 4, 63.0 s** at `d80d5ee`
+(`build\pipeline-fast.json`), `flutter analyze --fatal-infos` clean, `flutter test`
+**146 passing, 0 failing** (141 before this pass). Four of the new cases are the panel's
+(`test/tray_panel_test.dart`): it asks `guard.status`, `fw.default_deny.status` and
+`net.connections` for the state it shows; the guard switch asks the engine *and* re-reads
+it; the other switches write `dnd` and `close_to_tray`; `Escape` and `Quit` throw nothing.
+The panel is also a **swept surface**, not an exception: `qa/ui/ledger.json` gained
+`surfaces.trayPanel` with exactly **6 controls** (Open MI CS, Quit, ✕, three switches), and
+`qa/report.md`/`.html` now read **"13 screens, 1 surface and the shell"**, **107 controls**,
+**67 methods** — a diff a reviewer reads, which is the point of the ledger. The 19 new i18n
+keys exist in both packs (`ar`, `en`), which `test/i18n_parity_test.dart` enforces.
+
+**Supersedes** the comment in `lib\main.dart` that said the tray menu "stays deliberately
+small until the tray panel lands", and closes §0.6 row 15. `tray_manager` is untouched: the
+native menu keeps working, which is what makes it a fallback rather than a leftover.
+
+**Does not commit us to:** a second window or a second Flutter engine, tray badges or
+overlay icons, richer panel content (charts, incident lists), or removing the native menu —
+it stays the right-click path for anything the panel does not do.

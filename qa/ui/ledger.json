@@ -129,6 +129,14 @@
       "_TrafficLight/GestureDetector",
       "_TrafficLight/GestureDetector#2",
       "_TrafficLight/GestureDetector#3"
+    ],
+    "surfaces.trayPanel": [
+      "FilledButton(Open MI CS)",
+      "IconButton(Close the panel)",
+      "OutlinedButton(Quit)",
+      "_Toggle/Switch",
+      "_Toggle/Switch#2",
+      "_Toggle/Switch#3"
     ]
   }
 }
