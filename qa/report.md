@@ -12,19 +12,19 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 68 rows in `qa/methods.json` | 68 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 69 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 72 rows in `qa/methods.json` | 72 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 73 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens, 1 surface and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 107 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 26 files | 128 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 22 modules | 162 declared cases | `engine.test` step |
+| Engine tests | 23 modules | 174 declared cases | `engine.test` step |
 | Pipeline steps | 12 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 68 methods
+## The pipe: 72 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
@@ -34,8 +34,8 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `mutating` | 22 | 12 | 10 |
 | `network` | 4 | 0 | 4 |
 | `pure` | 6 | 6 | 0 |
-| `read` | 24 | 24 | 0 |
-| `sandbox` | 10 | 10 | 0 |
+| `read` | 25 | 25 | 0 |
+| `sandbox` | 13 | 13 | 0 |
 
 ### Every method
 
@@ -58,6 +58,10 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `fw.rules.add` | `mutating` | 2 |  |
 | `fw.rules.list` | `read` | 1 |  |
 | `fw.rules.remove` | `mutating` | 2 |  |
+| `fw.wfp.block` | `sandbox` | 1 |  |
+| `fw.wfp.reset` | `sandbox` | 1 |  |
+| `fw.wfp.status` | `read` | 1 |  |
+| `fw.wfp.unblock` | `sandbox` | 1 |  |
 | `geoip.lookup` | `read` | 2 |  |
 | `guard.event.dismiss` | `sandbox` | 2 |  |
 | `guard.rules.add` | `mutating` | 1 |  |
@@ -240,6 +244,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | Module | Declared cases |
 |---|---|
 | `engine/src/crash.rs` | 14 |
+| `engine/src/firewall/wfp.rs` | 8 |
 | `engine/src/guard/canary.rs` | 6 |
 | `engine/src/jobs.rs` | 4 |
 | `engine/src/lifecycle.rs` | 4 |
@@ -259,9 +264,9 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/secrets.rs` | 5 |
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 8 |
-| `engine/src/tests.rs` | 51 |
+| `engine/src/tests.rs` | 55 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **162** in 22 modules |
+| **total** | **174** in 23 modules |
 
 ## What runs where
 

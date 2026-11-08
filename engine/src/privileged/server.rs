@@ -233,6 +233,22 @@ fn run(op: &Op) -> Result<Value> {
             crate::hardening::run_rollback_now(snapshot)?;
             Ok(json!({ "lines": snapshot.lines().count() }))
         }
+        Op::FirewallWfpStatus => Ok(serde_json::to_value(crate::firewall::wfp::status_now()?)?),
+        Op::FirewallWfpBlock { spec } => {
+            // The op fails unless the filter is read back from the BFE, so the
+            // helper never reports a block it did not see.
+            let outcome = crate::firewall::wfp::block_now(spec)?;
+            Ok(serde_json::to_value(outcome)?)
+        }
+        Op::FirewallWfpUnblock { spec } => {
+            let outcome = crate::firewall::wfp::unblock_now(spec)?;
+            Ok(serde_json::to_value(outcome)?)
+        }
+        Op::FirewallWfpReset => {
+            let removed = crate::firewall::wfp::reset_now()?;
+            let filters = crate::firewall::wfp::status_now()?.filters;
+            Ok(json!({ "removed": removed, "filters": filters }))
+        }
     }
 }
 

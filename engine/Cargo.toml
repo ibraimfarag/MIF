@@ -32,7 +32,7 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 async-trait = "0.1.92"
-windows = { version = "0.62.2", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_WindowsFirewall", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_Security_WinTrust", "Win32_System_Pipes", "Win32_System_ProcessStatus", "Win32_System_Services", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_UI_Notifications", "Data_Xml_Dom", "UI_Notifications"] }
+windows = { version = "0.62.2", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_WindowsFirewall", "Win32_NetworkManagement_WindowsFilteringPlatform", "Win32_System_Rpc", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_Security_WinTrust", "Win32_System_Pipes", "Win32_System_ProcessStatus", "Win32_System_Services", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Media_Audio", "Win32_UI_Notifications", "Data_Xml_Dom", "UI_Notifications"] }
 sysinfo = "0.39.6"
 yara-x = "1.22.1"
 aes-gcm = { version = "0.11.1", features = ["aes", "alloc", "getrandom"] }

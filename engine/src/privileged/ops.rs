@@ -63,6 +63,20 @@ pub enum Op {
     /// Re-applies a snapshot's old state. The script is allow-listed by shape.
     #[serde(rename = "hardening.rollback")]
     HardeningRollback { snapshot: String },
+    /// Reads MI CS' own WFP objects (provider, sublayer, persistent filters).
+    /// A read, but it needs an administrator, so it lives here like the writes.
+    #[serde(rename = "firewall.wfp.status")]
+    FirewallWfpStatus,
+    /// Adds one persistent block filter, enforced by the BFE whether the engine
+    /// is running or not.
+    #[serde(rename = "firewall.wfp.block")]
+    FirewallWfpBlock { spec: crate::firewall::wfp::FilterSpec },
+    /// Removes one persistent block filter by the same spec.
+    #[serde(rename = "firewall.wfp.unblock")]
+    FirewallWfpUnblock { spec: crate::firewall::wfp::FilterSpec },
+    /// The undo: removes every filter of ours, then the sublayer and provider.
+    #[serde(rename = "firewall.wfp.reset")]
+    FirewallWfpReset,
 }
 
 impl Op {
@@ -90,6 +104,21 @@ impl Op {
                 snapshot.lines().count(),
                 sha256_hex(snapshot.as_bytes())
             ),
+            // The audit line carries the filter's *name* (what it covers, which
+            // is the same string `netsh wfp show filters` prints) and its key,
+            // never the whole spec: a directory path has no place in a log.
+            Op::FirewallWfpStatus => "firewall.wfp.status".into(),
+            Op::FirewallWfpBlock { spec } => format!(
+                "firewall.wfp.block filter={} key={}",
+                crate::firewall::wfp::filter_name(spec),
+                crate::firewall::wfp::key_text(&crate::firewall::wfp::filter_key(spec))
+            ),
+            Op::FirewallWfpUnblock { spec } => format!(
+                "firewall.wfp.unblock filter={} key={}",
+                crate::firewall::wfp::filter_name(spec),
+                crate::firewall::wfp::key_text(&crate::firewall::wfp::filter_key(spec))
+            ),
+            Op::FirewallWfpReset => "firewall.wfp.reset".into(),
         }
     }
 
@@ -137,6 +166,27 @@ impl Op {
             Op::HostsWrite { content } => validate_hosts(content),
             Op::HardeningRun { action } => crate::hardening::validate_action(action),
             Op::HardeningRollback { snapshot } => validate_rollback(snapshot),
+            Op::FirewallWfpStatus | Op::FirewallWfpReset => Ok(()),
+            Op::FirewallWfpBlock { spec } | Op::FirewallWfpUnblock { spec } => {
+                crate::firewall::wfp::validate(spec)?;
+                if let Some(note) = spec.note.as_deref() {
+                    // The note ends up in the filter's display name, which the
+                    // BFE holds and `netsh` prints: keep it a word, not a place
+                    // to smuggle a sentence (or a newline) into the machine's
+                    // filtering table.
+                    if note.len() > 40
+                        || !note
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == ' ' || c == '_')
+                    {
+                        bail!(
+                            "a filter note is at most 40 letters, digits, spaces, dashes or \
+                             underscores, not {note:?}"
+                        );
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }

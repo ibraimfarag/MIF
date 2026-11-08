@@ -27,6 +27,16 @@ script passthrough: a bug or a confused caller can only ask for one of these.
 | `hosts.write` | `{content}` | replaces the managed `# BEGIN MICS-IDS` section (the caller takes the snapshot **before** sending) | restore that snapshot |
 | `hardening.run` | `{action}` | one of `pua_protection`, `smbv1_off`, `rdp_off`, `uac_on`, `defender_scan_quick` | `hardening.rollback` with the snapshot |
 | `hardening.rollback` | `{snapshot}` | re-applies a previous state | — |
+| `firewall.wfp.status` | — | nothing; reads MI CS' WFP provider, sublayer and filters | — |
+| `firewall.wfp.block` | `{spec: {app?, port?, protocol?, note?}}` | one persistent `MICS-` filter in the BFE (creates the provider and sublayer on first use) | `firewall.wfp.unblock` with the same spec |
+| `firewall.wfp.unblock` | `{spec}` (same shape) | removes that one filter | `firewall.wfp.block` |
+| `firewall.wfp.reset` | — | removes **every** `MICS-` filter, then the sublayer and the provider | — |
+
+The four `firewall.wfp.*` ops were added by D-042 (register section 0.6 row 17,
+slice a). They are the only ops that name no rule and no path for the machine to
+delete: `reset` addresses our own provider key, so it cannot be pointed at
+anything Windows or another product owns. A spec needs an application or a
+remote port (`validate`), so the set cannot express "block everything".
 
 Every op names its effect on the machine; nothing is implicit, nothing is
 "best effort and hope".
@@ -68,6 +78,15 @@ a UI request.
   `Set-MpPreference -PUAProtection 0|1|2|enabled|disabled`. Keys must be absolute
   `HKLM\` paths and may not walk out of their hive. A snapshot that cannot be
   expressed in those shapes is a bug, not something to run.
+- `firewall.wfp.block` / `firewall.wfp.unblock` — the spec must name an
+  application or a remote port (so "filter everything" is not expressible), a
+  named application must be a path of ≤ 1024 characters without a quote,
+  newline or NUL, a port must be above zero, a protocol must be 6 (TCP) or 17
+  (UDP) and needs a remote port — those are the only two this product blocks —
+  and a `note` is at most 40 characters of letters, digits, spaces, `-` or `_`,
+  because it ends up in the filter's display name, which the BFE stores and
+  `netsh` prints. The engine applies the same `validate` before the call is put
+  on the wire, so both sides refuse the same specs.
 
 The helper also refuses to pretend: run without an elevated token and the
 privileged ops answer with *"the privileged helper is running without an
@@ -87,6 +106,10 @@ work — so a crash mid-op still leaves the intent on disk (`security` rule 6 in
 - Payloads are never logged whole: `hosts.write` records `bytes=`, `lines=` and a
   truncated `sha256=` (`dab82ccbcffeb900`), which proves *what* was sent without
   copying a document that can contain the machine's name resolution.
+- `firewall.wfp.block` and `firewall.wfp.unblock` record the filter's display
+  name and its key — `filter=MICS-setup.exe port 443 protocol 6 note guard
+  key=B051BA44-...` — never the directory the application sits in, so the log
+  says what the machine now enforces without copying a user's paths.
 - `phase=note` lines record service start/stop and install/uninstall.
 - Rotated at 2 MiB to `priv.1.log`.
 
@@ -213,6 +236,7 @@ Observed on this machine (unelevated, 2026-10-30):
 | `{"op":"hardening.run","action":"smbv1_off"}` | refused: no elevated token |
 | `{"op":"hosts.write","content":"no marker here"}` | refused: missing MI CS marker |
 | `{"op":"firewall.add_rule","rule":{"name":"x","direction":"sideways","action":"block"}}` | refused: direction must be `in` or `out` |
+| `{"op":"firewall.wfp.status"}` against a helper installed before D-042 | refused: `unknown variant firewall.wfp.status, expected one of ping, version, …, hardening.rollback` — the installed helper is older than the engine; reinstall it from Settings → Engine (measured 2026-11-08 on this machine) |
 | `{"op":"shell.exec","cmd":"whoami"}` | refused: unknown variant, lists the allowed ops |
 | `helper-status --json` while `helper-console` runs | `reachable:true, version:"0.1.0", elevated:false` |
 

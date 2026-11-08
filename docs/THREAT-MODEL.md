@@ -127,6 +127,16 @@ stops the pipe from being a "write any file / run anything as SYSTEM" primitive
 (AP-1, AP-2). `MICSHelper` refuses to act at all when it is running without an
 elevated token.
 
+Since D-042 the set also carries four `firewall.wfp.*` operations, which write MI CS'
+own objects into the filtering engine: a spec is validated on both sides of the pipe
+(it must name an application or a port, so "filter everything" is not expressible; the
+note that lands in the BFE's display name is 40 characters of a safe alphabet), the
+filter key is derived from the spec rather than supplied by the caller, and
+`firewall.wfp.reset` addresses **our own provider key** — so the op set still cannot be
+pointed at an object Windows or another product owns. The helper's token and the
+per-user pipe ACL are unchanged, and the engine holds no WFP privilege of its own: it
+asks, the helper writes.
+
 ### B5 — Elevation
 
 One UAC prompt, at helper installation (D-007). The UI stays `asInvoker`; when an

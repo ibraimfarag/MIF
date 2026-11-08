@@ -31,6 +31,8 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::IEnumVARIANT;
 use windows::Win32::System::Variant::VARIANT;
 
+pub mod wfp;
+
 /// Every rule the engine creates starts with this, so list and remove only ever
 /// see MI CS' own rules.
 pub const RULE_PREFIX: &str = "MICS-";

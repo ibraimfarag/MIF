@@ -2119,3 +2119,101 @@ The engine half of the handover *is* measured here, live, as above.
 **Closes** §0.6 row 16. **Does not commit us to:** a Win32 single-instance mutex, scanning a
 whole multi-selection, a shell extension (`IExplorerCommand`), Windows 11's top-level menu
 placement, or an "Open with" entry — the verb is one entry that scans.
+
+## D-042 — MI CS gets its own layer in the filtering engine, not a driver
+
+**Context.** §0.6 row 17 measured what existed on 2026-11-08: `MICS-*` blocks live in the
+**Windows Firewall's rule table** (`INetFwPolicy2`/`INetFwRule`), which the engine stops
+owning the moment it stops — the rules persist and Windows enforces them, but they are
+Windows' objects, in Windows' namespace, indistinguishable from a rule a user or another
+product wrote (`MICS-` is a naming convention, not a boundary). The row asked for MI CS' own
+enforcement layer: WFP persistent filters under a **provider and sublayer MI CS owns**, the
+way `netsh wfp` and every filtering product describe them. The alternatives the register
+weighed — WinDivert/Mullvad-Lib or a driver of our own, and the legacy `netfilter2.sys` —
+mean shipping kernel code and a WHQL-signed binary: more to sign, more to get wrong, and a
+known-bad driver in the family tree. WFP is the supported path, and it needs no driver.
+
+**Decision.** Slice (a): a **provider, a sublayer and persistent filters owned by MI CS**,
+written only through the helper (D-007), with the same prefix and the same undo story as the
+firewall rules. Five parts:
+
+1. **The objects** (`engine\src\firewall\wfp.rs`, new). A provider keyed
+   `{6D494353-0001-4D49-9B43-534355425331}` named `MI CS` and a sublayer keyed
+   `{6D494353-0002-…}` named `MI CS real-time filter`, both persistent in the BFE store and
+   stable forever, so a second install finds the same objects instead of a parallel set.
+   Filters are added with `FWPM_FILTER_FLAG_PERSISTENT` at the ALE connect layers
+   (`FWPM_LAYER_ALE_AUTH_CONNECT_V4` and `_V6` — connection time, both address families),
+   action `FWP_ACTION_BLOCK`, under our sublayer (weight `0x7fff`, the highest value the
+   API's own examples use for a sublayer that has to be consulted first), with one
+   condition: the application id and/or the remote port.
+2. **The key is derived from the spec**, not rolled: `sha256` over the canonical fields, with
+   the RFC 4122 version/variant bits set, and the V6 filter's key differs by one bit. Asking
+   for the same block twice edits the same filter instead of adding a second one, and
+   removing it needs no state we could lose between runs.
+3. **Four ops, no more** (D-007 amendment): `firewall.wfp.status`, `firewall.wfp.block`,
+   `firewall.wfp.unblock`, `firewall.wfp.reset`. The set is still a closed enum and the
+   payload is still data — a spec — that the helper validates, not a command it interprets.
+   `reset` names **our provider key**, never a filter name, so it cannot delete an object
+   Windows or another product owns.
+4. **A block is verified before it is reported.** `block_now` reads the filter list back from
+   the BFE and fails unless the new filter is in it; the helper reports `added`, `key` and
+   the resulting filter count, and the audit line carries the filter's display name and key —
+   never the directory the application sits in.
+5. **Four methods on the dispatcher**: `fw.wfp.status`, `fw.wfp.block`, `fw.wfp.unblock`,
+   `fw.wfp.reset` (72 registered now), routed through `WfpManager`, which writes directly
+   when the process is elevated and through the helper when it is not — the same split as
+   `FirewallManager`.
+
+**What it costs, stated plainly.** A persistent filter is enforced by the BFE with MI CS not
+running at all, which is the point of the row; it is also **not a kernel driver** and does not
+pretend to be one. Traffic that never reaches the ALE layers for a named application — kernel
+mode, raw sockets, a filter in a higher-weight sublayer, a callout that terminates a
+connection before ours sees it — is outside what this slice covers. Blocking *by application*
+still means the path the user gave us, exactly like a firewall rule: the same binary reached
+through a renamed copy is a different filter. And the unelevated engine cannot read the
+BFE at all, so `fw.wfp.status` answers `needs_elevation: true` **with the reason** rather
+than showing an empty list — "0 filters" and "cannot look" are different facts and the UI
+must not confuse them.
+
+**Measured.** Twelve new unit tests: eight in `engine\src\firewall\wfp.rs` — the canonical
+name keeps its prefix and says what it covers, a spec with nothing in it is refused, a
+protocol without a port is refused, a path that cannot be a path is refused, the same block
+has the same key, a known spec keeps its measured key
+(`B051BA44-F5BF-454C-8D09-B8F1F8D5680E`, so a key cannot move between versions), the two
+layers get two keys and a well-formed GUID (RFC 4122 version 4, variant `10`), and — on this
+machine, unelevated — **the BFE opens and refuses the write**: `FwpmEngineOpen0` succeeds,
+`FwpmProviderAdd0` answers `0x80070005 Access is denied`, and the code names that as
+`needs_elevation`. Four more in `engine\src\tests.rs` — the four ops are in the closed set
+and a made-up one is not, a spec with no target and a note with a newline or 41 characters
+are refused before the wire, the audit line carries the filter name and key but not the
+folder, and the RPC params become a spec or a refusal with the same gate. `cargo test` is
+**174** (162 before). `scripts\verify-wfp.ps1` (new) measured the live surface on this
+machine, unelevated, against the debug engine: **PASS, 7 checks, 3 skips, 0 failures** —
+`fw.wfp.status` answered `sublayer=false filters=0 needs_elevation=true` with the helper's
+own refusal as `detail`, `fw.wfp.block` was refused **with the reason**
+(`unknown variant firewall.wfp.block, expected one of ping, version, …, hardening.rollback`)
+instead of the generic "method failed", and the three write checks skipped: this shell is
+unelevated but a `MICSHelper` service *is* running on this machine, and the **installed
+helper predates this decision** — reinstalling it from Settings → Engine is what makes the
+write path reachable. The RPC contract ran against the same binary: **86 cases, 0 failed**,
+with the four new methods answering in their documented shape (`status` an object, the three
+writes a refusal error), and `qa/methods.json` carries them; `qa/report.md`/`.html` were
+regenerated (72 methods, 107 controls).
+
+**Not measured, and the row stays `[~]`.** No filter was actually persisted on a real
+machine in this session: that needs an administrator (an elevated probe run, or the helper
+reinstalled), and neither was available here. So these four claims are **unproven**: that a
+created filter blocks a real connection, that our sublayer's weight (`0x7fff`) really puts
+our block in front of the built-in firewall's permit, that the filter survives a reboot (the
+BFE persistent store), and that it still blocks with MI CS not running.
+`scripts\verify-wfp.ps1` is written to measure exactly those — parts 2–4 do the write, read
+it back through `netsh wfp show state` and `netsh wfp show filters`, check the action is
+Block, then remove it and ask Windows again — and it skips loud rather than passing when it
+cannot write. Run it elevated (or with a reinstalled helper) and the skips become the row's
+remaining evidence.
+
+**Advances** §0.6 row 17 (slice a), which stays `[~]` until the writes are measured on a real
+machine. **Does not commit us to:** a kernel driver, WinDivert or Mullvad-Lib, DNS or name
+resolution interception, stateful callouts or the stream layer, per-connection state, blocking
+by package SID, or any UI surface of its own — this slice is the enforcement layer the rest of
+the product can now build on.

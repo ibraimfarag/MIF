@@ -73,6 +73,39 @@ pub(crate) fn readonly_hint(e: &anyhow::Error) -> Option<String> {
     readonly.then(crate::storage::sqlite::readonly_hint)
 }
 
+/// The filter a `fw.wfp.*` call asks about, read from the request params. A
+/// spec with neither an application nor a port is refused here, in front of the
+/// privilege split, so the caller gets the same answer either way.
+pub(crate) fn filter_spec(req: &JsonRpcRequest) -> Option<crate::firewall::wfp::FilterSpec> {
+    let params = req.params.as_ref()?;
+    let spec = crate::firewall::wfp::FilterSpec {
+        app: params
+            .get("app")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|app| !app.is_empty())
+            .map(String::from),
+        port: params
+            .get("port")
+            .and_then(|v| v.as_u64())
+            .and_then(|p| u16::try_from(p).ok()),
+        protocol: params
+            .get("protocol")
+            .and_then(|v| v.as_u64())
+            .and_then(|p| u8::try_from(p).ok()),
+        note: params
+            .get("note")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|note| !note.is_empty())
+            .map(String::from),
+    };
+    // The same gate the helper applies, so a spec that could never be written
+    // is refused before it is put on the wire.
+    crate::firewall::wfp::validate(&spec).ok()?;
+    Some(spec)
+}
+
 impl Dispatcher {
     pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
@@ -301,6 +334,56 @@ impl Dispatcher {
                     }
                 }
             }
+            // MI CS' own WFP objects (register section 0.6 row 17, slice a). The
+            // writes need an administrator, so they go through the helper; the
+            // status is answered honestly when nothing can read the BFE at all.
+            "fw.wfp.status" => match crate::firewall::wfp::WfpManager::status().await {
+                Ok(status) => Some(json!(status)),
+                Err(e) => {
+                    error!("fw.wfp.status failed: {e:#}");
+                    return detailed_error(req, "fw.wfp.status", e);
+                }
+            },
+            "fw.wfp.block" => {
+                let Some(spec) = filter_spec(&req) else {
+                    return error_response(req, "missing app or port to block");
+                };
+                match crate::firewall::wfp::WfpManager::block(&spec).await {
+                    Ok(outcome) => Some(json!({
+                        "status": "blocked",
+                        "key": outcome.key,
+                        "added": outcome.added,
+                        "filters": outcome.filters,
+                    })),
+                    Err(e) => {
+                        error!("fw.wfp.block failed: {e:#}");
+                        return detailed_error(req, "fw.wfp.block", e);
+                    }
+                }
+            }
+            "fw.wfp.unblock" => {
+                let Some(spec) = filter_spec(&req) else {
+                    return error_response(req, "missing app or port to unblock");
+                };
+                match crate::firewall::wfp::WfpManager::unblock(&spec).await {
+                    Ok(outcome) => Some(json!({
+                        "status": "unblocked",
+                        "removed": outcome.removed,
+                        "filters": outcome.filters,
+                    })),
+                    Err(e) => {
+                        error!("fw.wfp.unblock failed: {e:#}");
+                        return detailed_error(req, "fw.wfp.unblock", e);
+                    }
+                }
+            }
+            "fw.wfp.reset" => match crate::firewall::wfp::WfpManager::reset().await {
+                Ok(removed) => Some(json!({"status": "reset", "removed": removed})),
+                Err(e) => {
+                    error!("fw.wfp.reset failed: {e:#}");
+                    return detailed_error(req, "fw.wfp.reset", e);
+                }
+            },
             // A second launch, and the Explorer verb's `--scan` (D-041): the
             // window that is already open comes forward, scanning the handed
             // over path when there is one. `delivered` is the caller's answer —

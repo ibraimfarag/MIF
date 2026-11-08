@@ -386,6 +386,34 @@
       "note": "Same refusal contract as apply."
     },
     {
+      "method": "fw.wfp.status",
+      "class": "read",
+      "params": null,
+      "expect": "object",
+      "note": "Reads MI CS' WFP provider, sublayer and filters; unelevated without a helper it answers needs_elevation=true with the reason, not an empty list."
+    },
+    {
+      "method": "fw.wfp.block",
+      "class": "sandbox",
+      "params": { "app": "C:\\Windows\\System32\\notepad.exe", "port": 65000, "protocol": 6, "note": "qa" },
+      "expect": "error",
+      "note": "A persistent filter needs an administrator: unelevated the call is refused with the reason (D-007/D-042). The refusal path is what runs in QA; the write itself is measured by scripts/verify-wfp.ps1 in an elevated shell."
+    },
+    {
+      "method": "fw.wfp.unblock",
+      "class": "sandbox",
+      "params": { "app": "C:\\Windows\\System32\\notepad.exe", "port": 65000, "protocol": 6, "note": "qa" },
+      "expect": "error",
+      "note": "Same refusal contract as block, and it names no filter the machine could delete by accident."
+    },
+    {
+      "method": "fw.wfp.reset",
+      "class": "sandbox",
+      "params": null,
+      "expect": "error",
+      "note": "The undo needs an administrator like the write; the helper addresses MI CS' own provider key only."
+    },
+    {
       "method": "report.export",
       "class": "sandbox",
       "params": null,

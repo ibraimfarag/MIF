@@ -33,6 +33,7 @@ so they keep their own names. This sheet's section numbers (§2 scanner, §3 net
 | L4 scanner | on-demand static analysis of files | engine job | no | known hashes (IOC feed) + YARA rules, over the tree you point it at | only through quarantine (the file is moved); never pre-execution |
 | L2 IDS | DNS-name sinkhole in the hosts file | helper applies, every app consumes | yes (helper) | nothing — it is a pure block | listed domains resolve to `0.0.0.0` |
 | L1 firewall | Windows Firewall API (`INetFwPolicy2`) rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
+| L1 filtering engine (WFP) | MI CS' own provider, sublayer and persistent filters in the Base Filtering Engine | helper (or the engine when it is elevated) | yes (helper) | nothing | a persistent per-application/port `FWP_ACTION_BLOCK` at the ALE connect layers, enforced by the BFE with MI CS not running — **written and unit-tested 2026-11-08 (D-042), not yet measured on a real connection (`scripts\verify-wfp.ps1` skips the write checks unelevated)** |
 | L3 guard | process-start rules (ETW, or a 2 s poll unelevated) | engine | ETW yes, poll no | process starts matching JSON rules (image, parent, command line) | kills the process tree for rules marked `kill` — after the start |
 | L3 canaries | decoy files | engine poll | no | decoys whose mtime/size changed | nothing |
 | L3 correlator + noise learner | analysis over guard events | engine | no | kill-chain grouping; mute suggestions for events you keep dismissing | nothing |
@@ -143,6 +144,31 @@ someone else adds. Country blocking is **IPv4-only** and offline-first: if no
 `<CC>.cidr` file is installed, the request is refused instead of guessing (D-012).
 Default-deny outbound is a blunt instrument by design — it breaks whatever the user
 did not allow.
+
+### 3.3 The filtering engine (`firewall/wfp.rs`, D-042)
+
+**Sees.** MI CS' own objects in the Base Filtering Engine: the provider
+`{6D494353-0001-…}`, the sublayer `{6D494353-0002-…}` and every filter under them,
+read back through `FwpmFilterEnumByProvider0`. Nothing outside that provider is
+enumerated, and an unelevated engine with no helper cannot read the BFE at all — it
+says `needs_elevation: true` with the reason instead of showing an empty list.
+
+**Blocks.** One persistent `FWP_ACTION_BLOCK` per application and/or remote port, at
+`ALE_AUTH_CONNECT_V4`/`_V6` (connection time, both families), added only through the
+helper (D-007). The filter is written with `FWPM_FILTER_FLAG_PERSISTENT`, so the BFE
+enforces it with MI CS not running — which is the whole point of having our own
+sublayer instead of a Windows Firewall rule: the objects are ours, `MICS-` names them,
+and `reset` addresses our provider key, so nothing else on the machine can be deleted
+by it. The engine reads the filter list back before reporting a block, and the audit
+line records the display name and key but never the directory the application sits in.
+
+**Misses.** This is a *usermode* filter, not a driver: it decides at the ALE layers
+for the application path it was given, so traffic that never reaches them — kernel
+mode, raw sockets, a callout in a heavier sublayer, or the same binary reached through
+a renamed copy — is outside it. There is no live connection feed, no one-click block
+from the UI, and no alert when someone deletes our sublayer: those are §0.6 row 17
+slices (b) and (c). And the write path itself is **not yet measured on a real
+connection**: `scripts\verify-wfp.ps1` needs an administrator (D-042).
 
 ## 4. L3 — process guard, canaries, correlation
 
@@ -308,3 +334,4 @@ administrator can delete it (F-10).
 | A decoy *read* is detected, and what the decoys cover is a measurement | `scripts\verify-canary.ps1` (20 checks, PASS, 2026-11-05) against a real engine on a private pipe: a decoy MI CS had just written is settled silently inside the 90 s window (and the log records it), a pre-existing decoy raises HIGH `canary_read` with its size and SHA-256 unchanged, one appended byte raises CRITICAL `canary_triggered`, fifty metadata queries move no last-access time and raise nothing, and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell — including that the verdict names the decoys' own folder |
 | Reading and writing are told apart in one place | the six `guard::canary::tests` cases over `classify` (untouched, read-only, read-that-also-writes, deleted, a volume without atime, and the probe leaving nothing behind) |
 | What the shipped detection pack *catches*, not that it loads | `scripts\verify-rules.ps1` (**35 checks, PASS, 2026-11-05**) scans the 9 vectors in `engine\testdata\detection` with the pack a package ships and requires each one to be caught under the rule it was written for, the clean control to stay silent, and every declared rule to be either caught or named as unreachable — plus the same table as a unit test (`scanner::yara_engine::tests`, 4 cases), which is what found `Malicious_Macro_AutoOpen` comparing the zip magic against `"KP"`. `verify-release.ps1` runs the probe against the packaged pack with `-InPlace`, so the artifact's own `rules\` is what catches the vectors |
+| MI CS' own WFP objects exist, and writing them needs an administrator | `firewall\wfp`'s 8 unit tests: the canonical name, four refusals in `validate`, one spec → one derived key, a known spec → the measured key `B051BA44-F5BF-454C-8D09-B8F1F8D5680E`, two layers → two version-4 GUIDs — and, live on this machine, `FwpmEngineOpen0` succeeding unelevated while `FwpmProviderAdd0` answers `0x80070005`, which the code names as `needs_elevation`. `scripts\verify-wfp.ps1` measured the live surface unelevated (**PASS, 7 checks, 3 skipped**): `fw.wfp.status` answered `sublayer=false filters=0 needs_elevation=true` with the running helper's own refusal as `detail`. **Not measured here:** an actual persistent filter, its effect on a connection, and its survival of a reboot — the three checks the probe skips until it runs with an administrator (D-042) |

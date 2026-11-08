@@ -560,9 +560,155 @@ mod tests {
         );
     }
 
+    /// The WFP ops are part of the closed set (D-007, amended by D-042): four
+    /// named tags, no "add any filter" surface, and the spec travels as data the
+    /// helper validates rather than as a command it interprets.
     #[test]
-    fn hosts_documents_are_shape_checked() {
-        use crate::privileged::validate_hosts;
+    fn the_wfp_ops_are_part_of_the_closed_set() {
+        use crate::firewall::wfp::FilterSpec;
+        use crate::privileged::Op;
+
+        assert!(matches!(
+            serde_json::from_str::<Op>(r#"{"op":"firewall.wfp.status"}"#).unwrap(),
+            Op::FirewallWfpStatus
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Op>(r#"{"op":"firewall.wfp.reset"}"#).unwrap(),
+            Op::FirewallWfpReset
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Op>(
+                r#"{"op":"firewall.wfp.block","spec":{"app":"C:\\app.exe","port":443,"protocol":6}}"#
+            )
+            .unwrap(),
+            Op::FirewallWfpBlock { .. }
+        ));
+        assert!(
+            serde_json::from_str::<Op>(r#"{"op":"firewall.wfp.add_any","filter":"*"}"#).is_err(),
+            "the helper does not take a filter description it did not define"
+        );
+        assert!(
+            serde_json::from_str::<Op>(r#"{"op":"wfp.block","app":"x"}"#).is_err(),
+            "nor one under a second spelling"
+        );
+
+        // A spec round-trips, so the engine and the helper agree on the wire.
+        let spec = FilterSpec {
+            app: Some("C:\\app.exe".into()),
+            port: Some(443),
+            protocol: Some(6),
+            note: Some("guard".into()),
+        };
+        let line = serde_json::to_string(&Op::FirewallWfpBlock { spec: spec.clone() }).unwrap();
+        match serde_json::from_str::<Op>(&line).unwrap() {
+            Op::FirewallWfpBlock { spec: back } => assert_eq!(back, spec),
+            other => panic!("a block op came back as {other:?}"),
+        }
+    }
+
+    /// The validation in front of the BFE: a spec that would filter everything,
+    /// or a note that would put a sentence (or a newline) into the machine's
+    /// filtering table, is refused before anything is written.
+    #[test]
+    fn a_wfp_filter_spec_is_checked_before_it_reaches_the_bfe() {
+        use crate::firewall::wfp::FilterSpec;
+        use crate::privileged::Op;
+
+        let spec = |app: Option<&str>, port: Option<u16>, note: Option<&str>| FilterSpec {
+            app: app.map(String::from),
+            port,
+            protocol: port.map(|_| 6),
+            note: note.map(String::from),
+        };
+
+        assert!(Op::FirewallWfpBlock {
+            spec: spec(None, None, None)
+        }
+        .validate()
+        .is_err());
+        assert!(Op::FirewallWfpBlock {
+            spec: spec(Some("C:\\app.exe"), Some(443), Some("guard"))
+        }
+        .validate()
+        .is_ok());
+        assert!(
+            Op::FirewallWfpBlock {
+                spec: spec(Some("C:\\app.exe"), None, Some("guard\nfirewall.wfp.reset"))
+            }
+            .validate()
+            .is_err(),
+            "a filter name is one line the machine stores, not a place for a second request"
+        );
+        assert!(Op::FirewallWfpBlock {
+            spec: spec(Some("C:\\app.exe"), None, Some(&"x".repeat(41)))
+        }
+        .validate()
+        .is_err());
+        assert!(Op::FirewallWfpUnblock {
+            spec: spec(None, Some(0), None)
+        }
+        .validate()
+        .is_err());
+    }
+
+    /// What the audit log gets: the filter's name (what it covers) and its key,
+    /// never the directory the application sits in.
+    #[test]
+    fn a_wfp_audit_line_names_the_filter_not_the_folder() {
+        use crate::firewall::wfp::{filter_key, key_text, FilterSpec};
+        use crate::privileged::Op;
+
+        let spec = FilterSpec {
+            app: Some("C:\\Users\\someone\\Downloads\\setup.exe".into()),
+            port: Some(8443),
+            protocol: Some(6),
+            note: Some("guard".into()),
+        };
+        let line = Op::FirewallWfpBlock { spec: spec.clone() }.audit_summary();
+        assert!(line.starts_with("firewall.wfp.block "), "{line}");
+        assert!(line.contains("setup.exe"), "{line}");
+        assert!(line.contains("8443"), "{line}");
+        assert!(line.contains(&key_text(&filter_key(&spec))), "{line}");
+        assert!(
+            !line.contains("someone") && !line.contains("Downloads"),
+            "the audit line carries the name, not the path: {line}"
+        );
+    }
+
+    /// The RPC parameters a `fw.wfp.*` call carries. A request with nothing to
+    /// filter is refused before the privilege split, so the caller gets the same
+    /// answer whether or not a helper is installed.
+    #[test]
+    fn wfp_rpc_params_become_a_spec_or_a_refusal() {
+        use crate::dispatcher::filter_spec;
+        use crate::rpc::JsonRpcRequest;
+        use serde_json::json;
+
+        let request = |params: serde_json::Value| JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            method: "fw.wfp.block".into(),
+            params: Some(params),
+            id: Some(json!(1)),
+        };
+
+        let spec = filter_spec(&request(json!({"app": " C:\\app.exe ", "port": 443, "protocol": 6})))
+            .expect("a spec with an application and a port");
+        assert_eq!(spec.app.as_deref(), Some("C:\\app.exe"));
+        assert_eq!(spec.port, Some(443));
+        assert_eq!(spec.protocol, Some(6));
+        assert_eq!(spec.note, None);
+
+        assert!(filter_spec(&request(json!({}))).is_none(), "nothing to filter");
+        assert!(filter_spec(&request(json!({"app": ""}))).is_none());
+        assert!(
+            filter_spec(&request(json!({"port": 70000}))).is_none(),
+            "a port that is not a port"
+        );
+        assert!(filter_spec(&request(json!({"port": 443, "protocol": 99}))).is_none());
+    }
+
+    #[test]
+    fn hosts_documents_are_shape_checked() {        use crate::privileged::validate_hosts;
         let good = "# Copyright\n127.0.0.1 localhost\n::1 localhost\n\
                     \n# BEGIN MICS-IDS (managed — do not edit)\n\
                     0.0.0.0 ads.example.com\t# inline comment\n# END MICS-IDS\n";
