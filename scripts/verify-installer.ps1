@@ -18,15 +18,20 @@
        WriteRegStr cannot write); the AUMID key and the Apps & features entry point at
        this copy; and Get-StartApps files "MI CS" under AppID MICS with no entry under
        the copy's exe path - an entry there is the exact symptom step 1 shipped, when
-       the desktop shortcut came out untagged.
+       the desktop shortcut came out untagged. The Explorer verb (D-041) is measured
+       the same way: one under `*`, one under `Directory` and one under
+       `Directory\Background`, each labelled "Scan with MI CS", carrying this copy's
+       icon and running `"<install>\mics_app.exe" --scan "%1"` - `%V` for the empty
+       space behind a folder, which is the folder itself. The menu Explorer paints
+       from those keys cannot be read from a script; the keys are the half it consumes.
     2. the helper check: scripts\check-helper-ownership.ps1 answers SAFE for this
        copy and SAFE for a service that is not there, and - when this machine's
        MICSHelper points at %LOCALAPPDATA%\MI CS - OWNED for that copy, which is the
        answer the real uninstaller acts on. A machine without the service is
        reported, not failed.
-    3. uninstall: exit 0, and the folder, both shortcuts, the AUMID key and the Apps &
-       features entry are gone, while the machine's helper definition and state and
-       the user's own copy are exactly as they were.
+    3. uninstall: exit 0, and the folder, both shortcuts, the AUMID key, the Apps &
+       features entry and all three Explorer verbs are gone, while the machine's
+       helper definition and state and the user's own copy are exactly as they were.
     4. refusal: a second build compiled with -HelperServiceKey against a synthetic
        HKCU key whose ImagePath names that copy. Since B4 the uninstaller tries to
        *remove* the service first, and this one it cannot: the key's leaf is not a
@@ -97,6 +102,13 @@ $helperKey = "HKLM\SYSTEM\CurrentControlSet\Services\MICSHelper"
 $syntheticKey = "HKCU\Software\MICS-verify-helper"
 $syntheticProvider = "HKCU:\Software\MICS-verify-helper"
 
+# Explorer's "Scan with MI CS" verb (D-041). One per thing a user can point at:
+# a file (`*`), a folder (`Directory`), and the empty space inside one
+# (`Directory\Background`, whose %V is the folder itself). The `*` key really is
+# a literal asterisk, so every read of it has to be -LiteralPath.
+$verbClasses = @("*", "Directory", "Directory\Background")
+function Get-VerbProvider([string]$class) { "HKCU:\Software\Classes\$class\shell\MICS" }
+
 $deskLnk = Join-Path $desktop "$appName.lnk"
 $smDir = Join-Path $startPrograms $appName
 $smLnk = Join-Path $smDir "$appName.lnk"
@@ -164,9 +176,11 @@ if (-not (Test-Path (Join-Path $packageDir "mics_app.exe"))) {
 
 # This probe owns the names it creates, so a pre-existing MI CS install under this
 # account would be the one it removed. Refuse instead of guessing.
-if ((Test-Path -LiteralPath $deskLnk) -or (Test-Path -LiteralPath $smDir) -or (Test-Path -LiteralPath $arpProvider)) {
+if ((Test-Path -LiteralPath $deskLnk) -or (Test-Path -LiteralPath $smDir) -or (Test-Path -LiteralPath $arpProvider) -or
+    (Test-Path -LiteralPath (Get-VerbProvider "Directory"))) {
   throw ("this account already has an '$appName' install (desktop shortcut: $(Test-Path -LiteralPath $deskLnk), " +
-    "Start-Menu folder: $(Test-Path -LiteralPath $smDir), Apps & features entry: $(Test-Path -LiteralPath $arpProvider)). " +
+    "Start-Menu folder: $(Test-Path -LiteralPath $smDir), Apps & features entry: $(Test-Path -LiteralPath $arpProvider), " +
+    "Explorer verb: $(Test-Path -LiteralPath (Get-VerbProvider 'Directory'))). " +
     "This probe installs into %TEMP% and must own those names - remove that install first or run on a clean account.")
 }
 
@@ -253,6 +267,23 @@ try {
   Note "Apps & features: $(if ($arp) { $arp.DisplayName + ' / ' + $arp.UninstallString } else { '(none)' })"
   Check ($null -ne $arp -and $arp.UninstallString -eq "`"$(Join-Path $install 'uninstall.exe')`"") "the Apps & features entry points at this copy's uninstaller"
 
+  # The Explorer verb (D-041). The menu itself cannot be read from a script, so
+  # what is proved is the half Explorer actually consumes: the keys exist under
+  # this user, and each command line is the one that hands a path to this copy.
+  # `%1` is the file or folder the user clicked; `%V` is the folder the click
+  # happened in, which is why the Background verb differs.
+  foreach ($class in $verbClasses) {
+    $provider = Get-VerbProvider $class
+    $verb = Get-ItemProperty -LiteralPath $provider -ErrorAction SilentlyContinue
+    $command = Get-ItemProperty -LiteralPath "$provider\command" -ErrorAction SilentlyContinue
+    $argument = if ($class -eq "Directory\Background") { "%V" } else { "%1" }
+    $expected = "`"$(Join-Path $install 'mics_app.exe')`" --scan `"$argument`""
+    Note "verb on '$class': [$($verb.'(default)')] -> [$($command.'(default)')]"
+    Check ($null -ne $verb -and $verb.'(default)' -eq "Scan with $appName") "the verb on '$class' is labelled 'Scan with $appName'"
+    Check ($null -ne $verb -and $verb.Icon -eq (Join-Path $install "mics_app.exe")) "the verb on '$class' carries the app's icon"
+    Check ($null -ne $command -and $command.'(default)' -eq $expected) "the verb on '$class' runs: $expected"
+  }
+
   # The Shell's own start-menu index, which is cached and refreshes a few seconds
   # after a shortcut changes. Both facts matter: the app must be filed under AppID
   # MICS, and nothing may be filed under the exe path instead (the untagged-shortcut
@@ -305,6 +336,10 @@ try {
   Check (-not (Test-Path -LiteralPath $deskLnk)) "the desktop shortcut is gone"
   Check (-not (Test-Path -LiteralPath $aumidProvider)) "the AUMID registry key is gone"
   Check (-not (Test-Path -LiteralPath $arpProvider)) "the Apps & features entry is gone"
+  foreach ($class in $verbClasses) {
+    Check (-not (Test-Path -LiteralPath (Get-VerbProvider $class))) "the Explorer verb on '$class' is gone"
+    Check (-not (Test-Path -LiteralPath "$(Get-VerbProvider $class)\command")) "its command key is gone too ('$class')"
+  }
   Check ((Get-ImagePath $helperKey) -eq $helperBefore) "the machine's helper definition is unchanged by the uninstall"
   Check ((Get-ServiceState "MICSHelper") -eq $helperStateBefore) "the machine's helper state is unchanged"
   if ($userEngineHash) {
@@ -344,6 +379,7 @@ try {
 
   Check (Test-Path -LiteralPath (Join-Path $installRefuse "mics_app.exe")) "the refused run left the program in place"
   Check (Test-Path -LiteralPath (Join-Path $installRefuse "uninstall.exe")) "the refused run left the uninstaller in place"
+  Check (Test-Path -LiteralPath (Get-VerbProvider "Directory")) "the refused run left the Explorer verb in place"
   Check (Test-Path -LiteralPath $smLnk) "the refused run left the Start-Menu shortcut in place"
   Check (Test-Path -LiteralPath $deskLnk) "the refused run left the desktop shortcut in place"
   Check (Test-Path -LiteralPath $arpProvider) "the refused run left the Apps & features entry in place"

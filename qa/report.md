@@ -12,25 +12,25 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 67 rows in `qa/methods.json` | 67 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 69 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 68 rows in `qa/methods.json` | 68 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 69 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens, 1 surface and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 107 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 25 files | 116 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 21 modules | 158 declared cases | `engine.test` step |
+| Dart tests | 26 files | 128 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Engine tests | 22 modules | 162 declared cases | `engine.test` step |
 | Pipeline steps | 12 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 67 methods
+## The pipe: 68 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
 | Class | Methods | With a case | Classified not to run |
 |---|---|---|---|
-| `desktop` | 1 | 0 | 1 |
+| `desktop` | 2 | 0 | 2 |
 | `mutating` | 22 | 12 | 10 |
 | `network` | 4 | 0 | 4 |
 | `pure` | 6 | 6 | 0 |
@@ -41,6 +41,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 
 | Method | Class | Cases | Classified not to run |
 |---|---|---|---|
+| `app.activate` | `desktop` | 0 | yes |
 | `audit.run` | `read` | 2 |  |
 | `canary.configure` | `mutating` | 1 |  |
 | `canary.deploy` | `mutating` | 0 | yes |
@@ -109,12 +110,13 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `update.download` | `network` | 0 | yes |
 | `vuln.scan.start` | `network` | 0 | yes |
 
-### The 15 methods that are classified not to run
+### The 16 methods that are classified not to run
 
 Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so "n/a" cannot pass as one.
 
 | Method | Class | Why |
 |---|---|---|
+| `app.activate` | `desktop` | raises the window that is already open on the interactive desktop |
 | `canary.deploy` | `mutating` | creates decoy files on disk |
 | `defender.scan.quick` | `mutating` | starts a real Defender quick scan of this machine |
 | `fw.default_deny.disable` | `mutating` | changes the Windows firewall profile of this machine |
@@ -209,6 +211,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/canary_status_test.dart` | 4 |
 | `test/crash_report_model_test.dart` | 3 |
 | `test/dark_contrast_audit_test.dart` | 0 |
+| `test/handoff_test.dart` | 12 |
 | `test/i18n_lint_test.dart` | 1 |
 | `test/i18n_parity_test.dart` | 6 |
 | `test/icon_test.dart` | 4 |
@@ -230,7 +233,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **116** in 25 files |
+| **total** | **128** in 26 files |
 
 ### Engine: the modules under engine/src with tests
 
@@ -238,6 +241,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 |---|---|
 | `engine/src/crash.rs` | 14 |
 | `engine/src/guard/canary.rs` | 6 |
+| `engine/src/jobs.rs` | 4 |
 | `engine/src/lifecycle.rs` | 4 |
 | `engine/src/notify/alert.rs` | 10 |
 | `engine/src/notify/sound.rs` | 2 |
@@ -257,7 +261,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/settings.rs` | 8 |
 | `engine/src/tests.rs` | 51 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **158** in 21 modules |
+| **total** | **162** in 22 modules |
 
 ## What runs where
 

@@ -2037,3 +2037,85 @@ native menu keeps working, which is what makes it a fallback rather than a lefto
 **Does not commit us to:** a second window or a second Flutter engine, tray badges or
 overlay icons, richer panel content (charts, incident lists), or removing the native menu —
 it stays the right-click path for anything the panel does not do.
+
+## D-041 — Explorer's verb hands the path to the window that is already open
+
+**Context.** §0.6 row 16 measured the hole: nothing in the tree could scan a file the user
+was looking at. There was no context-menu verb anywhere, and no way for a second launch to
+reach the process that already had a window — two MI CS processes would mean two windows
+watching one machine, each with its own engine. Windows gives the verb a *fresh process* and
+the path as an argument (`--scan "%1"`), so the argument had to travel from a process that
+must not stay alive to a window that must not start a second engine.
+
+**Decision.** The **engine is the single instance**, and the handover is one new method.
+Three parts:
+
+1. **The verb**, written by the installer and deleted by the uninstaller, under the
+   installing user's own hive: `HKCU\Software\Classes\{*,\Directory,\Directory\Background}\
+   shell\MICS`, labelled `Scan with MI CS`, carrying the installed app's icon, running
+   `"<install>\mics_app.exe" --scan "%1"` — and `--scan "%V"` for
+   `Directory\Background`, where the click is on the empty space *inside* a folder and `%V`
+   is that folder. `*` covers a file, `Directory` a folder, and all three are needed: a
+   user who right-clicks a `.pdf` and a user who right-clicks a folder are the same
+   intention. Per-user keys, written even from the per-machine install: NSIS runs the
+   elevated half with the invoking user's token still attached, which is the same reason the
+   AUMID key has always been HKCU.
+2. **`app.activate`**, the 68th method, with an optional `path`. It answers
+   `{"delivered": <bool>}`, where delivered means *another transport is attached*
+   (`subscriber_count() > 1`: the caller is a client too, so only a second one counts). When
+   it is delivered the engine raises `event` `{"type":"activate","data":{"path":...}}` to
+   every client; when it is not, nothing is raised at all — a notification nobody could hear
+   is noise, not a message.
+3. **The app's first act**, in `lib\core\ipc\handoff.dart` (new) and `lib\main.dart`: every
+   launch announces itself and reads the answer. `delivered: true` means the window that is
+   open has been handed the path, so this process ends through the D-039 quit path — and it
+   leaves the engine alone, because attaching first (`tryConnect`) means it never owned one.
+   `delivered: false` means this process *is* the window: it raises itself, records the
+   handover in `handedScanProvider`, navigates to the scanner, and the scanner starts the
+   scan (quarantine on, matching the checkbox the screen shows) and puts the handed path in
+   the path field.
+
+**What it costs, stated plainly.** Explorer paints the menu from those keys and no script can
+read the menu back, so the verb is proved as far as it can be: the keys exist under this user,
+their label, icon and command line are the ones above, and the `--scan` path they invoke is
+tested end to end against two real clients. A second launch still creates a process, attaches
+to the engine, asks, and only then closes: the window it opens for that moment is the price of
+using one pipe instead of a Win32 named mutex — and the pipe is the thing both processes
+already trust. Multi-selection is not measured: no `MultiSelectModel` is written, so what
+Explorer does with five selected files is Explorer's default and unproven. Another client that
+is not a window (a probe, a script holding the pipe) counts as a listener and would swallow a
+handover — the count is of transports, not of windows, deliberately, because a probe that can
+receive it can also report what it received. The MSIX and the portable package get **no** verb:
+they are not installed by this installer.
+
+**Measured.** `scripts\verify-handoff.ps1` (new): **PASS, 10 checks, 5.1 s**, against a real
+engine on a private pipe, using two real `NamedPipeClientStream` connections the way two app
+processes use two pipe handles — `delivered: true` with a window attached, the `event`/
+`activate` notification arriving on *that* window with the path unchanged (spaces and all),
+a notification and not a reply, a plain launch carrying a null path, `delivered: false` once
+the window closes, and nothing raised for the caller that has nobody to hand over to.
+`engine/src/jobs.rs` gained four unit tests (the handover boundary, the payload, the plain
+launch, and that the activation is not a `progress` event), and `test/handoff_test.dart`
+(new) has twelve: five for `--scan` parsing (`--scan p`, `--scan=p`, no flag, a flag with no
+path, extra arguments), six for the two halves of the handshake against `FakeEngine` — "nobody
+is here", a plain launch, a window that is handed over and does not act on its own activation,
+an engine too old to answer at all (which must still leave the user a window), an activation
+that carries a path and one that does not — including the one that matters for the row: a
+handover makes the scanner ask for exactly `{"path": ..., "quarantine": true}` and show the
+folder it came with. `flutter test` is **158** (146 before). `scripts\
+verify-installer.ps1` now asserts the verb on each of the three classes after install
+(label, icon, command line), their removal after uninstall, their survival of a refused
+uninstall, and refuses to run at all on an account that already has the verb (it must own
+what it deletes). `qa/methods.json` carries the 68th method; `qa/report.md`/`.html` were
+regenerated and `test/qa_report_test.dart` is byte-identical.
+
+**Environment limit, recorded here.** The live install half of `verify-installer.ps1` could
+not run in the session that wrote this: on that machine `Start-Process` on the freshly built
+NSIS package never returned (no process appeared, no key was written, the same for a copied
+package and for a `WaitForExit(150000)`), so the verb keys are asserted by a probe that runs
+where an install can run — a release-tier or user run — and not claimed from this session.
+The engine half of the handover *is* measured here, live, as above.
+
+**Closes** §0.6 row 16. **Does not commit us to:** a Win32 single-instance mutex, scanning a
+whole multi-selection, a shell extension (`IExplorerCommand`), Windows 11's top-level menu
+placement, or an "Open with" entry — the verb is one entry that scans.

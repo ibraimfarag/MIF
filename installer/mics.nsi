@@ -55,6 +55,16 @@ SetCompressor /SOLID lzma
 !define AUMID_KEY "Software\Classes\AppUserModelId\MICS"
 !define AUMID "MICS"
 
+; The Explorer verb (D-041): "Scan with MI CS" on a file, on a folder, and on the
+; empty space inside a folder. Explorer reads the per-user class store first, and
+; HKCU is written for the account that ran the installer (UAC keeps that user),
+; exactly like the toast AUMID above - so even the per-machine build needs no
+; extra prompt for this. The command line is the app's `--scan` entry point: one
+; path, handed to the window that is already open, or opened in a new one.
+!define SCAN_KEY "Software\Classes"
+!define SCAN_VERB "MICS"
+!define SCAN_LABEL "Scan with ${APP_NAME}"
+
 ; The privileged helper the app installs (engine\src\privileged\ops.rs,
 ; SERVICE_NAME). This installer never creates it - it only asks whose it is before
 ; removing a copy it points at. A verification build may point this elsewhere; the
@@ -191,6 +201,22 @@ Section "MI CS" SecMain
   WriteRegStr HKCU "${AUMID_KEY}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKCU "${AUMID_KEY}" "IconUri" "$INSTDIR\${APP_EXE}"
 
+  ; "Scan with MI CS" in Explorer's context menu (D-041). Three verbs, because
+  ; Windows splits the menu by what was clicked: `*` is a file, `Directory` is a
+  ; folder, and `Directory\Background` is the empty space inside one (where
+  ; Explorer substitutes %V, the folder, for the %1 a selection gives). The
+  ; label is the same text Explorer shows and the icon is the app's own; the
+  ; command is the `--scan` entry point, quoted so a path with spaces survives.
+  WriteRegStr HKCU "${SCAN_KEY}\*\shell\${SCAN_VERB}" "" "${SCAN_LABEL}"
+  WriteRegStr HKCU "${SCAN_KEY}\*\shell\${SCAN_VERB}" "Icon" "$INSTDIR\${APP_EXE}"
+  WriteRegStr HKCU "${SCAN_KEY}\*\shell\${SCAN_VERB}\command" "" '"$INSTDIR\${APP_EXE}" --scan "%1"'
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\shell\${SCAN_VERB}" "" "${SCAN_LABEL}"
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\shell\${SCAN_VERB}" "Icon" "$INSTDIR\${APP_EXE}"
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\shell\${SCAN_VERB}\command" "" '"$INSTDIR\${APP_EXE}" --scan "%1"'
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\Background\shell\${SCAN_VERB}" "" "${SCAN_LABEL}"
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\Background\shell\${SCAN_VERB}" "Icon" "$INSTDIR\${APP_EXE}"
+  WriteRegStr HKCU "${SCAN_KEY}\Directory\Background\shell\${SCAN_VERB}\command" "" '"$INSTDIR\${APP_EXE}" --scan "%V"'
+
   !ifdef TESTUSER
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${APP_NAME} ${VERSION}"
     WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
@@ -318,6 +344,12 @@ Section "Uninstall"
   RMDir "$INSTDIR"
 
   DeleteRegKey HKCU "${AUMID_KEY}"
+  ; The Explorer verbs this installer wrote, and only those: the three keys
+  ; named above, under HKCU\Software\Classes (D-041). A verb another product
+  ; wrote under its own name is not touched, and neither is `Classes` itself.
+  DeleteRegKey HKCU "${SCAN_KEY}\*\shell\${SCAN_VERB}"
+  DeleteRegKey HKCU "${SCAN_KEY}\Directory\shell\${SCAN_VERB}"
+  DeleteRegKey HKCU "${SCAN_KEY}\Directory\Background\shell\${SCAN_VERB}"
   DeleteRegKey HKCU "${UNINST_KEY}"
   !ifndef TESTUSER
     DeleteRegKey HKLM "${UNINST_KEY}"

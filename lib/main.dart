@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/audio/sound_service.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/handoff.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/router/app_router.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
@@ -12,19 +16,26 @@ import 'package:mics_app/core/window/window_corners.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-void main() {
+void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
+  // Explorer's "Scan with MI CS" verb starts this process with
+  // `--scan "<path>"` (D-041); a plain second launch carries nothing and only
+  // comes forward.
+  final scanPath = AppHandoff.scanPathFrom(args);
   // window_manager must be initialized before runApp for TitleBarStyle.hidden
   // to take effect on the first frame.
   windowManager.ensureInitialized().then((_) {
-    runApp(const ProviderScope(child: Bootstrap()));
+    runApp(ProviderScope(child: Bootstrap(scanPath: scanPath)));
   });
 }
 
 /// Boots the window (hidden title bar, rounded corners, sizing), then swaps
 /// in the real app once settings + i18n are warm.
 class Bootstrap extends ConsumerStatefulWidget {
-  const Bootstrap({super.key});
+  const Bootstrap({super.key, this.scanPath});
+
+  /// The path this launch was started to scan (`--scan`), or null.
+  final String? scanPath;
 
   @override
   ConsumerState<Bootstrap> createState() => _BootstrapState();
@@ -33,6 +44,7 @@ class Bootstrap extends ConsumerStatefulWidget {
 class _BootstrapState extends ConsumerState<Bootstrap>
     with WindowListener, TrayListener {
   bool _ready = false;
+  AppHandoff? _handoffSub;
 
   @override
   void initState() {
@@ -40,6 +52,12 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     windowManager.addListener(this);
     trayManager.addListener(this);
     _init();
+  }
+
+  @override
+  void dispose() {
+    _handoffSub?.dispose();
+    super.dispose();
   }
 
   /// The icon's right-click menu: the native fallback (D-040). It stays two
@@ -158,6 +176,47 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       } catch (_) {}
     }
     if (mounted) setState(() => _ready = true);
+    await _handoff(ipc);
+  }
+
+  /// The single-instance half of D-041: this launch either hands itself over to
+  /// the window that is already open (and ends), or it *is* that window — and
+  /// then it scans the path Explorer handed over, if there was one.
+  ///
+  /// The window is already visible by now (the splash in [build] becomes the
+  /// app), so a handover that ends this process is a window that appears and
+  /// closes; keeping that beat short is what the early `ensureRunning` above
+  /// buys: the engine is up, not spawned.
+  Future<void> _handoff(EngineIpc ipc) async {
+    final handoff = AppHandoff(ipc: ipc, onActivate: _onActivate);
+    _handoffSub = handoff;
+    // The window that answers "nobody else is here" is the one that keeps
+    // listening for later launches.
+    handoff.listen();
+    final scanPath = widget.scanPath;
+    final delivered = await handoff.announce(path: scanPath);
+    if (!mounted) return;
+    if (delivered) {
+      // Another window has it: leave without touching the engine (a second
+      // process never owns the engine it did not start).
+      await ref.read(trayPanelProvider.notifier).quit();
+      return;
+    }
+    if (scanPath != null) _onActivate(scanPath);
+  }
+
+  /// Raises this window for a handover, and shows + starts the scan when the
+  /// handover carried a path.
+  void _onActivate(String? path) {
+    if (!mounted) return;
+    unawaited(windowManager.show());
+    unawaited(windowManager.focus());
+    if (path == null) return;
+    // Absolute, so the path means what the caller typed: the engine resolves a
+    // relative one against its own directory, which is not the user's.
+    final absolute = File(path).absolute.path;
+    ref.read(handedScanProvider.notifier).handOver(absolute);
+    appRouter.go('/scanner');
   }
 
   @override

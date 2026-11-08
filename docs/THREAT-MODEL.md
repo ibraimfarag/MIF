@@ -211,6 +211,19 @@ still a claim by whoever raised the card. What the registration does not change 
 who can raise one - any process in this user's session - and nothing in the
 product trusts the label.
 
+### B11 - The Explorer verb
+
+`Scan with MI CS` is written under the installing user's own hive
+(`HKCU\Software\Classes\{*,\Directory,Directory\Background}\shell\MICS`, D-041), so
+it is a **per-user** entry: any process running as that user can rewrite the command
+line it holds, exactly as it can rewrite the AUMID key above, and the entry then runs
+with that user's rights and no more. What it can ask for is bounded the same way - it
+starts MI CS with `--scan <path>`, and the path becomes an ordinary scan request that
+the engine validates and audits like any other. Nothing privileged hangs off the verb,
+a per-machine install still writes it per user rather than for everyone, the
+uninstaller removes all three keys, and the MSIX and portable packages carry no verb at
+all because this installer is what writes it.
+
 ## 5. Attack paths we considered
 
 | # | Attempt | Outcome | Evidence |

@@ -394,6 +394,14 @@ plain Windows menu, which is what the panel is built on top of rather than inste
 leaves the engine protecting; with it off — the default — closing the window stops the
 engine with it (D-039).
 
+**Explorer's context menu** carries **Scan with MI CS** on a file, on a folder, and on
+the empty space inside a folder — the installer writes that entry for the user who
+installed it, and the uninstaller removes it (D-041). Choosing it starts a scan of what
+you clicked and shows the result in the scanner screen; if MI CS is already open, the
+window that is open comes forward and scans there instead of a second window starting.
+A portable or Store copy carries no menu entry, because it is this installer that
+writes one.
+
 ## Building from source
 
 Prerequisites: **Flutter 3.x** (Windows desktop enabled), **Rust stable** (MSVC

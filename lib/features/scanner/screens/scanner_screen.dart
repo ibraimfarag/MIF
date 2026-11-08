@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/handoff.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/theme/app_theme.dart';
 
@@ -134,11 +135,30 @@ class ScannerNotifier extends Notifier<ScannerState> {
     // Progress arrives as an engine push; the screen never polls.
     _progressSub = ipc.progressStream.listen(_onProgress);
     _eventSub = ipc.eventStream.listen(_onEvent);
+    // A handover scans on its own: the window that receives one is already
+    // open, and its scanner screen may not be built yet (D-041). Reading the
+    // current value covers "the handover arrived before this notifier existed";
+    // the listener covers every handover after it.
+    ref.listen(handedScanProvider, (_, next) => _scanHanded(next));
+    _scanHanded(ref.read(handedScanProvider));
     ref.onDispose(() {
       _progressSub?.cancel();
       _eventSub?.cancel();
     });
     return const ScannerState();
+  }
+
+  /// The last handover acted on, by identity: the same path scanned twice from
+  /// Explorer is two handovers, and a provider that has not been rebuilt must
+  /// not scan it a third time.
+  HandedScan? _handedDone;
+
+  void _scanHanded(HandedScan? handed) {
+    if (handed == null || identical(handed, _handedDone)) return;
+    _handedDone = handed;
+    // Quarantine matches the screen's default checkbox: a scan the user did not
+    // configure behaves like one they would have started by hand.
+    unawaited(scan(handed.path, true));
   }
 
   /// Re-attaches to a scan that was already running (engine restart, or a job
@@ -342,7 +362,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
   @override
   void initState() {
     super.initState();
-    _pathController.text =
+    final handed = ref.read(handedScanProvider)?.path;
+    _pathController.text = handed ??
         '${Platform.environment['USERPROFILE'] ?? ''}\\Downloads';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(scannerProvider.notifier).refreshQuarantine();
@@ -360,6 +381,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A handover (the Explorer verb, or a second launch carrying `--scan`)
+    // shows the folder it brought, not the previous one (D-041).
+    ref.listen(handedScanProvider, (_, next) {
+      if (next != null) _pathController.text = next.path;
+    });
     final st = ref.watch(scannerProvider);
     return Column(
       children: [

@@ -33,6 +33,12 @@
       "note": "The app's own quit path (D-039): the engine answers `stopping`, ends cleanly, and the app that started it does not outlive it. Only the owner of the engine sends it."
     },
     {
+      "method": "app.activate",
+      "class": "desktop",
+      "skip": "raises the window that is already open on the interactive desktop",
+      "note": "A second launch, and the Explorer verb's `--scan` handover (D-041): the running window comes forward and scans the path when one was handed over. `delivered` tells the caller whether it may end. Two real clients on one pipe are driven by scripts\\verify-handoff.ps1."
+    },
+    {
       "method": "audit.run",
       "class": "read",
       "params": null,

@@ -256,23 +256,29 @@ Open a fresh session and paste exactly this:
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-**Resume point (2026-11-08).** Working tree clean at the **tray-panel** commit — the one
-whose parent is the engine-lifetime commit (`git log -2 --oneline` names both) — and
-`scripts\pipeline.ps1 -Tier fast` green: 4 of 4, **63.0 s**, in `build\pipeline-fast.json`,
-whose `head` field names the commit as it stood before the last documentation-only edits.
-The register is **11 open rows** (1 HIGH, 3 MED, 7 LOW), and §0.6 rows 14 and 15 are **closed
-with measurements**: the engine's life is the app's (D-039), and the tray's styled surface is
-a Flutter panel inside the app's own window (D-040) — `flutter test` is **146**, the QA
-ledger is **107 controls** over **67 methods**, and the panel is swept like a screen
-(`surfaces.trayPanel`, 6 controls). **Two commits are unpushed**
-(`git rev-list --count '@{u}..HEAD'` -> 2); the sixteen before them are **on `origin/main`**
-at `067caf5`, so a single `git push` publishes both rows.
+**Resume point (2026-11-08).** Working tree clean at the **Explorer-verb** commit — the one
+whose parent chain is the engine-lifetime, tray-panel and verb commits (`git log -3 --oneline`
+names them) — and `scripts\pipeline.ps1 -Tier fast` green: 4 of 4, in
+`build\pipeline-fast.json`, whose `head` field names the commit as it stood before the last
+documentation-only edits.
+The register is **11 open rows** (1 HIGH, 3 MED, 7 LOW), and §0.6 rows 14, 15 and 16 are
+**closed with measurements**: the engine's life is the app's (D-039), the tray's styled
+surface is a Flutter panel inside the app's own window (D-040), and Explorer's `Scan with
+MI CS` verb hands a path to the window that is already open (D-041) — `flutter test` is
+**158**, the QA ledger is **107 controls** over **68 methods** (the panel still swept as
+`surfaces.trayPanel`, 6 controls). **Three commits are unpushed**
+(`git rev-list --count '@{u}..HEAD'` -> 3); the sixteen before them are **on `origin/main`**
+at `067caf5`, so a single `git push` publishes all three rows.
 
 That means: read §0 (especially **§0.6** and §0.3c) and `docs/ROADMAP.md`; **§0.6 is
 the complete list of what is left**, and a session takes one row at a time. The order
 the user set on 2026-11-08 is **rows 15–17** — the designed tray panel, "Scan with MI CS"
-in Explorer's context menu, then the real-time firewall (WFP) — and row 15 is next
-(row 14, the engine's lifetime, closed 2026-11-08). Independently: **publish `v0.1.0`** (one free click, if you are
+in Explorer's context menu, then the real-time firewall (WFP) — and **row 17 is next**
+(rows 14, 15 and 16 closed 2026-11-08). Row 17 is three slices, in order: (a) a usermode
+`FwpmFilterAdd` sublayer with persistent filters, (b) live connections with one-click block,
+(c) a tamper alert when the sublayer or its filters are removed — and its honest limit is
+already written down: a per-connection allow/block *prompt* needs a kernel callout driver,
+and `SECURITY.md` says usermode only. Independently: **publish `v0.1.0`** (one free click, if you are
 the one clicking), **هـ1** (the default update-manifest URL and a signature check before
 applying), the §0.6 row 13 remainder, or a §7 register row — each with the proof its row
 names. **Nothing in this project is
@@ -946,6 +952,10 @@ above.
 **Re-run 2026-11-08 for the engine's lifetime (D-039, §0.6 row 14): green, 4 of 4,
 60.9 s warm, then **94.6 s** once the last source edit forced the engine to be rebuilt,
 158 engine tests.**
+**Re-run 2026-11-08 for Explorer's verb (D-041, §0.6 row 16): green, 4 of 4, 66.4 s —
+warm, with `flutter test` at 158 and 162 engine tests — and separately
+`scripts\verify-handoff.ps1`, which is not part of the tier, PASS **10 checks, 0
+failures, 5.1 s** against a real engine on a private pipe.**
 
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
@@ -971,7 +981,7 @@ somebody who signs for free.
 | 13 | **The engine is the one file a rebuild cannot match** — `MICS_MANIFEST` records the SHA-256 of every other shipped file *as signed*, so a rebuild signed with another key changes that document and therefore `mics-engine.exe` (this is F-11's remaining half, and `verify-reproducible.ps1` accepts it only after proving the difference is the signature) | ✅ engineering only | a **D-025 revision** + the work | make the document cover **content** instead of signatures: inject the payload hash `Get-MicsUnsignedHash` already computes, make the engine's start-up self-check hash the same way (the certificate table, the optional-header checksum and the security directory are not the code), record in D-025 why, and then delete the "explained" verdict from `verify-reproducible.ps1` because the engine matches too |
 | 14 | ~~**The engine is not tied to the app's lifetime**~~ | ✅ | nobody | **closed 2026-11-08 (D-039)**: the app starts it as `service --parent <its own pid>`, and the engine holds a handle to that process — so a close, a crash and a Task Manager kill all end it, with the reason in its log and no crash report. A deliberate quit asks first: the new `shutdown` method answers `stopping` and only then ends, and the client does not treat that disconnect as a reason to reconnect. Closing the window quits by default; **Settings -> Protection -> "Keep running in the background"** (`close_to_tray`, off by default) is the opt-in for the old hide-to-tray behaviour. The app stops an engine only when it started it (`status.pid` against the pid it spawned), so a second MI CS that merely attached does not end protection somebody else owns. Measured: `scripts\verify-lifecycle.ps1` **19 checks, 0 skipped, 0 failures, 9.6 s** (now the pipeline's `engine.lifecycle` step), +6 engine tests (**158** total, 0 failed), the fast tier is **4 of 4, 94.6 s, 158 engine tests**, and the README's "protection survives the window" claims rewritten to what still holds |
 | 15 | ~~**The tray menu is two labels** (`Open MI CS`, `Quit`) — `tray_manager 0.5.2` builds it with `AppendMenuW`, which renders labels, separators and check marks only: no icons, no styling (measured 2026-11-08 in the plugin's `windows\tray_manager_plugin.cpp`)~~ | ✅ | nobody | **closed 2026-11-08 (D-040)**: a left click opens a Flutter panel inside the app's own window — 392×486, non-resizable, always-on-top and out of the taskbar, anchored above the notification area, closed by `Escape`/click-away/✕ — carrying live state (engine, guard, firewall default-deny, connection count) and quick actions (Open MI CS, Quit, and switches that write the same settings Settings → Protection writes); the native menu stays on the right click as the fallback. Evidence: `flutter test` **146**, `test/tray_panel_test.dart` (4 cases), and the sweep treats the panel as a surface — `surfaces.trayPanel` = **6 controls** in `qa/ui/ledger.json` |
-| 16 | **Nothing scans a file from Explorer** — there is no context-menu verb anywhere in the tree, and the app has no single-instance mutex to receive a path with | ✅ | nobody | `HKCU\Software\Classes\{*,\Directory,Directory\Background}\shell\MICS` written by the installer and removed by the uninstaller, an `--scan "<path>"` entry point that hands the path to the running window (single-instance + argument handoff), and the result shown in the scanner screen |
+| 16 | ~~**Nothing scans a file from Explorer** — there is no context-menu verb anywhere in the tree, and the app has no single-instance mutex to receive a path with~~ | ✅ | nobody | **closed 2026-11-08 (D-041)**: `HKCU\Software\Classes\{*,\Directory,Directory\Background}\shell\MICS` is written by the installer (label `Scan with MI CS`, this copy's icon, `"<install>\mics_app.exe" --scan "%1"`, `%V` for the empty space inside a folder) and deleted by the uninstaller; the new `app.activate` method (68th) answers whether another transport is attached and, when it is, raises `event`/`activate` with the handed path — so a second launch hands over and ends instead of opening a second window, and the launch that finds nobody is the window: it raises itself, navigates to the scanner, and starts the scan with the handed path shown in the path field. Measured: `scripts\verify-handoff.ps1` **10 checks, 0 failures, 5.1 s** against a real engine with two real pipe clients, +4 engine tests, `test\handoff_test.dart` **11 tests**, `verify-installer.ps1` extended with the verb keys (install, uninstall, refused uninstall). Honest limits: Explorer's rendered menu cannot be read by a script, the live install half could not run in the writing session (see D-041), multi-selection is unproven, and MSIX/portable copies get no verb |
 | 17 | **The firewall is Windows' rule list, not an enforcement engine of ours** — blocking is real and Windows-enforced, but there are no per-connection decisions, no live feed and no one-click block, and the brief's "ETW + WFP usermode" is unimplemented | ✅ | nobody | WFP in three slices: (a) a usermode `FwpmFilterAdd` sublayer — persistent filters the BFE enforces, so they outlive the engine, (b) live connections and one-click block, (c) a tamper alert when our sublayer or filters are removed; the honest limit is that an allow/block *prompt* per new connection needs a kernel callout driver, and `SECURITY.md` says usermode only |
 
 **What the 2026-11-07 acceptance run measured** (the evidence behind row 2, on the
@@ -1154,6 +1164,12 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | P6 | Full QA harness + HTML report, malware lab (later) | **the harness is done**: **د1** (the `qa/` contract harness over all 67 methods (row 14 added `shutdown`)), **د2** (every screen and control swept, ledger committed — and since D-040 the tray panel is swept the same way, as a *surface* rather than a screen) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) **ran on 2026-11-07 and is closed** — §0.6 row 2, §0.2 item 1. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **Explorer's verb hands the path to the window that is already open (D-041, §0.6 row 16) — 2026-11-08**
+  - **What was wrong.** Nothing in the tree could scan the file the user was looking at: no context-menu verb anywhere, and no way for a second MI CS process to reach the window that was already open — two processes would have meant two windows and two engines watching one machine.
+  - **What was done.** Three parts, one handover. **The verb:** `installer\mics.nsi` writes `HKCU\Software\Classes\{*,\Directory,\Directory\Background}\shell\MICS` — labelled `Scan with MI CS`, carrying this copy's icon, running `"$INSTDIR\mics_app.exe" --scan "%1"` (`%V` for `Directory\Background`, where the click is the empty space *inside* a folder) — and the uninstaller deletes all three; HKCU because NSIS keeps the invoking user's token even in the elevated half. **The method:** `app.activate` (the 68th) takes an optional `path`, answers `{"delivered": subscriber_count() > 1}` — the caller is a client itself, so only a *second* transport counts — and raises `event` `{"type":"activate","data":{"path":...}}` only when it is delivered, so the caller never reads back its own message. **The app:** `lib\core\ipc\handoff.dart` (new: `AppHandoff`, `HandedScan`, `handedScanProvider`) + `lib\main.dart` — `main(List<String> args)` now reads the arguments Windows already passed (`GetCommandLineArguments` → `set_dart_entrypoint_arguments`) for `--scan <path>`; every launch announces, `delivered: true` ends the process through the D-039 quit path (it never owned the engine — attaching first leaves `_ownsEngine == false`), and `delivered: false` means it *is* the window: raise, `appRouter.go('/scanner')`, hand the path to the scanner's notifier, which starts the scan (quarantine on, matching the checkbox) and shows the folder in the path field.
+  - **What was measured.** `scripts\verify-handoff.ps1` (new): **PASS, 10 checks, 0 failures, 5.1 s** against a real engine on a private pipe with two real `NamedPipeClientStream` clients — delivered with a window attached, the `event`/`activate` notification arriving on that window with the path unchanged, a notification and not a reply, a plain launch carrying a null path, `delivered: false` once the window closes, and nothing raised for a caller with nobody to hand over to. Engine: `cargo test jobs::` **4 of 4** new tests in `engine\src\jobs.rs`. App: `flutter analyze --fatal-infos` clean, `flutter test` **158 passing, 0 failing** (146 before), `test\handoff_test.dart` (new) **12 tests** — five for the command line, six for the handshake against `FakeEngine` (including an engine too old to answer, which must still leave the user a window) and one for the scanner asking for exactly `{"path": ..., "quarantine": true}` and showing the handed folder. QA: `qa\methods.json` row 68, `qa\report.md`/`.html` regenerated (68 methods, 107 controls), `test\qa_registry_test.dart` and `test\qa_report_test.dart` green. `scripts\verify-installer.ps1` extended: the verb on each class after install (label, icon, command line), gone after uninstall, still there after a refused uninstall, and the probe refuses to run on an account that already has the verb.
+  - **Honest limits.** Explorer paints the menu from those keys and a script cannot read the menu back, so the evidence is the keys plus the `--scan` path they invoke; the live install half of `verify-installer.ps1` could not run in this session (`Start-Process` on the NSIS package never returned on that machine — no process, no key, also for a copy and for an explicit `WaitForExit`), so the registry claims are asserted by a release-tier/user run of that probe, not from this session; multi-selection is unproven (no `MultiSelectModel` written); another pipe client that is not a window (a probe) counts as a listener and would take the handover; a second launch does create a process that briefly has no window, which is the price of using the engine as the single instance instead of a Win32 mutex; MSIX and portable copies get no verb.
 
 - **The tray's styled surface is a Flutter panel in the app's own window (D-040, §0.6 row 15) — 2026-11-08**
   - **What was wrong.** The tray icon offered two labels, `Open MI CS` and `Quit`, because `tray_manager 0.5.2` builds its menu with `AppendMenuW` — labels, separators and check marks, read in the plugin's `windows\tray_manager_plugin.cpp` — so no amount of work makes that menu "designed". The user asked for a tray surface that looks styled; the only surface that can be is Flutter's.

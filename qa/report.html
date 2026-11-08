@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>67 rows in <code>qa&#47;methods.json</code></td>
-      <td>67 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>68 rows in <code>qa&#47;methods.json</code></td>
+      <td>68 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>69 declared in the registry, 15 classified not to run</td>
+      <td>69 declared in the registry, 16 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -81,14 +81,14 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Dart tests</td>
-      <td>25 files</td>
-      <td>116 declared cases (a floor: loops add more at run time)</td>
+      <td>26 files</td>
+      <td>128 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
       <td>Engine tests</td>
-      <td>21 modules</td>
-      <td>158 declared cases</td>
+      <td>22 modules</td>
+      <td>162 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 67 methods</h2>
+<h2>The pipe: 68 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -117,9 +117,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td><code>desktop</code></td>
-      <td class="num">1</td>
+      <td class="num">2</td>
       <td class="num">0</td>
-      <td class="num">1</td>
+      <td class="num">2</td>
     </tr>
     <tr>
       <td><code>mutating</code></td>
@@ -162,6 +162,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <th>Classified not to run</th>
   </tr></thead>
   <tbody>
+    <tr>
+      <td><code>app.activate</code></td>
+      <td><code>desktop</code></td>
+      <td class="num">0</td>
+      <td>yes</td>
+    </tr>
     <tr>
       <td><code>audit.run</code></td>
       <td><code>read</code></td>
@@ -566,7 +572,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h3>The 15 methods that are classified not to run</h3>
+<h3>The 16 methods that are classified not to run</h3>
 <p>Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so &quot;n&#47;a&quot; cannot pass as one.</p>
 <table>
   <thead><tr>
@@ -575,6 +581,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <th>Why</th>
   </tr></thead>
   <tbody>
+    <tr>
+      <td><code>app.activate</code></td>
+      <td><code>desktop</code></td>
+      <td>raises the window that is already open on the interactive desktop</td>
+    </tr>
     <tr>
       <td><code>canary.deploy</code></td>
       <td><code>mutating</code></td>
@@ -899,6 +910,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>0</td>
     </tr>
     <tr>
+      <td><code>test&#47;handoff_test.dart</code></td>
+      <td>12</td>
+    </tr>
+    <tr>
       <td><code>test&#47;i18n_lint_test.dart</code></td>
       <td>1</td>
     </tr>
@@ -984,7 +999,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**116** in 25 files</td>
+      <td>**128** in 26 files</td>
     </tr>
   </tbody>
 </table>
@@ -1002,6 +1017,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>engine&#47;src&#47;guard&#47;canary.rs</code></td>
       <td>6</td>
+    </tr>
+    <tr>
+      <td><code>engine&#47;src&#47;jobs.rs</code></td>
+      <td>4</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;lifecycle.rs</code></td>
@@ -1081,7 +1100,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**158** in 21 modules</td>
+      <td>**162** in 22 modules</td>
     </tr>
   </tbody>
 </table>

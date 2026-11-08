@@ -301,6 +301,21 @@ impl Dispatcher {
                     }
                 }
             }
+            // A second launch, and the Explorer verb's `--scan` (D-041): the
+            // window that is already open comes forward, scanning the handed
+            // over path when there is one. `delivered` is the caller's answer —
+            // true means another client took it and this process has nothing to
+            // show, false means it is the window and scans the path itself.
+            "app.activate" => {
+                let path = req
+                    .params
+                    .as_ref()
+                    .and_then(|p| p.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty());
+                Some(json!({"delivered": crate::jobs::announce_activation(path)}))
+            }
             "scan.schedule" => Some(json!(crate::scanner::schedule_status())),
             "scan.start" => {
                 info!("Starting scan job of {:?}", req.params);
