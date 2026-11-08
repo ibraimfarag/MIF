@@ -216,9 +216,10 @@
 > to uninstall a copy its privileged helper still points at (`/S _?=$INSTDIR` →
 > **5**, nothing removed), and `scripts\verify-installer.ps1` proves all of it
 > end to end in **126 s** (install, measure, uninstall, refuse, restore itself). The
-> per-machine run is the one ب3 item left, and it needs one UAC click from you; the
-> helper acceptance in §0.2 item 1 and a signing certificate are the other two that
-> still need you.
+> per-machine run, the helper acceptance and the uninstall all ran on **2026-11-07**
+> (§0.2 item 1, closed — including the three privileged toggles it deliberately did not run
+> live, which nothing waits on). What still needs you is the publish click (§0.6 row 1) and
+> the answers in §0.2 items 3–5; the certificate is closed as not-purchased.
 > README is written; the app runs unelevated and was verified end-to-end on a real
 > machine.
 >
@@ -272,12 +273,12 @@ result each — and **د4 is done** (the QA report was generated, byte-gated and
 all along; only its checkbox was stale), and **ب2 is done as far as this machine
 allows** (the ARM64 engine and its test binaries build and are checked; the app
 needs an ARM64 host and nothing ARM64 was ever run). **What is left is §0.6** — read
-that table, not this history; its shape is one free publish click, one UAC-click
-acceptance run, and free engineering (a reproducible build, the update pin, the §7
+that table, not this history; its shape is one free publish click, the answers to §0.2
+items 3–5, and free engineering (a reproducible build, the update pin, the §7
 rows). **The certificate is no longer "waiting on a human"**: it is closed as
-not-purchased (D-035, §0.2 item 2), and the helper acceptance is the single UAC-click
-item — the installer creates the service, not the app (D-026). The rules that session
-must keep, all from `AGENTS.md`:
+not-purchased (D-035, §0.2 item 2), and the helper acceptance — which used to be the single
+UAC-click item — **ran on 2026-11-07** (§0.2 item 1, closed; the installer creates the
+service, not the app, D-026). The rules that session must keep, all from `AGENTS.md`:
 
 - **one small step per turn** — the user asked for work split until a single reply is
   cheap in time and tokens; do not bundle steps;
@@ -379,20 +380,25 @@ both binaries `Valid`).
 done**. What is left is no longer "small steps" — it is counted in **§0.6** (the one
 table) with the order and estimates in **`docs/ROADMAP.md`**. Short version, as of
 2026-11-07: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured; what
-remains is **publish `v0.1.0`** (a free click), **د3** (one UAC-click acceptance run on
-the per-machine installer), the free engineering (**a reproducible build**, **هـ1**'s
+remains is **publish `v0.1.0`** (a free click), the answers in §0.2 items 3–5, the free
+engineering (**a reproducible build**, **هـ1**'s
 manifest URL + signature pin, the §7 rows), and three things that are *blocked* rather
 than pending: a publicly trusted signature (not purchased — D-035), an ARM64 **app**
 (no Flutter Windows ARM64 SDK) and **ز2-د** (D-023 + the bridge endpoint).
-**Only one item still needs a human click** (§0.2 item 1); the certificate used to be
-the second and is now closed.
+**No item in §0.2 is a click away any more** — the helper acceptance ran on 2026-11-07
+(§0.2 item 1, closed) and the certificate is closed as not-purchased. What waits on you are
+answers, not runs (§0.2 items 3–5), plus the one publish click in §0.6 row 1.
 
 ### 0.2 Blocked on the user
 
 Everything below waits on a human, and nothing else in the plan does. It was
-recounted on **2026-11-07**; if an item is not here, it is not waiting on you.
+recounted on **2026-11-07** and reconciled with what actually ran on **2026-11-08**; if an
+item is not here, it is not waiting on you. **Item 1 is struck through on purpose**: it is
+the record of a run that happened, kept where the run used to be requested, not a request.
 
-1. **د3: three clicks, and the helper acceptance happens in the same session.**
+1. ~~**د3: three clicks, and the helper acceptance in the same session.**~~ — **closed
+   2026-11-07.** Its own record follows, including the slice it deliberately left
+   unexercised; nothing in it waits on you.
    The machine was measured clean on 2026-11-07: `MICSHelper` **does not exist at all**
    (`sc qc MICSHelper` → error 1060, where the 2026-11-04 note still expected a leftover
    pointing at `engine\target\debug\mics-engine.exe`), no `MICS` entry is in
@@ -436,7 +442,8 @@ recounted on **2026-11-07**; if an item is not here, it is not waiting on you.
      machine's own network path mid-run, including the session that was writing these
      docs), the SMBv1 toggle, and the hosts write. So that slice of the promise is
      still proven only by `verify-helper.ps1`'s protocol probe, not by a live toggle —
-     said here rather than glossed over.
+     said here rather than glossed over. That slice is available to take during any future
+     human session; it is **not** a request, and no row in §0.6 waits on it.
    - **click 3 (uninstall)** — ran, **one** UAC prompt, exit 0: product folder, the
      service (`sc qc MICSHelper` → 1060), the Start-Menu group, the registry row and
      the shortcuts all gone — so the helper was really removed, not refused — while
@@ -680,7 +687,7 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries **12 open rows (1 HIGH, 4 MED, 7 LOW)** out of 22 —
+`docs/TODO.md` §7 carries **13 open rows (1 HIGH, 4 MED, 8 LOW)** out of 24 —
 recounted from the table itself on 2026-11-03, after و4 closed six of them (the
 incomplete package, the merged-audit ages, the blocking `vuln.scan`, the plaintext
 keys, the guard cost, the portable caller check, the AUMID attribution) and the
@@ -692,9 +699,11 @@ The HIGH one left is the signing certificate and a published download (ب5 → �
 incomplete-package HIGH row is **closed** — `verify-release.ps1` refuses a package
 whose `rules\` went missing, measured with exit code 1.
 
-**Blocked on the user (listed in §0.2, do not plan around them):** a real signing
-certificate (ب5), and the three-operation helper acceptance in §0.2 — its install
-prompt was answered on 2026-10-31 (the service is installed, running and reachable).
+**Blocked on the user (listed in §0.2, do not plan around them):** the answers in §0.2
+items 3–5 and the one publish click in §0.6 row 1. The signing certificate is closed as
+not-purchased (D-035, D-036), and the three-operation helper acceptance is **measured** —
+it ran against the installed service on 2026-11-07 (§0.2 item 1, closed; the 2026-10-31
+prompt and the ROADMAP P1.5 row are its earlier half).
 
 ### 0.3b The approved QA and reliability track (2026-11-01)
 
@@ -809,7 +818,8 @@ large ones. Two of the three human items are settled (the VirusTotal client is
 deleted — D-019, small step 2; the shortcut name stays «MI CS» — D-020, small
 step 3, no code change) and the helper's install prompt was answered the same
 day, so what
-remains human is a certificate (§0.2/ب5) and the three-operation helper acceptance.
+remains human is the answers in §0.2 items 3–5 — the certificate is closed as
+not-purchased and the three-operation helper acceptance ran on 2026-11-07 (§0.2 item 1).
 The steps below are the same work as §0.3, split by size so a session always knows
 what "next" means.
 
@@ -866,7 +876,8 @@ what "next" means.
 **Large — where a human used to be required (and no longer money)**
 
 - ~~**د4** `qa/report.html` + CI gate~~ — **done** (the checkbox was stale; see §0.3)
-- **د3** E2E against the built installer (**needs one UAC click from you**)
+- ~~**د3** E2E against the built installer~~ — **done and measured 2026-11-07** (§0.2 item 1,
+  closed); the unexercised three toggles are noted there and nothing waits on them
 - **ب5** the certificate — **not bought, and free to obtain**: nothing is purchased
   (D-035), and the re-research of 2026-11-07 (**D-036**, `docs/SIGNING.md`) found two
   routes that sign for free — the Microsoft Store re-signing an MSIX (available today,
@@ -907,7 +918,7 @@ somebody who signs for free.
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
-| 9 | **12 open rows in the §7 register** — **1 HIGH, 4 MED, 7 LOW** out of 23 — and one of them is a **real defect the acceptance run found**: a firewall rule whose name already starts with `MICS-` is prefixed twice and can then never be removed by the name that was given | ✅ | nobody, or one measurement each | work the rows one at a time; the defect is a one-place normalization plus a harness case |
+| 9 | **13 open rows in the §7 register** — **1 HIGH, 4 MED, 8 LOW** out of 24 — and one of them is a **real defect the acceptance run found**: a firewall rule whose name already starts with `MICS-` is prefixed twice and can then never be removed by the name that was given | ✅ | nobody, or one measurement each | work the rows one at a time; the defect is a one-place normalization plus a harness case |
 | 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
@@ -1064,7 +1075,7 @@ Both tools need an engine to talk to; start one with an isolated pipe first
 Everything that can be verified without administrator rights is done, and so is
 everything that needed money — **because nothing is bought** (D-035; that is a
 constraint, not a saving). What remains is in **§0.6**, and the shape of it is: one
-free publish click, one UAC-click acceptance run, and engineering that is free
+free publish click, the answers to §0.2 items 3–5, and engineering that is free
 (reproducible builds, the update pin, the §7 rows).
 
 | Phase | Scope | State |
@@ -1088,9 +1099,29 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 | **Release** | Portable package assembled by script: engine + `rules` + app + `VERSION` + ZIP + `SHA256SUMS`, and a probe that runs the extracted copy (helper, card, own rules) | **done — this commit** |
 | P4 | Code signing (real cert), x64+ARM64, NSIS installer, SBOM/notices | **done except the certificate, which is no longer planned (D-035)**: SBOM + notices shipped (ب1a), the cost researched and kept (ب1b), the NSIS installer built and verified (ب3 + ب4, helper folded in), the ARM64 **engine** leg built and PE-checked (ب2), and signing wired so a certificate is two secrets and no code change (D-034). Left = **ب6** (publish the draft, one free click) and the free trust stack (§0.6 rows 3–4) |
 | P5 | Threat model, integrity/anti-tamper, protection-matrix doc | **done 2026-11-03**: `docs/THREAT-MODEL.md` + `docs/PROTECTION-MATRIX.md` exist and F-1…F-4 are closed with measured evidence; the integrity story closed 2026-11-03 with **ج2** (the signed manifest inside the engine, the start-up self-check and the About line/notice), **ط2** proved both halves catch a tampered copy, build hardening (**ج1**) landed with the PE measured, and the README now says what it does and does not do (**ج3**). Left: F-11's reproducible-build note, which needs a toolchain decision rather than a slice |
-| P6 | Full QA harness + HTML report, malware lab (later) | **done except د3**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) is one UAC-click session away — §0.6 row 2. The malware lab stays "later" by design |
+| P6 | Full QA harness + HTML report, malware lab (later) | **the harness is done**: **د1** (the `qa/` contract harness over all 66 methods), **د2** (every screen and control swept, ledger committed) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) **ran on 2026-11-07 and is closed** — §0.6 row 2, §0.2 item 1. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **§0.2 reconciled with what actually ran, and the register count corrected (2026-11-08)**
+  - The first item in "Blocked on the user" still read *"د3: three clicks, and the helper
+    acceptance happens in the same session"* a day after §0.6 row 2 and the ROADMAP recorded it
+    closed and measured, so the section contradicted itself: it opens by promising that
+    everything below waits on a human. The item is now struck through and kept as **the record
+    where the request used to be** — install with one prompt, `MICSHelper` created by the
+    installer inside it, `fw.rules.add`/`fw.rules.remove` over a private pipe with no GUI, the
+    uninstall with one prompt, and the installed tree's 68-of-68 self-check reporting
+    `untrusted-certificate`. The slice it deliberately did **not** run live (*Default deny
+    outbound*, the SMBv1 toggle, the hosts write — said so at the time rather than glossed over)
+    is now labelled as **not a request**: nothing in §0.6 waits on it.
+  - The register count is one number in all three places that state it (`TODO` §0.3, §0.6 row 9,
+    `ROADMAP` و): **13 open rows — 1 HIGH, 4 MED, 8 LOW — out of 24**, counted on 2026-11-08 by
+    walking §7. Three copies had drifted to 12/23, 12/22 and 12/23; the eighth LOW row is the one
+    this session added — what a user sees when the engine refuses to start at all.
+  - Every pointer that still described د3 as pending was swept: the release-lane blockquote, both
+    "what is left" summaries (§0.1 and §0.3), the P6 phase row, the 21-point list row 13, and the
+    §0.2 item 1 references in §0.5. No page now says a *run* waits on you; what waits are answers
+    (§0.2 items 3–5) and the one publish click (§0.6 row 1).
 
 - **"Trusted by a stranger's Windows" became a command with an exit code (2026-11-07, later
   again)**
@@ -3830,8 +3861,8 @@ free publish click, one UAC-click acceptance run, and engineering that is free
     calls now pass 240 s explicitly.
   - Evidence in this commit: `cargo test` 78/78 (76 + the two new), the four checks
     green, and the release rebuilt and signed. The end-to-end install with a real
-    UAC click is what §0.2 item 1 still asks for; its result gets recorded here when
-    it runs.
+    UAC click ran on **2026-11-07** — the result, including the slice it deliberately left
+    unexercised, is the record under §0.2 item 1 and the block after §0.6's table.
 
 - **What is inside the package is written down, generated and checked (ب1a)**
   - The register had a HIGH row for "no SBOM and no third-party notices", so
@@ -5120,7 +5151,7 @@ free publish click, one UAC-click acceptance run, and engineering that is free
 | 10 | README: what it does / does not + requirements | **done** — bilingual README with a capability matrix, requirements, data locations, privacy, build and troubleshooting | `README.md` |
 | 11 | x64 / x86 / ARM64 | **decided, and half-built** — x64 + ARM64; the 32-bit UI is impossible (Flutter has no 32-bit Windows desktop target); the ARM64 **engine** builds and its PE is checked (ب2), and GitHub's `windows-11-arm` runner runs its tests natively. Pending: the ARM64 **app**, because Flutter publishes no Windows ARM64 SDK — §0.6 row 6 | D-003; §0.6 |
 | 12 | Protection types | **done** — `docs/PROTECTION-MATRIX.md`: layer → sees / detects / blocks / misses, plus the evidence table (verified in small step 7) | `docs/PROTECTION-MATRIX.md` |
-| 13 | Full test walk-through with a report | **done except the installer E2E** — **د1** the `qa/` contract harness over all 66 methods, **د2** every screen and control swept with a committed ledger, **د4** the generated `qa/report.md`/`report.html` (byte-gated so the fast tier fails when it drifts). Left: **د3**, §0.6 row 2 | P6, `qa/` |
+| 13 | Full test walk-through with a report | **done, including the installer E2E (2026-11-07)** — **د1** the `qa/` contract harness over all 66 methods, **د2** every screen and control swept with a committed ledger, **d4** the generated `qa/report.md`/`report.html` (byte-gated so the fast tier fails when it drifts), and **د3** the per-machine E2E, which ran on 2026-11-07 (§0.6 row 2). Nothing in this row is left | P6, `qa/` |
 | 14 | Malware corpus for testing | **deferred** — EICAR only, and only inside a VM lab | P6 (later) |
 | 15 | Engine restart must not lose a scan | **done** — durable jobs + auto-resume, verified | `engine/src/jobs.rs` |
 | 16 | Interactive sounds + control | **done** — in-house pack, engine cue with the UI closed, UI volume/mute/DND, test button | D-004 |
