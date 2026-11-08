@@ -141,6 +141,10 @@ class AppSettings {
   final AppLang lang;
   final ThemeMode themeMode;
   final bool guardAutostart;
+  /// Closing the window hides MI CS to the tray and leaves the engine running;
+  /// off (the default) means closing the window quits the app and the engine it
+  /// started stops with it (D-039).
+  final bool closeToTray;
   final bool autoResumeScans;
   final bool dndMode;
   final int syncIntervalHours;
@@ -170,6 +174,7 @@ class AppSettings {
     this.lang = AppLang.ar,
     this.themeMode = ThemeMode.dark,
     this.guardAutostart = true,
+    this.closeToTray = false,
     this.autoResumeScans = true,
     this.dndMode = false,
     this.syncIntervalHours = 6,
@@ -206,6 +211,7 @@ class AppSettings {
         lang: AppLang.byCode(j['lang'] as String?) ?? AppLang.ar,
         themeMode: themeFromString((j['theme'] as String?) ?? 'dark'),
         guardAutostart: j['guard_autostart'] as bool? ?? true,
+        closeToTray: j['close_to_tray'] as bool? ?? false,
         autoResumeScans: j['auto_resume_scans'] as bool? ?? true,
         dndMode: j['dnd'] as bool? ?? false,
         syncIntervalHours: (j['sync_interval_hours'] as num?)?.toInt() ?? 6,
@@ -233,6 +239,7 @@ class AppSettings {
         'lang': lang.code,
         'theme': themeToString(themeMode),
         'guard_autostart': guardAutostart,
+        'close_to_tray': closeToTray,
         'auto_resume_scans': autoResumeScans,
         'dnd': dndMode,
         'sync_interval_hours': syncIntervalHours,
@@ -383,6 +390,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setGuardAutostart(bool enabled) =>
       patch({'guard_autostart': enabled});
+
+  Future<void> setCloseToTray(bool enabled) =>
+      patch({'close_to_tray': enabled});
 
   Future<void> setSyncHours(int hours) =>
       patch({'sync_interval_hours': hours.clamp(1, 168)});

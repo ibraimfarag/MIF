@@ -38,6 +38,7 @@ void main() {
     // Every documented key must be present in a full write.
     for (final key in const [
       'guard_autostart',
+      'close_to_tray',
       'auto_resume_scans',
       'nvd_api_key',
       'ioc_feed_url',
@@ -98,6 +99,16 @@ void main() {
     expect(back.toastEnabled, isFalse);
     expect(back.scanQuarantineDefault, isFalse);
     expect(back.canaryPaths, hasLength(2));
+  });
+
+  test('closing the window quits unless the user asked for the background', () {
+    // D-039: the engine's lifetime follows this switch, so its default is the
+    // one the user chose — closing the window ends both.
+    expect(const AppSettings().closeToTray, isFalse);
+    expect(AppSettings.fromEngineJson(const {}).closeToTray, isFalse);
+    final back = AppSettings.fromEngineJson(
+        const AppSettings(closeToTray: true).toEngineJson());
+    expect(back.closeToTray, isTrue);
   });
 
   test('unknown or missing keys fall back to defaults instead of throwing', () {

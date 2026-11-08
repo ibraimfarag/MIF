@@ -1916,3 +1916,60 @@ stands untouched.
 **Does not commit us to:** never shipping the `Packaged` shape (it stays the full-product
 shape for a later submission or a direct download), or to installing a helper without the
 user's consent, which D-026 forbids.
+
+## D-039 — The engine belongs to the app that started it, and ends when that app does
+
+**Context.** D-006 made the engine one long-lived process per machine, and the product
+brief said what that meant for its life: "Closing the UI -> tray; engine keeps
+protecting." So the app started `mics-engine service` *detached*, never stopped it, and
+hid to the tray on close instead of quitting. Closing MI CS therefore left
+`mics-engine.exe` running with no window anywhere that named it, and the only way to end
+it was Task Manager — an invisible process watching every new process on the machine,
+which is exactly the shape this project's threat model treats as a liability, and one the
+user cannot see, stop, or even know about. The user asked for the opposite on
+2026-11-08: "when I close the program, the engine should close and exit."
+
+**Decision.** The engine's lifetime is the app's lifetime, in three parts. (1) The app
+starts it with `service --parent <its own pid>`; the engine opens a handle to that
+process once and exits when the handle signals, so a close, a crash and a Task Manager
+kill all take the engine with them. (2) On a deliberate quit the app *asks* first —
+`shutdown`, a new whitelisted method, answers `stopping` and only then ends — so the app
+can tell "my engine is stopping" from "I lost the engine". (3) Closing the window quits
+by default; **Settings -> Protection -> "Keep running in the background"**
+(`close_to_tray`, default **false**) restores the previous behaviour by hiding to the
+tray.
+
+**Why.** A handle rather than a pid polled on a timer, because Windows does not hand a
+pid to another process while a handle to the first one is open — so "signaled" cannot be
+a recycled pid, it can only be that process ending. Asking before stopping, because a
+clean end is what keeps the engine's own bookkeeping honest; and the parent handle as the
+second path, because a process that was killed cannot ask for anything. The app stops the
+engine only when it started it: it compares `status.pid` with the pid it spawned, so a
+second MI CS that merely attached to a running engine does not end protection somebody
+else owns.
+
+**What it costs, stated plainly.** Protection lasts as long as MI CS is open, and no
+longer: the process guard, the scan schedule and the alert cards stop with the engine.
+The Windows-enforced artefacts — firewall rules, hosts entries — stay, because Windows
+enforces them without us. An engine started by something else (the autostart entry
+`service.install` writes, a terminal, a verifier) has no parent and keeps running until it
+is asked to stop, which is what makes 24/7 an explicit choice instead of an accident.
+Measured on this machine on 2026-11-08: no MI CS entry in `HKCU\...\CurrentVersion\Run`
+and no MI CS scheduled task exist, so nothing starts an engine behind the user's back
+today.
+
+**Measured.** `scripts\verify-lifecycle.ps1`, against a real engine on private pipes and a
+stand-in app process: **19 checks, 0 skipped, 0 failures, 9.6 s** — a killed app ends the
+engine within seconds with the reason in its log and no crash report; `shutdown` answers
+`stopping` before the process ends and files no crash report; an engine whose `--parent`
+was already gone ends by itself; a parentless engine keeps running until it is asked to
+stop; `service --help` lists `--parent`. Engine unit tests: 6 new cases (4 on the stop
+flag, 2 on the parent handle) in 158 passing, 0 failing.
+
+**Supersedes** one line of `MI-CS-Agent-Prompt.md` ("Closing the UI -> tray; engine keeps
+protecting") and the comment it produced in `lib\main.dart`. D-006 (one engine per
+machine) is untouched, and is what makes ownership checkable at all.
+
+**Does not commit us to:** stopping an engine this app did not start, hiding a running
+protection engine from the user, or removing the autostart entry — 24/7 protection stays
+one explicit switch away (Settings -> Engine -> Start with Windows).

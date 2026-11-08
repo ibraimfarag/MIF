@@ -102,6 +102,17 @@ impl Dispatcher {
                     "integrity": crate::selfcheck::state().state.as_str(),
                 }))
             }
+            "shutdown" => {
+                // The UI's own quit path (D-039): reply first, then end. The
+                // pipe server holds the connection open just long enough for
+                // this answer to be written, so the app knows its engine is
+                // stopping on purpose rather than losing it. Only the app that
+                // started this engine sends it (the client checks that before
+                // calling), and the parent watch is the second, harsher route
+                // to the same place when the app dies without asking.
+                crate::lifecycle::request("the app asked the engine to stop (shutdown)");
+                Some(json!({ "status": "stopping" }))
+            }
             "audit.run" => {
                 // `params.sections` runs a subset (re-check one thing after a fix);
                 // absent or empty means the full audit the dashboard shows.

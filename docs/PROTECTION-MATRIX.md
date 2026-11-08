@@ -70,7 +70,8 @@ restored or deleted. A scan never stops a process or a file from loading.
 - **Only what you point it at.** A scan is what covers a file, and there are two
   ways to get one: the button, or the **scheduled scan** (D-027) — opt-in, off by
   default, every 6..168 h over the folder in `scan_target`, and only while the
-  engine is running (the logon entry keeps it running). A scheduled run is
+  engine is running — and since D-039 the engine's life is the app's, unless
+  *Keep running in the background* is on or an autostart entry owns it. A scheduled run is
   **report-only**: it never quarantines, because nobody chose a file while it was
   running. There is still **no real-time file watching**, so a file that appears and
   is deleted between two runs is never seen — that half of the register row is open

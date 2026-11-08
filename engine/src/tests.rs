@@ -1573,7 +1573,7 @@ mod tests {
         }
         let stateful = [
             Some(crate::Commands::Serve),
-            Some(crate::Commands::Service),
+            Some(crate::Commands::Service { parent: None }),
             Some(crate::Commands::Scan {
                 path: "C:\\".into(),
                 quarantine: false,

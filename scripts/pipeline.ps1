@@ -165,6 +165,26 @@ $steps = @(
         What = 'The built engine starts and runs its own benchmark'
     },
     @{
+        Id   = 'engine.lifecycle'
+        Tier = 'full'
+        Dir  = $repo
+        Run  = {
+            # D-039's engine half, against the release binary: the engine ends
+            # when the app that started it does, answers `shutdown` before it
+            # ends, and leaves alone an engine nobody owns. It starts its own
+            # isolated engines on private pipes, so the fast tier's unit tests
+            # cannot see any of this.
+            $engineArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", (Join-Path $repo 'scripts\verify-lifecycle.ps1'))
+            if ($env:CARGO_TARGET_DIR) {
+                $engineArgs += @("-EngineExe", (Join-Path $env:CARGO_TARGET_DIR 'release\mics-engine.exe'))
+            }
+            powershell @engineArgs
+            if ($LASTEXITCODE -ne 0) { throw "verify-lifecycle.ps1 exited $LASTEXITCODE" }
+        }
+        What = 'The engine ends with the app that started it, and answers a shutdown first'
+    },
+    @{
         Id   = 'engine.contract'
         Tier = 'full'
         Dir  = $repo

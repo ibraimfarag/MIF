@@ -41,7 +41,8 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     _init();
   }
 
-  /// Closing the window hides to tray — the engine (and alerts) keep running.
+  /// The tray menu stays deliberately small until the tray panel lands: open,
+  /// and a quit that means quit — including the engine this app started.
   Future<void> _setupTray() async {
     await trayManager.setIcon('assets/icons/mics.ico');
     await trayManager.setToolTip(appDisplayName);
@@ -50,6 +51,20 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       MenuItem.separator(),
       MenuItem(key: 'quit', label: 'Quit'),
     ]));
+  }
+
+  /// Closing the window hides MI CS to the tray and leaves the engine running —
+  /// the opt-in half of D-039 (Settings → Protection). Off, which is the
+  /// default, closing the window is quitting.
+  bool get _closeToTray =>
+      ref.read(settingsProvider).value?.closeToTray ?? false;
+
+  /// Ends this app on purpose: ask the engine it started to stop, then close
+  /// the window. The engine also holds a handle to this process, so an answer
+  /// that never arrives still takes it with us.
+  Future<void> _quit() async {
+    await ref.read(engineIpcProvider).stopOwnEngine();
+    await windowManager.destroy();
   }
 
   @override
@@ -69,14 +84,17 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       windowManager.show();
       windowManager.focus();
     } else if (item.key == 'quit') {
-      windowManager.destroy();
+      _quit();
     }
   }
 
   @override
   void onWindowClose() async {
-    // Minimize to tray instead of quitting; engine keeps protecting.
-    await windowManager.hide();
+    if (_closeToTray) {
+      await windowManager.hide();
+      return;
+    }
+    await _quit();
   }
 
   @override

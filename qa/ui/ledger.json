@@ -89,6 +89,7 @@
       "SwitchListTile(Auto-quarantine detections by default)",
       "SwitchListTile(Desktop notifications)",
       "SwitchListTile(Do not disturb)",
+      "SwitchListTile(Keep running in the background)",
       "SwitchListTile(Notification sounds)",
       "SwitchListTile(Resume interrupted scans)",
       "SwitchListTile(Start the process guard with the engine)",

@@ -5,10 +5,16 @@
 //
 // Behaviour that matters to the product:
 //  * the engine is a **single** long-lived process per machine. The UI attaches
-//    to it if it is already running, otherwise it starts it detached and
-//    attaches. Quitting the UI never kills the engine;
+//    to it if it is already running, otherwise it starts it — passing this app's
+//    own pid as `--parent` — and attaches. The engine that *this* app started
+//    stops when this app does: `stopOwnEngine()` asks it to stop on the way out,
+//    and the engine also holds a handle to us, so a quit that never gets an
+//    answer (a crash, Task Manager) still takes it with us (D-039);
+//  * an engine this app only *attached* to belongs to whoever started it and is
+//    left alone: closing MI CS must not stop a protection engine that another
+//    instance — or the autostart entry — is running;
 //  * a dropped connection is retried with 1→2→5→10 s backoff and a `ping`
-//    heartbeat every 15 s;
+//    heartbeat every 15 s, except while we are deliberately stopping;
 //  * the engine's push traffic (`progress`, `event`) is exposed as streams, so
 //    screens never have to poll for scan progress.
 
@@ -46,6 +52,22 @@ class EngineIpc {
   int _restartBackoffSeconds = 1;
   bool _disposed = false;
   Future<bool>? _connecting;
+
+  /// The pid of the engine process this app started, when it started one. It is
+  /// the only thing that makes this app the engine's owner: a start that loses
+  /// the engine's single-instance race exits at once, and `status.pid` then
+  /// names somebody else's process (D-039).
+  int? _spawnedPid;
+  bool _ownershipChecked = false;
+
+  /// True when the engine this app is talking to is the one it started, and
+  /// therefore the one it may stop when it quits.
+  bool _ownsEngine = false;
+  bool get ownsEngine => _ownsEngine;
+
+  /// Set while this app is deliberately stopping the engine, so the disconnect
+  /// that follows is not mistaken for a crash worth reconnecting to.
+  bool _stopping = false;
 
   Stream<EngineState> get statusStream => _statusController.stream;
   EngineState _state = EngineState.stopped;
@@ -85,9 +107,70 @@ class EngineIpc {
 
   /// Connects to the engine, starting it if needed. Safe to call repeatedly:
   /// concurrent callers share the same in-flight attempt.
-  Future<bool> ensureRunning() {
-    if (_pipe != null) return Future.value(true);
-    return _connecting ??= _connect().whenComplete(() => _connecting = null);
+  ///
+  /// The first successful connect also settles *ownership* — whether the engine
+  /// behind the pipe is the process this app started — because that is what
+  /// decides if quitting may stop it.
+  Future<bool> ensureRunning() async {
+    if (_pipe != null) return true;
+    final pending = _connecting ??= _connect().whenComplete(() {
+      _connecting = null;
+    });
+    final ok = await pending;
+    if (ok && !_ownershipChecked) {
+      _ownershipChecked = true;
+      await _claimOwnership();
+    }
+    return ok;
+  }
+
+  /// Did the engine we are talking to turn out to be the process we started?
+  ///
+  /// `status.pid` answers it: when this app's start lost the single-instance
+  /// race the loser exited immediately and the pipe belongs to the engine that
+  /// was already running — an engine this app must not stop when it quits.
+  Future<void> _claimOwnership() async {
+    final spawned = _spawnedPid;
+    if (spawned == null) {
+      _ownsEngine = false;
+      return;
+    }
+    try {
+      final status = await request('status', null, const Duration(seconds: 5));
+      _ownsEngine =
+          status is Map && (status['pid'] as num?)?.toInt() == spawned;
+    } catch (_) {
+      // No answer, no claim: leaving somebody else's engine running is the
+      // harmless direction to be wrong in.
+      _ownsEngine = false;
+    }
+  }
+
+  /// Asks the engine **this app started** to stop, and gives it a bounded
+  /// moment to close the pipe — the engine's own proof that it exited.
+  ///
+  /// A no-op when this app only attached to an engine somebody else owns: that
+  /// engine outlives us on purpose. Bounded on purpose too: the engine holds a
+  /// handle to this process, so a shutdown that never answers still ends when
+  /// we do.
+  Future<void> stopOwnEngine(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    if (!_ownsEngine || _pipe == null || _stopping) return;
+    _stopping = true;
+    _restartTimer?.cancel();
+    _heartbeat?.cancel();
+    try {
+      await request('shutdown', null, const Duration(seconds: 2));
+    } catch (e) {
+      // The engine is stopping either way; whether it answered is not something
+      // the user needs to see while the window is closing.
+      stderr.writeln('shutdown request got no answer ($e) — the engine still exits with the app');
+    }
+    final deadline = DateTime.now().add(timeout);
+    while (_pipe != null && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    _ownsEngine = false;
   }
 
   Future<bool> _connect() async {
@@ -95,21 +178,28 @@ class EngineIpc {
     final existing = await PipeConnection.tryConnect(
       timeout: const Duration(milliseconds: 900),
     );    if (existing != null) {
+      // Somebody else's engine: attach, and leave its lifetime alone.
+      _spawnedPid = null;
+      _ownsEngine = false;
+      _ownershipChecked = true;
       _attach(existing);
       return true;
     }
 
-    // 2) Start it detached. The single-instance mutex inside the engine makes
-    //    a duplicate start harmless: the loser exits immediately.
+    // 2) Start it detached — detached so that a crash of *this* process does not
+    //    kill protection mid-operation; tying it to us is the parent watch's job
+    //    (D-039), which is deliberate and reports itself. The single-instance
+    //    mutex inside the engine makes a duplicate start harmless: the loser
+    //    exits immediately, and `status.pid` below decides who owns the pipe.
     final path = resolveEnginePath();
     if (!File(path).existsSync()) {
       _setState(EngineState.engineMissing);
       return false;
     }
     try {
-      await Process.start(
+      final spawned = await Process.start(
         path,
-        const ['service'],
+        ['service', '--parent', '$pid'],
         // Dart replaces the whole environment when `environment` is given, so
         // it must be merged with the current one: dropping it would lose
         // PROGRAMDATA (state/data path) and PATH (netsh, taskkill, reg).
@@ -118,7 +208,11 @@ class EngineIpc {
             : {...Platform.environment, ...spawnEnv},
         mode: ProcessStartMode.detached,
       );
+      _spawnedPid = spawned.pid;
+      _ownsEngine = false;
+      _ownershipChecked = false;
     } catch (_) {
+      _spawnedPid = null;
       _setState(EngineState.engineMissing);
       _scheduleRestart();
       return false;
@@ -193,7 +287,10 @@ class EngineIpc {
     }
     _pending.clear();
     _heartbeat?.cancel();
-    if (!_disposed) {
+    // A deliberate stop is not a lost engine: nothing to reconnect to, and
+    // restarting what we just asked to end would leave the process behind that
+    // D-039 exists to prevent.
+    if (!_disposed && !_stopping) {
       _setState(EngineState.reconnecting);
       _scheduleRestart();
     }

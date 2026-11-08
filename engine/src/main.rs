@@ -15,6 +15,7 @@ mod guard;
 mod ids;
 mod hardening;
 mod jobs;
+mod lifecycle;
 mod llm;
 mod notify;
 mod privileged;
@@ -45,7 +46,15 @@ enum Commands {
     /// Start the engine in serve mode (stdio JSON-RPC)
     Serve,
     /// Start the engine as a background service (Named Pipe JSON-RPC)
-    Service,
+    Service {
+        /// Process id of the app that started this engine (D-039). The engine
+        /// ends when that process does, so closing — or killing — MI CS never
+        /// leaves an engine behind. Absent for an engine nobody owns (a logon
+        /// entry, a terminal, a verifier), which then runs until it is asked to
+        /// stop.
+        #[arg(long)]
+        parent: Option<u32>,
+    },
     /// Run the full system audit and print results
     Audit {
         #[arg(short, long)]
@@ -162,7 +171,7 @@ async fn run() -> Result<()> {
     // how support tells "did it even start?" apart from "did it crash later?".
     let mode = match &cli.command {
         Some(Commands::Serve) => "serve",
-        Some(Commands::Service) => "service",
+        Some(Commands::Service { .. }) => "service",
         Some(Commands::Audit { .. }) => "audit",
         Some(Commands::Connections { .. }) => "connections",
         Some(Commands::Inventory { .. }) => "inventory",
@@ -218,7 +227,7 @@ async fn run() -> Result<()> {
     // a one-shot CLI probe is not the place to interrupt anybody.
     selfcheck::start(matches!(
         &cli.command,
-        Some(Commands::Serve) | Some(Commands::Service)
+        Some(Commands::Serve) | Some(Commands::Service { .. })
     ));
 
     match cli.command {
@@ -239,8 +248,11 @@ async fn run() -> Result<()> {
             watchdog::start_session();
             tracing::info!("Starting engine in --serve mode (stdio)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
-            // The scan schedule (D-027): off unless the user set an interval, and
-            // started here so it works with the window closed too.
+            // The scan schedule (D-027): off unless the user set an interval. It
+            // runs here (rather than in the UI) so it survives a screen being
+            // closed, and for as long as this engine lives — which, since D-039,
+            // is as long as the app that started it, unless the user asked for the
+            // background or an autostart entry owns the engine.
             scanner::start_schedule(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
             // Forward guard events as JSON-RPC notifications on stdout.
@@ -292,7 +304,7 @@ async fn run() -> Result<()> {
             // crash, so the next start must not file one.
             crash::end_session("clean");
         }
-        Some(Commands::Service) => {
+        Some(Commands::Service { parent }) => {
             let _instance = match platform::windows::single_instance::acquire() {
                 Some(g) => g,
                 None => {
@@ -304,16 +316,25 @@ async fn run() -> Result<()> {
             // See `serve`: the hang detector starts with the session and lives
             // outside the runtime it watches.
             watchdog::start_session();
+            // The app that started us owns our lifetime (D-039): when it ends —
+            // closed, crashed or killed — this engine stops. Only the instance
+            // that won the single-instance slot watches, so a second app that
+            // merely attached to a running engine cannot end it by starting a
+            // loser process of its own.
+            if let Some(pid) = parent {
+                platform::windows::parent::watch_parent(pid);
+            }
             tracing::info!("Starting engine in --service mode (Named Pipe)...");
             sync::SyncManager::start_auto_sync(tokio::runtime::Handle::current());
-            // Same schedule as `serve`: this is the mode that keeps running after
-            // the window is closed, so it is the one that makes D-027 true.
+            // Same schedule as `serve`. It fires for as long as this engine lives:
+            // the app's window (D-039) or, for an engine nobody owns, until it is
+            // asked to stop.
             scanner::start_schedule(tokio::runtime::Handle::current());
             resume_jobs_on_startup();
-            // 24/7 protection: with the service running, the guard is armed
-            // even when the UI is closed (unless the user turned it off, or a
-            // test sets MICS_NO_GUARD=1). `guard.start` from the UI is a no-op
-            // when it is already running.
+            // The guard is armed as soon as the engine serves, so protection
+            // starts with the app rather than with the first screen (unless the
+            // user turned it off, or a test sets MICS_NO_GUARD=1). `guard.start`
+            // from the UI is a no-op when it is already running.
             if std::env::var("MICS_NO_GUARD").is_err() && settings.guard_autostart {
                 guard::start_guard();
             }
@@ -335,6 +356,11 @@ async fn run() -> Result<()> {
             });
             if let Err(e) = platform::windows::pipe::run_pipe_server().await {
                 error!("Pipe server error: {e:#}");
+            }
+            // A deliberate end, not a crash — whether the app asked for it or
+            // its process simply went away. `lifecycle` holds the one reason.
+            if lifecycle::requested() {
+                tracing::info!("engine stopping: {}", lifecycle::reason());
             }
             crash::end_session("clean");
         }

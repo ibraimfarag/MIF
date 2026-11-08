@@ -196,6 +196,13 @@ pub async fn run_pipe_server() -> Result<()> {
     info!("Starting Named Pipe server on {name}");
     let mut first = true;
     loop {
+        // A stop can be asked for while no client is attached — the app that
+        // started this engine closed, or `shutdown` arrived on another
+        // connection — and then the accept below would park forever. This is
+        // the second half of that wake-up (the first is the request itself).
+        if crate::lifecycle::requested() {
+            break;
+        }
         let server = match create_instance(&name, first, attributes.as_mut()) {
             Ok(s) => {
                 first = false;
@@ -207,10 +214,18 @@ pub async fn run_pipe_server() -> Result<()> {
                 continue;
             }
         };
-        if let Err(e) = server.connect().await {
-            warn!("pipe connect failed ({e}) — retrying");
-            tokio::time::sleep(BACKOFF).await;
-            continue;
+        tokio::select! {
+            connected = server.connect() => {
+                if let Err(e) = connected {
+                    warn!("pipe connect failed ({e}) — retrying");
+                    tokio::time::sleep(BACKOFF).await;
+                    continue;
+                }
+            }
+            _ = crate::lifecycle::wait() => {
+                info!("stop requested while waiting for a client — closing the pipe");
+                break;
+            }
         }
         info!("client connected to pipe");
         tokio::spawn(async move {
@@ -219,6 +234,14 @@ pub async fn run_pipe_server() -> Result<()> {
             }
         });
     }
+    // `shutdown` is answered on the connection that asked for it, and that
+    // answer is written by a task of its own: without this pause the process
+    // can end before the caller reads "stopping" and the UI would have to treat
+    // its own deliberate shutdown as a lost connection. Bounded, local, and
+    // shorter than the client's own timeout.
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    info!("pipe server stopped");
+    Ok(())
 }
 
 async fn handle_client(stream: NamedPipeServer) -> Result<()> {

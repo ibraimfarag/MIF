@@ -39,6 +39,11 @@ pub struct Settings {
     pub theme: String,
     /// Start the real-time guard as soon as the engine starts.
     pub guard_autostart: bool,
+    /// Closing the window hides MI CS to the tray and leaves the engine running
+    /// (D-039). **Off by default**: closing the window quits the app, and the
+    /// engine it started stops with it — an engine that outlives the window is
+    /// now a choice, not the only behaviour.
+    pub close_to_tray: bool,
     /// Resume scans that were interrupted by a crash/reboot.
     pub auto_resume_scans: bool,
     /// Do-not-disturb: silence everything below CRITICAL.
@@ -78,9 +83,11 @@ pub struct Settings {
     /// Hours between automatic scans; **0 disables them** (the default: a scan
     /// that starts by itself is something the user turns on, D-027).
     ///
-    /// The engine has to be running - `--service` from the logon entry, or the
-    /// app itself - and the scan is report-only: a scheduled run never
-    /// quarantines, because nobody chose a file while it was running.
+    /// The engine has to be running: MI CS starts it and, by default, ends it
+    /// when the window closes (D-039), so a schedule only fires while the app
+    /// (or an engine the user started, e.g. the autostart entry) is up. The
+    /// scan is report-only: a scheduled run never quarantines, because nobody
+    /// chose a file while it was running.
     pub scan_interval_hours: u32,
     /// Folder that scan walks; empty = the current user's profile folder.
     pub scan_target: String,
@@ -94,6 +101,7 @@ impl Default for Settings {
             lang: "ar".into(),
             theme: "dark".into(),
             guard_autostart: true,
+            close_to_tray: false,
             auto_resume_scans: true,
             dnd: false,
             sync_interval_hours: 6,
@@ -142,6 +150,7 @@ impl Settings {
                     self.theme = v;
                 }
                 "guard_autostart" => self.guard_autostart = boolean(value, key)?,
+                "close_to_tray" => self.close_to_tray = boolean(value, key)?,
                 "auto_resume_scans" => self.auto_resume_scans = boolean(value, key)?,
                 "dnd" => self.dnd = boolean(value, key)?,
                 "sync_interval_hours" => {

@@ -115,6 +115,12 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: notifier.setGuardAutostart,
               ),
               _Switch(
+                title: context.tr('settings.closeToTray'),
+                subtitle: context.tr('settings.closeToTrayHint'),
+                value: s.closeToTray,
+                onChanged: notifier.setCloseToTray,
+              ),
+              _Switch(
                 title: context.tr('settings.autoResume'),
                 subtitle: context.tr('settings.autoResumeHint'),
                 value: s.autoResumeScans,

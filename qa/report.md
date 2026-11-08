@@ -12,26 +12,26 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 66 rows in `qa/methods.json` | 66 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 69 declared in the registry, 14 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 67 rows in `qa/methods.json` | 67 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 69 declared in the registry, 15 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
-| Controls | 100 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
+| Controls | 101 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 24 files | 110 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 19 modules | 152 declared cases | `engine.test` step |
-| Pipeline steps | 11 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
+| Dart tests | 24 files | 111 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Engine tests | 21 modules | 158 declared cases | `engine.test` step |
+| Pipeline steps | 12 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 66 methods
+## The pipe: 67 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
 | Class | Methods | With a case | Classified not to run |
 |---|---|---|---|
 | `desktop` | 1 | 0 | 1 |
-| `mutating` | 21 | 12 | 9 |
+| `mutating` | 22 | 12 | 10 |
 | `network` | 4 | 0 | 4 |
 | `pure` | 6 | 6 | 0 |
 | `read` | 24 | 24 | 0 |
@@ -100,6 +100,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `service.remove` | `mutating` | 0 | yes |
 | `settings.get` | `pure` | 1 |  |
 | `settings.set` | `sandbox` | 3 |  |
+| `shutdown` | `mutating` | 0 | yes |
 | `status` | `pure` | 1 |  |
 | `sync.now` | `network` | 0 | yes |
 | `sync.status` | `read` | 1 |  |
@@ -108,7 +109,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `update.download` | `network` | 0 | yes |
 | `vuln.scan.start` | `network` | 0 | yes |
 
-### The 14 methods that are classified not to run
+### The 15 methods that are classified not to run
 
 Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so "n/a" cannot pass as one.
 
@@ -125,11 +126,12 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `notify.test` | `desktop` | raises a real Windows toast on this machine |
 | `service.install` | `mutating` | writes an HKCU Run autostart entry |
 | `service.remove` | `mutating` | deletes the HKCU Run autostart entry |
+| `shutdown` | `mutating` | Ends the engine the harness is talking to; proved end to end by scripts\verify-lifecycle.ps1 instead. |
 | `sync.now` | `network` | fetches the configured intel feeds |
 | `update.download` | `network` | downloads the configured update manifest |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 
-## The screens: 13 screens and the shell, 100 controls
+## The screens: 13 screens and the shell, 101 controls
 
 The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with `qa/ui/ledger.json`. The ledger is a ratchet in both directions.
 
@@ -144,7 +146,7 @@ The sweep mounts each screen the way the router does, taps every control once ag
 - `screens.network` - 6 controls
 - `screens.reports` - 1 control
 - `screens.scanner` - 9 controls
-- `screens.settings` - 33 controls
+- `screens.settings` - 34 controls
 - `screens.vulns` - 2 controls
 - `shell` - 21 controls (rail, window buttons, command box)
 
@@ -220,14 +222,14 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/qa_report_test.dart` | 5 |
 | `test/sbom_test.dart` | 22 |
 | `test/settings_integrity_test.dart` | 2 |
-| `test/settings_model_test.dart` | 5 |
+| `test/settings_model_test.dart` | 6 |
 | `test/sound_assets_test.dart` | 2 |
 | `test/ui_screens_test.dart` | 7 |
 | `test/ui_shell_test.dart` | 3 |
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **110** in 24 files |
+| **total** | **111** in 24 files |
 
 ### Engine: the modules under engine/src with tests
 
@@ -235,11 +237,13 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 |---|---|
 | `engine/src/crash.rs` | 14 |
 | `engine/src/guard/canary.rs` | 6 |
+| `engine/src/lifecycle.rs` | 4 |
 | `engine/src/notify/alert.rs` | 10 |
 | `engine/src/notify/sound.rs` | 2 |
 | `engine/src/notify/toast.rs` | 4 |
 | `engine/src/platform/windows/caller.rs` | 8 |
 | `engine/src/platform/windows/integrity.rs` | 2 |
+| `engine/src/platform/windows/parent.rs` | 2 |
 | `engine/src/platform/windows/pids.rs` | 2 |
 | `engine/src/platform/windows/pipe.rs` | 3 |
 | `engine/src/platform/windows/process.rs` | 4 |
@@ -252,7 +256,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/settings.rs` | 8 |
 | `engine/src/tests.rs` | 51 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **152** in 19 modules |
+| **total** | **158** in 21 modules |
 
 ## What runs where
 
@@ -266,6 +270,7 @@ Parsed from `scripts/pipeline.ps1`, so this table cannot drift from the script a
 | `fast` | `engine.clippy` | Clippy with zero warnings allowed |
 | `full` | `engine.build` | Release build of the engine |
 | `full` | `engine.smoke` | The built engine starts and runs its own benchmark |
+| `full` | `engine.lifecycle` | The engine ends with the app that started it, and answers a shutdown first |
 | `full` | `engine.contract` | Every registered JSON-RPC method answers, or refuses, as documented |
 | `full` | `app.build` | Release build of the Windows app |
 | `release` | `opsec.verify` | The packaged files carry no build fingerprint the baseline forbids |

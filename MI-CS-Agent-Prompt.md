@@ -34,7 +34,7 @@
 
 **Product principles:**
 - **Offline-First:** all core features (audit, firewall, ETW guard, YARA, canaries, quarantine) work with zero internet. Internet only enriches intel; offline the app uses last-synced intelligence and says so.
-- **Complete System:** the engine runs 24/7 as a background service, even when the UI is closed.
+- **Complete System:** the engine runs 24/7 as a background service, even when the UI is closed. *(Superseded 2026-11-08 by D-039: the engine ends with the app that started it; 24/7 is the "keep running in the background" setting or the autostart entry.)*
 - **Smart by design:** the app doesn't just show data — it prioritizes, correlates, explains, and suggests the next action (section 7).
 - **Full transparency:** everything local in SQLite; nothing leaves the machine except explicit VT/NVD/LLM lookups.
 
@@ -63,7 +63,7 @@
 3. Admin-required operations are done by the engine via self-elevation (`ShellExecuteW runas`) on demand; the app starts unelevated.
 4. Every collector works standalone via CLI (e.g. `mics_engine.exe --audit --json`).
 5. **Platform portability rule (from day one):** all OS-specific code lives behind Rust traits (`PlatformCollectors`, `PlatformFirewall`, `PlatformGuard`, `PlatformNotify`) with a `windows/` implementation now — Linux and macOS are new implementations, not rewrites. The Flutter UI must contain ZERO OS-specific logic.
-6. Engine lifecycle: scheduled task at logon, `--service` mode, listening on the pipe. Closing the UI → tray; engine keeps protecting.
+6. Engine lifecycle: scheduled task at logon, `--service` mode, listening on the pipe. Closing the UI → tray; engine keeps protecting. *(Superseded 2026-11-08 by D-039: `--service --parent <pid>` ties the engine to the app, `shutdown` stops it deliberately, and the tray behaviour is the `close_to_tray` setting — off by default. No logon scheduled task was ever installed.)*
 
 # 3) ENVIRONMENT
 

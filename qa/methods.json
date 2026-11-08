@@ -26,6 +26,13 @@
       "note": "Build version, platform, pid, and the package's own integrity verdict (`ok` / `untrusted-certificate` / `unverified`, D-025)."
     },
     {
+      "method": "shutdown",
+      "class": "mutating",
+      "params": null,
+      "skip": "Ends the engine the harness is talking to; proved end to end by scripts\\verify-lifecycle.ps1 instead.",
+      "note": "The app's own quit path (D-039): the engine answers `stopping`, ends cleanly, and the app that started it does not outlive it. Only the owner of the engine sends it."
+    },
+    {
       "method": "audit.run",
       "class": "read",
       "params": null,
