@@ -2702,3 +2702,146 @@ kind, a beta release that does not exist yet (the beta feed answers 404, and the
 release is published under that tag), trusting a manifest because it arrived over https, or a second
 manifest format for the installer — `update.apply` replaces a portable folder, so the manifest
 describes the zip and nothing else.
+
+## D-047 — The update manifest is signed, and the engine refuses one that is not
+
+**Status:** accepted (2026-11-09)
+
+**Context.** D-046 gave the update path a compiled-in feed and closed with its own honest gap: "nothing
+verifies a signature over the manifest. The `sha256` in a manifest describes the file the same manifest
+points at, so it catches a truncated or corrupted transfer, not a hostile feed; today the only thing
+standing behind a manifest is the TLS connection that carried it." That is §0.6 row 5's second half
+(هـ1), and it is not a small gap: `releases/latest/download/update.json` is served to every install
+from a GitHub release, and a manifest is a *version, a URL and a hash* — whoever controls those bytes
+decides what a machine downloads and, through `update.apply`, what it unpacks over its own folder. Four
+facts shaped this entry:
+
+- **there is already a signing identity with a rule about it.** D-016 signs the engine and refuses to
+  call a self-signed result verified; `engine/src/platform/windows/signature.rs` already verifies an
+  Authenticode signature and reads the signer (`verify_embedded`, `SignerInfo`). What was missing was a
+  *detached* signature — a document is not a PE, and signtool will not sign one;
+- **the pin D-046 deferred to is the one D-016 already uses**: the certificate the project signs with,
+  which the shipped engine carries as its own signature. So `MICS_UPDATE_SIGNER_THUMBPRINT` is the test
+  hook for the same check, not a second trust model;
+- **the engine must not trust a chain it cannot check.** A self-signed development certificate is what
+  this project has today (§0.6 row 3, ب5): `CryptVerifyDetachedMessageSignature` with
+  `X509_ASN_ENCODING | PKCS_7_ASN_ENCODING` verifies the *signature* and hands back the signer, while
+  `WinVerifyTrust`-style chain building would refuse it — measured below;
+- **a feed that cannot be checked is worse than no feed**, because the compiled-in default points at it
+  and the failure would be silent.
+
+**Decision.**
+
+1. **The signature is detached and beside the manifest**: `update.json.sig`, the manifest's own URL plus
+   `.sig`, with a query string or fragment left where it is. The manifest format does not change — it
+   still carries only `{version, url, sha256, size, notes_en, notes_ar}` — and a feed that publishes
+   `update.json` says nothing about its own signature. `<file>.sig` is also what the release lane
+   already writes for data (`scripts\sign.ps1 -DataFile`), so one naming rule covers both ends.
+2. **PKCS#7 detached, SHA-256, certificate included (`EndCertOnly`), no chain trust.** Exactly what
+   `SignedCms.ComputeSignature` produces with a `CmsSigner`, which is the same shape OSSign and the
+   Authenticode lane produce; `verify_detached` in `signature.rs` calls
+   `CryptVerifyDetachedMessageSignature` with the message withdrawn (detached), so nothing has to
+   re-encode the bytes that were signed.
+3. **Verified before parsing, and the reason is specific.** `crate::update::check()` fetches the
+   manifest's bytes (`SyncManager::fetch_bytes`, new), fetches the signature, verifies it over those
+   bytes, and only then runs `serde_json::from_slice`. A missing signature, a signature by another key,
+   or a signature that does not verify are three different refusals with their own text; "the fetch
+   returned 404" is kept as the cause of the first, so an unpublished feed is readable as itself.
+4. **The signer is pinned, and the answer says which check happened.** `pinned_update_thumbprint()` is
+   `MICS_UPDATE_SIGNER_THUMBPRINT` if the environment sets it (the only way a probe can test a
+   certificate it minted seconds ago, AGENTS.md rule 5), else the thumbprint of the certificate over the
+   running engine, else `None`. With a pin, the signer's thumbprint must equal it. With no pin — a
+   `cargo build` has none — the signature must still verify *and* the signer's name must be the release
+   name, and the answer reports `pinned: false` rather than the same `true` a release would report.
+   `update.check` now answers with `signature`, `signer`, `signer_thumbprint` and `pinned` beside the
+   fields it already carried: an update answer has to be checkable by the person reading it (D-046).
+5. **The release lane signs with the identity that signed the binaries, and reads its own signature
+   back.** `scripts\sign.ps1` gained `-DataFile`/`-DataSignature` — the same script, so there is one
+   place that decides what "the release key" means — and `make-release.ps1` step 9b signs
+   `dist\update.json` with the `@signArgs` identity resolved at the top of the run, then proves the
+   bytes on disk decode, verify, and carry that identity's thumbprint. A build with no signing identity
+   prints that its feed is unsigned and why a shipped engine would refuse it, instead of shipping a
+   manifest that only looks publishable. The Release workflow uploads `dist/update.json.sig` with the
+   other assets (`if-no-files-found: error`), and the release notes name it.
+6. **Three corrections from checking, not from assuming.**
+   - The `Release` workflow handed `secrets.MICS_PFX` to `env: MICS_PFX`, but `make-release.ps1` reads
+     `MICS_PFX_B64` (D-034's order: `MICS_CERT_THUMBPRINT`, then `MICS_PFX_B64` + `MICS_PFX_PASSWORD`,
+     then `MICS_PFX_PATH` + `MICS_PFX_PASSWORD`, then self-signed). A donated certificate would have
+     been ignored and the release silently self-signed — which this decision makes more expensive,
+     because the *feed* would then be pinned to a self-signed key. Both legs now pass the secret's value
+     to the variable the script reads; the secret keeps its name.
+   - `scripts\verify-update.ps1` grew the four refusals *and* the two acceptances around them, and its
+     part 8 is a `SKIP` with a reason on a signed engine rather than a silent pass: the name fallback
+     can only be reached by an engine that carries no signature of its own.
+   - `docs/THREAT-MODEL.md` said twice that `update.apply` "never calls `WinVerifyTrust` on the extracted
+     binary" and that the payload half of F-3 was therefore open. It does call it: `apply()` runs
+     `signature::require_signed_by` over each extracted `mics-engine.exe` / `mics_app.exe`, which is
+     `WinVerifyTrust` plus `CN=MI CS Code Signing` (D-016). The claim had been stale since that check
+     landed. So F-3's remaining payload gap is narrower and different in kind — the check is a *subject
+     name*, not a thumbprint, so a certificate bearing that CN from any trusted CA would pass. That is
+     what this entry's pin does not fix, and the row and §B6/§B7 now say so.
+
+**Measured** (2026-11-09, unelevated shell, debug engine built from this commit, no network):
+
+- `scripts\verify-update.ps1` **45 passed, 0 skipped, 0 failed, 8 s** (was 18 checks for slice 1; a run
+  against a *signed* engine reports part 8's five checks as one `SKIP` with its reason instead, because
+  that branch needs an engine carrying no signature of its own to reach the name fallback). The
+  feed is served by the probe on `127.0.0.1`; both signing identities are minted in memory by the probe
+  (`CertificateRequest.CreateSelfSigned`) and never touch a certificate store. Proven accepted: a
+  manifest with `update.json.sig` beside it loads, answers `available`, `signature: verified`,
+  `signer: MI CS Code Signing`, `signer_thumbprint` equal to the pin, `pinned: true`, and the download
+  it names is staged and hashes to what the manifest promised. Proven refused, each with nothing staged:
+  no signature at all ("publishes no signature at ... refuses an update manifest nothing signed"),
+  another key's signature (naming both the signer's thumbprint and the pin), a body changed after
+  signing ("the manifest ... was refused: the detached signature over it does not verify"), the honest
+  feed under the wrong pin, and — in the branch the probe runs only on an unsigned engine — a signature
+  under another *name* with no pin. A correctly signed manifest whose `sha256` is 64 zeros is still read
+  and still refused by the hash check ("SHA256 mismatch"), which is the point: the signature did not
+  replace the hash. The skip is part 8 on a signed engine, with the reason printed.
+- **The engine accepts what the release lane actually produces.** One throwaway run (not committed) fed
+  the engine an `update.json` that `scripts\sign.ps1 -SelfSigned -DataFile` had just signed, with
+  `MICS_UPDATE_SIGNER_THUMBPRINT` set to that certificate: `update.check` answered
+  `signature: verified`, `signer: MI CS Code Signing`, `pinned: true`, thumbprint `9488d80e…`. This is
+  the join the row asks for — the same key that signs the binaries signs the feed, and the engine
+  verifies that signature — proved without minting a certificate into a store.
+- `cargo test` **6 new cases**: 3 in `update.rs` (the `.sig` URL rule including query and
+  fragment, the pin deciding and refusing with both thumbprints named, the no-pin fallback
+  accepting the release name and refusing a stranger's) and 3 in `signature.rs`
+  (`a_real_detached_signature_verifies_over_exactly_those_bytes` — a committed fixture,
+  `engine/tests/data/`, signed with a throwaway key whose private half was not kept, so
+  the success path is covered by the gate that always runs rather than only by the probe;
+  a blob that is not a signature at all, an empty one, and a PKCS#7 header with nothing
+  behind it; and the thumbprint pin's normalisation and refusal). A changed byte and a
+  wrong pin are refusals with their own text, not a generic error.
+- The four gates, all four green in this working tree: `cargo test` **200 passed, 0 failed**
+  (194 before), `cargo clippy --release -- -D warnings` exit 0, `flutter analyze --no-pub`
+  "No issues found!", `flutter test --no-pub` **162 passed**.
+
+**Not measured, and open.** Nothing here fetches the published feed: `releases/latest` serves
+*published* releases, v0.1.0 is a draft, and a probe that reached github.com would depend on the
+network (D-046's limit, unchanged). Concretely:
+
+- **the pin is only as trustworthy as the release it came from, and a self-signed release pins a
+  self-signed feed.** `pinned_update_thumbprint` reads the certificate over the running engine, so a
+  build signed with the throwaway development certificate pins *that* certificate — it proves the feed
+  came from whoever built this engine, which is the honest claim, not "a stranger can verify it". A real
+  CA certificate (§0.6 row 3, ب5) is what makes the same sentence checkable by someone else, and the
+  feed's own signature is what makes a *donation* of that certificate reach the update path;
+- **an attacker who can replace the engine binary can replace the pin with it.** This is Authenticode's
+  own limit, not a new one: the manifest signature is checked by a process that trusts its own file, and
+  `verify-tamper.ps1` plus D-016's refusal to call a self-signed result verified are what stand in front
+  of that;
+- **nothing verifies `update.json.sig` at publish time in CI** beyond `make-release.ps1` reading its own
+  bytes back on the runner that wrote them: the workflow uploads the asset and the release gate
+  (`verify-release.ps1`) does not reach into a downloaded feed, because doing so would need the
+  certificate this run used;
+- **keyless signing (OSSign, D-036 route B) has no detached-CMS story here.** OSSign signs over OIDC
+  with a transparency log, so its signature would be verified by `cosign`/`sigstore`, not by
+  `CryptVerifyDetachedMessageSignature` — a different verifier and a different pin, and one to design
+  when that route is actually eligible (~2027-04-27) rather than guessed at now.
+
+**Advances** §0.6 row 5 (slice 2: a signature over the manifest, verified before parsing, with the D-016
+thumbprint pin) and §7's هـ1, and closes the "nothing verifies a signature over the manifest" bullet
+D-046 left open. **Does not commit us to:** a second trust store, trusting a signature because it
+verified (the pin decides), a revocation check, a timestamp authority for the manifest, signing the
+*installer* with the same lane (it publishes no feed), or verifying the feed from CI.

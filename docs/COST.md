@@ -256,7 +256,11 @@ code edit. What is left is confirming the identity and writing the purchase down
    and prints it before the build: `-Thumbprint`, then `-PfxPath`, then
    `MICS_CERT_THUMBPRINT`, then `MICS_PFX_B64` + `MICS_PFX_PASSWORD`, then
    `MICS_PFX_PATH` + `MICS_PFX_PASSWORD`, and only then the self-signed development
-   certificate. The `Release` workflow already passes those two secrets through, and a PFX
+   certificate. The `Release` workflow already passes those two secrets through — the
+   repository secret is named `MICS_PFX` and both legs hand its value (the base64 text
+   of the PFX, which the script decodes) to `MICS_PFX_B64`, the variable this script
+   actually reads; until 2026-11-09 they did not (D-047), so a donated PFX would have
+   been ignored and the release silently self-signed — and a PFX
    handed in as base64 is written to a temp file, used by `signtool /f`, and deleted before
    the script returns. Timestamping (RFC 3161) is unchanged, so old releases keep
    verifying after the certificate expires. **Do not put the throwaway certificate here**:

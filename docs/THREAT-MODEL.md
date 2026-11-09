@@ -167,7 +167,7 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 | `services.nvd.nist.gov` | installed product identifiers (CPE/keyword query), key optional | vulnerability scan |
 | `dns.google`, `1.1.1.1` | a HEAD/GET probe with no payload | the "online?" check, cached 30 s (`sync/mod.rs::online`) |
 | LM Studio (`lm_url`, default `http://127.0.0.1:1234`) | the finding text to explain | LLM explain, explicit |
-| `github.com/ibraimfarag/MIF/releases/…` (the channel's own release) | a GET for `update.json`, and only if it names a newer version that one, for the zip | **`update.check` — the user's *Check now*, never a timer** (D-046) |
+| `github.com/ibraimfarag/MIF/releases/…` (the channel's own release) | a GET for `update.json`, one for `update.json.sig` beside it, and only if it names a newer version that one, for the zip | **`update.check` — the user's *Check now*, never a timer** (D-046; the manifest's signature is D-047) |
 
 Nothing polls the update feed: `update.check` has one caller (the Updates panel's
 button) and `update.download` a second (the button's download), so the row above is
@@ -185,8 +185,14 @@ this list because no code could reach one.
 (`127.0.0.0/8`, `::1`, the literal name `localhost`) — that is what a local LM
 Studio needs, and it is the one case where the traffic never leaves the machine.
 A cleartext feed or update manifest is refused at `settings.set` and cleared again
-on load, so a hand-edited file cannot smuggle one in (the half of F-3 that is
-closed; `WinVerifyTrust` on the extracted binary is still open).
+on load, so a hand-edited file cannot smuggle one in. What that manifest *says* is
+checked separately and before it is parsed: a detached PKCS#7 over its exact bytes
+must verify and its signer must match the pin (D-047), so an on-path attacker who
+can serve bytes but not sign them changes nothing. The payload that manifest points
+at is checked in its turn: SHA-256 against the (now signed) manifest, then the
+extracted binaries through `WinVerifyTrust` and `CN=MI CS Code Signing` (`apply()`'s
+`require_signed_by`). What is left of F-3 is the *precision* of that payload check:
+it matches a subject name, not a thumbprint.
 `AGENTS.md` rule 8 now carries this table's list instead of a shorter one — the
 intel sources and the connectivity probe used to be missing from it (F-7, closed).
 
@@ -196,9 +202,13 @@ The install directory is user-writable (`%LOCALAPPDATA%\MI CS` or an unpacked
 portable folder). Two consequences: `rules\` is hot-reloaded from a path the user
 (and any same-token process) can write, and the updater replaces binaries there.
 Impact is limited to detection quality and availability for the same user; it is
-not a privilege boundary. Releases are Authenticode-signed (`scripts/sign.ps1`),
-but the *updater* verifies only the SHA-256 recorded in the manifest — it never
-calls `WinVerifyTrust` (F-3).
+not a privilege boundary. Releases are Authenticode-signed (`scripts\sign.ps1`),
+and the manifest that names the payload is now signed and pinned too (D-047). The
+*updater* checks the payload twice more before it replaces anything: the archive's
+SHA-256 against the manifest it just verified the signature over, and then each
+extracted `mics-engine.exe` / `mics_app.exe` through `WinVerifyTrust` with the
+release subject name (`require_signed_by`, D-016) — so the open half of F-3 there is
+not "no signature check" but "a subject name instead of a thumbprint".
 
 ### B8 — The data directory
 
@@ -260,7 +270,7 @@ all because this installer is what writes it.
 | AP-1 | "write any file as SYSTEM through the helper" | Refused: marker + line-shape validation, ≤ 4 MiB, `MICS-` prefix owned by the helper | `Op::validate`, `scripts/verify-helper.ps1` |
 | AP-2 | "make the engine run arbitrary PowerShell" | No op takes a command; hardening ids come from a fixed table (`validate_action`) | `hardening/mod.rs`, helper tests |
 | AP-3 | "make the audit lie" | The engine computes the score, flags `partial`, and omits a section whose collector failed instead of reporting it secure; a refused Defender query is `Unknown`, never `Secure` | audit tests, D-014 |
-| AP-4 | "poison an update" | SHA-256 from the manifest over TLS, `http://` refused outside loopback, and the extracted payload must carry an embedded signature from `CN=MI CS Code Signing` that Windows trusts before it replaces anything (D-016) | F-3 (CN pin, thumbprint gap open) |
+| AP-4 | "poison an update" | The manifest is itself a signed document — a detached PKCS#7 verified over its exact bytes against the engine's pin before a field is parsed (D-047) — its SHA-256 is checked, `http://` is refused outside loopback, and the extracted payload must carry an embedded signature from `CN=MI CS Code Signing` that Windows trusts before it replaces anything (D-016) | F-3 (the payload's CN pin, thumbprint gap open) |
 | AP-5 | "steal quarantined samples" | AES-256-GCM + machine-scope DPAPI: an off-box copy is useless, local code can decrypt | `scanner/quarantine.rs` (F-6) |
 | AP-6 | "hide from the scanner" | Acknowledged: user-mode, hash-IOC + YARA only — no unpacking, emulation, memory scanning. A custom packer wins round one; the guard's behavioural rules are round two | `scanner/`, F-9 |
 | AP-7 | "read the decoys and slip through" | A pure **read** changes neither mtime nor size, so it is invisible; the copy says "modified" and never claims otherwise | `guard/canary.rs` (F-4, copy fixed) |
@@ -275,7 +285,7 @@ all because this installer is what writes it.
 | # | Risk | Why it is accepted today | Mitigation if we want it |
 |---|---|---|---|
 | F-2 | **Closed as a distinct-user risk** (F-2a + F-2b): the helper reads the caller's pid, image and token SID, and answers only `mics-engine.exe` running as the account that owns `%PROGRAMDATA%\MICS`. What is left is not another user — it is a process running as the *installing user*, which can already answer a UAC prompt itself (D-007's trade), plus the portable fallback where no account is recorded yet: with no `%PROGRAMDATA%\MICS` there is no account to compare against, so the check falls back to the **image name** and logs `no installer account recorded` once — the pipe ACL (F-1) is what still keeps other users out there. **Measured 2026-11-03 (و4)**: `scripts/verify-helper.ps1` starts the helper in that exact portable layout and shows a non-engine caller refused (`this pipe only serves the MI CS engine`) with the log line present, and the same probe served only after the documented `MICS_ENGINE_PATH` pin names it **Measured 2026-11-05 (CI, D-030)**: on a server-class Windows the directory this process created was owned by `BUILTIN\Administrators` (`S-1-5-32-544`) while the token user was `S-1-5-21-...-500`, so a record naming that group is now satisfied by a caller whose token carries it (`CheckTokenMembership`); a standard user is still refused by both tests, and the same account without the group is refused too | D-007 removes per-action prompts by accepting that the install owner is the trust anchor | Nothing further for F-2; a future service-mode engine running as `SYSTEM` would need a new decision |
-| F-3 | The update signer is pinned by **subject name** (`CN=MI CS Code Signing`), not by thumbprint — a certificate with that same CN issued by a CA that failed identity validation would still pass | A thumbprint pin would break on every locally re-issued certificate, making the next release refuse its own payload | Pin the thumbprint once a release certificate with a stable lifetime exists, or carry the expected thumbprint inside a separately signed manifest |
+| F-3 | **Part of this is closed (D-047, 2026-11-09) and one half of it is not.** The update *manifest* is now a signed document: `update.json.sig` travels beside it, the engine verifies the detached PKCS#7 over the exact bytes **before** it parses a field, and the signer is pinned to the certificate over its own engine (`MICS_UPDATE_SIGNER_THUMBPRINT` is the environment-only override a probe uses) — so a hostile feed can no longer change the version, the URL or the hash, which is what a manifest *is*. With no pin in reach (a `cargo build` carries no signature), the check falls back to the release **subject name** and reports `pinned: false`, and a self-signed release pins a self-signed feed. The same name-based limit therefore stands for the payload: the embedded signature D-016 checks is matched by `CN=MI CS Code Signing`, so a certificate with that CN issued by a CA that failed identity validation would still pass | A thumbprint pin on the *payload* would break on every locally re-issued certificate, making the next release refuse its own feed; the manifest's pin does not have that problem because the certificate is compared, not chosen | Pin the payload's thumbprint the same way the manifest's is pinned the moment a release certificate with a stable lifetime exists (ب5), and pin the release-name fallback's certificate rather than its CN |
 | F-4 | Canary decoys detect writes (mtime/size), not reads | NTFS last-access updates are off by default; a read needs a minifilter or handle auditing (kernel, A-9). **The copy no longer overstates it** (alert, card title and incident say "modified", not "accessed") | A read-level detector needs the kernel; keeping the decoy names plausible still makes a read worth attempting |
 | F-5 | ~~`nvd_api_key` / `ioc_feed_key` sit in plaintext in `settings.json`~~ — **guarded 2026-11-03 (و4)**: both keys moved to `<data dir>\secrets.dat`, DPAPI-protected at machine scope behind a `MS1\0` header and replaced atomically, and `settings.json` no longer holds them (a file an older build wrote is migrated on the next start). The file is still a **local** secret, not a vault: machine-scope DPAPI can be decrypted by any account on this computer, and `settings.get` still returns the values to the UI that owns the fields (the same interactive user). What the change removes is the plaintext copy — the one that left in backups, synced folders and pasted bug reports | A local user who can read that file can already read the engine's own state; the remaining gap is a per-user DPAPI scope, which would break the helper's service-mode sync | Done; a user-scope option would need a decision (it changes who can decrypt after an admin reinstall) |
 | F-6 | Quarantine master key is DPAPI **machine** scope: any local process can decrypt the blobs | The point is that a copied blob is useless off-box; local code with the user's rights can read the DB anyway | User-scope DPAPI per machine account, at the cost of breaking "restore after an admin reinstall" |
@@ -302,11 +312,14 @@ closed: a pure read is still invisible, and that part stays in the table above.
 **F-7 (the rule)**: `AGENTS.md` rule 8 now lists what section B6 measures — the
 configured intel sources and the 30 s connectivity probe included — instead of
 claiming "nothing leaves the machine except VT/NVD/LM". **F-3's cleartext and
-signature halves (F-3a/F-3b)**: `http://` is refused outside loopback, and the
+signature halves (F-3a/F-3b)**: `http://` is refused outside loopback, the manifest
+itself is now a signed document the engine verifies before it parses a field
+(D-047), and the
 extracted payload must carry an embedded signature Windows trusts before a single
 byte is copied over the running install (D-016), and the signer's name must be
 `MI CS Code Signing` — a valid signature from another certificate is refused. What
-F-3 still carries is the pin's *precision*: subject name, not thumbprint.
+F-3 still carries is the pin's *precision* on the payload: subject name, not
+thumbprint (the manifest's pin is a thumbprint).
 **F-11's symbol half**: the shipped binaries are Control-Flow-Guard instrumented
 (measured from the PE — `GUARD_CF` plus a real guard function table, which was
 absent before ج1), the engine is LTO'd, `panic=abort` and stripped, and the Dart

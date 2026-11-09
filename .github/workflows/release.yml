@@ -21,10 +21,14 @@ name: Release
 #      (~2027-04-27) and signs it keyless over OIDC, so no secret is stored here.
 # Both are recorded rather than wired: route A is packaging work that does not live in
 # this workflow, and route B cannot apply before it is eligible. The paid route stays a
-# drop-in meanwhile: make-release.ps1 reads MICS_PFX (a base64 PFX) with
+# drop-in meanwhile: make-release.ps1 reads MICS_PFX_B64 (a base64 PFX) with
 # MICS_PFX_PASSWORD, or MICS_CERT_THUMBPRINT for a certificate already in a store
 # (a token or a signing agent), and prints the identity it chose - so a *donated*
 # certificate still needs no step below to change (docs/COST.md §5, D-034).
+# The repository secret is still called MICS_PFX; the two legs below hand its value
+# to the variable make-release.ps1 actually reads, which until 2026-11-09 they did
+# not - so a real donated PFX would have been ignored and the release silently
+# self-signed (D-047's correction).
 #
 # ARM64: `windows-11-arm` is a real runner (D-003's correction, 2026-11-04), so the
 # ARM64 legs are here - but they have never run, and Flutter's own Windows ARM64 SDK
@@ -167,7 +171,10 @@ jobs:
           # Empty until a certificate exists (ب5): an unset secret expands to "", and
           # make-release.ps1 falls back to the self-signed development certificate and
           # prints which identity it used. Two repository secrets, no workflow edit.
-          MICS_PFX: ${{ secrets.MICS_PFX }}
+          # The name make-release.ps1 reads is MICS_PFX_B64, and it base64-decodes it,
+          # so the secret's value is the base64 text of the PFX; the secret itself
+          # keeps the name MICS_PFX.
+          MICS_PFX_B64: ${{ secrets.MICS_PFX }}
           MICS_PFX_PASSWORD: ${{ secrets.MICS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Continue'
@@ -231,6 +238,7 @@ jobs:
             dist/MICS-portable-*.zip
             dist/MICS-setup-*.exe
             dist/update.json
+            dist/update.json.sig
           if-no-files-found: error
 
       - name: Keep the QA report with the binaries it describes
@@ -348,7 +356,7 @@ jobs:
           YRX_REGENERATE_MODULES_RS: "false"
           # Same two secrets as the x64 leg; the ARM64 leg is informational for now
           # (it has never had a green run), so it may self-sign while x64 does not.
-          MICS_PFX: ${{ secrets.MICS_PFX }}
+          MICS_PFX_B64: ${{ secrets.MICS_PFX }}
           MICS_PFX_PASSWORD: ${{ secrets.MICS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Continue'
@@ -434,6 +442,7 @@ jobs:
           | `report.md` | The QA report of the run that built these files |
           | `SHA256SUMS` | Hashes of exactly the files above, made in this run |
           | `update.json` | What MI CS' own *Check now* reads: the portable zip's version, URL, size and SHA-256 (`docs/DECISIONS.md` D-046). It describes the zip beside it and names nothing else. |
+          | `update.json.sig` | The detached PKCS#7 over `update.json`, made with the identity that signed the binaries. MI CS verifies it *before* it reads the manifest and pins the signer to the certificate over its own engine, so an unsigned or re-signed feed is refused (`docs/DECISIONS.md` D-047). |
 
           ## Before you install
 

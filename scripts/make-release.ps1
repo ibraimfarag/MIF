@@ -789,6 +789,34 @@ if ($manifestExit -ne 0) {
   exit 1
 }
 
+# 9b. The manifest's own signature, beside it (D-047). The engine verifies this
+# *before* it reads a single field, and pins the certificate to the one that signed
+# the engine - so a feed signed by another key is refused, and a feed with no
+# signature at all is refused too. It is therefore signed by the same identity
+# selected above, through the same script: the release lane has one answer to "the
+# release key", and this is the file that makes the shipped engine's compiled-in
+# URL worth pointing at.
+if ($signedRequest) {
+  Write-Host "signing the update manifest with $signIdentity..."
+  $manifestSig = Join-Path $root "dist\update.json.sig"
+  $stopPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "sign.ps1") @signArgs `
+      -DataFile (Join-Path $root "dist\update.json") -DataSignature $manifestSig
+    $manifestSignExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $stopPreference
+  }
+  if ($manifestSignExit -ne 0 -or -not (Test-Path -LiteralPath $manifestSig)) {
+    Write-Output "RESULT: FAIL - dist\update.json has no signature; a shipped engine would refuse it (D-047)"
+    exit 1
+  }
+} else {
+  Write-Output "note: no signing identity was selected, so dist\update.json ships without update.json.sig"
+  Write-Output "      and a shipped engine refuses an unsigned manifest - this build is for local use (D-047)"
+}
+
 # Swap the staging build into place. Never delete the live folder in place: a DLL
 # that a running MI CS has mapped makes Remove-Item fail *halfway* - it deletes
 # what is not loaded and refuses what is - which is how a release once left a
@@ -844,6 +872,11 @@ Write-Output "  hardened: CFG + ASLR/DEP + stripped (checked from the PE, not th
 Write-Output ("  symbols: {0}  (kept out of the package on purpose)" -f $symbolsDir)
 Write-Output ("  engine name: {0}" -f $engineName)
 Write-Output ("  manifest: {0} file(s) described by the MICS_MANIFEST resource in the engine" -f $manifestFiles.Count)
+if ($signedRequest) {
+  Write-Output ("  feed   : dist\update.json + update.json.sig (detached PKCS#7 by the identity above)")
+} else {
+  Write-Output "  feed   : dist\update.json with no signature - publish it only for a local feed"
+}
 if ($signature -eq "Valid") {
   Write-Output "  signed : $signature - $signer"
   if ($signedRequest) { Write-Output "  identity: $signIdentity" }

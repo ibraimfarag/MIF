@@ -10,7 +10,7 @@
 
 pub mod feeds;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use reqwest::Client;
 use serde::Serialize;
 use std::time::Duration;
@@ -496,17 +496,28 @@ impl SyncManager {
         });
     }
 
-    pub async fn fetch_manifest(&self, url: &str) -> Result<serde_json::Value> {
-        let resp = self.client.get(url).send().await.context("fetch manifest")?;
-        resp.json().await.context("manifest json")
+    /// The bytes of `url`, refused unless the response is a success, with the
+    /// caller's word for what it was fetching in every error.
+    ///
+    /// The update feed needs the bytes rather than the parsed document (D-047):
+    /// what the detached signature covers is what arrived on the wire, and
+    /// re-encoding the fields a parser produced would verify a document nobody
+    /// published.
+    pub async fn fetch_bytes(&self, url: &str, what: &str) -> Result<Vec<u8>> {
+        let resp = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .with_context(|| format!("fetch {what}"))?;
+        if !resp.status().is_success() {
+            bail!("{what} returned {}", resp.status());
+        }
+        Ok(resp.bytes().await?.to_vec())
     }
 
     pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
-        let resp = self.client.get(url).send().await.context("download")?;
-        if !resp.status().is_success() {
-            anyhow::bail!("download returned {}", resp.status());
-        }
-        Ok(resp.bytes().await?.to_vec())
+        self.fetch_bytes(url, "download").await
     }
 
     /// Everything the UI needs for the Intel screen and the freshness badge.

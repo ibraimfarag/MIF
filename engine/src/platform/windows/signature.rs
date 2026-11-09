@@ -6,26 +6,40 @@
 //! Windows trusts" is not the answer — the caller passes the name it expects and a
 //! different certificate is refused (`docs/THREAT-MODEL.md` F-3, D-016).
 //!
-//! The name is compared, not the thumbprint: the release certificate is created
-//! locally and can be re-issued, and the certificate's subject is the part a
-//! buyer/user can read in Explorer. The trade-off is written down in D-016 — a
-//! thumbprint pin would also have to be updated by the release script.
+//! For a *binary*, the name is compared, not the thumbprint: the release
+//! certificate is created locally and can be re-issued, and the certificate's
+//! subject is the part a buyer/user can read in Explorer. The trade-off is written
+//! down in D-016 — a thumbprint pin would also have to be updated by the release
+//! script. For the update *feed* the same trade-off is settled the other way
+//! (D-047): the signature is checked against the thumbprint of whatever signed this
+//! engine, because nothing else in that path builds a chain.
 //!
 //! [`Trust`] is the same question asked with the answer ج2 needs (D-025): a
 //! package that is ours but signed with a certificate this Windows has not
 //! trusted *yet* is not the same thing as a package somebody edited, and
 //! [`embedded_signer_name`] is what tells the two apart.
+//!
+//! The update feed needs the same question answered about a *document* rather than
+//! a PE ([`verify_detached`], D-047): `update.json` ships with a detached PKCS#7
+//! beside it, and the certificate that must have made that signature is the one
+//! over this executable ([`pinned_update_thumbprint`]). Verifying a document cannot
+//! go through `WinVerifyTrust` — there is no PE, no page hashes and no chain to
+//! build — so it is `CryptVerifyDetachedMessageSignature` plus the thumbprint,
+//! which is also what makes the pin survive a machine that has never trusted the
+//! release certificate (D-002).
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::os::windows::ffi::OsStrExt;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CERT_E_UNTRUSTEDROOT, HANDLE, HWND};
 use windows::Win32::Security::Cryptography::{
-    CertCloseStore, CertFindCertificateInStore, CertFreeCertificateContext, CertGetNameStringW,
-    CryptMsgClose, CryptMsgGetParam, CryptQueryObject, CERT_FIND_SUBJECT_CERT, CERT_INFO,
-    CERT_NAME_SIMPLE_DISPLAY_TYPE, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
-    CERT_QUERY_FORMAT_FLAG_BINARY, CERT_QUERY_OBJECT_FILE, CMSG_SIGNER_INFO,
-    CMSG_SIGNER_INFO_PARAM, HCERTSTORE, PKCS_7_ASN_ENCODING, X509_ASN_ENCODING,
+    CertCloseStore, CertFindCertificateInStore, CertFreeCertificateContext,
+    CertGetCertificateContextProperty, CertGetNameStringW, CryptMsgClose, CryptMsgGetParam,
+    CryptQueryObject, CryptVerifyDetachedMessageSignature, CERT_CONTEXT, CERT_FIND_SUBJECT_CERT,
+    CERT_INFO, CERT_NAME_SIMPLE_DISPLAY_TYPE, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+    CERT_QUERY_FORMAT_FLAG_BINARY, CERT_QUERY_OBJECT_FILE, CERT_SHA1_HASH_PROP_ID,
+    CMSG_SIGNER_INFO, CMSG_SIGNER_INFO_PARAM, CRYPT_VERIFY_MESSAGE_PARA, HCERTSTORE,
+    PKCS_7_ASN_ENCODING, X509_ASN_ENCODING,
 };
 use windows::Win32::Security::WinTrust::{
     WinVerifyTrustEx, WTHelperGetProvSignerFromChain, WTHelperProvDataFromStateData,
@@ -40,6 +54,171 @@ const TRUST_OK: i32 = 0;
 /// release contract: `scripts/make-release.ps1 -Sign` uses this name, and an update
 /// signed with anything else is refused.
 pub const EXPECTED_SIGNER_CN: &str = "MI CS Code Signing";
+
+/// The test hook that pins an update manifest to a thumbprint (D-047).
+///
+/// The probe and the tests sign a manifest with a certificate this machine minted
+/// seconds ago, so they cannot re-sign the engine they are testing; this is the
+/// environment-only way to say which certificate they signed with (AGENTS.md
+/// rule 5). It is read by [`pinned_update_thumbprint`] and never by a shipped
+/// configuration: a release engine pins its own signature.
+pub const ENV_UPDATE_SIGNER_THUMBPRINT: &str = "MICS_UPDATE_SIGNER_THUMBPRINT";
+
+/// A signature that verified, and who made it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedSigner {
+    /// The signer's display name, when the certificate carries one.
+    pub name: Option<String>,
+    /// The SHA-1 thumbprint of the signer's certificate, lowercase hex.
+    pub thumbprint: String,
+}
+
+/// Verifies a detached PKCS#7 signature over `content` and says who signed it.
+///
+/// The certificate travels inside the signature, so this proves *a* key signed
+/// these exact bytes — not that the key is ours. Pinning is the caller's job:
+/// `update::check` is the caller, and [`pinned_update_thumbprint`] is the pin it
+/// uses. A document that was edited after signing fails here with the provider's
+/// own error, which is why the refusal can name the digest rather than a hash
+/// mismatch in the manifest's own fields (D-047).
+pub fn verify_detached(content: &[u8], signature: &[u8]) -> Result<VerifiedSigner> {
+    let size = u32::try_from(content.len()).context("the signed content is larger than 4 GiB")?;
+    let para = CRYPT_VERIFY_MESSAGE_PARA {
+        cbSize: std::mem::size_of::<CRYPT_VERIFY_MESSAGE_PARA>() as u32,
+        dwMsgAndCertEncodingType: X509_ASN_ENCODING.0 | PKCS_7_ASN_ENCODING.0,
+        ..Default::default()
+    };
+    // One blob, so the detached content cannot be split or reordered by a caller
+    // that thinks it is passing more than it is.
+    let contents = [content.as_ptr()];
+    let lengths = [size];
+    let mut signer: *mut CERT_CONTEXT = std::ptr::null_mut();
+    // SAFETY: `para` is fully initialized, the blob pointer array and its lengths
+    // describe `content`, `signature` is a live slice for the call, and `signer` is
+    // an out-parameter Windows fills with a context this function releases below.
+    let verified = unsafe {
+        CryptVerifyDetachedMessageSignature(
+            &para,
+            0,
+            signature,
+            1,
+            contents.as_ptr(),
+            lengths.as_ptr(),
+            Some(&mut signer),
+        )
+    };
+    if let Err(e) = verified {
+        bail!("the detached signature does not verify ({e})");
+    }
+    if signer.is_null() {
+        bail!("the signature verified but named no signer certificate");
+    }
+    // SAFETY: `signer` is the context the call above returned: non-null, live until
+    // the free below, and owned by this call.
+    let identity = unsafe { signer_identity_from_context(signer) };
+    // SAFETY: the context is released here, once, after the identity was copied out.
+    let _ = unsafe { CertFreeCertificateContext(Some(signer)) };
+    identity.ok_or_else(|| anyhow!("the signer certificate carries no readable thumbprint"))
+}
+
+/// The certificate's display name and SHA-1 thumbprint.
+///
+/// # Safety
+/// `cert` must be a live certificate context for the duration of the call.
+unsafe fn signer_identity_from_context(cert: *const CERT_CONTEXT) -> Option<VerifiedSigner> {
+    Some(VerifiedSigner {
+        name: unsafe { display_name(cert) },
+        thumbprint: unsafe { thumbprint_of(cert) }?,
+    })
+}
+
+/// The certificate's subject display name, `None` when it has none readable.
+///
+/// # Safety
+/// `cert` must be a live certificate context for the duration of the call.
+unsafe fn display_name(cert: *const CERT_CONTEXT) -> Option<String> {
+    let mut buffer = [0u16; 512];
+    // SAFETY: `cert` is live and the buffer is passed with its length, as
+    // `CertGetNameStringW` documents.
+    let written = unsafe {
+        CertGetNameStringW(
+            cert,
+            CERT_NAME_SIMPLE_DISPLAY_TYPE,
+            0,
+            None,
+            Some(&mut buffer),
+        )
+    };
+    // The count includes the terminating NUL; 1 means "empty name".
+    if written == 0 || written == 1 {
+        return None;
+    }
+    let len = (written as usize - 1).min(buffer.len());
+    Some(String::from_utf16_lossy(&buffer[..len]))
+}
+
+/// The certificate's SHA-1 thumbprint, lowercase hex.
+///
+/// # Safety
+/// `cert` must be a live certificate context for the duration of the call.
+unsafe fn thumbprint_of(cert: *const CERT_CONTEXT) -> Option<String> {
+    // Ask for the size first: the property is a 20-byte digest here, but reading
+    // it the documented two-step way is what makes the buffer exactly right.
+    let mut size = 0u32;
+    // SAFETY: `cert` is live; a null buffer asks the property's size, as documented.
+    unsafe { CertGetCertificateContextProperty(cert, CERT_SHA1_HASH_PROP_ID, None, &mut size) }
+        .ok()?;
+    if size == 0 {
+        return None;
+    }
+    let mut buffer = vec![0u8; size as usize];
+    let mut written = size;
+    // SAFETY: the buffer is `size` bytes, which is what the call above measured.
+    unsafe {
+        CertGetCertificateContextProperty(
+            cert,
+            CERT_SHA1_HASH_PROP_ID,
+            Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
+            &mut written,
+        )
+    }
+    .ok()?;
+    buffer.truncate(written as usize);
+    Some(hex::encode(buffer))
+}
+
+/// The thumbprint an update manifest's signer must carry, or `None` when this
+/// engine has nothing of its own to pin (D-047).
+///
+/// Order: [`ENV_UPDATE_SIGNER_THUMBPRINT`] when the environment sets one, then the
+/// certificate that signed *this executable* — read out of its own Authenticode
+/// blob by [`embedded_signer_thumbprint`], which builds no chain, so the
+/// self-signed situation D-002 records still pins.
+///
+/// `None` means this engine carries no signature at all: a development build. The
+/// caller keeps the signature check and the name check, and reports which of the
+/// two pins it used rather than pretending they are the same.
+pub fn pinned_update_thumbprint() -> Result<Option<String>> {
+    if let Some(value) = std::env::var_os(ENV_UPDATE_SIGNER_THUMBPRINT) {
+        return normalise_thumbprint(&value.to_string_lossy()).map(Some);
+    }
+    let exe = std::env::current_exe().context("resolve this executable's own path")?;
+    Ok(embedded_signer_thumbprint(&exe))
+}
+
+/// A SHA-1 thumbprint in the one spelling this module compares: lowercase hex,
+/// no separators. Anything else is refused rather than guessed at — a pin that
+/// silently matched nothing would refuse every honest release.
+pub fn normalise_thumbprint(value: &str) -> Result<String> {
+    let hex = value.trim().replace([' ', ':', '-'], "").to_lowercase();
+    if hex.len() != 40 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!(
+            "{} is not a SHA-1 thumbprint (40 hex digits): {value:?}",
+            ENV_UPDATE_SIGNER_THUMBPRINT
+        );
+    }
+    Ok(hex)
+}
 
 /// The signer's display name when Windows accepts the signature, `None` when it
 /// does not.
@@ -122,22 +301,9 @@ unsafe fn signer_from_state(state: HANDLE) -> Option<String> {
     if cert.is_null() {
         return None;
     }
-    let mut buffer = [0u16; 512];
-    let written = unsafe {
-        CertGetNameStringW(
-            cert,
-            CERT_NAME_SIMPLE_DISPLAY_TYPE,
-            0,
-            None,
-            Some(&mut buffer),
-        )
-    };
-    // The count includes the terminating NUL; 1 means "empty name".
-    if written == 0 || written == 1 {
-        return None;
-    }
-    let len = (written as usize - 1).min(buffer.len());
-    Some(String::from_utf16_lossy(&buffer[..len]))
+    // SAFETY: `cert` is the signer's own certificate inside the provider state,
+    // which is live until the caller closes it.
+    unsafe { display_name(cert) }
 }
 
 /// Refuses a file unless it carries a valid signature from `expected_cn`.
@@ -211,6 +377,22 @@ pub fn trust(path: &std::path::Path) -> Result<Trust> {
 /// here: the caller is classifying bytes it already has to read anyway, and the
 /// hashes it checks are what report a missing file.
 pub fn embedded_signer_name(path: &std::path::Path) -> Option<String> {
+    embedded_identity(path).and_then(|signer| signer.name)
+}
+
+/// The SHA-1 thumbprint of the certificate embedded in a file's signature, read
+/// **without** building a chain — the pin the update feed is checked against
+/// (D-047).
+///
+/// Same `None` contract as [`embedded_signer_name`], and for the same reason: an
+/// unsigned engine is a development build, not a failure.
+pub fn embedded_signer_thumbprint(path: &std::path::Path) -> Option<String> {
+    embedded_identity(path).map(|signer| signer.thumbprint)
+}
+
+/// The signer's name and thumbprint out of the certificate embedded in a file's
+/// Authenticode signature, read without building a chain.
+fn embedded_identity(path: &std::path::Path) -> Option<VerifiedSigner> {
     let wide: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -239,22 +421,23 @@ pub fn embedded_signer_name(path: &std::path::Path) -> Option<String> {
     }
     // SAFETY: both handles come from the successful query above and are still
     // open; the message is non-null.
-    let name = unsafe { signer_name_from_message(store, msg) };
+    let identity = unsafe { signer_identity_from_message(store, msg) };
     // SAFETY: the two handles are released here, once, and are not used again.
     let _ = unsafe { CryptMsgClose(Some(msg)) };
     let _ = unsafe { CertCloseStore(Some(store), 0) };
-    name
+    identity
 }
 
-/// The signer certificate's display name out of a decoded signed message.
+/// The signer certificate's display name and thumbprint out of a decoded signed
+/// message.
 ///
 /// # Safety
 /// `store` must be the certificate store and `msg` the signed message of a
 /// successful `CryptQueryObject`, both still open.
-unsafe fn signer_name_from_message(
+unsafe fn signer_identity_from_message(
     store: HCERTSTORE,
     msg: *mut core::ffi::c_void,
-) -> Option<String> {
+) -> Option<VerifiedSigner> {
     // Ask for the size first: the signer info is variable-length (its attributes
     // are ASN.1 blobs), so it is read into a buffer of exactly that size.
     let mut size = 0u32;
@@ -302,26 +485,11 @@ unsafe fn signer_name_from_message(
     if cert.is_null() {
         return None;
     }
-    let mut name_buffer = [0u16; 512];
-    // SAFETY: `cert` is a live context from the call above; the buffer is passed
-    // with its length, as `CertGetNameStringW` documents.
-    let written = unsafe {
-        CertGetNameStringW(
-            cert,
-            CERT_NAME_SIMPLE_DISPLAY_TYPE,
-            0,
-            None,
-            Some(&mut name_buffer),
-        )
-    };
-    // SAFETY: the context was found above and is released once, after the name
-    // has been copied out of it.
+    // SAFETY: `cert` is a live context found above; the identity is copied out of
+    // it before the context is released, once.
+    let identity = unsafe { signer_identity_from_context(cert) };
     let _ = unsafe { CertFreeCertificateContext(Some(cert)) };
-    if written == 0 || written == 1 {
-        return None;
-    }
-    let len = (written as usize - 1).min(name_buffer.len());
-    Some(String::from_utf16_lossy(&name_buffer[..len]))
+    identity
 }
 
 #[cfg(test)]
@@ -430,7 +598,83 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert!(name.is_none(), "an unsigned file embeds no signer: {name:?}");
+        assert!(
+            embedded_signer_thumbprint(&path).is_none(),
+            "an unsigned file pins no thumbprint either"
+        );
         assert_eq!(verdict, Trust::NotOurs);
+    }
+
+    #[test]
+    fn a_detached_signature_that_is_not_one_is_refused() {
+        // The feed half of F-3: whatever arrives beside `update.json` has to be a
+        // signature over those exact bytes. Bytes that are not a PKCS#7 message, an
+        // empty sidecar, and a valid-looking header with nothing behind it all have
+        // to come back refused rather than `Ok` (D-047).
+        for (what, signature) in [
+            ("plain text", b"this is not a signature".as_slice()),
+            ("empty", b"".as_slice()),
+            ("a PKCS#7 header and no message", [0x30u8, 0x82, 0x00, 0x0a].as_slice()),
+        ] {
+            let refused = verify_detached(b"{\"version\":\"9.9.9\"}", signature);
+            assert!(
+                refused.is_err(),
+                "{what} must not verify as a signature: {refused:?}"
+            );
+        }
+    }
+
+    /// The manifest a committed fixture signature was made over, the detached
+    /// PKCS#7 itself, and the thumbprint of the throwaway certificate inside it.
+    /// See `engine/tests/data/README.md` - regenerating them is a deliberate act,
+    /// because the pinned thumbprint is part of the test.
+    const FIXTURE_MANIFEST: &[u8] = include_bytes!("../../../tests/data/update-manifest.json");
+    const FIXTURE_SIGNATURE: &[u8] = include_bytes!("../../../tests/data/update-manifest.pkcs7");
+    const FIXTURE_THUMBPRINT: &str = "f34c6d80ebaa3bf5110d343adeb37718f539da35";
+
+    #[test]
+    fn a_real_detached_signature_verifies_over_exactly_those_bytes() {
+        // The happy path, without a store, a CA or a network: the fixture is a
+        // detached PKCS#7 over `update-manifest.json`, made once with a throwaway
+        // key whose private half was not kept (a signature stays verifiable, and
+        // nothing here reads a certificate's dates). It is the same shape
+        // `scripts/sign.ps1 -DataFile` writes, which is the point: the release lane
+        // and this verifier have to agree about what a signed manifest is.
+        let signer = verify_detached(FIXTURE_MANIFEST, FIXTURE_SIGNATURE)
+            .expect("the committed fixture signature verifies");
+        assert_eq!(signer.name.as_deref(), Some("MI CS Update Fixture"));
+        assert_eq!(
+            signer.thumbprint, FIXTURE_THUMBPRINT,
+            "the signer's own thumbprint is what the pin decides on"
+        );
+
+        // One flipped byte is one refused manifest: the signature is over these
+        // exact bytes, not over a re-encoded copy of the parsed document.
+        let mut changed = FIXTURE_MANIFEST.to_vec();
+        changed[0] ^= 0x01;
+        let refused = verify_detached(&changed, FIXTURE_SIGNATURE);
+        assert!(
+            refused.is_err(),
+            "a manifest changed after signing must not verify: {refused:?}"
+        );
+    }
+
+    #[test]
+    fn a_thumbprint_pin_is_normalised_or_refused() {
+        assert_eq!(
+            normalise_thumbprint("  ab:CD:ef 01 23 45 67 89 ab cd ef 01 23 45 67 89-ab-cd-ef-01  ").unwrap(),
+            "abcdef0123456789abcdef0123456789abcdef01"
+        );
+        assert_eq!(
+            normalise_thumbprint("ABCDEF0123456789ABCDEF0123456789ABCDEF01").unwrap(),
+            "abcdef0123456789abcdef0123456789abcdef01"
+        );
+        for bad in ["", "off", "abcdef", &"a".repeat(39), &"a".repeat(41), &"z".repeat(40)] {
+            assert!(
+                normalise_thumbprint(bad).is_err(),
+                "{bad:?} is not a SHA-1 thumbprint and must be refused"
+            );
+        }
     }
 
     #[test]
@@ -451,6 +695,17 @@ mod tests {
         assert!(
             matches!(verdict, Trust::Ours | Trust::UntrustedRoot),
             "a genuine release is never \"not ours\": {verdict:?}"
+        );
+        // The pin D-047 compares against comes out of this same blob: a signed
+        // release always carries one, and it is the thumbprint Windows shows.
+        let thumbprint = embedded_signer_thumbprint(&release)
+            .expect("a signed release embeds the certificate the feed is pinned to");
+        assert_eq!(thumbprint.len(), 40, "a SHA-1 thumbprint: {thumbprint}");
+        assert!(
+            thumbprint
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
+            "the pin is compared in lowercase hex: {thumbprint}"
         );
     }
 

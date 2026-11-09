@@ -145,7 +145,8 @@ if (-not $Keep) { Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinu
 
 Write-Host ""
 Write-Host "  the 'Valid' end of the branch needs a CA-issued certificate: the certificate row, docs/ROADMAP.md"
-Write-Host "  the workflow passes a real one as MICS_PFX + MICS_PFX_PASSWORD - docs/COST.md section 5"
+Write-Host "  the workflow passes a real one as MICS_PFX_B64 + MICS_PFX_PASSWORD (the"
+Write-Host "  secret is still named MICS_PFX) - docs/COST.md section 5, D-047"
 if ($failed -gt 0) {
     Write-Output "RESULT: FAIL - $failed of $checks check(s) failed"
     exit 1

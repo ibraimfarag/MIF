@@ -522,6 +522,17 @@ is closed on eligibility and on money at the same time.
    bytes and compare them (`scripts\verify-reproducible.ps1`, `docs\REPRODUCIBLE.md`).
    What changes is that "no certificate can ever exist" is no longer the
    truth, so no document may say it.
+5. **The self-update feed is the first thing a certificate would visibly improve (D-047,
+   2026-11-09).** `update.json` now ships with a detached PKCS#7 beside it and the engine
+   verifies it *before* it reads a field, pinning the signer to the certificate over its
+   own engine: a machine that installed a build signed by a donated certificate will
+   refuse a feed signed by anything else, including a self-signed look-alike. The
+   measured limit is the same one this whole document is about — with today's throwaway
+   certificate the pin says "the same key that built this engine", which is honest and
+   checkable by nobody else. A certificate from any route above is what turns the same
+   check into one a stranger can repeat, and route B's keyless signature would need a
+   different verifier (a Sigstore client and its own pin, D-047's open list) rather than
+   the CMS check that is in place now.
 
 ## 8. Sources, all read 2026-11-07
 

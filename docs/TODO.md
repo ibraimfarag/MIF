@@ -157,9 +157,11 @@
 > been measured as a user meets it (§0.2 item 1). **Nothing in the release lane waits
 > on you except one free click to publish the draft (ب6).** ز2-د stays blocked on D-023
 > and the
-> bridge endpoint; the autonomous alternatives meanwhile are هـ1 (the default
-> update-manifest URL + a signature check before applying), the §0.6 row 13 remainder
-> (the engine's manifest covering content instead of signatures), or a §7 register row. The
+> bridge endpoint; the autonomous alternatives meanwhile are the §0.6 row 13 remainder
+> (the engine's manifest covering content instead of signatures) or a §7 register row —
+> **هـ1 (the default update-manifest URL + a signature check before applying) was the
+> third and landed 2026-11-09** (D-046 for the feed, D-047 for the signature and its
+> thumbprint pin). The
 > ARM64 engine is built and checked but **has never been run here** — no ARM64
 > machine exists — and ARM64 CI jobs now exist for that (marked informational until
 > they have a green run) while the ARM64 *app* still needs an ARM64 host, which CI
@@ -266,8 +268,9 @@ Open a fresh session and paste exactly this:
 > بيعدّي **38 فحص** بدون أدمن (سيب فحص واحد: قراءة الجهاز الحقيقية محتاجة أدمن)،
 > فصف 17 بقى **التلات شرايح مكتوبة** ومستني نفس الشل المرتفع عشان الدليل الحي.
 > وفيه كمان **نشر `v0.1.0`**
-> (كليكة مجانية واحدة) لو حضرتك هتعملها، و**هـ1** (نصها الأول — فيد التحديث الافتراضي
-> المتجمّع في المحرك — خلص 2026-11-09، D-046؛ اللي فاضل فيها توقيع المانيفست)، و**صف 13**. وكل صف بدليل القياس اللي
+> (كليكة مجانية واحدة) لو حضرتك هتعملها، و**هـ1** (النصين: فيد التحديث الافتراضي
+> المتجمّع في المحرك — D-046 — وتوقيع المانيفست مع تثبيت البصمة — D-047، الاتنين خلصوا
+> 2026-11-09)، و**صف 13**. وكل صف بدليل القياس اللي
 > اسمه في الجدول. **مفيش شراء في المشروع خالص** (D-035): أي صف فيه «شهادة» يبقى
 > **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
@@ -295,7 +298,8 @@ pass or as a privilege boundary); the fix, its two tests, the honest probes and
 `scripts\reset-wfp.ps1` are in, and one machine is still on the old build: the installed
 `MICSHelper` is a release binary from before D-045, so the app's own unelevated write path answers
 `0x80320004` until it is reinstalled from a fixed build.
-**162**, `cargo test` is **192**, the QA ledger is **109 controls** over **73 methods** (the
+**162**, `cargo test` is **200** (D-047's six cases; the snapshot this line was written from read 192),
+the QA ledger is **109 controls** over **73 methods** (the
 panel still swept as `surfaces.trayPanel`, 6 controls), and the fast tier is green as one run:
 **4 of 4, 65.2 s** (re-run after the docs commit; D-045's own run measured 68.8 s)
 (`git rev-list --count '@{u}..HEAD'` names how many commits are unpushed).
@@ -310,9 +314,11 @@ Engine (a persistent Block filter Windows' own tool reports, the connection list
 and undone, the watch reading the real machine and clearing it). Row 17's honest limit is
 already written down: a per-connection allow/block *prompt* needs a kernel callout driver,
 and `SECURITY.md` says usermode only. Independently: **publish `v0.1.0`** (one free click, if you are
-the one clicking), **هـ1** (the default update-manifest URL and a signature check before
-applying), the §0.6 row 13 remainder, or a §7 register row — each with the proof its row
-names. **Nothing in this project is
+the one clicking), the §0.6 row 13 remainder, or a §7 register row — each with the proof its row
+names. **هـ1 landed on 2026-11-09 in two slices** — the compiled-in feed (D-046) and the signed
+manifest with the thumbprint pin (D-047, `cargo test` **200**, the probe **45/0/0**) — so what is
+left of the signing story is the certificate itself (ب5), which is a free account and a click, not
+code. **Nothing in this project is
 purchased** (D-035), so a row that says "certificate" is **closed, not pending**. When work
 touches signing, **do not re-research the routes** — they are closed, with sources and dates, in
 `docs/SIGNING.md` (D-036); judge artifacts with `scripts\verify-trust.ps1` (exit 0 means a
@@ -450,11 +456,12 @@ both binaries `Valid`).
 done**. What is left is no longer "small steps" — it is counted in **§0.6** (the one
 table) with the order and estimates in **`docs/ROADMAP.md`**. Short version, as of
 2026-11-09: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured, and so is
-remains is **publish `v0.1.0`** (a free click), the answers in §0.2 items 3–5, the free
-engineering (**هـ1**'s signature pin — its default manifest URL landed **2026-11-09**
-(D-046, `scripts\verify-update.ps1`, now the `update.verify` step of `-Tier full`), so the
-feed a fresh install checks is the project's own release assets — the §7 rows, and §0.6 row
-13 — the reproducible build
+**هـ1** — the compiled-in feed (D-046) *and* the signature over the manifest with its
+thumbprint pin (D-047), measured by `scripts\verify-update.ps1`, now the `update.verify`
+step of `-Tier full`. What
+remains is **publish `v0.1.0`** (a free click), the answers in §0.2 items 3–5, the
+§7 rows, §0.6 row
+13 (the reproducible build
 itself landed 2026-11-08 and left only the engine's manifest behind), and three things that are *blocked* rather
 than pending: a publicly trusted signature (not purchased — D-035), an ARM64 **app**
 (no Flutter Windows ARM64 SDK) and **ز2-د** (D-023 + the bridge endpoint).
@@ -725,7 +732,7 @@ below remain the per-phase detail it was built from, with the step IDs the ROADM
 uses. The chosen order is:
 
 > **ج1** build hardening → **ب3** installer → **ب4** helper fold-in → **ج2** signed
-> manifest → **د1 + د2** QA → **هـ1 + و1** *(و1 done)* → **ب2 / د3 / د4** → **و3 + و4**
+> manifest → **د1 + د2** QA → **هـ1 + و1** *(both done)* → **ب2 / د3 / د4** → **و3 + و4**
 > → **ب5 → ب6** once the certificate exists.
 
 Every row is one commit-sized step unless it says otherwise; **§0.5 carries the
@@ -775,7 +782,7 @@ order the user picked (small → medium → large), and it is finished**
 | Step | What |
 |---|---|
 | ~~**هـ1 (the URL)**~~ | ~~A default update-manifest URL compiled in~~ — **done 2026-11-09** (D-046): the channel carries the project's own release feed, a pure `resolve_update_url` orders environment → saved URL → channel default, `update.check` uses the one implementation the downloader uses and now reports **which feed answered**, `MICS_UPDATE_MANIFEST_URL=off` is the explicit do-not-check, `scripts\verify-update.ps1` measures all of it without a network (18 checks), and `make-release.ps1` publishes the `update.json` that feed serves (D-046) |
-| **هـ1 (the signature)** | A signature check on the manifest before applying, and the **thumbprint** pin it needs the moment any certificate exists (D-016) — what is left of the same row |
+| ~~**هـ1 (the signature)**~~ | ~~A signature check on the manifest before applying, and the **thumbprint** pin it needs the moment any certificate exists (D-016)~~ — **done 2026-11-09** (D-047): a detached PKCS#7 beside the manifest (`sign.ps1 -DataFile`, `make-release.ps1` step 9b), verified over the exact bytes before a field is parsed, the signer pinned to the certificate over the engine or to `MICS_UPDATE_SIGNER_THUMBPRINT`, and every refusal (unsigned, another key, tampered, wrong pin) staging nothing. Measured: `scripts\verify-update.ps1` **45 checks, 0 failed** and six new engine cases including one against a committed signed fixture |
 
 **و — the register (parallel, not a phase)**
 
@@ -841,7 +848,7 @@ what was measured. Do not bundle two slices because one "looks small".
 | **Row 17 slice (a)** (the WFP layer) | **Written 2026-11-08 (D-042), evidence incomplete on purpose.** The machine is not this session's to elevate, so the pickup is two commands: (1) reinstall `MICSHelper` — in the installed app, Settings → Engine → *Install helper*, or `mics-engine.exe helper-install` from an elevated shell — because the helper already running on this machine only knows the eight pre-D-042 ops, which is why every write is refused today; (2) run `scripts\verify-wfp.ps1 -EngineExe engine\target\debug\mics-engine.exe` in an elevated shell and paste its numbers (checks, the created filter's key as `netsh wfp show filters` shows it, and whether `fw.wfp.status` then reports `sublayer=true filters=1`) into `D-042` and the §0.6 row. Do **not** mark slice (a) closed on the unit tests alone: what is unmeasured is exactly what a unit test cannot see — a real connection to the blocked port failing, the filter outliving a reboot, and the sublayer's weight beating the built-in firewall's permit. |
 | **Row 17 slice (b)** (live connections + one-click block) | **Written 2026-11-08 (D-043), the same elevated run outstanding as (a).** It turned out not to need a new method: `net.connections` already existed and was the thing to fix — it was IPv4 TCP only, so the walk moved to `engine\src\platform\windows\conns.rs` over all four tables with the owner's **image path** resolved through a handle, and the row now carries the spec a click would send (`block`) or `null` with the reason why not. The UI forwards that spec to the existing `fw.wfp.block`, so a click writes a persistent filter rather than a session rule. Measured unelevated: `scripts\verify-connections.ps1` **23 checks, 0 skipped, 0 failed** (490 rows; 139 with a spec that matches the row and whose file exists; 0 owner contradictions with Windows' own cmdlets; IPv6 and UDP rows present; the write refused with a reason and nothing left behind). **What is still unproven** is the same sentence (a) is waiting on: that an accepted spec blocks that row's connection — run the probe elevated (after reinstalling the helper) and its part 3 takes the write branch instead of the refusal branch. The honest limit stays in the matrix: this is a snapshot, not a push, and there is no un-block from a row. |
 | **Row 17 slice (c)** (tamper alert) | **Written 2026-11-09 (D-044), with the detector measured and the machine-reading half still needing an administrator.** The record of what MI CS wrote lives beside the objects (`meta` row `wfp_baseline`, written after a successful `fw.wfp.block`, removed by `unblock`, cleared by `reset`), and `fw.wfp.watch` compares it against the filtering engine: `guarded`, `tampered` (naming the sublayer and each missing filter), `clear`, `unrecorded`, or `unknown` when neither this process nor the helper may read the BFE. A tamper raises one HIGH guard event per change — an incident titled "MI CS' filtering layer was tampered with", a card with its own copy and icon, the correlator timeline — and the guard thread polls it about every 30 s. Measured unelevated: `scripts\verify-wfp-watch.ps1` **38 checks, 1 skipped, 0 failed** (the detector, the alert, the once-per-change rule, and `unknown` instead of a false alarm), and 10 unit tests on the pure comparison. **What is still unproven** needs an administrator, exactly like (a) and (b): deleting a *real* filter (or the sublayer) behind the engine's back and watching this notice, and the guard thread's own 30 s poll firing rather than the method being called directly. **It is deliberately not a self-healing watchdog**: re-adding a filter an administrator deleted would fight the machine's owner, so the alert is the whole feature. |
-| **Row 5 slice 2** (a signature over `update.json`) | **Left over from the 2026-11-09 slice (D-046); slice 1 is done.** Done means: `make-release.ps1` writes a detached signature beside `update.json` using the same key that signs the engine (or a documented free route from `docs\SIGNING.md`), the engine ships the public half — or the pinned **thumbprint** once a certificate exists (D-016) — and a manifest whose signature does not verify is refused with *that* reason rather than a hash mismatch. The proof extends `scripts\verify-update.ps1` (no second probe): an unsigned manifest, one signed by another key, and one whose body changed after signing each come back refused, with nothing staged. "No certificate exists yet" is not a reason to skip the check — it is a reason for the check to say it cannot verify. |
+| ~~**Row 5 slice 2** (a signature over `update.json`)~~ | **Done 2026-11-09 (D-047).** `make-release.ps1` step 9b writes a detached PKCS#7 beside the manifest (`sign.ps1 -DataFile`, the same identity that signs the binaries, verified by reading its own bytes back), and the engine verifies it **before** it parses a field: `update.rs` fetches `<manifest>.sig` with the new `SyncManager::fetch_bytes`, `signature.rs` gained `verify_detached` (`CryptVerifyDetachedMessageSignature`, signature only - no chain trust, so a self-signed development build works) and `pinned_update_thumbprint` (the D-016 pin: `MICS_UPDATE_SIGNER_THUMBPRINT`, else the certificate over the running engine), and `update.check` answers with `signature`, `signer`, `signer_thumbprint` and `pinned` so the screen can print who signed the feed and whether that was checked against a pin. Unsigned, other-key, tampered, and wrongly-pinned feeds are refused with the signature as the reason and stage nothing; a manifest that is signed but lies is still refused by the SHA-256 check, so the signature did not replace it. Measured: `scripts\verify-update.ps1` **45 checks, 0 failed, 0 skipped, 8 s** against the unsigned debug engine (on a *signed* engine, part 8's five checks are recorded as one `SKIP` with the reason that the name fallback needs an engine with no signature of its own), 6 new engine cases (**200 in total**: 3 in `update.rs`, 3 in `signature.rs` including one against a committed signed fixture), and one throwaway end-to-end run proving the engine accepts a signature `sign.ps1 -DataFile -SelfSigned` produced (pin `9488d80e…`, `pinned: true`). Two corrections are recorded in D-047 — the `Release` workflow handed `secrets.MICS_PFX` to a variable `make-release.ps1` does not read (it reads `MICS_PFX_B64`), so a donated certificate would have been ignored; and the probe's part 8 exists because "no certificate exists yet" is a reason for the check to say *which* check it managed, not a reason to skip it — plus a third: `docs/THREAT-MODEL.md` had claimed (twice, since it went stale) that `update.apply` never calls `WinVerifyTrust` on the extracted payload, which it does (`require_signed_by`), so F-3's payload gap is a subject name rather than a thumbprint, not an absent check. |
 
 **Still open for the user** (asked 2026-11-01): approval of **D-023** (opt-in,
 user-configured crash reports — rule 8 of `AGENTS.md` forbids any other outbound
@@ -959,7 +966,8 @@ what "next" means.
   prompt installed product + service, one prompt removed both (§0.2 item 1)
 - ~~**د1** `qa/` JSON-RPC harness, **د2** per-screen widget tests~~ — **done
   2026-11-01**, with **د3** (E2E on the built installer) following on 2026-11-07
-- **هـ1** a default update-manifest URL + signature check
+- ~~**هـ1** a default update-manifest URL + signature check~~ — **done 2026-11-09**
+  (D-046 the feed, D-047 the signature and the thumbprint pin)
 - ~~**canary read-only** (the register's MED row)~~ — **done 2026-11-05 (D-032)**: the
   variable the row was missing is the last-access time, not a driver, so a read-only
   open is a HIGH `canary_read` event of its own (`CANARY_READ`), a write stays
@@ -1048,7 +1056,7 @@ somebody who signs for free.
 | 2 | ~~**د3 — the E2E acceptance on the per-machine installer**, plus the helper acceptance (D-007/D-026)~~ | ✅ | — | **closed and measured 2026-11-07** — the numbers are in the block below, and in the د3 row of `docs/ROADMAP.md` §2 |
 | 3 | **A publicly trusted signature** (ب5) — Windows still shows "Unknown publisher" and SmartScreen may still warn today | ✅ **two free routes, no purchase** | **route A: the free Store account, then Microsoft's certification — no administrator needed for the shape submitted first (D-038)**; route B: the calendar (~2027-04-27) | **D-036** replaces D-035's "not purchasable": **A** the Microsoft Store re-signs an MSIX for free (free account, ID + selfie, worldwide), **B** OSSign issues the project a certificate once the repo is 6 months old (needs `id-token: write`, no secrets). The route A artifact exists and is measured (**D-037**): `installer/msix/AppxManifest.xml` + `scripts\make-msix.ps1` pack 75 files into 22.11 MB in 3.6–4.3 s, makeappx accepts the LocalSystem service and both restricted capabilities (`packagedServices`, `localSystemServices`), and the install stops on two measured OS rules — **0x800B0109** (a self-signed chain has no trusted root, and user-level trust does not count) and **0x80073D28** (Windows requires an administrator for any packaged service). The container questions now belong to the `Packaged` shape only, and stay unmeasured until an administrator installs a trusted build of it (§8 traps 29 and 30); `-ServiceMode None` is the shape submitted first, measured on 2026-11-07 to register with no elevation at all (D-038). The app half of that shape was then **run for real** the same day: launched from a developer-mode registration it started `mics-engine` by itself, brought `\\.\pipe\mics_engine` up, answered the app's 15-second `ping` and `sync.status`, reported `package integrity: ok - 68 file(s) hash as the manifest says` from inside the container, and wrote its state to the real `%LOCALAPPDATA%\MICS` (`SIGNING.md` §3) — what remains unmeasured is the helper across the container, which needs an administrator. **The acceptance check for this row now exists**: `scripts\verify-trust.ps1` exits 0 only for an artifact a stranger's Windows would trust, with `-SelfTest` proving the instrument against both controls (`SIGNING.md` §1) — so the day the Store signs the package, "ب5 is done" is one command instead of an opinion |
 | 4 | ~~**Reproducible builds** (threat-model F-11)~~ | ✅ | — | **closed and measured 2026-11-08.** `make-release.ps1 -Reproducible` takes the build time from the revision (`SOURCE_DATE_EPOCH`), asks both linkers for `/Brepro`, writes the archive with one fixed timestamp and puts the signature-independent content hashes in `VERSION`; `scripts\verify-reproducible.ps1 -Reference <zip-or-folder>` rebuilds from source (signed with a locally minted self-signed identity, so no certificate is needed) and compares (file hash exactly, PE files on their content hash, and the two rows the signature legitimately moves — `mics-engine.exe` and the `VERSION` line that records its hash — proved rather than waved through), and **`docs/REPRODUCIBLE.md`** is the recipe a stranger follows. Measured: two from-scratch app builds matched byte for byte after `/Brepro` over the whole 63-file output tree (`mics_app.exe` `4d5cafba…` both times — before it `604152af…` then `03bcfac2…`, and every plugin DLL moved too), the obfuscated Dart snapshot matched all along (`51c2ab76…`), the same 70-file tree zipped twice by the new writer gave one hash where `Compress-Archive` stored per-file times, and `-SelfTest` is **17** checks. The one file a rebuild cannot match byte for byte is `mics-engine.exe`, and **row 13** is that remainder |
-| 5 | **هـ1 — a default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | **half done 2026-11-09**: the URL is compiled in per channel, resolved in one pure function, and reported back by `update.check` (D-046, measured by `scripts\verify-update.ps1`), and the release lane publishes the `update.json` the default reads. What is left is the second half: verify the manifest's **signature** before applying, and pin the **thumbprint** the moment any certificate exists (D-016) |
+| 5 | **A default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | **done 2026-11-09**: the URL is compiled in per channel, resolved in one pure function, and reported back by `update.check` (D-046, measured by `scripts\verify-update.ps1`), and the release lane publishes the `update.json` the default reads. The second half landed the same day (D-047): `make-release.ps1` step 9b writes a detached PKCS#7 beside the manifest with the identity that signed the binaries, and the engine verifies it **before** it parses a field and pins the signer's thumbprint to the certificate over its own engine (D-016) or to `MICS_UPDATE_SIGNER_THUMBPRINT`; an unsigned, re-signed, tampered or wrongly-pinned feed is refused with the signature as the reason and stages nothing. Measured: 45 checks in `scripts\verify-update.ps1`, 6 new engine cases (200 in total, including one against a committed signed-manifest fixture), and one end-to-end run of a signature `sign.ps1 -DataFile` produced |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
@@ -5530,8 +5538,13 @@ signing certificate respectively), so this is the work that is always available.
       `update.check` and the downloader, and an answer that names the feed that
       answered (D-046) — measured by `scripts\verify-update.ps1`, and the release lane
       publishes the `update.json` it reads (`scripts\update-manifest.ps1`).
-- [ ] A signed manifest check before applying, plus the thumbprint pin it needs
-      (D-016) — the second half of §0.6 row 5 (هـ1).
+- [x] A signed manifest check before applying, plus the thumbprint pin it needs
+      (D-016) — the second half of §0.6 row 5 (هـ1), **done 2026-11-09 (D-047)**:
+      `update.json.sig` is verified over the manifest's exact bytes before a field is
+      parsed, the signer is pinned to the certificate over the engine (or
+      `MICS_UPDATE_SIGNER_THUMBPRINT`), and every refusal stages nothing — measured by
+      `scripts\verify-update.ps1` and six new engine cases, one against a committed
+      signed fixture.
 - [x] OFFLINE badge + "intel last updated Xh ago" in the title bar, tap to sync.
 - [x] Intel pipeline hardening: named sources in one scheduled pass, per-source
       state + backoff + `sync_state.next_due`, DNS-blocklist domains, CISA KEV

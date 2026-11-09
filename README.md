@@ -36,8 +36,10 @@ explains, and suggests the next action instead of dumping raw data.
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
 > 2026-11-04) — the release workflow asks that runner for the x64 SDK and marks
 > both ARM64 jobs informational until they have a green run — see *Requirements*).
-> What is left is short and entirely free: **publish the draft** (one click), **هـ1**
-> (the update manifest's URL and signature pin), the engine manifest's signed hashes,
+> What is left is short and entirely free: **publish the draft** (one click),
+> a publicly trusted certificate (ب5 — the Store account or OSSign; **هـ1** is done,
+> the update manifest's URL, its signature and the thumbprint pin all landed on
+> 2026-11-09, D-046/D-047), the engine manifest's signed hashes,
 > and the register rows — priorities and estimates in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md), and the one-table answer in
 > [`docs/TODO.md`](docs/TODO.md) §0.6. Live status:
@@ -520,12 +522,13 @@ powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only f
 the ones `qa\report.md` generates (2026-11-09): `flutter analyze` (no issues — an info is a
 failure), `flutter test` (**132 declared cases across 28 files**, including the two contrast
 audits and the i18n parity/lint gates over **19 module files / 299 keys per language**),
-`cargo test` (**194 declared cases across 25 modules**) and
+`cargo test` (**200 declared cases across 26 modules**) and
 `cargo clippy --release -- -D warnings` (clean). Those counts are
 floors — loops and generated cases add more at run time, and `qa\report.md` is the
 generated table that the fast tier itself refuses to let drift. **full** adds the
 release builds of the engine and the app, the engine's own benchmark (CPU/RAM budget),
-the update feed's own probe (`update.verify`, D-046) and the **contract harness**:
+the update feed's own probe (`update.verify`, D-046/D-047: the compiled-in URL, the
+detached signature over the manifest, and the signer's pin) and the **contract harness**:
 `dart run qa\contract.dart` drives every one of the
 **73** JSON-RPC methods against a real engine on an isolated pipe — **74 declared
 cases**, 16 of them classified not to run, plus the harness's own scenarios — and every

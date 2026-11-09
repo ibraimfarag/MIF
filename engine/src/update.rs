@@ -4,6 +4,11 @@
 //!
 //! The manifest shape is the section-6 contract:
 //! {version, url, sha256, size, notes_en, notes_ar}
+//!
+//! The manifest is only read after the detached signature published beside it
+//! verifies against the certificate that signed this engine (D-047,
+//! `docs/THREAT-MODEL.md` F-3). The `sha256` field catches a transfer that went
+//! wrong; the signature is the part that says the feed is ours to trust.
 
 use anyhow::{bail, Context, Result};
 use serde_json::json;
@@ -11,6 +16,9 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 use crate::platform::windows::process::ToolCall;
+use crate::platform::windows::signature::{
+    pinned_update_thumbprint, verify_detached, VerifiedSigner, EXPECTED_SIGNER_CN,
+};
 use crate::sync::SyncManager;
 
 /// How long the staged archive may take to unpack. A ~24 MB zip takes seconds; a
@@ -50,7 +58,13 @@ pub async fn check() -> Result<serde_json::Value> {
             "detail": "update checks are switched off (MICS_UPDATE_MANIFEST_URL=off)"}));
     }
     let sm = SyncManager::new()?;
-    let manifest = sm.fetch_manifest(&url).await?;
+    // The bytes first, and the signature over exactly those bytes, before anything
+    // parses them: a manifest that is not signed by the key this engine pins is
+    // refused whatever its fields say (D-047).
+    let raw = sm.fetch_bytes(&url, "the update manifest").await?;
+    let verified = verify_manifest(&sm, &url, &raw).await?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&raw).with_context(|| format!("{url} is not manifest json"))?;
     let current = env!("CARGO_PKG_VERSION");
     let latest = manifest["version"].as_str().unwrap_or(current);
     Ok(json!({
@@ -62,7 +76,98 @@ pub async fn check() -> Result<serde_json::Value> {
         "sha256": manifest["sha256"].as_str(),
         "notes_en": manifest["notes_en"].as_str(),
         "notes_ar": manifest["notes_ar"].as_str(),
+        // Who signed the feed, and whether that was checked against a pin. The
+        // screen prints the same fields it already prints; a probe reads them to
+        // tell "verified against the pin" from "verified by name only".
+        "signature": "verified",
+        "signer": verified.signer.name,
+        "signer_thumbprint": verified.signer.thumbprint,
+        "pinned": verified.pinned,
     }))
+}
+
+/// The detached signature a feed publishes beside its manifest (D-047).
+///
+/// `<manifest>.sig`, the way a checksum names the file it describes, so the
+/// manifest format does not change and a feed that publishes `update.json` says
+/// nothing about its own signature. A query string or a fragment stays where it
+/// is, so a feed served as `.../update.json?channel=beta` is described as
+/// `.../update.json.sig?channel=beta` rather than guessed at.
+pub fn signature_url(manifest_url: &str) -> String {
+    let cut = manifest_url.find(['?', '#']).unwrap_or(manifest_url.len());
+    format!("{}.sig{}", &manifest_url[..cut], &manifest_url[cut..])
+}
+
+/// A manifest whose signature verified, and the pin it was judged by.
+struct Verified {
+    signer: VerifiedSigner,
+    /// True when the signer's thumbprint was compared against a pin this engine
+    /// has; false when the engine carries no certificate of its own and only the
+    /// release name could be checked.
+    pinned: bool,
+}
+
+/// Fetches the signature beside `manifest_url` and verifies it over `raw`.
+///
+/// The pin is [`pinned_update_thumbprint`]: the environment's test hook, or the
+/// certificate over this executable. A build with neither still verifies the
+/// signature and still has to recognise the signer's name — an update feed that
+/// cannot be checked is refused with that reason, not read anyway.
+async fn verify_manifest(sm: &SyncManager, manifest_url: &str, raw: &[u8]) -> Result<Verified> {
+    let sig_url = signature_url(manifest_url);
+    let signature = sm
+        .fetch_bytes(&sig_url, "the update manifest signature")
+        .await
+        .with_context(|| {
+            format!(
+                "the feed at {manifest_url} publishes no signature at {sig_url}: \
+                 refusing an update manifest nothing signed"
+            )
+        })?;
+    let signer = verify_detached(raw, &signature)
+        .with_context(|| format!("the manifest at {manifest_url} was refused"))?;
+    let pinned = judge(pinned_update_thumbprint()?, &signer, manifest_url)?;
+    Ok(Verified { signer, pinned })
+}
+
+/// Whether a verified signer is the one this engine trusts, and which pin decided
+/// it: `Ok(true)` when the thumbprint was compared, `Ok(false)` when this engine
+/// has no certificate of its own and the release name had to stand in.
+///
+/// Pure on purpose: the refusals below are the whole policy of F-3's feed half,
+/// and they are checked in unit tests rather than only against a live feed.
+fn judge(pin: Option<String>, signer: &VerifiedSigner, manifest_url: &str) -> Result<bool> {
+    match pin {
+        Some(pin) if pin == signer.thumbprint => Ok(true),
+        Some(pin) => bail!(
+            "the manifest at {manifest_url} was refused: it is signed by {}, and this engine pins {pin}",
+            describe(signer)
+        ),
+        None if signer
+            .name
+            .as_deref()
+            .is_some_and(|name| name.eq_ignore_ascii_case(EXPECTED_SIGNER_CN)) =>
+        {
+            // A development build: nothing of its own to pin. The signature still
+            // had to verify and the name still had to be ours, and the caller
+            // reports `pinned: false` rather than calling this the same check.
+            Ok(false)
+        }
+        None => bail!(
+            "the manifest at {manifest_url} was refused: it is signed by {}, and this engine \
+             carries no signature of its own to pin, so the signer must be {EXPECTED_SIGNER_CN}",
+            describe(signer)
+        ),
+    }
+}
+
+/// A signer as a refusal has to name it: the name a person can read first, then
+/// the thumbprint, so two certificates that share a subject stay tellable apart.
+fn describe(signer: &VerifiedSigner) -> String {
+    match signer.name.as_deref() {
+        Some(name) => format!("{name:?} (thumbprint {})", signer.thumbprint),
+        None => format!("a certificate with thumbprint {}", signer.thumbprint),
+    }
 }
 
 /// Downloads + verifies + stages the update. Returns the staged path.
@@ -184,4 +289,80 @@ fn copy_over(src: &PathBuf, dst: &PathBuf) -> Result<()> {
         std::fs::copy(&from, &to).with_context(|| format!("copy {}", to.display()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn signer(name: &str, thumbprint: &str) -> VerifiedSigner {
+        VerifiedSigner {
+            name: Some(name.to_string()),
+            thumbprint: thumbprint.to_string(),
+        }
+    }
+
+    const OURS: &str = "abcdef0123456789abcdef0123456789abcdef01";
+
+    #[test]
+    fn the_signature_sits_where_the_manifest_does() {
+        // Plain, with a query, with a fragment, and with both: the signature is
+        // the manifest's own name plus `.sig`, so a feed cannot ask for one file
+        // and sign another (D-047).
+        assert_eq!(
+            signature_url("https://host/u/update.json"),
+            "https://host/u/update.json.sig"
+        );
+        assert_eq!(
+            signature_url("http://127.0.0.1:9/good.json?x=1"),
+            "http://127.0.0.1:9/good.json.sig?x=1"
+        );
+        assert_eq!(
+            signature_url("https://host/update.json#top"),
+            "https://host/update.json.sig#top"
+        );
+        assert_eq!(
+            signature_url("https://host/update.json?a=1#b"),
+            "https://host/update.json.sig?a=1#b"
+        );
+    }
+
+    #[test]
+    fn a_manifest_is_judged_by_the_pin_and_then_by_the_name() {
+        // The pin decides, and a signature by another key is refused with both
+        // thumbprints named so the refusal can be checked.
+        let ours = signer(EXPECTED_SIGNER_CN, OURS);
+        assert_eq!(judge(Some(OURS.to_string()), &ours, "u").unwrap(), true);
+
+        let other = signer(EXPECTED_SIGNER_CN, &"b".repeat(40));
+        let refused = judge(Some(OURS.to_string()), &other, "https://host/u.json")
+            .expect_err("a signature by another key must be refused");
+        let message = format!("{refused:#}");
+        assert!(message.contains(OURS), "names the pin: {message}");
+        assert!(message.contains(&"b".repeat(40)), "names the signer: {message}");
+    }
+
+    #[test]
+    fn a_development_engine_falls_back_to_the_name_and_says_so() {
+        // No pin: a dev engine has no signature of its own. The name still has to
+        // be the release name, and the answer reports the weaker check as weaker.
+        let ours = signer(EXPECTED_SIGNER_CN, OURS);
+        assert_eq!(judge(None, &ours, "u").unwrap(), false);
+
+        let impostor = signer("Some Other Signer", &"c".repeat(40));
+        let refused = judge(None, &impostor, "https://host/u.json")
+            .expect_err("a different name must be refused when there is no pin");
+        let message = format!("{refused:#}");
+        assert!(
+            message.contains("Some Other Signer") && message.contains(EXPECTED_SIGNER_CN),
+            "the refusal names both the signer and the expected name: {message}"
+        );
+
+        // A certificate with no readable name is never ours.
+        let nameless = VerifiedSigner {
+            name: None,
+            thumbprint: "d".repeat(40),
+        };
+        assert!(judge(None, &nameless, "u").is_err());
+    }
 }
