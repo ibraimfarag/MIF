@@ -251,11 +251,19 @@ try {
       # The spec goes to the engine as the UI sends it: the row's own object.
       $spec = $blockable[0].block
       $statusBefore = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.wfp.status" -params $null -id 4
-      $writable = (-not $statusBefore.result.needs_elevation)
+      # A status that failed to answer is not "writable": `$null.needs_elevation`
+      # is $null and `-not $null` is True, which sent a broken read down the
+      # write path and then compared two errors as "back where it started" -
+      # measured on 2026-11-08, the run that found D-045.
+      $writable = ($null -ne $statusBefore.result) -and (-not $statusBefore.result.needs_elevation)
       $write = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.wfp.block" -params @{
         app = $spec.app; port = $spec.port; protocol = $spec.protocol; note = $spec.note } -id 5
       if ($null -eq $write) {
         Skip "fw.wfp.block did not answer, so the spec could not be checked"
+      } elseif ($null -eq $statusBefore.result) {
+        $why = ""
+        if ($null -ne $statusBefore.error) { $why = $statusBefore.error.message }
+        Skip ("fw.wfp.status did not answer ({0}), so the write path was not exercised" -f $why)
       } elseif ($writable) {
         Check ($null -ne $write.result) "the spec a row offers is accepted by fw.wfp.block"
         $statusAfter = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.wfp.status" -params $null -id 6
@@ -273,7 +281,7 @@ try {
           "and the reason says what is missing"
         Note ("refusal: " + $reason)
         $statusEnd = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.wfp.status" -params $null -id 9
-        Check ($statusEnd.result.filters -eq $statusBefore.result.filters) `
+        Check (($null -ne $statusEnd.result) -and ($statusEnd.result.filters -eq $statusBefore.result.filters)) `
           "a refused call left nothing behind"
       }
     }

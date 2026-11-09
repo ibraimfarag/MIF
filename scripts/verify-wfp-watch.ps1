@@ -271,8 +271,15 @@ try {
   $refused = ($null -eq $blocked) -or ($null -ne $blocked.error)
   $after = Invoke-Rpc -pipeName "mics-watch-e" -method "fw.wfp.watch" -params $null -id 6
   if ($refused) {
-    Note "the block was refused here (no administrator, no helper): the record must stay empty"
-    if ($after -and $null -ne $after.result) {
+    $why = "no answer"
+    if ($null -ne $blocked -and $null -ne $blocked.error) { $why = $blocked.error.message }
+    # The reason is printed, not assumed: on 2026-11-08 this note said "no
+    # administrator, no helper" in an elevated shell, while the real cause was
+    # the engine failing to enumerate its own filters (D-045).
+    Note ("the block was refused here (elevated=$elevated, helper=$helper): " + $why)
+    if ($elevated -or $helper) {
+      Check $false "fw.wfp.block was refused although this shell can write: $why"
+    } elseif ($after -and $null -ne $after.result) {
       Check ($after.result.recorded -eq 0) "a refused write records nothing"
       Check ($after.result.state -ne "tampered") "and it cannot turn into a tamper either"
     } else { Check $false "fw.wfp.watch answered after a refused block" }

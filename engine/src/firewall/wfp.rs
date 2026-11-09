@@ -44,7 +44,8 @@ use windows::Win32::NetworkManagement::WindowsFilteringPlatform::{
     FwpmGetAppIdFromFileName0, FwpmProviderAdd0, FwpmProviderDeleteByKey0, FwpmSubLayerAdd0,
     FwpmSubLayerDeleteByKey0, FwpmSubLayerGetByKey0, FWP_ACTION_BLOCK, FWP_BYTE_BLOB,
     FWP_BYTE_BLOB_TYPE, FWP_CONDITION_VALUE0, FWP_CONDITION_VALUE0_0, FWP_DATA_TYPE,
-    FWP_MATCH_EQUAL, FWP_UINT8, FWP_UINT16, FWP_VALUE0, FWP_VALUE0_0, FWPM_ACTION0,
+    FWP_FILTER_ENUM_FULLY_CONTAINED, FWP_MATCH_EQUAL, FWP_UINT8, FWP_UINT16, FWP_VALUE0,
+    FWP_VALUE0_0, FWPM_ACTION0,
     FWPM_ACTION0_0, FWPM_CONDITION_ALE_APP_ID, FWPM_CONDITION_IP_PROTOCOL,
     FWPM_CONDITION_IP_REMOTE_PORT, FWPM_DISPLAY_DATA0, FWPM_FILTER0,
     FWPM_FILTER_CONDITION0, FWPM_FILTER_ENUM_TEMPLATE0, FWPM_FILTER_FLAG_PERSISTENT,
@@ -229,6 +230,26 @@ pub fn layer_key(base: GUID, layer: GUID) -> GUID {
         key.data4[7] ^= 0x01;
     }
     key
+}
+
+/// The enumeration template for one of our layers: our provider, and a layer
+/// the BFE can actually resolve.
+///
+/// Pure, and separate from the walk that uses it, because the bug it exists to
+/// prevent (D-045) was invisible in the type: `layerKey` defaults to the zero
+/// GUID, which reads like "no layer in particular" and is answered with
+/// `FWP_E_LAYER_NOT_FOUND` - "layer does not exist" - before the provider is
+/// even considered. Enumerating across layers needs `FWP_FILTER_ENUM_FLAT`,
+/// which the `windows` crate does not expose; one call per real layer is the
+/// same answer with the layers this product writes to as the only input.
+pub fn filter_enum_template(layer: GUID) -> FWPM_FILTER_ENUM_TEMPLATE0 {
+    FWPM_FILTER_ENUM_TEMPLATE0 {
+        providerKey: &PROVIDER_KEY as *const GUID as *mut GUID,
+        layerKey: layer,
+        enumType: FWP_FILTER_ENUM_FULLY_CONTAINED,
+        actionMask: u32::MAX,
+        ..Default::default()
+    }
 }
 
 /// A GUID as the canonical text form. `windows-core`'s `GUID` has no `Display`,
@@ -515,47 +536,58 @@ impl Engine {
         Ok(names)
     }
 
-    /// Walks our own filters. The callback sees the filter while the BFE's
-    /// buffer is still alive, so it must copy what it needs.
+    /// Walks our own filters, one enumeration per layer this product installs
+    /// into. The callback sees the filter while the BFE's buffer is still
+    /// alive, so it must copy what it needs.
+    ///
+    /// The layer is in the template because it has to be: with the default
+    /// `FWP_FILTER_ENUM_FULLY_CONTAINED`, the BFE resolves `layerKey` before it
+    /// looks at the provider, and a zeroed GUID is not "every layer", it is
+    /// `FWP_E_LAYER_NOT_FOUND` - "layer does not exist". That is D-045: it
+    /// compiled, it read like "the filters of our provider", and it failed on
+    /// the machine the first time an elevated shell reached this code.
     fn for_each_ours<F: FnMut(&FWPM_FILTER0)>(&self, mut visit: F) -> Result<()> {
-        let template = FWPM_FILTER_ENUM_TEMPLATE0 {
-            providerKey: &PROVIDER_KEY as *const GUID as *mut GUID,
-            actionMask: u32::MAX,
-            ..Default::default()
-        };
-        let mut handle = HANDLE::default();
-        check(
-            unsafe { FwpmFilterCreateEnumHandle0(self.handle, Some(&template), &mut handle) },
-            "enumerating MI CS' filters",
-        )?;
-        loop {
-            let mut entries: *mut *mut FWPM_FILTER0 = std::ptr::null_mut();
-            let mut count = 0u32;
+        for layer in LAYERS {
+            let template = filter_enum_template(layer);
+            let mut handle = HANDLE::default();
             let code =
-                unsafe { FwpmFilterEnum0(self.handle, handle, 64, &mut entries, &mut count) };
-            if code != 0 || count == 0 || entries.is_null() {
-                break;
+                unsafe { FwpmFilterCreateEnumHandle0(self.handle, Some(&template), &mut handle) };
+            // No provider on this machine yet means no filters of ours. The
+            // layer is a real one at this point, so anything else is a failure
+            // worth naming rather than an empty answer.
+            if is_missing(code) {
+                continue;
             }
-            let mut seen = 0usize;
-            for i in 0..count as usize {
-                let filter = unsafe { *entries.add(i) };
-                if filter.is_null() {
-                    continue;
+            check(code, "enumerating MI CS' filters")?;
+            loop {
+                let mut entries: *mut *mut FWPM_FILTER0 = std::ptr::null_mut();
+                let mut count = 0u32;
+                let code =
+                    unsafe { FwpmFilterEnum0(self.handle, handle, 64, &mut entries, &mut count) };
+                if code != 0 || count == 0 || entries.is_null() {
+                    break;
                 }
-                let filter = unsafe { &*filter };
-                let ours =
-                    !filter.providerKey.is_null() && unsafe { *filter.providerKey } == PROVIDER_KEY;
-                if ours {
-                    visit(filter);
-                    seen += 1;
+                let mut seen = 0usize;
+                for i in 0..count as usize {
+                    let filter = unsafe { *entries.add(i) };
+                    if filter.is_null() {
+                        continue;
+                    }
+                    let filter = unsafe { &*filter };
+                    let ours = !filter.providerKey.is_null()
+                        && unsafe { *filter.providerKey } == PROVIDER_KEY;
+                    if ours {
+                        visit(filter);
+                        seen += 1;
+                    }
+                }
+                free(entries as *mut c_void);
+                if seen == 0 {
+                    break;
                 }
             }
-            free(entries as *mut c_void);
-            if seen == 0 {
-                break;
-            }
+            unsafe { FwpmFilterDestroyEnumHandle0(self.handle, handle) };
         }
-        unsafe { FwpmFilterDestroyEnumHandle0(self.handle, handle) };
         Ok(())
     }
 
@@ -888,6 +920,50 @@ mod tests {
 
         let other = spec(Some("C:\\Program Files\\App\\app.exe"), Some(80), Some(6));
         assert_ne!(filter_key(&one), filter_key(&other));
+    }
+
+    /// Every enumeration template names a layer the BFE can resolve.
+    ///
+    /// The bug this pins (D-045) was invisible in the type: `layerKey` defaults
+    /// to the zero GUID, which reads like "no layer in particular", and an
+    /// elevated shell on 2026-11-08 answered it with `FWP_E_LAYER_NOT_FOUND`
+    /// (`0x80320004`, "layer does not exist") - so `fw.wfp.status` failed, and
+    /// `fw.wfp.block` reported an error *after* its filter was already in the
+    /// machine. Nothing here touches the BFE, which is the point: the mistake
+    /// is in the template, and the template is pure.
+    #[test]
+    fn every_enumeration_template_names_a_real_layer() {
+        for layer in LAYERS {
+            let template = filter_enum_template(layer);
+            assert_eq!(template.layerKey, layer);
+            assert_ne!(
+                template.layerKey,
+                GUID::zeroed(),
+                "a zero layerKey is FWP_E_LAYER_NOT_FOUND, not 'every layer'"
+            );
+            assert!(!template.providerKey.is_null(), "our provider, not every one");
+            assert_eq!(unsafe { *template.providerKey }, PROVIDER_KEY);
+            assert_eq!(template.actionMask, u32::MAX, "no action is filtered out");
+        }
+        assert_eq!(
+            LAYERS.len(),
+            2,
+            "one call per layer: the count here is the number of templates the walk makes"
+        );
+    }
+
+    /// A provider that is not on the machine is an empty answer; a layer that is
+    /// not on the machine is a real failure. Collapsing the two is how a broken
+    /// read starts looking like "we own nothing" - the state the tamper watch
+    /// exists to distinguish from a healthy machine.
+    #[test]
+    fn a_missing_provider_is_not_a_layer_error() {
+        const FWP_E_LAYER_NOT_FOUND: u32 = 0x8032_0004;
+        assert!(is_missing(FWP_E_PROVIDER_NOT_FOUND.0 as u32));
+        assert!(
+            !is_missing(FWP_E_LAYER_NOT_FOUND),
+            "the error this file was fixed for must stay loud"
+        );
     }
 
     #[test]

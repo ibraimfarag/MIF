@@ -2440,3 +2440,93 @@ is why this experiment still needs its own script or a WFP-API tool.
 callout driver, self-healing re-creation of a deleted filter, attribution of the deletion, watching
 anything other than MI CS' own objects, or treating `unknown` as a healthy state anywhere in the
 UI.
+
+## D-045 — A filter enumeration names its layer; "every layer" is not a zero GUID
+
+**Status:** accepted (2026-11-09)
+
+**Context.** Everything in D-042 and D-043 was measured from an unelevated shell, where the engine
+answers `needs_elevation` and never reaches the Base Filtering Engine. The first **elevated** run of
+`scripts\verify-wfp.ps1` (2026-11-08) reached the BFE and found the write path broken:
+
+- `fw.wfp.status` failed with `enumerating MI CS' filters: layer does not exist. (0x80320004)` —
+  `FWP_E_LAYER_NOT_FOUND`;
+- `fw.wfp.block` failed with the same sentence **after** its filter had been added, because the
+  read-back that makes "blocked" a state that was *seen* rather than a call that returned zero
+  (D-042) is the step that failed.
+
+The cause is one line. `for_each_ours` built its `FWPM_FILTER_ENUM_TEMPLATE0` as
+`providerKey: ours, actionMask: u32::MAX, ..Default::default()`, so `layerKey` stayed the zero GUID.
+With the default `FWP_FILTER_ENUM_FULLY_CONTAINED` the BFE resolves that layer *before* it looks at
+the provider: a zero GUID is not "every layer of this provider", it is a layer that does not exist.
+The type made the mistake invisible — `Default` is legally zeroed, and the intent the line reads as
+("the filters of our provider") is not what the API does with it. The same template is used by
+`reset`, so before this fix the undo for a stray filter could not run either: `fw.wfp.reset` failed
+with the identical sentence (reproduced unelevated through the installed helper on 2026-11-09).
+
+Three instruments read that failure as something other than a failure, which is why it survived a
+green `cargo test` and a green unelevated probe run:
+
+1. `verify-wfp.ps1` printed `PASS a refused block carries a reason the UI can show` for a refusal
+   that happened in a shell which *could* write, and then skipped the write path — a broken engine
+   reading as a working one;
+2. `verify-connections.ps1` computed `$writable = -not $statusBefore.result.needs_elevation`; with a
+   failed status, `$null.needs_elevation` is `$null` and `-not $null` is `$true`, so it went down the
+   write path and then compared `$null -eq $null` as `PASS ... the machine is back where it started`;
+3. `verify-wfp-watch.ps1` printed "the block was refused here (no administrator, no helper)" — in an
+   elevated shell, asserting the reason instead of printing the one it was given.
+
+**Decision.**
+
+1. **One enumeration per layer, and the layer comes from the list this product installs into.**
+   `filter_enum_template(layer)` builds the template — provider, `FWP_FILTER_ENUM_FULLY_CONTAINED`,
+   `actionMask: u32::MAX`, and a **real** `layerKey` — and `for_each_ours` calls it once per entry of
+   `LAYERS`. Enumerating across layers would need `FWP_FILTER_ENUM_FLAT`, which the `windows` crate
+   does not expose; one call per real layer is the same answer with the layers MI CS writes to as the
+   only input, so the engine can still only ever report a filter it wrote (D-042).
+2. **A provider that is not on the machine yet is an empty answer; a layer that is not on the
+   machine is a failure.** `FWP_E_PROVIDER_NOT_FOUND` (and the other "it is not there" codes) remains
+   `is_missing`, so a first-time status is `filters=0` rather than an error. `FWP_E_LAYER_NOT_FOUND`
+   is deliberately **not** in that set, and a test says so: collapsing the two is how a broken read
+   starts looking like a clean machine, which is the exact state the D-044 watch exists to tell apart
+   from a healthy one.
+3. **The template is a pure function and a test holds the invariant.** The test
+   `every_enumeration_template_names_a_real_layer` asserts, for every layer in `LAYERS`, that the
+   built template's `layerKey` is that layer, is not zero, carries our provider key and does not mask
+   any action. Nothing in it touches the BFE, which is the point: the mistake is in the template, and
+   the template is pure.
+4. **The instruments say what happened.** `verify-wfp.ps1` now *fails* a refusal in a shell that can
+   write, with the reason printed; `verify-connections.ps1` treats an unreadable status as
+   "not exercised" and skips instead of passing on two nulls; `verify-wfp-watch.ps1` prints the
+   refusal it was given and fails it when the shell could write. A probe that reports a broken write
+   path as a passing refusal is worse than no probe.
+5. **Cleanup is a state a crashed run can need, so it has a script.**
+   `scripts\reset-wfp.ps1` starts an engine against the app's own data directory, removes MI CS' own
+   filters, sublayer and provider through `fw.wfp.reset`, and reads the machine back — including
+   that the reset cleared the D-044 record, so a cleanup cannot read as a tamper. It is deliberately
+   honest about an unreadable machine: `filters=0` from a shell that could not read the BFE is
+   reported as *unmeasured*, not as "nothing is left".
+
+**Measured on this machine, 2026-11-09.** `cargo test` **192** (190 before): the two new tests above.
+`cargo clippy --release -- -D warnings` clean, and the fast tier as one run: **green, 4 of 4,
+68.8 s** (the QA report is byte-gated by `test\qa_report_test.dart` and declares the engine test
+count, so it had to be regenerated to say 192 — the one place a test count is a checked artifact).
+The debug build now carries the fix
+(`engine\target\debug\mics-engine.exe`). `scripts\reset-wfp.ps1` end to end, unelevated, against the
+**installed** helper (a release build that predates the fix): `fw.wfp.reset` is refused with
+`enumerating MI CS' filters: The layer does not exist. (0x80320004)` — the bug reproduced through a
+second caller — while the script's own path is exercised: `fw.wfp.status` answered, the machine
+reported unreadable and the cleanup **unmeasured** rather than "clean", and `fw.wfp.watch` answered
+`unknown`, `recorded=0`.
+
+**Not measured, and the row stays `[~]`.** No elevated run of the fixed build has happened yet: the
+green numbers for `verify-wfp.ps1`, `verify-connections.ps1` and `verify-wfp-watch.ps1` on the real
+BFE are still to come, and so is the answer to whether the 2026-11-08 run left a filter behind (its
+teardown never ran, because the RPC it waits for returned an error after the filter was added —
+that is the stray `scripts\reset-wfp.ps1` exists to remove). The fix is measured only as: the unit
+tests, a clean clippy, and the *unfixed* helper still failing in the same place.
+
+**Advances** §0.6 row 17 (slice a's elevated path, and the honesty of its probes). **Does not commit
+us to:** enumerating layers MI CS does not write to, `FWP_FILTER_ENUM_FLAT` (unavailable in the
+bindings), treating a failed read as an empty machine anywhere, or a probe that reports a broken
+write path as a passing refusal.

@@ -180,6 +180,9 @@ try {
   Write-Output "== part 1 - the status the engine reports"
   $before = Invoke-Rpc -pipeName $env:MICS_PIPE_NAME -method "fw.wfp.status" -params $null
   Check ($null -ne $before -and $null -ne $before.result) "fw.wfp.status answered"
+  if ($null -ne $before -and $null -ne $before.error) {
+    Note ("status failed: " + $before.error.message)
+  }
   $status = $null
   if ($before -and $null -ne $before.result) { $status = $before.result }
   if ($null -ne $status) {
@@ -198,11 +201,15 @@ try {
   if ($blockRefused) {
     $reason = "no answer"
     if ($block -and $block.error) { $reason = "$($block.error.message)" }
-    Check ($reason -ne "no answer") "a refused block carries a reason the UI can show"
-    Note ("refusal: " + $reason)
     if ($canWrite) {
-      Skip "fw.wfp.block was refused although this shell can write (elevated=$elevated, helper=$helper)"
+      # This shell can write, so a refusal here is the engine failing at
+      # something it said it could do - not a privilege boundary. Reporting it
+      # as "a reason the UI can show" let a broken write path read as a working
+      # one on 2026-11-08 (D-045); it is a failure with its reason.
+      Check $false ("fw.wfp.block was refused although this shell can write (elevated=$elevated, helper=$helper): " + $reason)
     } else {
+      Check ($reason -ne "no answer") "a refused block carries a reason the UI can show"
+      Note ("refusal: " + $reason)
       Skip ("fw.wfp.block was refused ({0}) - no elevated shell and no MICSHelper service" -f $reason)
       Check $true "the refusal matches this shell's privilege (elevated=$elevated, helper=$helper)"
     }
