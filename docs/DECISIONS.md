@@ -2200,20 +2200,36 @@ with the four new methods answering in their documented shape (`status` an objec
 writes a refusal error), and `qa/methods.json` carries them; `qa/report.md`/`.html` were
 regenerated (72 methods, 107 controls).
 
-**Not measured, and the row stays `[~]`.** No filter was actually persisted on a real
-machine in this session: that needs an administrator (an elevated probe run, or the helper
-reinstalled), and neither was available here. So these four claims are **unproven**: that a
-created filter blocks a real connection, that our sublayer's weight (`0x7fff`) really puts
-our block in front of the built-in firewall's permit, that the filter survives a reboot (the
-BFE persistent store), and that it still blocks with MI CS not running.
-`scripts\verify-wfp.ps1` is written to measure exactly those — parts 2–4 do the write, read
-it back through `netsh wfp show state` and `netsh wfp show filters`, check the action is
-Block, then remove it and ask Windows again — and it skips loud rather than passing when it
-cannot write. Run it elevated (or with a reinstalled helper) and the skips become the row's
-remaining evidence.
+**Measured against the real Base Filtering Engine on 2026-11-09** — the elevated run §0 item 7
+asked for, with `engine\target\debug\mics-engine.exe` (the build that carries D-045):
+`scripts\verify-wfp.ps1` **16 checks passed, 2 skipped, 0 failed, 5 s**. `fw.wfp.status` answered
+`needs_elevation=false` before and after, `fw.wfp.block` reported `block` with
+`added=true` and the key `77C31A7A-8BE6-4277-BDCC-6045151EE243`, the filter count went from 0 to
+2 (one per address family), and the name MI CS reports is the one Windows reports:
+`MICS-mics-engine.exe port 65001 protocol 6 probe`. Windows' own `netsh wfp show filters` carried
+the same object — `FWPM_FILTER_FLAG_PERSISTENT`, `FWPM_FILTER_FLAG_INDEXED`, provider
+`{6d494353-0001-...}`, sublayer `{6d494353-0002-...}`, layer `FWPM_LAYER_ALE_AUTH_CONNECT_V4`,
+conditions `FWPM_CONDITION_ALE_APP_ID` (a `FWP_BYTE_BLOB` holding the debug exe's path),
+`FWPM_CONDITION_IP_REMOTE_PORT` 65001 and `FWPM_CONDITION_IP_PROTOCOL` 6, action
+`FWP_ACTION_BLOCK` — and the probe checked it is **not** a Permit filter. The undo removed it:
+gone from our list and from Windows' filtering state. The two skips are honest: the
+`netsh wfp show state` comparison produced no XML here (`show filters` carried the same evidence),
+and part 5's refusal path is unreachable in a shell that can write (measured unelevated instead).
+The first elevated run of the same probe (2026-11-08) is what produced D-045: every call failed
+`0x80320004`.
 
-**Advances** §0.6 row 17 (slice a), which stays `[~]` until the writes are measured on a real
-machine. **Does not commit us to:** a kernel driver, WinDivert or Mullvad-Lib, DNS or name
+**Not measured, and the row keeps these three open.** No connection was opened through the filter
+to watch it be **refused**, so the enforcement effect is not composed into evidence; no **reboot**
+was performed, so survival is the `FWPM_FILTER_FLAG_PERSISTENT` flag Windows prints rather than an
+observed reload; and no **permit rule with a higher precedence** was created, so whether our
+sublayer weight (`0x7fff`) really outranks the built-in firewall's permit is still unproven. What
+the run does prove is the layer MI CS claims: MI CS' own provider, sublayer and persistent block
+exist in the BFE, Windows names and enforces them with MI CS free to stop, and `reset`/`unblock`
+address only our provider key.
+
+**Advances** §0.6 row 17 (slice a), which is closed for what it states — the firewall is Windows'
+rule list, and MI CS writes real rules into it — with the three claims above named as the honest
+limit. **Does not commit us to:** a kernel driver, WinDivert or Mullvad-Lib, DNS or name
 resolution interception, stateful callouts or the stream layer, per-connection state, blocking
 by package SID, or any UI surface of its own — this slice is the enforcement layer the rest of
 the product can now build on.
@@ -2310,15 +2326,26 @@ the **engine** derives the filter spec a row implies.
   regenerated (**+2 controls, 109**), and the RPC contract re-run against the same binary:
   **86 cases, 0 failed**, with `net.connections` answering in the new shape.
 
-**Not measured, and the row stays `[~]`.** No click actually blocked anything on this machine: a
-block needs an administrator or a helper that knows the WFP ops, and neither was available (the
-same wall D-042 hit). So the claim "the spec a row offers, once accepted, blocks exactly that
-row's connection" is **written and reasoned but unproven**, and `verify-connections.ps1` records
-it as the refusal path until it is run elevated or the helper is reinstalled from Settings →
-Engine — at which point its part 3 takes the write branch and asserts the BFE holds one more
-filter, then that it is gone again. The UI's own click is proved only up to the wire.
+**Measured elevated on 2026-11-09** (same run, fixed debug build):
+`scripts\verify-connections.ps1` **24 checks passed, 0 skipped, 0 failed, 6 s**, with part 3 taking
+the write branch for a **real row's own spec** instead of the refusal path — the spec
+`fw.wfp.block` accepted, the BFE holding one more filter, `fw.wfp.unblock` removing it, and the
+probe's closing check that the machine is back where it started. The list itself: 462 rows, every
+one carrying address, protocol, state, pid, name, path, protocol number, remote port and a block
+decision; 143 rows still present in Windows' own table when compared, 319 already gone, 38 shared
+UDP sockets not comparable; 147 rows offering a block and 315 not; IPv6 and UDP rows present, with
+a UDP row saying it has no peer instead of inventing one.
 
-**Advances** §0.6 row 17 (slice b). **Does not commit us to:** a packet-level view, per-connection
+**Not measured, and the row keeps this open.** Nothing watched a blocked row's connection actually
+die: the probe proves the filter a row offers is exact, accepted and really in the BFE, not that
+the connection it names is then refused (that would need the probe to open a connection through
+the filter, and the click's own effect on screen is the same claim a step further out). So the
+sentence "the spec a row offers, once accepted, blocks exactly that row's connection" is now
+written, reasoned and **half measured**: the rule is real and Windows-owned, its enforcement on a
+live socket is not observed. The UI's own click is proved up to the wire, plus 2 widget tests.
+
+**Advances** §0.6 row 17 (slice b), which is closed for what it states — there is a live feed and
+a one-click block. **Does not commit us to:** a packet-level view, per-connection
 state or byte counters, reverse DNS, a process tree in the list, blocking by process *name*,
 automatic blocking from a heuristic or a feed (the click is the human's), or an un-block from the
 row — removal stays the Firewall tab's rule list, where the filter's own name is shown.
@@ -2422,13 +2449,22 @@ cannot see rather than on pretending it is a subscription.
   regenerated (**73 methods, 109 controls**) with the RPC contract re-run against the same binary:
   **87 cases, 0 failed**.
 
-**Not measured, and the row stays `[~]`.** No **real** deletion was performed behind the engine's
-back: that needs an administrator, so what part 2 proves is the detector, the alert and the
-once-per-change rule against an injected status, not a measurement of the machine. The guard
-thread's own 30 s poll was not observed firing either — the probe and the contract call
-`fw.wfp.watch` directly, which is the same function on a timer. Elevated (or with the helper
-reinstalled from Settings → Engine), part 1 answers from the real BFE, and the same probe then
-reports a real `guarded`. The missing experiment is a **real** removal while the engine watches:
+**Measured elevated on 2026-11-09** (same run, fixed debug build):
+`scripts\verify-wfp-watch.ps1` **34 checks passed, 1 skipped, 0 failed, 4 s**. Part 1 read the
+**real** BFE for the first time — `state=clear recorded=0 live=0 needs_elevation=false`, and
+`live=0` is also the independent proof that the four stray filters the 2026-11-08 run left behind
+were gone (they were: `scripts\reset-wfp.ps1` removed 4 filters, the sublayer and the provider, see
+D-045). Parts 2 and 3 still drive the detector and the alert over an injected status, now in a
+shell that can write, and part 4 is skipped there for the same reason (its refusal path is measured
+unelevated). The alert path is unchanged and measured: one HIGH incident titled "filtering layer
+was tampered with", naming the missing filter, once per change, with the engine's log line and the
+injected status labelled as injected.
+
+**Not measured, and this is the experiment that stays open.** No **real** deletion was performed
+behind the engine's back: what part 2 proves is the detector, the alert and the once-per-change rule
+against an injected status, not a measurement of the machine. The guard thread's own 30 s poll was
+not observed firing either — the probe and the contract call `fw.wfp.watch` directly, which is the
+same function on a timer. The missing experiment is a **real** removal while the engine watches:
 create one filter (the connection list's block button, or `fw.wfp.block`), then take it out of the
 BFE **behind the engine's back**, which the engine's own ops cannot do without also clearing the
 record — the available route is the helper's `firewall.wfp.unblock`, called on the helper pipe
@@ -2436,7 +2472,8 @@ directly so the engine's bookkeeping is untouched. `scripts\verify-wfp.ps1 -Keep
 filter: it keeps the scratch directory, and its teardown unblocks what it created either way, which
 is why this experiment still needs its own script or a WFP-API tool.
 
-**Advances** §0.6 row 17 (slice c). **Does not commit us to:** a WFP change subscription, a kernel
+**Advances** §0.6 row 17 (slice c), which is closed for what it states — a lost filter or sublayer
+becomes an incident. **Does not commit us to:** a WFP change subscription, a kernel
 callout driver, self-healing re-creation of a deleted filter, attribution of the deletion, watching
 anything other than MI CS' own objects, or treating `unknown` as a healthy state anywhere in the
 UI.
@@ -2519,14 +2556,35 @@ second caller — while the script's own path is exercised: `fw.wfp.status` answ
 reported unreadable and the cleanup **unmeasured** rather than "clean", and `fw.wfp.watch` answered
 `unknown`, `recorded=0`.
 
-**Not measured, and the row stays `[~]`.** No elevated run of the fixed build has happened yet: the
-green numbers for `verify-wfp.ps1`, `verify-connections.ps1` and `verify-wfp-watch.ps1` on the real
-BFE are still to come, and so is the answer to whether the 2026-11-08 run left a filter behind (its
-teardown never ran, because the RPC it waits for returned an error after the filter was added —
-that is the stray `scripts\reset-wfp.ps1` exists to remove). The fix is measured only as: the unit
-tests, a clean clippy, and the *unfixed* helper still failing in the same place.
+**Verified against the real Base Filtering Engine the same day.** The elevated re-run §0 item 7
+asked for happened on 2026-11-09 with the fixed debug build, and the bug is gone: `fw.wfp.status`,
+`fw.wfp.block` and `fw.wfp.reset` all answered from the BFE. The numbers, in the order the run
+prescribes: `scripts\reset-wfp.ps1` **7 checks passed, 0 skipped, 0 failed, 1 s** — and it found what
+it exists for: `before: sublayer=True filters=4` naming four of our own filters
+(`MICS-mics-engine.exe port 65001 protocol 6 probe` twice and the same at port 65002), so the
+2026-11-08 teardown had indeed left the machine dirty; `removed: 6` (four filters, the sublayer and
+the provider), `after: filters=0 sublayer=False`, and `watch: state=clear recorded=0` — the cleanup
+did not leave a tamper behind. Then `verify-wfp.ps1` **16 passed, 2 skipped, 0 failed, 5 s**,
+`verify-connections.ps1` **24 passed, 0 skipped, 0 failed, 6 s** and `verify-wfp-watch.ps1`
+**34 passed, 1 skipped, 0 failed, 4 s**, whose part 1 read the real BFE
+(`state=clear recorded=0 live=0`) — `live=0` being the second proof that no filter of ours was left
+anywhere. The three checks the 2026-11-08 run reported as PASS while nothing could be written now
+report the reason they are skipped, and the one that was a FAIL was a FAIL for the right reason.
 
-**Advances** §0.6 row 17 (slice a's elevated path, and the honesty of its probes). **Does not commit
+**Not measured.** The D-045 fix itself is now measured (above); what stays open belongs to the
+slices, not to this bug: the *enforcement effect* of a filter on a live connection, its survival
+across a reboot, our sublayer's weight against a built-in permit rule (D-042), and a **real**
+deletion behind the engine's back (D-044). One instrument limit is recorded rather than fixed:
+`netsh wfp show state` produced no XML on this machine, so the `show filters` comparison is what
+carried the action evidence — the skip now quotes netsh's own exit code and answer (commit
+`4709011`), which is why the next run will say *why* instead of only *that*. A second one: the
+installed `MICSHelper` is still a release build from before this fix, so the **app's own unelevated**
+write path still answers `0x80320004` until the helper is reinstalled from a fixed build
+(`engine\target\debug\mics-engine.exe install-helper` in an elevated shell, which also unlocks the
+release exe for the next `cargo build --release`).
+
+**Advances** §0.6 row 17 (slice a's elevated path, and the honesty of its probes), which is closed
+with the slices. **Does not commit
 us to:** enumerating layers MI CS does not write to, `FWP_FILTER_ENUM_FLAT` (unavailable in the
 bindings), treating a failed read as an empty machine anywhere, or a probe that reports a broken
 write path as a passing refusal.

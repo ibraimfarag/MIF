@@ -33,7 +33,7 @@ so they keep their own names. This sheet's section numbers (§2 scanner, §3 net
 | L4 scanner | on-demand static analysis of files | engine job | no | known hashes (IOC feed) + YARA rules, over the tree you point it at | only through quarantine (the file is moved); never pre-execution |
 | L2 IDS | DNS-name sinkhole in the hosts file | helper applies, every app consumes | yes (helper) | nothing — it is a pure block | listed domains resolve to `0.0.0.0` |
 | L1 firewall | Windows Firewall API (`INetFwPolicy2`) rules | helper | yes (helper) | nothing | outbound default-deny, per-rule allow/block (program/port/IP), one firewall rule per blocked country |
-| L1 filtering engine (WFP) | MI CS' own provider, sublayer and persistent filters in the Base Filtering Engine | helper (or the engine when it is elevated) | yes (helper) | nothing | a persistent per-application/port `FWP_ACTION_BLOCK` at the ALE connect layers, enforced by the BFE with MI CS not running — **written and unit-tested 2026-11-08 (D-042), not yet measured on a real connection (`scripts\verify-wfp.ps1` skips the write checks unelevated)** |
+| L1 filtering engine (WFP) | MI CS' own provider, sublayer and persistent filters in the Base Filtering Engine | helper (or the engine when it is elevated) | yes (helper) | nothing | a persistent per-application/port `FWP_ACTION_BLOCK` at the ALE connect layers, enforced by the BFE with MI CS not running — **measured against the real Base Filtering Engine 2026-11-09 (D-042/D-045): `scripts\verify-wfp.ps1` 16 passed, 2 skipped, 0 failed, with Windows' own `netsh wfp show filters` reporting the filter as a persistent Block in `ALE_AUTH_CONNECT_V4`** |
 | L1 tamper watch (WFP) | a record of our filter names and sublayer compared against the BFE by a poll (~30 s) | engine | no | our own sublayer or filter leaving the BFE while MI CS did not remove it | nothing — one HIGH incident and card naming what is gone (D-044); it never re-creates the object |
 | L3 guard | process-start rules (ETW, or a 2 s poll unelevated) | engine | ETW yes, poll no | process starts matching JSON rules (image, parent, command line) | kills the process tree for rules marked `kill` — after the start |
 | L3 canaries | decoy files | engine poll | no | decoys whose mtime/size changed | nothing |
@@ -169,9 +169,16 @@ mode, raw sockets, a callout in a heavier sublayer, or the same binary reached t
 a renamed copy — is outside it. The list it is driven from is a **snapshot** of the
 kernel's tables, not a push feed: a connection that opens and closes between two reads
 is never seen. A deletion of our sublayer or filters is noticed by §3.5 (D-044), and
-only on its own poll — a delete-and-re-add inside that window is invisible to it. And
-the write path itself is **not yet measured on a real connection**:
-`scripts\verify-wfp.ps1` needs an administrator (D-042).
+only on its own poll — a delete-and-re-add inside that window is invisible to it. The
+write path is no longer unmeasured (2026-11-09, D-042/D-045): `scripts\verify-wfp.ps1` ran
+elevated and read the filter back out of the BFE with Windows' own `netsh wfp show
+filters` — `FWP_ACTION_BLOCK`, `FWPM_FILTER_FLAG_PERSISTENT`, at
+`FWPM_LAYER_ALE_AUTH_CONNECT_V4`, matching the application path, the remote port and the
+protocol it was given, and gone from both our list and Windows' state after the undo. What
+is still not composed into evidence: the **enforcement effect** (no connection was opened
+through the blocked app and port to watch it be refused), a **survival across a reboot**
+(persistence is the flag Windows reports; no reboot was performed), and whether our
+sublayer's **weight outranks a permit rule** from the built-in firewall.
 
 ### 3.5 The tamper watch (`firewall/watch.rs`, D-044)
 
@@ -196,9 +203,15 @@ both read as the same sentence. `unknown` is not "fine" — an unelevated engine
 helper genuinely cannot read the BFE (D-042), and the watch says so rather than
 reporting an empty machine as `guarded`. The record is best-effort by construction: a
 crash between the write and the record leaves one filter of ours listed as `extra`,
-which is never a false tamper. The real deletion is unmeasured:
-`scripts\verify-wfp-watch.ps1` proves the detector and the alert unelevated over an
-injected status, and reading a real machine needs an administrator.
+which is never a false tamper. The machine half is measured (2026-11-09, D-044):
+`scripts\verify-wfp-watch.ps1` ran elevated and **34 checks passed, 1 skipped, 0 failed**,
+its first part reading the **real** BFE (`state=clear recorded=0 live=0
+needs_elevation=false` — and `live=0` is also the proof that the four stray filters the
+2026-11-08 run left behind were gone), with the detector and alert parts still driven by an
+injected status. What is not measured is the case the feature exists for: a **real** filter
+deleted behind the engine's back so that the engine's own bookkeeping is untouched and the
+poll is the only thing that can notice, and the guard thread's 30 s tick observed firing on
+its own rather than the on-demand call.
 
 ### 3.4 Live connections and the one-click block (`windows/conns.rs`, D-043)
 
@@ -219,7 +232,12 @@ image path).
 
 **Misses.** It is a snapshot taken when the screen opens or Refresh is pressed, so it can
 be seconds stale by the time a row is clicked — the block is still written, but a
-connection that has already moved on will not be caught by it. There is no per-row
+connection that has already moved on will not be caught by it. Its write path *is*
+measured — elevated `scripts\verify-connections.ps1` **24 checks passed, 0 skipped, 0
+failed** (2026-11-09, D-043: a row's own spec accepted by `fw.wfp.block`, the BFE one
+filter heavier, `fw.wfp.unblock` taking the machine back to where it started) — but the
+enforcement is not: no connection was opened through that filter to watch it be refused.
+There is no per-row
 traffic counter, no reverse DNS and no process tree next to a row (the UI shows country,
 name and path only), and a block cannot be removed from the list itself: removal is the
 Firewall tab's rule list. UDP rows carry no peer at all, which is Windows' limitation,
@@ -389,5 +407,5 @@ administrator can delete it (F-10).
 | A decoy *read* is detected, and what the decoys cover is a measurement | `scripts\verify-canary.ps1` (20 checks, PASS, 2026-11-05) against a real engine on a private pipe: a decoy MI CS had just written is settled silently inside the 90 s window (and the log records it), a pre-existing decoy raises HIGH `canary_read` with its size and SHA-256 unchanged, one appended byte raises CRITICAL `canary_triggered`, fifty metadata queries move no last-access time and raise nothing, and the engine's `read_detection` verdict equals the same measurement taken independently in PowerShell — including that the verdict names the decoys' own folder |
 | Reading and writing are told apart in one place | the six `guard::canary::tests` cases over `classify` (untouched, read-only, read-that-also-writes, deleted, a volume without atime, and the probe leaving nothing behind) |
 | What the shipped detection pack *catches*, not that it loads | `scripts\verify-rules.ps1` (**35 checks, PASS, 2026-11-05**) scans the 9 vectors in `engine\testdata\detection` with the pack a package ships and requires each one to be caught under the rule it was written for, the clean control to stay silent, and every declared rule to be either caught or named as unreachable — plus the same table as a unit test (`scanner::yara_engine::tests`, 4 cases), which is what found `Malicious_Macro_AutoOpen` comparing the zip magic against `"KP"`. `verify-release.ps1` runs the probe against the packaged pack with `-InPlace`, so the artifact's own `rules\` is what catches the vectors |
-| MI CS' own WFP objects exist, and writing them needs an administrator | `firewall\wfp`'s 8 unit tests: the canonical name, four refusals in `validate`, one spec → one derived key, a known spec → the measured key `B051BA44-F5BF-454C-8D09-B8F1F8D5680E`, two layers → two version-4 GUIDs — and, live on this machine, `FwpmEngineOpen0` succeeding unelevated while `FwpmProviderAdd0` answers `0x80070005`, which the code names as `needs_elevation`. `scripts\verify-wfp.ps1` measured the live surface unelevated (**PASS, 7 checks, 3 skipped**): `fw.wfp.status` answered `sublayer=false filters=0 needs_elevation=true` with the running helper's own refusal as `detail`. **Not measured here:** an actual persistent filter, its effect on a connection, and its survival of a reboot — the three checks the probe skips until it runs with an administrator (D-042) |
-| The connection list is Windows' own table, and what a row offers to block is exact | `windows\conns`'s 6 unit tests hold the parts a test can: a spec is offered only with a peer port and an image path, the note is one the helper's validator accepts, and both address families format the way Windows writes them. `scripts\verify-connections.ps1` (new, D-043) measured the live list unelevated against the debug engine: **PASS, 23 checks, 0 skipped, 0 failed** — 490 rows, every row carrying path/protocol/peer port and a block decision, 139 rows offering a spec whose app path, port and protocol match the row (and whose file exists), no row with an empty peer port offering one, Windows agreeing with every owner it names (343 rows had already vanished, 0 contradictions), IPv6 and UDP rows present, and the spec handed to `fw.wfp.block` refused **with a reason** and `fw.wfp.status` unchanged afterwards. **Not measured here:** a spec that is actually *accepted*, and therefore a click that really blocks — the installed `MICSHelper` predates the WFP ops, so the write path is the same one `verify-wfp.ps1` skips until a helper is reinstalled or the probe runs elevated |
+| MI CS' own WFP objects exist, and writing them needs an administrator | `firewall\wfp`'s 8 unit tests: the canonical name, four refusals in `validate`, one spec → one derived key, a known spec → the measured key `B051BA44-F5BF-454C-8D09-B8F1F8D5680E`, two layers → two version-4 GUIDs — and, live on this machine, `FwpmEngineOpen0` succeeding unelevated while `FwpmProviderAdd0` answers `0x80070005`, which the code names as `needs_elevation`. `scripts\verify-wfp.ps1` measured the live surface unelevated (**PASS, 7 checks, 3 skipped**): `fw.wfp.status` answered `sublayer=false filters=0 needs_elevation=true` with the running helper's own refusal as `detail`. **Measured elevated 2026-11-09** against the fixed debug build (`scripts\verify-wfp.ps1` **16 passed, 2 skipped, 0 failed**, D-045): a real persistent filter, its key, its action read back out of Windows' own `netsh wfp show filters` as `FWP_ACTION_BLOCK` (and explicitly not a permit), its conditions (the application path, remote port 65001, protocol 6) in `FWPM_LAYER_ALE_AUTH_CONNECT_V4`, the count going up and the undo taking it out of both our list and Windows' state. The first elevated run of 2026-11-08 produced D-045 instead: `for_each_ours` enumerated with a zero `layerKey` and every call failed `0x80320004`. **Still not measured:** the block's *effect* on a connection, its survival across a reboot, and our sublayer's weight against a built-in permit rule |
+| The connection list is Windows' own table, and what a row offers to block is exact | `windows\conns`'s 6 unit tests hold the parts a test can: a spec is offered only with a peer port and an image path, the note is one the helper's validator accepts, and both address families format the way Windows writes them. `scripts\verify-connections.ps1` (new, D-043) measured the live list unelevated against the debug engine: **PASS, 23 checks, 0 skipped, 0 failed** — 490 rows, every row carrying path/protocol/peer port and a block decision, 139 rows offering a spec whose app path, port and protocol match the row (and whose file exists), no row with an empty peer port offering one, Windows agreeing with every owner it names (343 rows had already vanished, 0 contradictions), IPv6 and UDP rows present, and the spec handed to `fw.wfp.block` refused **with a reason** and `fw.wfp.status` unchanged afterwards. **Measured elevated 2026-11-09** (D-043): **24 checks passed, 0 skipped, 0 failed** — 462 rows walked, 147 offering a block and 315 not, every offered spec matching its row and its file, and the write branch taken for a **real row's spec**: accepted by `fw.wfp.block`, the BFE holding one more filter, `fw.wfp.unblock` removing it and the machine back where it started. **Still not measured:** that a row's connection is actually refused once its filter is in — the probe never opens a connection through it |
