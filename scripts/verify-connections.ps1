@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Proves the connection list is Windows' own table, and that what it offers to
   block is an exact spec the filtering engine accepts.

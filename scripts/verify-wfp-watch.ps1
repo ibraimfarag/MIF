@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Proves the tamper watch notices our sublayer or a filter of ours being removed
   from Windows' filtering engine (WFP), and that it says "unknown" instead of

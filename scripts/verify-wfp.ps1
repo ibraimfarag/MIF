@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Proves MI CS' own persistent block lives in Windows' filtering engine (WFP)
   and that persisting it is refused without an administrator.

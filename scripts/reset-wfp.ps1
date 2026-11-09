@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Removes every filtering-engine object MI CS wrote - its filters, its sublayer
   and its provider - and proves the machine is clean afterwards.
