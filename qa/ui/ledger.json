@@ -99,9 +99,9 @@
       "TextField(Empty = engine defaults in Documents and Desktop)",
       "TextField(Empty = your profile folder)",
       "TextField(NVD API 2.0 key)",
+      "TextField(empty = MI CS' own release feed)",
       "TextField(http://127.0.0.1:1234)",
       "TextField(https://…/hashes.csv)",
-      "TextField(https://…/mics-manifest.json)",
       "TextField(local-model)",
       "_SliderRow/Slider"
     ],

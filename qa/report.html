@@ -88,12 +88,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td>Engine tests</td>
       <td>25 modules</td>
-      <td>192 declared cases</td>
+      <td>194 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
       <td>Pipeline steps</td>
-      <td>12 across 3 tiers</td>
+      <td>13 across 3 tiers</td>
       <td>the same script a human runs and CI runs</td>
       <td><code>scripts&#47;pipeline.ps1</code>, <code>.github&#47;workflows&#47;ci.yml</code></td>
     </tr>
@@ -1138,7 +1138,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;settings.rs</code></td>
-      <td>8</td>
+      <td>10</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;tests.rs</code></td>
@@ -1150,7 +1150,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**192** in 25 modules</td>
+      <td>**194** in 25 modules</td>
     </tr>
   </tbody>
 </table>
@@ -1202,6 +1202,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>full</code></td>
       <td><code>engine.contract</code></td>
       <td>Every registered JSON-RPC method answers, or refuses, as documented</td>
+    </tr>
+    <tr>
+      <td><code>full</code></td>
+      <td><code>update.verify</code></td>
+      <td>update.check reads the channel</td>
     </tr>
     <tr>
       <td><code>full</code></td>

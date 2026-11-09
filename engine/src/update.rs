@@ -38,11 +38,16 @@ fn staging_dir() -> PathBuf {
 }
 
 /// Downloads the manifest and returns its parsed fields (update.check).
+///
+/// The URL is `Settings::update_url()`: the user's own when they typed one, and
+/// otherwise the channel's compiled-in default (D-046). `manifest_url` is echoed
+/// back so the screen that asked can show which feed answered — an update answer
+/// has to be checkable by the person reading it, not just plausible.
 pub async fn check() -> Result<serde_json::Value> {
     let url = crate::settings::current().update_url();
-    if url.is_empty() {
+    if crate::settings::update_checks_disabled(&url) {
         return Ok(json!({"status": "disabled",
-            "detail": "no update manifest URL configured (Settings → Updates)"}));
+            "detail": "update checks are switched off (MICS_UPDATE_MANIFEST_URL=off)"}));
     }
     let sm = SyncManager::new()?;
     let manifest = sm.fetch_manifest(&url).await?;
@@ -52,6 +57,7 @@ pub async fn check() -> Result<serde_json::Value> {
         "status": if latest != current { "available" } else { "up_to_date" },
         "current": current,
         "latest": latest,
+        "manifest_url": url,
         "download_url": manifest["url"].as_str(),
         "sha256": manifest["sha256"].as_str(),
         "notes_en": manifest["notes_en"].as_str(),

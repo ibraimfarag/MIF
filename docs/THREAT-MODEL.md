@@ -167,6 +167,15 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 | `services.nvd.nist.gov` | installed product identifiers (CPE/keyword query), key optional | vulnerability scan |
 | `dns.google`, `1.1.1.1` | a HEAD/GET probe with no payload | the "online?" check, cached 30 s (`sync/mod.rs::online`) |
 | LM Studio (`lm_url`, default `http://127.0.0.1:1234`) | the finding text to explain | LLM explain, explicit |
+| `github.com/ibraimfarag/MIF/releases/…` (the channel's own release) | a GET for `update.json`, and only if it names a newer version that one, for the zip | **`update.check` — the user's *Check now*, never a timer** (D-046) |
+
+Nothing polls the update feed: `update.check` has one caller (the Updates panel's
+button) and `update.download` a second (the button's download), so the row above is
+traffic the user asked for and can see the result of — the answer names the feed
+that answered, and the panel prints it. An empty manifest URL is not "off": it
+means the channel's compiled-in default, the project's own release assets
+(`MICS_UPDATE_MANIFEST_URL=off` is the explicit do-not-check, for a probe or an
+offline machine).
 
 There is **no VirusTotal client and no key for it** (D-019), so no file and not
 even a hash is ever sent anywhere for reputation; that destination is gone from

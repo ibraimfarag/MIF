@@ -511,24 +511,25 @@ One entry point runs everything, in three tiers, and writes
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast       # 4 steps, ~3 min
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier full       # + both release builds, the contract harness
-powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier release    # + the package gates (11 steps in all)
+powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier release    # + the package gates (13 steps in all)
 powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only flutter.test
 ```
 
 **fast** is what runs before every commit: **181 s** on the cold run at `173224a`, and
-**76.9 s** on the last green run (2026-11-07, warm caches, 150 engine tests).
-`flutter analyze` (no issues — an info is a failure), `flutter test`
-(**110 declared cases across 24 files**, including the two contrast audits and the
-i18n parity/lint gates over **19 module files / 270 keys per language**), `cargo test`
-(**150 declared cases across 19 modules**;
-64 s) and `cargo clippy --release -- -D warnings` (clean; 12 s). Those counts are
+**76.9 s** on the last timed run (2026-11-07, warm caches). The counted surfaces below are
+the ones `qa\report.md` generates (2026-11-09): `flutter analyze` (no issues — an info is a
+failure), `flutter test` (**132 declared cases across 28 files**, including the two contrast
+audits and the i18n parity/lint gates over **19 module files / 299 keys per language**),
+`cargo test` (**194 declared cases across 25 modules**) and
+`cargo clippy --release -- -D warnings` (clean). Those counts are
 floors — loops and generated cases add more at run time, and `qa\report.md` is the
 generated table that the fast tier itself refuses to let drift. **full** adds the
-release builds of the engine and the app, the engine's own benchmark (CPU/RAM budget)
-and the **contract harness**: `dart run qa\contract.dart` drives every one of the
-**66** JSON-RPC methods against a real engine on an isolated pipe — **67 declared
-cases**, 14 of them classified not to run, plus the harness's own scenarios (80
-executed on the last recorded run) — and every method is either run or carries its
+release builds of the engine and the app, the engine's own benchmark (CPU/RAM budget),
+the update feed's own probe (`update.verify`, D-046) and the **contract harness**:
+`dart run qa\contract.dart` drives every one of the
+**73** JSON-RPC methods against a real engine on an isolated pipe — **74 declared
+cases**, 16 of them classified not to run, plus the harness's own scenarios — and every
+method is either run or carries its
 reason. **release** runs against
 `dist\MICS-portable`, never the build folder:
 

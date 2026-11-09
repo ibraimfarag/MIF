@@ -1070,18 +1070,12 @@ impl Dispatcher {
                 }
             }
             "update.check" => {
-                // Manifest-based self-update check (URL comes from settings).
-                let url = crate::settings::current().update_url();
-                if url.is_empty() {
-                    Some(json!({"status": "disabled", "detail": "no update manifest URL configured"}))
-                } else {
-                    match crate::sync::SyncManager::new() {
-                        Ok(sm) => match sm.check_update(&url).await {
-                            Ok(info) => Some(json!(info)),
-                            Err(e) => { error!("update.check: {e:#}"); return detailed_error(req, "update.check", e); }
-                        },
-                        Err(e) => { error!("update.check: {e:#}"); return detailed_error(req, "update.check", e); }
-                    }
+                // Manifest-based self-update check. The URL is the user's own or
+                // the channel's compiled-in default (D-046), and this is the only
+                // thing that fetches it — there is no timer behind it.
+                match crate::update::check().await {
+                    Ok(info) => Some(info),
+                    Err(e) => { error!("update.check: {e:#}"); return detailed_error(req, "update.check", e); }
                 }
             }
             _ => {

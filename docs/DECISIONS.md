@@ -2588,3 +2588,117 @@ with the slices. **Does not commit
 us to:** enumerating layers MI CS does not write to, `FWP_FILTER_ENUM_FLAT` (unavailable in the
 bindings), treating a failed read as an empty machine anywhere, or a probe that reports a broken
 write path as a passing refusal.
+
+## D-046 — The update feed has a compiled-in default, one implementation, and an answer that names it
+
+**Status:** accepted (2026-11-09)
+
+**Context.** `update.check` read `settings.update_manifest_url`, which starts empty, and answered
+`disabled` — so the Updates section of Settings shipped a *Check now* button that could not do
+anything until its owner found, typed and trusted a URL, and `update.download` / `update.apply`
+behind it were unreachable the same way. §0.6 row 5 (هـ1) is the self-update path; a check that only
+works after hand-configuration is not one. Three facts shaped what follows:
+
+- the engine already parses exactly the manifest `scripts\make-release.ps1`'s contract names
+  (`{version, url, sha256, size, notes_en, notes_ar}`) and refuses a download whose SHA-256 does not
+  match before it stages anything (`engine/src/update.rs`), so there was no fetcher to design — only a
+  URL to choose;
+- **nothing polls it.** `update.check` is reached from one dispatcher arm and from
+  `download_and_verify`, and the auto-sync scheduler's `run_due` covers the intel sources only. So
+  *when* traffic happens is the user's button and nothing else;
+- the channel (`stable`/`beta`) was already a real setting that nothing read.
+
+**Decision.**
+
+1. **The channel carries a URL.** `DEFAULT_UPDATE_MANIFEST_URL_STABLE` is
+   `https://github.com/ibraimfarag/MIF/releases/latest/download/update.json`; the beta feed is
+   `…/releases/download/beta/update.json` — the rolling `beta` tag's release, the one place a
+   newer-than-stable build can live without becoming "latest". `default_update_manifest_url(channel)`
+   maps everything but `beta` to stable, the same rule `settings.set` applies to the channel.
+2. **Resolution is ordered and pure.** `resolve_update_url(env, setting, channel)`:
+   `MICS_UPDATE_MANIFEST_URL` wins when the environment sets it, then a URL the user saved, then the
+   channel's default. Keeping that order in a function that does not read the environment itself is
+   what lets the tests be about the order instead of about the machine they run on.
+3. **"Do not check" is `off`, not empty.** `MICS_UPDATE_MANIFEST_URL=off` (any case) is the single
+   explicit do-not-check value (`update_checks_disabled`); an empty environment value counts too where
+   a platform can carry one — Windows *deletes* a variable set to `""`, which is why a word is the
+   sentinel. It is deliberately environment-only: `check_url` keeps refusing anything that is not a
+   URL, so a typo in the field can never switch updates off quietly.
+4. **One implementation.** `SyncManager::check_update` is deleted; `update.check` calls
+   `crate::update::check()`, the same function `download_and_verify` already used, so the screen, the
+   downloader and the prober cannot disagree about what "latest" means.
+5. **The answer names the feed.** `check()` reports `manifest_url`, and the Updates panel prints it
+   under the button in mono. An update answer that does not say who gave it cannot be checked by the
+   person reading it.
+6. **The release lane publishes the manifest the default reads.** `scripts\update-manifest.ps1` writes
+   `dist\update.json` from the archive *after* the zip and `SHA256SUMS` exist (step 9 of
+   `make-release.ps1`): the asset URL is built from version and arch rather than discovered, the file
+   is UTF-8 without a BOM, and the script re-reads its own output field by field to prove it describes
+   that zip. The Release workflow uploads it with the other assets, so the stable default begins to
+   answer the moment the v0.1.0 draft is published (§0.6 row 1) — and answers 404, in the UI's own
+   error text, until then.
+
+**Measured** (2026-11-09, unelevated shell, debug engine built from this commit):
+
+- `scripts\verify-update.ps1` **18 passed, 0 skipped, 0 failed, 4 s**, run twice — once with no
+  arguments, so the probe picked its own binary, and once with `-EngineExe
+  engine\target\debug\mics-engine.exe`. The manifest is served by the
+  probe itself on `127.0.0.1` over a raw `TcpListener`, so the run needs no network: `=off` answers
+  `disabled` with a reason and names no feed; a saved loopback feed is fetched and answers `available`
+  with `latest=9.9.9` and `manifest_url`, `sha256` and `download_url` carried through; the download the
+  manifest names is really fetched, is staged under the data directory and hashes to what the manifest
+  promised; a manifest whose `sha256` is 64 zeros is refused with `SHA256 mismatch: expected 000…,
+  got 0f69…` and leaves no `update.zip`; `http://example.com/update.json` is refused by `settings.set`
+  with "must use https:// (http:// is only accepted for loopback: 127.0.0.1, ::1 or localhost)", and
+  the refused patch leaves the previous feed in place.
+  Running it is also how two false readings were caught, and both are now guards rather than notes: the
+  probe used to take the first binary that *exists*, and a leftover `release` build answered as if the
+  feature were missing — **14 passed, 2 failed**, both failures being "switched off" and "echoes the
+  feed that answered". It now picks the **newest** of the two outputs, and refuses to run at all when
+  the one it has predates `engine\src` (**measured**: passing the stale release binary exits 1 with
+  `RESULT: FAIL - ... predates engine\src\settings.rs; build the engine or pass -EngineExe`). A stale
+  binary reads exactly like a defect, which is D-045's lesson.
+- `scripts\update-manifest.ps1` — the happy path plus three refusals, measured against the real
+  `dist\MICS-portable-0.1.0-x64.zip`: it wrote `size 22552651` and `sha256
+  8f27ad587efa450eae3f428c0641b8a16ea4616d77e31b5ae0106a43054fb37a` with the asset URL **built** from
+  version and arch (`.../releases/download/v0.1.0/MICS-portable-0.1.0-x64.zip`), re-read the file and
+  compared `version`/`url`/`sha256`/`size`, and left it UTF-8 with no BOM (`{`, LF, space as the first
+  three bytes). Each of these was refused with exit 1 and nothing written: an archive named for another
+  arch (`probe-MICS-portable-9.9.9-x64.zip`), `-Version beta`, and a missing archive.
+- `scripts\pipeline.ps1` gained the step `update.verify` (**full** tier — 13 steps across 3 tiers now),
+  so the probe runs in the same tier and the same shape as the other live probes instead of only when a
+  human remembers it; it passes `-EngineExe` from `CARGO_TARGET_DIR` the way `engine.lifecycle` does.
+- `cargo test settings::` **10 passed**, including the two new cases: the compiled-in defaults pass the
+  same gate a typed URL does (https, not loopback, `check_url` accepts them, the two channels differ),
+  and the resolution order — environment over setting over default — with `off` and `""` disabling and
+  `"  https://mirror.test/u.json  "` trimmed.
+- The four gates, all four green in this working tree: `cargo test` **194 passed, 0 failed** (192
+  before), `cargo clippy --release -- -D warnings` exit 0, `flutter analyze --no-pub` "No issues
+  found!", `flutter test --no-pub` **162 passed**. Two gates were regenerated to keep their ratchets
+  honest: `qa/report.md`/`.html` (192 → 194 engine cases in 25 modules, and the new pipeline step) and
+  `qa/ui/ledger.json` (the settings field whose hint became a translated key — same one control, new
+  signature `TextField(empty = MI CS' own release feed)`).
+
+**Not measured, and open.** No run in this repository fetches the compiled-in default: `releases/latest`
+serves **published** releases, v0.1.0 is still a draft, and a probe that reached github.com would make
+its result depend on the network and on a release that does not exist yet. What the measurements above
+support is the wiring, the refusals and the staging — not "the feed answered". What that leaves:
+
+- **nothing verifies a signature over the manifest.** The `sha256` in a manifest describes the file the
+  same manifest points at, so it catches a truncated or corrupted transfer, not a hostile feed; today
+  the only thing standing behind a manifest is the TLS connection that carried it. That is هـ1's second
+  half (a detached signature beside `update.json`, checked against a key shipped in the engine), and it
+  wants the thumbprint pin that arrives with any certificate (D-016);
+- `notes_ar` is carried and never shown: the Updates panel reads `notes_en` only, and the app has no
+  locale accessor (`languageCode` appears nowhere in `lib\`). The release lane ships no Arabic notes
+  either — scripts here are ASCII — so the honest fix is the existing translation-debt row, not a
+  machine translation;
+- `update.apply` still ends in a restart the *app* performs, and the extraction of a **real** signed zip
+  is exercised by the release gate (`verify-release.ps1`), which this decision does not touch.
+
+**Advances** §0.6 row 5 (slice 1: the compiled-in default, the single implementation and the named
+feed) and §7's هـ1. **Does not commit us to:** an update that installs itself, an automatic poll of any
+kind, a beta release that does not exist yet (the beta feed answers 404, and the panel says so until a
+release is published under that tag), trusting a manifest because it arrived over https, or a second
+manifest format for the installer — `update.apply` replaces a portable folder, so the manifest
+describes the zip and nothing else.

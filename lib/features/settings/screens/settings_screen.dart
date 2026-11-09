@@ -357,10 +357,16 @@ class SettingsScreen extends ConsumerWidget {
             children: [
               _TextSetting(
                 label: context.tr('settings.manifestUrl'),
-                hint: 'https://…/mics-manifest.json',
+                hint: context.tr('settings.manifestUrlDefault'),
                 initial: s.updateManifestUrl,
                 onSave: (v) => notifier.setUpdates(v, s.updateChannel),
               ),
+              const SizedBox(height: 4),
+              // Empty stopped meaning "off": the engine reads the channel's own
+              // feed unless the user typed one (D-046), so the sentence below has
+              // to say that — and that nothing is fetched on its own.
+              Text(context.tr('settings.manifestHint'),
+                  style: TextStyle(color: AppColors.muted, fontSize: 10.5)),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(
@@ -990,6 +996,10 @@ class _UpdatePanelState extends ConsumerState<_UpdatePanel> {
     final current = _info?['current']?.toString() ?? '';
     final latest = _info?['latest']?.toString() ?? '';
     final notes = _info?['notes_en']?.toString() ?? '';
+    // Which feed answered, not which feed was configured: with an empty URL the
+    // engine reads its channel's own feed (D-046), and the answer says which one —
+    // an update check nobody can check is just a claim.
+    final feed = _info?['manifest_url']?.toString() ?? widget.manifestUrl;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1015,8 +1025,18 @@ class _UpdatePanelState extends ConsumerState<_UpdatePanel> {
         ],
         if (status == 'disabled') ...[
           const SizedBox(height: 8),
-          Text(context.tr('settings.manifestHint'),
+          // The engine's own reason: the only way to reach this state is the
+          // MICS_UPDATE_MANIFEST_URL=off hook, and inventing a second wording for
+          // it here would be one more sentence to keep true.
+          Text(_info?['detail']?.toString() ?? '',
               style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        ],
+        if (status != null && status != 'disabled' && feed.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text('${context.tr('settings.manifestUrl')}: $feed',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.mono(size: 10, color: AppColors.muted)),
         ],
         if (status == 'up_to_date') ...[
           const SizedBox(height: 8),

@@ -496,23 +496,6 @@ impl SyncManager {
         });
     }
 
-    /// Self-update manifest check: {version, url, sha256, size, notes_en, notes_ar}.
-    pub async fn check_update(&self, url: &str) -> Result<serde_json::Value> {
-        let resp = self.client.get(url).send().await.context("fetch update manifest")?;
-        let manifest: serde_json::Value = resp.json().await.context("manifest json")?;
-        let current = env!("CARGO_PKG_VERSION");
-        let latest = manifest["version"].as_str().unwrap_or(current);
-        Ok(serde_json::json!({
-            "status": if latest != current { "available" } else { "up_to_date" },
-            "current": current,
-            "latest": latest,
-            "download_url": manifest["url"].as_str(),
-            "sha256": manifest["sha256"].as_str(),
-            "notes_en": manifest["notes_en"].as_str(),
-            "notes_ar": manifest["notes_ar"].as_str(),
-        }))
-    }
-
     pub async fn fetch_manifest(&self, url: &str) -> Result<serde_json::Value> {
         let resp = self.client.get(url).send().await.context("fetch manifest")?;
         resp.json().await.context("manifest json")

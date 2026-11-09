@@ -204,6 +204,27 @@ $steps = @(
         What = 'Every registered JSON-RPC method answers, or refuses, as documented'
     },
     @{
+        Id   = 'update.verify'
+        Tier = 'full'
+        Dir  = $repo
+        Run  = {
+            # D-046: where `update.check` looks (environment -> saved URL -> the
+            # channel's compiled-in default), that `off` really switches checking
+            # off, and that a manifest which does not describe its own download is
+            # refused before anything is staged. The probe serves the feed itself
+            # on 127.0.0.1, so the step needs no network and no elevation, and it
+            # refuses to measure a binary older than `engine\src` (D-045's lesson).
+            $engineArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", (Join-Path $repo 'scripts\verify-update.ps1'))
+            if ($env:CARGO_TARGET_DIR) {
+                $engineArgs += @("-EngineExe", (Join-Path $env:CARGO_TARGET_DIR 'release\mics-engine.exe'))
+            }
+            powershell @engineArgs
+            if ($LASTEXITCODE -ne 0) { throw "verify-update.ps1 exited $LASTEXITCODE" }
+        }
+        What = 'update.check reads the channel''s own feed, obeys off, and refuses a manifest that fails its hash'
+    },
+    @{
         Id   = 'app.build'
         Tier = 'full'
         Dir  = $repo

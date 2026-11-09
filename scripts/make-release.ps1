@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Assembles the portable release folder, zips it and writes SHA256SUMS.
+  Assembles the portable release folder, zips it and writes SHA256SUMS and the
+  update manifest.
 
 .DESCRIPTION
   `dist\MICS-portable` is what users copy and run, so it has to be built from the
@@ -28,7 +29,10 @@
        hardened);
     7. zips the folder to `dist\MICS-portable-<version>-<arch>.zip`;
     8. writes `dist\SHA256SUMS` for the zip, the engine, the app, the rules and the
-       inventory.
+       inventory;
+    9. writes `dist\update.json` - the manifest `update.check` reads when no feed
+       was configured, describing that same zip by name, hash and size
+       (`update-manifest.ps1`, D-046).
 
   `-Arch x64` (the default) is the leg that ships today. `-Arch arm64` is wired
   end to end - the engine is built with `--target aarch64-pc-windows-msvc`, the
@@ -764,6 +768,26 @@ $lines += "$((Get-FileHash (Join-Path $staging "rules\guard\starter.json") -Algo
 $lines += "$((Get-FileHash (Join-Path $staging "sbom.cdx.json") -Algorithm SHA256).Hash.ToLower())  MICS-portable/sbom.cdx.json"
 $lines += "$((Get-FileHash (Join-Path $staging "THIRD-PARTY-NOTICES") -Algorithm SHA256).Hash.ToLower())  MICS-portable/THIRD-PARTY-NOTICES"
 $lines | Set-Content -Path $sums -Encoding ASCII
+
+# 9. The update manifest the engine reads when its owner never typed a feed
+# (D-046). It is written here, after the archive and its hashes, because it
+# describes the bytes about to be published rather than the ones that were built -
+# and it is what `releases/latest/download/update.json` serves once a human
+# publishes the draft this workflow uploads.
+Write-Host "writing the update manifest..."
+$stopPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "update-manifest.ps1") `
+    -Zip $zip -Version $Version -Arch $Arch -Out (Join-Path $root "dist\update.json")
+  $manifestExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $stopPreference
+}
+if ($manifestExit -ne 0) {
+  Write-Output "RESULT: FAIL - the update manifest did not describe the archive; nothing was published"
+  exit 1
+}
 
 # Swap the staging build into place. Never delete the live folder in place: a DLL
 # that a running MI CS has mapped makes Remove-Item fail *halfway* - it deletes

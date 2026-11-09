@@ -230,6 +230,7 @@ jobs:
           path: |
             dist/MICS-portable-*.zip
             dist/MICS-setup-*.exe
+            dist/update.json
           if-no-files-found: error
 
       - name: Keep the QA report with the binaries it describes
@@ -432,6 +433,7 @@ jobs:
           | `MICS-setup-@VERSION@-x64.exe` | The installer: one UAC prompt, Start Menu and desktop shortcuts, uninstall entry |
           | `report.md` | The QA report of the run that built these files |
           | `SHA256SUMS` | Hashes of exactly the files above, made in this run |
+          | `update.json` | What MI CS' own *Check now* reads: the portable zip's version, URL, size and SHA-256 (`docs/DECISIONS.md` D-046). It describes the zip beside it and names nothing else. |
 
           ## Before you install
 

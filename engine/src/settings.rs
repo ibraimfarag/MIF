@@ -66,7 +66,8 @@ pub struct Settings {
     /// LM Studio base URL (OpenAI-compatible), e.g. http://127.0.0.1:1234.
     pub lm_url: String,
     pub lm_model: String,
-    /// Self-update manifest URL; empty = updates disabled.
+    /// Self-update manifest URL the user typed; empty = read the channel's
+    /// compiled-in default ([`default_update_manifest_url`], D-046).
     pub update_manifest_url: String,
     /// `stable` | `beta`.
     pub update_channel: String,
@@ -270,7 +271,11 @@ impl Settings {
     }
 
     pub fn update_url(&self) -> String {
-        std::env::var("MICS_UPDATE_MANIFEST_URL").unwrap_or_else(|_| self.update_manifest_url.clone())
+        resolve_update_url(
+            std::env::var("MICS_UPDATE_MANIFEST_URL").ok().as_deref(),
+            &self.update_manifest_url,
+            &self.update_channel,
+        )
     }
 
     pub fn sync_hours(&self) -> u32 {
@@ -646,6 +651,64 @@ fn is_language_tag(tag: &str) -> bool {
     }
 }
 
+/// The update feed MI CS ships, pointing at its own releases (D-046).
+///
+/// `scripts\make-release.ps1` writes the same `update.json` beside the archive it
+/// publishes and the Release workflow uploads it with the rest of the assets, so
+/// `releases/latest/download/update.json` resolves as soon as a release is
+/// *published*. A draft serves its assets to nobody, so until the v0.1.0 draft is
+/// published this URL answers 404 and the Updates screen says that rather than
+/// pretending to be up to date (§0.6 row 1 is that click).
+pub const DEFAULT_UPDATE_MANIFEST_URL_STABLE: &str =
+    "https://github.com/ibraimfarag/MIF/releases/latest/download/update.json";
+
+/// The `beta` channel's feed: the release behind the rolling `beta` tag, which is
+/// where a build newer than stable can live without becoming "latest" (D-046).
+pub const DEFAULT_UPDATE_MANIFEST_URL_BETA: &str =
+    "https://github.com/ibraimfarag/MIF/releases/download/beta/update.json";
+
+/// The feed a channel reads when the user named none. Anything but `beta` is
+/// `stable`, the same rule `settings.set` applies to the channel itself.
+pub fn default_update_manifest_url(channel: &str) -> &'static str {
+    if channel.eq_ignore_ascii_case("beta") {
+        DEFAULT_UPDATE_MANIFEST_URL_BETA
+    } else {
+        DEFAULT_UPDATE_MANIFEST_URL_STABLE
+    }
+}
+
+/// Where `update.check` looks, from the three inputs that can decide it (D-046).
+///
+/// 1. `MICS_UPDATE_MANIFEST_URL` when the environment sets it — see
+///    [`update_checks_disabled`] for the one value that means "do not check";
+/// 2. the URL the user saved in Settings, when it is not blank;
+/// 3. the channel's compiled-in default.
+///
+/// Nothing follows the result on its own: `update.check` — the UI's *Check now* —
+/// is its only caller, so the compiled-in default costs no traffic until the user
+/// asks (`docs/THREAT-MODEL.md` §B6).
+pub fn resolve_update_url(env: Option<&str>, setting: &str, channel: &str) -> String {
+    if let Some(from_env) = env {
+        return from_env.trim().to_string();
+    }
+    let saved = setting.trim();
+    if !saved.is_empty() {
+        return saved.to_string();
+    }
+    default_update_manifest_url(channel).to_string()
+}
+
+/// True for the one value that means "do not check at all".
+///
+/// Nothing in normal use needs it: no timer calls `update.check`, so a machine
+/// whose owner never presses *Check now* contacts no feed at all. It exists so a
+/// probe, a test or an offline packager can ask for the disabled answer on purpose
+/// — `MICS_UPDATE_MANIFEST_URL=off`, any case, or an explicitly empty environment
+/// value where the platform can carry one (Windows deletes a variable set to "").
+pub fn update_checks_disabled(url: &str) -> bool {
+    url.is_empty() || url.eq_ignore_ascii_case("off")
+}
+
 /// Refuses a cleartext URL that is not loopback.
 ///
 /// `http://127.0.0.1:1234` is the LM Studio default and never leaves the machine,
@@ -819,6 +882,59 @@ mod tests {
         assert_eq!(s.ioc_feed_url, "https://feeds.example.com/hashes.txt");
         assert_eq!(s.lm_url, "https://feeds.example.com/hashes.txt");
         assert_eq!(s.update_manifest_url, "https://feeds.example.com/hashes.txt");
+    }
+
+    #[test]
+    fn the_compiled_in_update_feed_passes_the_same_gate_as_a_typed_one() {
+        for url in [
+            DEFAULT_UPDATE_MANIFEST_URL_STABLE,
+            DEFAULT_UPDATE_MANIFEST_URL_BETA,
+        ] {
+            let parsed = reqwest::Url::parse(url).unwrap_or_else(|e| panic!("{url}: {e}"));
+            assert_eq!(parsed.scheme(), "https", "{url} must not be reachable in cleartext");
+            assert!(!host_is_loopback(&parsed), "{url} must not be loopback");
+            check_url("update_manifest_url", url)
+                .unwrap_or_else(|e| panic!("the default {url} fails the settings gate: {e}"));
+        }
+        assert_eq!(default_update_manifest_url("stable"), DEFAULT_UPDATE_MANIFEST_URL_STABLE);
+        assert_eq!(default_update_manifest_url("beta"), DEFAULT_UPDATE_MANIFEST_URL_BETA);
+        assert_eq!(default_update_manifest_url("BETA"), DEFAULT_UPDATE_MANIFEST_URL_BETA);
+        assert_eq!(default_update_manifest_url(""), DEFAULT_UPDATE_MANIFEST_URL_STABLE);
+        assert_ne!(
+            DEFAULT_UPDATE_MANIFEST_URL_STABLE, DEFAULT_UPDATE_MANIFEST_URL_BETA,
+            "the two channels must not read the same file"
+        );
+        // The sentinel is a word nobody can type into the URL field by accident:
+        // `check_url` refuses anything that is not a URL, so only the environment
+        // can carry it.
+        assert!(update_checks_disabled(""));
+        assert!(update_checks_disabled("off"));
+        assert!(update_checks_disabled("OFF"));
+        assert!(!update_checks_disabled("https://github.com/ibraimfarag/MIF"));
+        assert!(check_url("update_manifest_url", "off").is_err());
+    }
+
+    #[test]
+    fn the_update_url_resolves_in_order_and_an_empty_env_switches_it_off() {
+        let own = "https://feeds.example.com/mics-manifest.json";
+        // A URL the user saved wins over the default — on either channel.
+        assert_eq!(resolve_update_url(None, own, "beta"), own);
+        // Blank means "nothing saved", so the channel's default is read.
+        assert_eq!(resolve_update_url(None, "", "stable"), DEFAULT_UPDATE_MANIFEST_URL_STABLE);
+        assert_eq!(resolve_update_url(None, "   ", "beta"), DEFAULT_UPDATE_MANIFEST_URL_BETA);
+        // The environment wins over both, and is trimmed.
+        assert_eq!(resolve_update_url(Some(""), own, "stable"), "");
+        assert_eq!(resolve_update_url(Some("  https://mirror.test/u.json  "), "", "beta"),
+                   "https://mirror.test/u.json");
+        // The settings object asks the same question — unless this machine has the
+        // environment variable set, which would decide it instead.
+        if std::env::var_os("MICS_UPDATE_MANIFEST_URL").is_none() {
+            let mut s = Settings::default();
+            assert_eq!(s.update_url(), DEFAULT_UPDATE_MANIFEST_URL_STABLE);
+            s.apply_patch(&json!({"update_channel": "beta"}))
+                .expect("beta is a valid channel");
+            assert_eq!(s.update_url(), DEFAULT_UPDATE_MANIFEST_URL_BETA);
+        }
     }
 
     #[test]
