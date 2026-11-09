@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Proves the connection list is Windows' own table, and that what it offers to
   block is an exact spec the filtering engine accepts.
@@ -50,6 +50,14 @@ if (-not $EngineExe -or -not (Test-Path $EngineExe)) {
   Write-Output "RESULT: FAIL - no engine binary; build it (scripts\pipeline.ps1 -Tier full) or pass -EngineExe"
   exit 1
 }
+
+# A relative -EngineExe is usable in this shell and fatal for the helper: the
+# service runs as SYSTEM with its own working directory, so a relative path
+# cannot be resolved there (`The system cannot find the path specified`,
+# 0x80070003) and the write path fails for a reason that is not about the write.
+# Every probe hands the path to the helper, so it is resolved to an absolute one
+# here, once (D-045).
+$EngineExe = (Resolve-Path -LiteralPath $EngineExe).Path
 
 $script:checks = 0
 $script:skips = New-Object System.Collections.Generic.List[string]

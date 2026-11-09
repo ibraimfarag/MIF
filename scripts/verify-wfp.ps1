@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Proves MI CS' own persistent block lives in Windows' filtering engine (WFP)
   and that persisting it is refused without an administrator.
@@ -61,9 +61,19 @@ if (-not $EngineExe -or -not (Test-Path $EngineExe)) {
   exit 1
 }
 
+# A relative -EngineExe is usable in this shell and fatal for the helper: the
+# service runs as SYSTEM with its own working directory, so a relative path
+# cannot be resolved there (`The system cannot find the path specified`,
+# 0x80070003) and the write path fails for a reason that is not about the write.
+# Every probe hands the path to the helper, so it is resolved to an absolute one
+# here, once (D-045).
+$EngineExe = (Resolve-Path -LiteralPath $EngineExe).Path
+
 $script:checks = 0
 $script:skips = New-Object System.Collections.Generic.List[string]
 $script:failures = New-Object System.Collections.Generic.List[string]
+$script:stateXmlWhy = "no reader ran"
+$script:filterXmlWhy = "no reader ran"
 function Check([bool]$ok, [string]$text) {
   $script:checks++
   if ($ok) { Write-Output "PASS  $text" }
@@ -110,9 +120,16 @@ function Invoke-Rpc([string]$pipeName, [string]$method, $params, [int]$id = 1) {
 # Windows' own view of the filtering engine: `netsh wfp show state` writes an
 # XML file. That file, not our log, is what decides whether an object is really
 # in the BFE.
+#
+# Both readers keep netsh's own answer, because "produced no XML" on its own is
+# an instrument that failed without saying so: on 2026-11-09 the elevated run
+# skipped this comparison and there was no way to tell whether netsh refused,
+# wrote somewhere else, or Windows simply does not offer it here. The skip now
+# quotes it.
 function Get-WfpStateXml([string]$path) {
   Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-  & netsh wfp show state file="$path" 2>&1 | Out-Null
+  $out = & netsh wfp show state file="$path" 2>&1
+  $script:stateXmlWhy = ("netsh exited {0}: {1}" -f $LASTEXITCODE, (($out | Out-String).Trim() -replace "\r?\n", " "))
   for ($i = 0; $i -lt 20 -and -not (Test-Path $path); $i++) { Start-Sleep -Milliseconds 250 }
   if (-not (Test-Path $path)) { return $null }
   try { [xml](Get-Content -LiteralPath $path -Raw) } catch { $null }
@@ -120,7 +137,8 @@ function Get-WfpStateXml([string]$path) {
 
 function Get-FilterXml([string]$path) {
   Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-  & netsh wfp show filters file="$path" 2>&1 | Out-Null
+  $out = & netsh wfp show filters file="$path" 2>&1
+  $script:filterXmlWhy = ("netsh exited {0}: {1}" -f $LASTEXITCODE, (($out | Out-String).Trim() -replace "\r?\n", " "))
   for ($i = 0; $i -lt 20 -and -not (Test-Path $path); $i++) { Start-Sleep -Milliseconds 250 }
   if (-not (Test-Path $path)) { return $null }
   try { [xml](Get-Content -LiteralPath $path -Raw) } catch { $null }
@@ -231,7 +249,7 @@ try {
     $statePath = Join-Path $scratch "wfp-state.xml"
     $state = Get-WfpStateXml $statePath
     if ($null -eq $state) {
-      Skip "netsh wfp show state produced no XML to compare against"
+      Skip ("netsh wfp show state produced no XML to compare against ({0})" -f $script:stateXmlWhy)
     } else {
       $inState = @($state.SelectNodes("//*[local-name()='item']") | Where-Object { $_.InnerText -like "*$namePrefix*" })
       Check ($inState.Count -ge 1) "Windows' filtering state holds the filter, not only our log"
@@ -244,7 +262,7 @@ try {
     $filtersPath = Join-Path $scratch "wfp-filters.xml"
     $filtersXml = Get-FilterXml $filtersPath
     if ($null -eq $filtersXml) {
-      Skip "netsh wfp show filters produced no XML"
+      Skip ("netsh wfp show filters produced no XML ({0})" -f $script:filterXmlWhy)
     } else {
       $mine = @($filtersXml.SelectNodes("//*[local-name()='item']") | Where-Object { $_.InnerText -like "*$namePrefix*" })
       Check ($mine.Count -ge 1) "the filter appears in netsh wfp show filters"
