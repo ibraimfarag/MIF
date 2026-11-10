@@ -1,7 +1,8 @@
 # The open decisions, one page each
 
 These are the six answers that stop work which is otherwise ready (`docs/TODO.md` §0.2,
-item 3). Each brief says **what the code does today** - read out of the source or measured,
+item 3) — **four still wait on you**: (c) was settled by D-035 and (f) is answered and
+implemented by D-049, and both are left in place rather than deleted. Each brief says **what the code does today** - read out of the source or measured,
 not remembered - then the options, what each costs, and what I would pick. Nothing here
 needs a meeting: answering in one line per item is enough. For example:
 
@@ -10,7 +11,8 @@ needs a meeting: answering in one line per item is enough. For example:
 4: ip feed, measure the ceiling first               5: not yet     6: permissive + English fallback
 ```
 
-Two of the six are already answered by the code. They are kept here so the list stays
+Two of the six are already answered by the code, D-035 settled (c) and D-049 answered and
+implemented (f). They are kept here so the list stays
 honest rather than getting quietly shorter.
 
 ---

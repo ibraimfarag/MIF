@@ -254,7 +254,7 @@ Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص **§0.6** و§0.3c) و docs/ROADMAP.md. جدول §0.6 هو
 > قائمة الناقص كاملة — خُد **صف واحد** في المرة. **الخطوات الصغيرة التسعة (§0.5) خلصت**،
-> آخرها الخطوة 9 (`ed3e219`: رفض المحرك بقى يوصل للشاشة بسببه) وبعدها **D-048**
+> آخرها الخطوة 9 (`a4856d5`: رفض المحرك بقى يوصل للشاشة بسببه) وبعدها **D-048**
 > (`2726214`: صف الـETW اللي بيحمّل قائمة الـIOC ويرميها اتقفل — حمولة ميتة اتشالت،
 > والحقيقة بقت دالة واحدة `ioc_hash_coverage` واختبار بيثبّتها)، واللي فاضل هو **المتوسط
 > والكبير**. أقربهم **صف 9** — صفوف السجل في §7: **9 صفوف مفتوحة (1 HIGH، 3 MED، 5 LOW)
@@ -262,6 +262,13 @@ Open a fresh session and paste exactly this:
 > إصلاح + اختبار يثبته + قياس حقيقي + كوميت واحد فيه التوثيق كمان. آخرها **D-049**
 > (الكوميت اللي كتب السطر ده: صف «تاج اللغة اللي الواجهة مش عارفة تعرضه» اتقفل — السلسلة بقت تنتهي
 > بالإنجليزية زي ما المفاتيح الناقصة بتنتهي بيها، والشاشة بقت بتقول اسم التاج المخزّن).
+> **أرخص اثنين دلوقتي** (واقرأ الصف بنفسك في §7 قبل ما تكتب كود، زي ما العادة بتقول): صف
+> «مجلد لغة `pubspec.yaml` مش مُعلنه» — الاختبار اللي بيفشل وبوابة أول إطار خلصوا، والباقي إن
+> حزمة اللغة بتسكت على فشل القراءة بمفيش لوج ولا فشل؛ وصف «دبوس التحديث CN مش thumbprint» —
+> ساعة شغل والإصلاح مكتوب جوه الصف (thumbprint لو مُحدَّد، وإلا زي النهاردة)، والخطر الحقيقي إن
+> أول إصدار موقّع من CA حقيقي هيرفض **نفسه** عند `update.rs:128`؛ مربوط بقرار 3 في
+> OPEN-DECISIONS لكن ينفع يتعمل قبله — و**القرارات اللي مستنياك أربعة** مش ستة (اتنين اتحلّوا:
+> (c) بـD-035 و(f) بـD-049، وشوف §0.2 item 3).
 > بعده **صف 13**
 > (نصف F-11 الباقي:
 > مانيفست المحرك متجمّد على الهاشات الموقّعة، فإعادة بناء بتوقيع تاني مش بتطابق).
@@ -278,7 +285,7 @@ instead of Arabic with English gaps, in the commit that wrote this line; before 
 **D-048** — the guard's ETW callback stopped loading the IOC hash list it dropped and `guard.status`
 carries the coverage fact; before that,
 **D-046/D-047** (`5a9949b`, `f621a3d` — the compiled-in update feed and the signature over the
-manifest) and **small step 9** (`ed3e219` — the engine's refusal reaching the screen); before them,
+manifest) and **small step 9** (`a4856d5` — the engine's refusal reaching the screen); before them,
 the **WFP slices** ((a) `9c353e5`, (b) and (c) on the commits above it), then **D-045** (`52b69d3`, the
 bug the first elevated run found) and its probe instruments (`4709011`).
 The register is **9 open rows** (1 HIGH, 3 MED, 5 LOW, recounted from §7 on 2026-11-10 — small step
@@ -587,7 +594,9 @@ the record of a run that happened, kept where the run used to be requested, not 
      sitting in GitHub Releases as a **draft**, and the version bump, the signed zip and
      installer, the destination (**GitHub Releases**, item 6 below) and
      `.github/workflows/release.yml` are all done. One click (D-031).
-3. **Six decisions, one line each.** Every one of them stops work that is otherwise
+3. **Six decisions, one line each — and four of the six still wait on you** ((c) is
+   settled by D-035 and (f) is answered and implemented by D-049, both struck in place
+   below rather than deleted). Every one of them stops work that is otherwise
    ready - **[`docs/OPEN-DECISIONS.md`](OPEN-DECISIONS.md) has a one-page brief for each,
    with what the code does today measured, the cost of every option, and a
    recommendation**; answering in one line per item is enough. *(a)* whether licensed
@@ -604,11 +613,16 @@ the record of a run that happened, kept where the run used to be requested, not 
    *(d)* whether **IDS** grows past the DNS blocklist
    (Suricata/ET-Open is out of scope today, so this reopens a decision); *(e)*
    whether **real-time watching** (و2, 6-10 h) is wanted, because it costs CPU
-   continuously; *(f)* the **language-tag policy** (which tags the engine accepts and
+   continuously; *(f)* ~~the **language-tag policy** (which tags the engine accepts and
    the UI can render) — measured on 2026-11-05: the engine accepts any BCP-47-shaped
    tag (deliberately not a closed list) and the UI resolves exact code, then the
    primary subtag, then falls back to **Arabic** while missing *keys* fall back to
-   English, which is the incoherence the decision has to settle. The publishing
+   English, which is the incoherence the decision has to settle~~ — **answered and
+   implemented 2026-11-10 (D-049)**: the engine still accepts any BCP-47-shaped tag
+   (that half was never the problem), and the UI's chain now ends in **English** — the
+   language missing *keys* already fall back to — with the stored tag carried through a
+   settings write and named in one line of Settings when no pack answers to it. The
+   publishing
    destination used to be the seventh and is
    answered: **GitHub Releases** (2026-11-04).
 4. **D-023 and the bridge endpoint, which is what holds ز2-د (delivery).** A
@@ -1075,7 +1089,7 @@ somebody who signs for free.
 | 5 | **A default update-manifest URL and a signature check before applying** | ✅ engineering only | nothing | **done 2026-11-09**: the URL is compiled in per channel, resolved in one pure function, and reported back by `update.check` (D-046, measured by `scripts\verify-update.ps1`), and the release lane publishes the `update.json` the default reads. The second half landed the same day (D-047): `make-release.ps1` step 9b writes a detached PKCS#7 beside the manifest with the identity that signed the binaries, and the engine verifies it **before** it parses a field and pins the signer's thumbprint to the certificate over its own engine (D-016) or to `MICS_UPDATE_SIGNER_THUMBPRINT`; an unsigned, re-signed, tampered or wrongly-pinned feed is refused with the signature as the reason and stages nothing. Measured: 45 checks in `scripts\verify-update.ps1`, 6 new engine cases (200 in total, including one against a committed signed-manifest fixture), and one end-to-end run of a signature `sign.ps1 -DataFile` produced |
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
-| 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
+| 8 | **The four decisions that still wait on you** — of the six one-page briefs in `docs/OPEN-DECISIONS.md`, (c) was settled by D-035 and (f) is answered and implemented by D-049 | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
 | 9 | **9 open rows in the §7 register** — **1 HIGH, 3 MED, 5 LOW** out of 24 (recounted 2026-11-10; small step 9 closed the row about an engine that cannot say why it would not start, then the guard's ETW IOC-hash row closed the same day, and the same day closed the row about a stored language tag no pack can render) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; a closed row is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall — for the ETW row, one dead load removed, one coverage fact in one function (`ioc_hash_coverage`), a unit test and a green fast tier — or, for the language-tag row, a resolution that ends in English, the stored tag carried on the settings object and named in one line of Settings, four unit cases, one widget case and a green fast tier (D-049) |
 | 10 | ~~**Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship~~ | ✅ | — | **closed (small step 9)**: the diagram lists all 19 modules, and the check asserts the 70 files the per-user variant installs — the count `docs/ROADMAP.md` §2 already records for **ب3** |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
@@ -1274,6 +1288,10 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | P6 | Full QA harness + HTML report, malware lab (later) | **the harness is done**: **د1** (the `qa/` contract harness over all 67 methods (row 14 added `shutdown`)), **د2** (every screen and control swept, ledger committed — and since D-040 the tray panel is swept the same way, as a *surface* rather than a screen) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) **ran on 2026-11-07 and is closed** — §0.6 row 2, §0.2 item 1. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **The next-session block and the ROADMAP cited a commit that is not in `main` (docs only) — 2026-11-10**
+  - **What was wrong.** §0.0 — the block a fresh session is told to paste verbatim — and the ROADMAP's و row both named `ed3e219` as "small step 9". That object exists in this working copy but on no branch and in no commit's history: it is the **discarded first version** of step 9 (same parent `f621a3d`, same subject, same author date, **different tree** — the only difference is `docs/ROADMAP.md` and `docs/TODO.md`), and `a4856d5` is the version `main` carries, code-identical. A reader who follows the citation asks for a hash no clone can show, and the block that exists to orient a cold session was pointing at a commit nobody can read. `6737760` rewrote this same block and carried the stale hash through, which is why it survived.
+  - **What was done.** Both citations name `a4856d5`. The check that found it now covers every hex string in `README.md` and `docs/*.md`: **15 commit objects are cited and all 15 are in `main`**, this was the only dangling one, and the remaining strings are artifact hashes and build stamps rather than commit references — `docs/REPRODUCIBLE.md`'s `revision 238da10` is what `make-release.ps1` printed on 2026-11-08, quoted as a measurement, and it is left alone because the rule here is append, not rewrite. Also in this commit: the paste block now names the **two cheapest rows to take next** and what is left in each — the undeclared-language-folder LOW row (the failing test and the first-frame gate already landed; what remains is that the pack loader swallows a failed asset read with no log and no failure) and the update-pin LOW row (an hour, the fix is written in the row, and the real defect is that the first CA-signed release would refuse *itself* at `update.rs:128`) — so a cold session does not re-derive the ordering. No code, no test and no gate reads these files; the register count, the row pointer and the resume point are unchanged and still read 9 open rows (1 HIGH, 3 MED, 5 LOW) out of 24.
 
 - **A language tag no pack can render falls back to English, and the screen says which tag (§7 register, the cheapest open LOW row left, D-049) — 2026-11-10**
   - **What was wrong.** The engine accepts and persists any well-formed language tag **on purpose** — `settings.set lang=de` works, its shape check takes `zh-hant` and refuses `EN` and `abcd`, because a pack shipping next month must not need an engine release. The UI then resolved that tag with `AppLang.byCode(code) ?? AppLang.ar`, and Arabic is the one language the frame must not be in when the tag is unrenderable: `lookup` already falls back to **English per key**, so a hand-edited `settings.json` (or an external RPC caller — the picker cannot offer such a tag) produced an Arabic frame, right-to-left, with its missing keys in English, and not one word on screen about it. §7 carried it as a LOW row naming that exact expression.
