@@ -23,6 +23,14 @@ screen only ever reads its own module and two screens can never collide.
 The loader (`i18nModules` in the same file) already reads every module folder;
 a missing module degrades to English instead of crashing.
 
+Step 3 is the only code line, and it is what makes the picker offer the new
+language. A tag the app is *told* to use but has no pack for - a hand-edited
+`settings.json`, or an RPC caller writing `lang` straight, which the engine
+accepts on purpose - renders in English too (`AppLang.resolve`), the same
+language a missing key falls back to, and Settings prints one line naming the
+tag so the user is not left guessing (D-049). A missing *module* inside a pack
+that exists still degrades key by key, as above.
+
 ## Rules enforced by tests
 
 - `test/i18n_parity_test.dart` — every language must have exactly the same

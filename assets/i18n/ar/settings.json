@@ -31,6 +31,7 @@
     "settings.iocFeedKey":  "Auth-Key لفيد الهاشات (اختياري)",
     "settings.iocFeedUrl":  "رابط فيد الهاشات (اختياري)",
     "settings.language":  "اللغة",
+    "settings.languageMissing":  "إعدادات المحرّك مخزّنة اللغة «{tag}»، ومفيش حزمة لها في الإصدار ده، فـ MI CS بيعرض الإنجليزية. اختيار لغة من فوق بيستبدلها.",
     "settings.lmHint":  "مساعد محلي اختياري. من غيره الشرح بيستخدم قوالب جاهزة. مفيش أي حاجة بتطلع من الجهاز.",
     "settings.lmModel":  "موديل LM Studio",
     "settings.lmUrl":  "عنوان LM Studio",

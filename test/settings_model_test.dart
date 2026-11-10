@@ -8,6 +8,8 @@ void main() {
   test('defaults match engine/src/settings.rs', () {
     const s = AppSettings();
     expect(s.lang, AppLang.ar);
+    expect(s.storedLangTag, 'ar');
+    expect(s.langPackMissing, isFalse);
     expect(s.themeMode, ThemeMode.dark);
     expect(s.guardAutostart, isTrue);
     expect(s.autoResumeScans, isTrue);
@@ -127,5 +129,48 @@ void main() {
     expect(merged.lang, AppLang.en);
     expect(merged.dndMode, isTrue);
     expect(merged.syncIntervalHours, 24);
+  });
+
+  // A tag this build cannot render is not nothing: it is a tag the engine really
+  // stores (a hand-edited settings.json, or an RPC caller - the picker only
+  // offers what ships), and the frame it produces has to be one language rather
+  // than Arabic layout with English gaps and no explanation (D-049).
+  test('a stored tag with no pack renders English and names the tag', () {
+    final s = AppSettings.fromEngineJson({'lang': 'de'});
+    expect(s.lang, AppLang.en,
+        reason: 'the key-level fallback is English, so the frame must match it');
+    expect(s.storedLangTag, 'de',
+        reason: 'the stored tag is what the screen has to name');
+    expect(s.langPackMissing, isTrue);
+  });
+
+  test('a bundled tag, its regional form and a short are not "missing"', () {
+    for (final tag in const ['ar', 'en', 'en-GB', 'EN']) {
+      final s = AppSettings.fromEngineJson({'lang': tag});
+      expect(s.langPackMissing, isFalse, reason: '$tag has a pack');
+    }
+    expect(AppSettings.fromEngineJson({'lang': 'en-GB'}).lang, AppLang.en);
+    expect(AppSettings.fromEngineJson({'lang': 'ar'}).lang, AppLang.ar);
+    expect(AppSettings.fromEngineJson({'lang': 'en-GB'}).storedLangTag, 'en-GB',
+        reason: 'the stored tag survives even when it resolves to a pack');
+  });
+
+  test('an absent tag is the engine default, not a missing pack', () {
+    final s = AppSettings.fromEngineJson({'theme': 'light'});
+    expect(s.lang, AppLang.ar);
+    expect(s.langPackMissing, isFalse);
+  });
+
+  test('a write sends the stored tag back, so nothing overwrites it', () {
+    final s = AppSettings.fromEngineJson({'lang': 'de', 'theme': 'light'});
+    expect(s.toEngineJson()['lang'], 'de',
+        reason: 'a save of some other setting must not silently drop the tag');
+    // The picker is the one thing that replaces it, and only with a bundled code.
+    final picked = AppSettings.fromEngineJson({
+      ...s.toEngineJson(),
+      'lang': 'ar',
+    });
+    expect(picked.lang, AppLang.ar);
+    expect(picked.langPackMissing, isFalse);
   });
 }

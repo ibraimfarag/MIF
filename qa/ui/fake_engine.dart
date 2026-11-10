@@ -30,8 +30,13 @@ class Call {
 }
 
 class FakeEngine extends EngineIpc {
-  FakeEngine({Map<String, dynamic>? fixtures})
-      : _fixtures = fixtures ?? _loadFixtures(),
+  /// [initialLang] is the tag `settings.get` answers with before anything is
+  /// written. It is a parameter because the interesting case is a tag no pack
+  /// can render - a hand-edited `settings.json`, which the picker can never
+  /// produce - and it has to arrive the way the engine would deliver it.
+  FakeEngine({Map<String, dynamic>? fixtures, String initialLang = 'en'})
+      : _lang = initialLang,
+        _fixtures = fixtures ?? _loadFixtures(),
         _shapes = _loadRegistry().shapes,
         _known = _loadRegistry().methods;
 
@@ -54,7 +59,7 @@ class FakeEngine extends EngineIpc {
   final _progress = StreamController<Map<String, dynamic>>.broadcast();
   final _alerts = StreamController<Map<String, dynamic>>.broadcast();
 
-  String _lang = 'en';
+  String _lang;
   final Map<String, Map<String, dynamic>> _jobs = {};
   int _jobSeq = 0;
   bool scanRunning = false;

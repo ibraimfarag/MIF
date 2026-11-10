@@ -31,6 +31,7 @@
     "settings.iocFeedKey":  "Hash feed Auth-Key (optional)",
     "settings.iocFeedUrl":  "Hash feed URL (optional)",
     "settings.language":  "Language",
+    "settings.languageMissing":  "The engine's settings store the language «{tag}», and this build ships no pack for it, so MI CS is showing English. Choosing a language above replaces it.",
     "settings.lmHint":  "Optional local assistant. Without it, explanations use built-in templates. Nothing leaves this machine.",
     "settings.lmModel":  "LM Studio model",
     "settings.lmUrl":  "LM Studio URL",

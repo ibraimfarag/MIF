@@ -56,6 +56,23 @@ class AppLang {
     return null;
   }
 
+  /// Whether this build ships a pack for [code]. Empty is *not* a pack.
+  static bool hasPack(String code) => byCode(code) != null;
+
+  /// The language to *render* a stored code in, which is not always the code.
+  ///
+  /// A code with a pack resolves to it. A code with no pack at all - a
+  /// hand-edited `settings.json`, or an external RPC caller, since the picker
+  /// only offers what ships - resolves to **English**, the language a missing
+  /// *key* already falls back to in [lookup]. Ending the chain in Arabic instead
+  /// produced a frame in one language with its gaps in another and told nobody
+  /// (D-049). An absent or empty code is the engine's own default, Arabic.
+  static AppLang resolve(String? code) {
+    final withPack = byCode(code);
+    if (withPack != null) return withPack;
+    return (code == null || code.trim().isEmpty) ? ar : en;
+  }
+
   bool get isRtl => direction == TextDirection.rtl;
 
   Locale get locale => Locale(code);
@@ -139,6 +156,20 @@ String lookup(
 /// exactly the same fields, so the two can never drift.
 class AppSettings {
   final AppLang lang;
+
+  /// Storage for [storedLangTag] on the one occasion the two differ. See that
+  /// getter for why they can.
+  final String? _storedTagOverride;
+
+  /// The tag the engine actually has stored, which is not `lang.code` when that
+  /// tag has no pack: `lang` is what to render (D-049), this is what the notice
+  /// names, and what a write sends back so a hand-edited tag survives a settings
+  /// change that had nothing to do with language. `null` in the constructor
+  /// means "same as `lang`", which is what a hand-built `AppSettings` means; the
+  /// engine's own document always carries a tag, and an absent one is its
+  /// default, Arabic.
+  String get storedLangTag => _storedTagOverride ?? lang.code;
+
   final ThemeMode themeMode;
   final bool guardAutostart;
   /// Closing the window hides MI CS to the tray and leaves the engine running;
@@ -172,6 +203,7 @@ class AppSettings {
 
   const AppSettings({
     this.lang = AppLang.ar,
+    String? storedLangTag,
     this.themeMode = ThemeMode.dark,
     this.guardAutostart = true,
     this.closeToTray = false,
@@ -193,7 +225,7 @@ class AppSettings {
     this.scanIntervalHours = 0,
     this.scanTarget = '',
     this.canaryPaths = const [],
-  });
+  }) : _storedTagOverride = storedLangTag;
 
   static String themeToString(ThemeMode mode) => switch (mode) {
         ThemeMode.light => 'light',
@@ -207,8 +239,11 @@ class AppSettings {
         _ => ThemeMode.dark,
       };
 
-  factory AppSettings.fromEngineJson(Map<String, dynamic> j) => AppSettings(
-        lang: AppLang.byCode(j['lang'] as String?) ?? AppLang.ar,
+  factory AppSettings.fromEngineJson(Map<String, dynamic> j) {
+    final storedLang = (j['lang'] as String?)?.trim() ?? '';
+    return AppSettings(
+        lang: AppLang.resolve(storedLang),
+        storedLangTag: storedLang.isEmpty ? null : storedLang,
         themeMode: themeFromString((j['theme'] as String?) ?? 'dark'),
         guardAutostart: j['guard_autostart'] as bool? ?? true,
         closeToTray: j['close_to_tray'] as bool? ?? false,
@@ -233,10 +268,14 @@ class AppSettings {
             .map((e) => e.toString())
             .toList(),
       );
+  }
+
+  /// A stored tag that no shipped pack can render, so `lang` is a fallback.
+  bool get langPackMissing => !AppLang.hasPack(storedLangTag);
 
   /// Full document in the engine's own key names.
   Map<String, dynamic> toEngineJson() => {
-        'lang': lang.code,
+        'lang': storedLangTag,
         'theme': themeToString(themeMode),
         'guard_autostart': guardAutostart,
         'close_to_tray': closeToTray,
@@ -312,8 +351,10 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       await prefs.setBool(_migratedKey, true);
       return fromEngine;
     }
+    final legacyLang = (prefs.getString('lang') ?? '').trim();
     final legacy = AppSettings(
-      lang: AppLang.byCode(prefs.getString('lang')) ?? AppLang.ar,
+      lang: AppLang.resolve(legacyLang),
+      storedLangTag: legacyLang.isEmpty ? null : legacyLang,
       themeMode: AppSettings.themeFromString(
           prefs.getString('themeMode') ?? 'dark'),
       guardAutostart: prefs.getBool('guardAutostart') ?? true,

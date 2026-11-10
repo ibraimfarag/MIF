@@ -198,7 +198,7 @@ of it.
 
 ---
 
-## 6. Language tags: how strict?
+## 6. Language tags: how strict? - answered: permissive engine, coherent UI fallback (D-049)
 
 **What is blocked.** Nothing mechanically - `settings.set` works today. This decides what a
 tag the product cannot render should do.
@@ -232,3 +232,14 @@ keeps "a pack shipping next month must not need an engine change" true.
 **Cost.** About an hour: the fallback chain, two i18n keys, a widget test that a `de` tag
 renders English and says so, and the docs. Answer (2) and it can be done without anything
 else from you.
+
+**Answered (2) above, and implemented 2026-11-10 (D-049).** The shape check in the engine is
+untouched, as the field's own comment and test were written for. The UI's chain
+(`AppLang.resolve`) is bundled tag -> bundled pack, absent or empty -> Arabic (the engine's
+default), **no pack -> English** (`app_i18n.dart:70`), and it is the same English `lookup`
+already fell back to per key (`:147`). `AppSettings` now carries the tag the engine holds
+separately from the language it renders (`:171`, `:274`) and writes that tag back rather than
+`lang.code` (`:278`), so a hand-edited tag is no longer replaced by the next settings write;
+Settings prints one line naming it beside the picker. Six cases pin it - four in
+`test/settings_model_test.dart`, one in `test/ui_screens_test.dart`, and the fast tier is green
+in the commit that did it.

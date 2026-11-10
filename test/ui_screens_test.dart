@@ -198,6 +198,35 @@ void main() {
     expect(mounted.container.read(rtlProvider), isTrue);
   });
 
+  // The tag nobody can pick: `settings.json` edited by hand, or an RPC caller
+  // writing `lang` straight. The screen used to render Arabic - the product's
+  // default - over an English key table, with nothing saying why (D-049).
+  testWidgets('settings: a stored tag with no pack renders English and is named',
+      (tester) async {
+    final mounted = await openScreen(tester, const SettingsScreen(),
+        engine: FakeEngine(initialLang: 'de'));
+
+    expect(find.text('Language'), findsOneWidget,
+        reason: 'an unrenderable tag must fall back to the English pack');
+    expect(find.text('اللغة'), findsNothing);
+    expect(Directionality.of(tester.element(find.text('Language'))),
+        TextDirection.ltr);
+    expect(mounted.container.read(rtlProvider), isFalse);
+    expect(find.textContaining('«de»'), findsOneWidget,
+        reason: 'nothing on the screen names the tag the engine holds');
+
+    // The picker is the way out of it, and it replaces the tag.
+    await tester.tap(find.byType(DropdownButton<AppLang>));
+    await settle(tester);
+    await tester.tap(find.text('العربية').last);
+    await settle(tester);
+    expect(mounted.engine.lastParams('settings.set'), {'lang': 'ar'});
+    expect(find.text('اللغة'), findsOneWidget);
+    expect(find.textContaining('«de»'), findsNothing,
+        reason: 'the notice outlived the tag it was reporting');
+    expect(mounted.container.read(rtlProvider), isTrue);
+  });
+
   // The scan schedule (و1, D-027). The engine owns the timer, so the only thing
   // the UI can get wrong is the write: an interval the engine would refuse, a
   // dropdown that shows a value it did not store, or a folder that never leaves

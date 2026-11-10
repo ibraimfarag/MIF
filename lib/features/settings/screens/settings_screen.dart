@@ -100,6 +100,20 @@ class SettingsScreen extends ConsumerWidget {
                   },
                 ),
               ]),
+              // This line is always English in practice: an unpacked tag is
+              // exactly the case that renders English (D-049), so the pack that
+              // could translate it is the one that is missing. The key exists in
+              // every language anyway - the parity test requires it.
+              if (s.langPackMissing)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    context
+                        .tr('settings.languageMissing')
+                        .replaceAll('{tag}', s.storedLangTag),
+                    style: TextStyle(color: AppColors.orange, fontSize: 12),
+                  ),
+                ),
             ],
           ),
 

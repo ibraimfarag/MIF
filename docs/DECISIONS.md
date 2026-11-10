@@ -2900,3 +2900,64 @@ dead load and the untrue comment, not the deliberate limit.
 hash feed (that row stays open and needs an external source), a minifilter for file events, feeding
 the guard's rules from the IOC list, or any change to the poll fallback — unelevated, that path is
 unchanged.
+
+## D-049 — A language tag no pack can render falls back to English, and says which tag
+
+**Status:** accepted (2026-11-10)
+
+**Context.** `settings.set lang=de` is accepted and persisted **on purpose** — the engine must not need
+a release per language, so `lang` is a validated language tag and not a name checked against a list —
+and the UI turned that tag into a language with `AppLang.byCode(code) ?? AppLang.ar`. That fallback is
+the one language the frame must not be in: `lookup` already falls back to **English per key**, so `de`
+produced an Arabic layout — right-to-left, Arabic labels — with every key that pack is missing left in
+English, and nothing on screen said a word about it. The picker cannot produce such a tag (it offers
+`AppLang.all`), but a hand-edited `settings.json` and an external RPC caller both can, and both are
+supported ways in. §7 carried it as a LOW row naming exactly that expression.
+
+**Decision.** The chain ends where the key-level chain already ends, and the fact is shown:
+
+1. **One resolver decides, and it ends in English.** `AppLang.resolve(code)` returns the bundled pack
+   for a bundled tag (regional tags through their primary subtag, as `byCode` always did), **Arabic** for
+   an absent or empty code — the engine's own default, not a guess — and **English** for a tag no pack
+   answers to, because that is the language a missing *key* already falls back to. `AppSettings.lang` is
+   a *rendering* fact now rather than a copy of the stored string, so the frame is one language.
+2. **The stored tag is carried instead of lost.** `AppSettings` keeps it (`storedLangTag`; `null` in the
+   constructor means "same as `lang`", which keeps a hand-built object coherent) and `toEngineJson`
+   writes **it**, not `lang.code`. Without that, the next settings write — a theme change, anything —
+   would replace a hand-edited tag with the fallback's code: silent data loss in the one direction that
+   cannot be undone.
+3. **The screen says which tag.** When no pack answers to it, Settings prints one line under the
+   language picker naming the tag (`settings.languageMissing`, `{tag}` substituted), so the user is told
+   why the product is not in the language the file asks for, and that the picker is the way out. That
+   line is English in practice — an unrenderable tag is exactly the case that renders English — and the
+   key still exists in every pack, because the parity test requires it and a pack that *can* render the
+   tag is the only thing that makes the notice unnecessary rather than missing.
+4. **Tests pin all three.** Four cases in `test/settings_model_test.dart` (a tag with no pack renders
+   English and reports the tag; `ar`/`en`/`en-GB`/`EN` are not "missing"; an absent tag is the engine's
+   Arabic and *not* a missing pack; a write sends the stored tag back) and one in
+   `test/ui_screens_test.dart` that mounts Settings against a fake engine holding `de` — the new
+   `FakeEngine(initialLang:)` exists for this, because the interesting tag is the one the picker cannot
+   offer — asserts the English pack, the tag named on screen and `rtlProvider` false, then picks العربية
+   and watches both the notice and the tag go.
+
+**Measured** (2026-11-10, unelevated shell, no network, no machine changes): `scripts\pipeline.ps1
+-Tier fast` **green, 4 of 4 — 69.6 s** on the first green run (`flutter.analyze` 17.8 s,
+`flutter.test` 40.5 s, `engine.test` 8.8 s, `engine.clippy` 2.5 s) and **59.2 s** on the re-run of the
+frozen tree, with `flutter test` at **172 passed** (5 of them new) and the engine at
+**201 passed / 0 failed**. The first attempt failed `qa_report_test`, which is the gate doing its job
+rather than a defect: five new Dart cases move the report's counts (137 → **142** declared cases,
+`test/settings_model_test.dart` 6 → 10 and `test/ui_screens_test.dart` 10 → 11), and the regenerated
+`qa/report.md`/`qa/report.html` are in this commit. The two cases that assert the *rendering* were also
+run with the resolver put back to the pre-D-049 fallback: exactly those two fail, which is what makes
+them a pin rather than a description.
+
+**Not measured, and open.** Nothing here runs against a real `%PROGRAMDATA%\MICS\settings.json` edited
+by hand: the widget test drives the fake engine and the model cases drive `fromEngineJson` directly,
+which is the code path the settings notifier uses but not the file on disk. The wording is also a guess
+at the reader's situation — no user has been watched reading it. What is decided is where the chain
+ends, that the stored tag survives, and that the tag is named.
+
+**Advances** §7's LOW row (the engine stores a language tag the UI cannot render) — closed.
+**Does not commit us to:** validating `lang` in the engine against a list of shipped languages (the
+engine must not need a release per language), a second or third bundled pack, packaging languages so one
+can be installed at run time, or translating the notice into the language that is missing.

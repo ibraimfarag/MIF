@@ -110,7 +110,7 @@ the release page; that label is the same missing certificate, not a missing file
 | **Notifications** | A desktop card above the taskbar for **every** security event: a file the scanner catches (with a working **Quarantine** button), a suspicious process, a canary touch, or a protection action (default-deny, country block, hosts blocklist update). Cards fire while MI CS is running — with *Keep running in the background* on, that includes the window being closed — speak the app language (AR/EN), and follow one policy: CRITICAL/HIGH/MEDIUM become cards, LOW stays in the app, do-not-disturb keeps only CRITICAL, and a switch turns cards off entirely. In-house notification sounds with volume and mute are separate. |
 | **Privileged helper** | Admin work (firewall, hosts file, hardening) goes through one LocalSystem service installed with a **single** UAC prompt instead of one per action. The operation set is closed and documented (`docs/PRIVILEGED-OPS.md`), every call is audited before and after it runs, and an unelevated helper refuses instead of half-applying. |
 | **Is this copy the published one?** | The package describes itself: a SHA-256 manifest of the **68** files it ships is carried **inside `mics-engine.exe`**, written there before the engine gets its own Authenticode signature, so the manifest is only as trustworthy as the signature over it. At start-up the engine re-reads that document out of its own image, re-hashes the folder it runs from, and reports the verdict through `status.integrity`: `ok`, `untrusted-certificate` (our certificate, a root this Windows has not trusted yet) or `unverified`. **Settings → About** shows one line for all three, the log always names the first file that changed, and a card names it when the copy carries a document that disagrees. Delete a byte, swap a DLL, edit the document: the app says which file, and the release gate refuses the folder. |
-| **Languages** | Arabic and English, complete, with full RTL layout. Language packs are per-module files; adding a language is one folder plus one line. |
+| **Languages** | Arabic and English, complete, with full RTL layout. Language packs are per-module files; adding a language is one folder plus one line. The engine stores the tag you pick rather than a name it knows, so a pack can arrive without an engine release — and a tag no pack answers to renders **English** with one line in Settings naming it, instead of an Arabic frame with English gaps (D-049). |
 
 **Architecture in one line:** a Flutter UI talks JSON-RPC 2.0 over the named pipe
 `\\.\pipe\mics_engine` to a single Rust engine (`mics-engine.exe`), which owns
@@ -524,10 +524,12 @@ powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only f
 ```
 
 **fast** is what runs before every commit: **181 s** on the cold run at `173224a`, and
-**57.6 s** on the last timed run (2026-11-10, warm caches). The counted surfaces below are
+**59.2 s** on the last timed run (2026-11-10, immediately after a 69.6 s green run on the
+same content — warm caches are the whole difference, and every run of the four steps is
+green). The counted surfaces below are
 the ones `qa\report.md` generates (2026-11-10): `flutter analyze` (no issues — an info is a
-failure), `flutter test` (**137 declared cases across 29 files**, including the two contrast
-audits and the i18n parity/lint gates over **19 module files / 299 keys per language**),
+failure), `flutter test` (**142 declared cases across 29 files**, including the two contrast
+audits and the i18n parity/lint gates over **19 module files / 301 keys per language**),
 `cargo test` (**201 declared cases across 26 modules**) and
 `cargo clippy --release -- -D warnings` (clean). Those counts are
 floors — loops and generated cases add more at run time, and `qa\report.md` is the

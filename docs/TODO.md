@@ -15,8 +15,10 @@
 > no service. Two consequences. *(a)* **The documents were wrong in places, and are
 > fixed**: the JSON-RPC surface is **73** methods (measured 2026-11-09; the recount of
 > 2026-11-07 found 66 where the docs said 65, and the ROADMAP said 62 in
-> one row); i18n is **19 module files per language / 299 keys** (measured
-> 2026-11-09), not 16/169; the
+> one row); i18n is **19 module files per language / 301 keys** (measured
+> 2026-11-10; the 2026-11-09 count of 299 was right when taken and two keys have
+> landed since — one with the engine-refusal line, one with the unrenderable-tag
+> notice), not 16/169; the
 > README's canary claim ("a read-only open is not noticed") was true until **D-032**
 > landed and is now the opposite — a read is a HIGH `canary_read` event, with the
 > volume's atime range probed and reported; the README presented `v0.1.0` as a
@@ -241,8 +243,8 @@
 > exits 0 only for an artifact a stranger's Windows would trust (its `-SelfTest` proves the
 > instrument against a self-signed control and `kernel32.dll`). What waits on the owner is **one
 > publish click and the answers**, not a purchase. §0.2 and the register count were reconciled on
-> 2026-11-08 with what actually ran; the register is **10 open rows (1 HIGH, 3 MED, 6 LOW) out of
-> 24** (recounted from the table on 2026-11-10, after small step 9 closed the engine-refusal row and the same day closed the guard's ETW IOC-hash row; not carried over), and no page any longer describes a *run* as waiting on a human.
+> 2026-11-08 with what actually ran; the register is **9 open rows (1 HIGH, 3 MED, 5 LOW) out of
+> 24** (recounted from the table on 2026-11-10, after small step 9 closed the engine-refusal row, the same day closed the guard's ETW IOC-hash row, and the same day closed the unrenderable language tag (D-049); not carried over), and no page any longer describes a *run* as waiting on a human.
 
 ## 0. Resume here — a new session starts with this section
 
@@ -255,9 +257,12 @@ Open a fresh session and paste exactly this:
 > آخرها الخطوة 9 (`ed3e219`: رفض المحرك بقى يوصل للشاشة بسببه) وبعدها **D-048**
 > (`2726214`: صف الـETW اللي بيحمّل قائمة الـIOC ويرميها اتقفل — حمولة ميتة اتشالت،
 > والحقيقة بقت دالة واحدة `ioc_hash_coverage` واختبار بيثبّتها)، واللي فاضل هو **المتوسط
-> والكبير**. أقربهم **صف 9** — صفوف السجل في §7: **10 صفوف مفتوحة (1 HIGH، 3 MED، 6 LOW)
-> من 24** بعد عدّ 2026-11-10، خُد أرخصهم واحد واحد وبنفس نمط الخطوات 8 و9 وD-048:
-> إصلاح + اختبار يثبته + قياس حقيقي + كوميت واحد فيه التوثيق كمان. بعده **صف 13**
+> والكبير**. أقربهم **صف 9** — صفوف السجل في §7: **9 صفوف مفتوحة (1 HIGH، 3 MED، 5 LOW)
+> من 24** بعد عدّ 2026-11-10، خُد أرخصهم واحد واحد وبنفس نمط الخطوات 8 و9 وD-048 وD-049:
+> إصلاح + اختبار يثبته + قياس حقيقي + كوميت واحد فيه التوثيق كمان. آخرها **D-049**
+> (الكوميت اللي كتب السطر ده: صف «تاج اللغة اللي الواجهة مش عارفة تعرضه» اتقفل — السلسلة بقت تنتهي
+> بالإنجليزية زي ما المفاتيح الناقصة بتنتهي بيها، والشاشة بقت بتقول اسم التاج المخزّن).
+> بعده **صف 13**
 > (نصف F-11 الباقي:
 > مانيفست المحرك متجمّد على الهاشات الموقّعة، فإعادة بناء بتوقيع تاني مش بتطابق).
 > و**نشر `v0.1.0`** كليكة واحدة لو حضرتك هتعملها. **صفوف 14–17 اللي طلبتها قفلت بقياسات**
@@ -268,15 +273,18 @@ Open a fresh session and paste exactly this:
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
 **Resume point (2026-11-10, after the nine small steps were closed).** The last committed step is
+**D-049** — a stored language tag no pack can render now renders English with the tag named on screen
+instead of Arabic with English gaps, in the commit that wrote this line; before it,
 **D-048** — the guard's ETW callback stopped loading the IOC hash list it dropped and `guard.status`
-carries the coverage fact, in the commit that wrote this line; before it,
+carries the coverage fact; before that,
 **D-046/D-047** (`5a9949b`, `f621a3d` — the compiled-in update feed and the signature over the
 manifest) and **small step 9** (`ed3e219` — the engine's refusal reaching the screen); before them,
 the **WFP slices** ((a) `9c353e5`, (b) and (c) on the commits above it), then **D-045** (`52b69d3`, the
 bug the first elevated run found) and its probe instruments (`4709011`).
-The register is **10 open rows** (1 HIGH, 3 MED, 6 LOW, recounted from §7 on 2026-11-10 — small step
-9 closed the LOW row about an engine that cannot say why it would not start, and the same day closed
-the LOW row about the guard's ETW callback loading the IOC hash list and dropping it); §0.6 rows
+The register is **9 open rows** (1 HIGH, 3 MED, 5 LOW, recounted from §7 on 2026-11-10 — small step
+9 closed the LOW row about an engine that cannot say why it would not start, the same day closed
+the LOW row about the guard's ETW callback loading the IOC hash list and dropping it, and the same
+day closed the LOW row about a language tag the UI cannot render); §0.6 rows
 14, 15, 16 **and now 17** are
 **closed with measurements** (D-039, D-040, D-041, D-042/D-043/D-044/D-045). Row 17's close is the
 2026-11-09 elevated run: `scripts\reset-wfp.ps1` **7 passed, 0 skipped, 0 failed** (and it found the
@@ -784,13 +792,14 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries **10 open rows (1 HIGH, 3 MED, 6 LOW)** out of 24 —
+`docs/TODO.md` §7 carries **9 open rows (1 HIGH, 3 MED, 5 LOW)** out of 24 —
 recounted from the table itself on 2026-11-10. و4 had closed six of them (the
 incomplete package, the merged-audit ages, the blocking `vuln.scan`, the plaintext
 keys, the guard cost, the portable caller check, the AUMID attribution) and the
 dark-mode and `netsh` firewall rows closed earlier, and small step 9 closed the LOW
-row about an engine that cannot say why it would not start, and the guard's ETW
-IOC-hash row closed right after it. The MED ones
+row about an engine that cannot say why it would not start, the guard's ETW
+IOC-hash row closed right after it, and D-049 closed the LOW row about a stored
+language tag no pack can render. The MED ones
 worth pulling forward once the phases above allow it: **no real-time file watching**
 (the scheduled half landed with و1, D-027), the canary checker being poll-based, and
 Defender tamper protection.
@@ -1048,6 +1057,8 @@ regenerated report is in the commit. Separately, and outside the tier:
 
 **Re-run 2026-11-10 for the guard's ETW IOC-hash row (§7 register, the cheapest open LOW): green, 4 of 4, 74.7 s warm, then 57.6 s on the frozen tree — `cargo test` 201 passed / 0 failed, `engine.clippy` clean, `flutter.analyze` and `flutter.test` untouched by the change.** The first attempt failed `qa_report_test` for the same reason as the run above: one new engine case moves the report's per-file count (`engine/src/tests.rs` 55 → 56, total 200 → 201), and the regenerated report is in this commit. Nothing in the tier is a probe yet — what that row closes with is a dead load removed, one coverage fact moved into one function, and a unit test that pins it.
 
+**Re-run 2026-11-10 for the unrenderable-language-tag row (D-049, §7 register, the cheapest open LOW left): green, 4 of 4, 69.6 s, then 59.2 s on the re-run of the frozen tree (`engine.clippy` cached at 2.5 s) — `flutter analyze` clean, `flutter test` 172 passed (5 of them new), `engine.test` 201 passed, `engine.clippy` clean.** The first attempt failed `qa_report_test` once more, and the gate is right to: five new Dart cases move the report's counts (137 → **142** declared cases, `test/settings_model_test.dart` 6 → 10 and `test/ui_screens_test.dart` 10 → 11), and the regenerated `qa/report.md`/`.html` are in this commit. The engine is untouched by the change — its 201 tests and clippy time are the same work as the run above. The two new cases were also run against the **pre-D-049** fallback (Arabic) before the commit: exactly those two fail, which is what makes them a pin rather than a description.
+
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
 row that used to say "buy" now either has a free substitute or is written down as out
@@ -1065,9 +1076,8 @@ somebody who signs for free.
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
-| 9 | **10 open rows in the §7 register** — **1 HIGH, 3 MED, 6 LOW** out of 24 (recounted 2026-11-10; small step 9 closed the row about an engine that cannot say why it would not start, then the guard's ETW IOC-hash row closed the same day) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; a closed row is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall — or, for the ETW row, one dead load removed, one coverage fact in one function (`ioc_hash_coverage`), a unit test and a green fast tier |
+| 9 | **9 open rows in the §7 register** — **1 HIGH, 3 MED, 5 LOW** out of 24 (recounted 2026-11-10; small step 9 closed the row about an engine that cannot say why it would not start, then the guard's ETW IOC-hash row closed the same day, and the same day closed the row about a stored language tag no pack can render) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; a closed row is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall — for the ETW row, one dead load removed, one coverage fact in one function (`ioc_hash_coverage`), a unit test and a green fast tier — or, for the language-tag row, a resolution that ends in English, the stored tag carried on the settings object and named in one line of Settings, four unit cases, one widget case and a green fast tier (D-049) |
 | 10 | ~~**Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship~~ | ✅ | — | **closed (small step 9)**: the diagram lists all 19 modules, and the check asserts the 70 files the per-user variant installs — the count `docs/ROADMAP.md` §2 already records for **ب3** |
-erify-installer.ps1` still asserts `-ge 60` files against the 70 that ship~~ | ✅ | — | **closed (small step 9)**: the diagram lists all 19 modules, and the check asserts the 70 files the per-user variant installs — the count `docs/ROADMAP.md` §2 already records for **ب3** |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
 | 13 | **The engine is the one file a rebuild cannot match** — `MICS_MANIFEST` records the SHA-256 of every other shipped file *as signed*, so a rebuild signed with another key changes that document and therefore `mics-engine.exe` (this is F-11's remaining half, and `verify-reproducible.ps1` accepts it only after proving the difference is the signature) | ✅ engineering only | a **D-025 revision** + the work | make the document cover **content** instead of signatures: inject the payload hash `Get-MicsUnsignedHash` already computes, make the engine's start-up self-check hash the same way (the certificate table, the optional-header checksum and the security directory are not the code), record in D-025 why, and then delete the "explained" verdict from `verify-reproducible.ps1` because the engine matches too |
@@ -1264,6 +1274,12 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | P6 | Full QA harness + HTML report, malware lab (later) | **the harness is done**: **د1** (the `qa/` contract harness over all 67 methods (row 14 added `shutdown`)), **د2** (every screen and control swept, ledger committed — and since D-040 the tray panel is swept the same way, as a *surface* rather than a screen) and **د4** (the generated `qa/report.md` + `report.html`, byte-gated so the fast tier fails when it drifts) all landed; **د3** (the E2E acceptance on the per-machine installer) **ran on 2026-11-07 and is closed** — §0.6 row 2, §0.2 item 1. The malware lab stays "later" by design |
 
 ### Done log (append only)
+
+- **A language tag no pack can render falls back to English, and the screen says which tag (§7 register, the cheapest open LOW row left, D-049) — 2026-11-10**
+  - **What was wrong.** The engine accepts and persists any well-formed language tag **on purpose** — `settings.set lang=de` works, its shape check takes `zh-hant` and refuses `EN` and `abcd`, because a pack shipping next month must not need an engine release. The UI then resolved that tag with `AppLang.byCode(code) ?? AppLang.ar`, and Arabic is the one language the frame must not be in when the tag is unrenderable: `lookup` already falls back to **English per key**, so a hand-edited `settings.json` (or an external RPC caller — the picker cannot offer such a tag) produced an Arabic frame, right-to-left, with its missing keys in English, and not one word on screen about it. §7 carried it as a LOW row naming that exact expression.
+  - **What was done.** The chain ends where the key-level chain already ends, and the fact is shown. `AppLang.resolve(code)` resolves a bundled tag to its pack (regional tags through their primary subtag, as before), an absent or empty code to **Arabic** (the engine's own default, not a guess), and a tag no pack answers to to **English**; `AppSettings.lang` is a *rendering* fact now, and `AppSettings` carries the stored tag beside it (`storedLangTag`, `null` = "same as `lang`, so a hand-built object stays coherent"), which `toEngineJson` writes back instead of `lang.code` — without that, the next settings write, a theme change, would silently replace a hand-edited tag with the fallback's code. When no pack answers to it, Settings prints one line naming the tag under the picker (`settings.languageMissing`, `{tag}` substituted), so the user is told why the product is not in the language the file asks for and that the picker replaces it. New key in both packs, so the parity test is satisfied and no pack can be missing the sentence that explains a missing pack. `assets/i18n/README.md` says the same thing for whoever adds a language next.
+  - **What was measured.** `scripts\pipeline.ps1 -Tier fast` **green, 4 of 4** — **69.6 s** on the first green run (`flutter.analyze` 17.8 s, `flutter.test` 40.5 s, `engine.test` 8.8 s, `engine.clippy` 2.5 s) and **59.2 s** on the re-run of the frozen tree — with **`flutter test` 172 passed, 5 of them new, and the engine untouched at 201 passed**, which is what the row's close is: five cases, four in `test/settings_model_test.dart` (a tag with no pack renders English and reports the tag; `ar`/`en`/`en-GB`/`EN` are not "missing"; an absent tag is Arabic and not a missing pack; a write sends the stored tag back) and one in `test/ui_screens_test.dart` that mounts Settings against a fake engine holding `de` — the new `FakeEngine(initialLang:)`, because the interesting tag is exactly the one the picker cannot offer — finds the English pack, the tag named on screen and `rtlProvider` false, then picks العربية and watches the notice and the tag both go. The first attempt failed `qa_report_test`, the gate doing its job rather than a defect: five Dart cases move the report's counts (137 → **142** declared, `test/settings_model_test.dart` 6 → 10, `test/ui_screens_test.dart` 10 → 11), and the regenerated `qa/report.md`/`.html` are in this commit. Both new cases were then run against the **pre-D-049** fallback (Arabic) with the fix reverted, and exactly those two fail — the difference between a test that pins this and a test that merely describes it. Nothing here is a probe — no elevation, no network, no machine change.
+  - **Next.** The sibling LOW row above it in §7 is the nearest cheap one: a language folder `pubspec.yaml` does not declare renders every key raw and silently, because the loader swallows a failed asset read deliberately — `test/lang_registry_test.dart` fails instead and the first frame is gated on the packs, so it cannot reach a correct build, but nothing in the running app logs it. Beyond the register, §0.6 row 1 is still **one publish click by you**.
 
 - **The guard stops loading an IOC list it drops, and says out loud that a process start is not hash-checked (§7 register, the cheapest open LOW row) — 2026-11-10**
   - **What was wrong.** `guard::etw::start` opened the store, read `dump_ioc_hashes()` into a `HashMap`, and then threw it away with `let _ = ioc_hashes;`. Worse than the waste was the sentence sitting next to it: *"There is no scan scheduler yet, so this is not a safety net."* A scan scheduler landed with **D-027** on 2026-11-03, so a reader learning the guard's limits from that file was being told something false — and the true reason (the scan job owns the hash dimension) was nowhere in the code.
@@ -5354,10 +5370,11 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 - **P2b — translations as module files + live theme (D-009)**
   - `assets/i18n/<lang>/<module>.json`: 16 modules, 169 keys, Arabic and
     English at full parity; loader merges modules with graceful degradation.
-    *(Measured again 2026-11-09: **19 modules / 299 keys** per language — the pack
+    *(Measured again 2026-11-10: **19 modules / 301 keys** per language — the pack
     grew after this entry was written, and the same two gates below hold it; the
-    2026-11-07 footnote in this entry said 270, and 29 keys landed with the slices
-    between the two counts.)*
+    2026-11-07 footnote in this entry said 270 and the 2026-11-09 count 299 (29 keys
+    landed with the slices between those two counts, then one key with the
+    engine-refusal line and one with the unrenderable-tag notice).)*
   - `tool/split_i18n.dart` documents the module-assignment rule and can
     re-split a flat pack.
   - Two gates: `test/i18n_parity_test.dart` (same modules, same keys, no empty
@@ -5422,7 +5439,7 @@ free publish click, the answers to §0.2 items 3–5, and engineering that is fr
 | # | Request | State | Where / note |
 |---|---|---|---|
 | 1 | Rounded window corners | **done** (needs visual check on Win10 + HiDPI) | `lib/core/window/window_corners.dart` |
-| 2 | Translation as separate files with keys | **done** — **19** module files × 2 languages, **299** keys each (measured 2026-11-09; the 2026-11-07 count of 270 was stale), parity + no-hardcoded-copy tests | D-009 |
+| 2 | Translation as separate files with keys | **done** — **19** module files × 2 languages, **301** keys each (measured 2026-11-10; the 2026-11-09 count of 299 was stale by two keys — one with the engine-refusal line, one with the unrenderable-tag notice), parity + no-hardcoded-copy tests | D-009 |
 | 3 | Code signing | **not bought, and free to obtain (D-035 + D-036)** — the self-signed script works and names the publisher locally (`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`), and the release takes a real certificate as two secrets with **no code change** (D-034). Nothing is purchased (D-035); `docs/SIGNING.md` records the two free routes that sign for us instead — the Microsoft Store re-signing an MSIX after certification (available today; packaging work plus the three unknowns in its §3) and OSSign's project certificate (~2027-04-27) — while the public half is carried meanwhile by reproducible builds + published hashes | D-002, D-034, D-035, D-036, `scripts/sign.ps1` |
 | 4 | Permissions asked once, publisher name | **code complete; one UAC click left** — the helper, its closed op set, the audit trail and the Settings card are shipped and proven unelevated, and the **installer** now creates the service (ب4, D-026), so one prompt covers product + helper; the per-machine run is §0.6 row 2. Publisher naming is the certificate, and it is not purchased (D-035) | D-007, D-026, `docs/PRIVILEGED-OPS.md` |
 | 5 | Complete advanced Settings screen | **done** — 8 sections, every field writes through `settings.set` | D-008 |
@@ -5691,7 +5708,7 @@ signing certificate respectively), so this is the work that is always available.
 | ~~LOW~~ | ~~**The helper's caller check has nothing to compare against in a portable run**~~ — **closed 2026-11-03 (و4) by evidence**: `verify-helper.ps1` now starts the helper in exactly that layout (an empty `PROGRAMDATA` plus a separate `MICS_DATA_DIR`, so no install account exists) and measures both halves in one run: a client that is **not** the engine image is refused — `{"ok":false,"error":"this pipe only serves the MI CS engine"}` — while the helper's own log carries `no installer account recorded (no %PROGRAMDATA%\MICS) - the caller image is the only check`; then the same probe, with the documented `MICS_ENGINE_PATH` pin the installer records, is served (`pong:true`). The helper reads that pin from its own environment, which is why the probe uses two helper processes — the first version of this check reused one and the "pinned client" expectation failed, which is what made the behavior visible. `RESULT: PASS`, exit 0, 15 checks; the fallback stays what F-2 says it is (the pipe ACL is what keeps other users out) and is now measured rather than asserted | `platform/windows/caller.rs`, `privileged/server.rs`, `scripts\verify-helper.ps1`, D-017, THREAT-MODEL F-2 |
 | LOW | **The update pin is the signer's subject name, not its thumbprint**: a certificate with the same CN (`MI CS Code Signing`) issued by a CA that failed identity validation would pass — and since **no CA can issue that CN at all** (CSCBR §9.2.2 requires the subject CN to be the verified legal name, measured 2026-11-06), the pin stops matching the moment ب5 is bought: without decision (c) the first CA-signed release is refused by `update.rs:128` as "signed by X, not MI CS Code Signing" and reported as foreign by `selfcheck`. A thumbprint pin breaks on every locally re-issued release certificate, which is why the fix is thumbprint-when-configured and the CN otherwise | `platform/windows/signature.rs`, D-016, `docs/OPEN-DECISIONS.md` item 3, THREAT-MODEL F-3 |
 | LOW | **A language folder that `pubspec.yaml` does not declare renders every key raw, silently**: the pack loader swallows a failed asset read on purpose ("a module that has not been translated yet must not break the app"), so nothing logs or fails when a whole language is missing from the asset list. `test/lang_registry_test.dart` now fails instead, and the app itself gates its first frame on the settings *and* the packs (`lib/main.dart`), so this cannot reach a user who is running a correct build | `pubspec.yaml`, `test/lang_registry_test.dart`, `lib/main.dart` |
-| LOW | **The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages | `engine/src/settings.rs`, `lib/core/i18n/app_i18n.dart` |
+| ~~LOW~~ | ~~**The engine stores a language tag the UI cannot render**: `settings.set lang=de` is accepted and persisted (deliberately - the engine must not need a release per language), and the UI falls back to Arabic via `AppLang.byCode(...) ?? AppLang.ar`, so a hand-edited settings file shows Arabic rather than the requested language. The picker only ever offers bundled languages~~ — **closed 2026-11-10 (D-049)**: the chain ends in **English** now. `AppLang.resolve(code)` resolves a bundled tag to it, an absent or empty code to the engine's own default Arabic, and a tag with **no pack** to English — the language a missing *key* already fell back to (`lookup`), so the frame is one language instead of Arabic layout over an English key table. The screen is no longer silent about it either: `AppSettings` carries the tag the engine actually holds (`storedLangTag`, deliberately not the language being rendered, which is a fallback) and `toEngineJson` writes that tag back, so a hand-edited one survives an unrelated settings write instead of being replaced by `lang.code` — and when no pack answers to it, Settings prints one line naming the tag beside the picker. Pinned by four cases in `test/settings_model_test.dart` (`{'lang': 'de'}` renders English *and* reports the tag; `ar`/`en`/`en-GB`/`EN` are not "missing"; an absent tag is Arabic and not a missing pack; a write sends the stored tag back) and one in `test/ui_screens_test.dart` that mounts Settings against a fake engine holding `de` (the new `FakeEngine(initialLang:)`), finds the English pack, the tag named on screen and `rtlProvider` false, then picks العربية and watches both the notice and the tag go. Measured in this commit: fast tier **4/4, 69.6 s** on the first green run and **59.2 s** on the re-run of the frozen tree — `flutter analyze` clean, `flutter test` **172 passed** (5 of them new), engine test **201 passed**, `cargo clippy` clean. Reverting the resolver to the pre-D-049 fallback fails exactly the two new cases, so they pin the behaviour rather than describe it | `lib/core/i18n/app_i18n.dart`, `lib/features/settings/screens/settings_screen.dart`, `assets/i18n/{ar,en}/settings.json`, `test/settings_model_test.dart`, `test/ui_screens_test.dart` |
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
 | ~~LOW~~ | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the engine's manifest recording signed hashes rather than content (§0.6 row 13) | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
