@@ -429,6 +429,7 @@ class SettingsScreen extends ConsumerWidget {
                   style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ]),
+              _EngineFailureLine(ipc: ipc),
               const SizedBox(height: 10),
               _HelperCard(ipc: ipc),
               const SizedBox(height: 10),
@@ -520,6 +521,46 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 // ---------------- building blocks ----------------
+
+/// What the engine said when it refused to start.
+///
+/// The engine runs detached, so a refusal — most of all the Low-integrity folder
+/// one, which a sandbox or a web root produces — goes to a stderr nobody reads
+/// and the user is left staring at "engine missing" next to a retry button that
+/// cannot succeed. `EngineIpc` re-runs the engine once with stderr piped to
+/// recover that sentence; this shows it where the state is already displayed.
+class _EngineFailureLine extends StatelessWidget {
+  const _EngineFailureLine({required this.ipc});
+
+  final EngineIpc ipc;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<EngineState>(
+      stream: ipc.statusStream,
+      initialData: ipc.state,
+      builder: (context, snapshot) {
+        final reason = ipc.lastFailure;
+        if (snapshot.data != EngineState.engineMissing || reason == null) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(context.tr('settings.engine.lastError'),
+                  style: TextStyle(color: AppColors.red, fontSize: 12)),
+              const SizedBox(height: 3),
+              SelectableText(reason,
+                  style: AppTheme.mono(size: 11, color: AppColors.muted)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 
 /// Is this copy the one that was published? (ج2, D-025)
 ///

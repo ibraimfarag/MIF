@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/i18n/app_i18n.dart';
+import 'package:mics_app/core/ipc/ipc_client.dart';
 import 'package:mics_app/core/window/tray_panel.dart';
 import 'package:mics_app/features/audit/screens/audit_screen.dart';
 import 'package:mics_app/features/canaries/screens/canaries_screen.dart';
@@ -39,6 +40,7 @@ import 'package:mics_app/features/scanner/screens/scanner_screen.dart';
 import 'package:mics_app/features/settings/screens/settings_screen.dart';
 import 'package:mics_app/features/vulns/screens/vuln_scanner_screen.dart';
 
+import '../qa/ui/fake_engine.dart';
 import '../qa/ui/harness.dart';
 import '../qa/ui/ledger.dart';
 
@@ -301,4 +303,51 @@ void main() {
     expect(find.text('MICS-20261101-a1b2c3'), findsOneWidget,
         reason: 'deleting one report removed another');
   });
+
+  // The engine's refusal has to reach the user. It is printed on a stderr the
+  // detached spawn throws away, which is why "engine missing" used to arrive
+  // with no reason and a retry that could not succeed; `EngineIpc` re-runs the
+  // engine once to recover the sentence, and the Settings → Engine section shows
+  // it. Nothing about the sentence is a fixture: this is the real copy.
+  testWidgets('settings: a refused start shows the engine\'s own reason',
+      (tester) async {
+    await openScreen(
+      tester,
+      const SettingsScreen(),
+      engine: _RefusingEngine(),
+    );
+    expect(find.text(_RefusingEngine.refusal), findsOneWidget,
+        reason: 'the engine said why it would not start and the app did not '
+            'show it');
+    expect(find.text('Why it would not start'), findsOneWidget,
+        reason: 'the reason is on screen with no label saying what it is');
+  });
+
+  // The same screen with a healthy engine: the reason line is not a permanent
+  // fixture of Settings, so a start that works must leave nothing behind.
+  testWidgets('settings: a running engine shows no failure line',
+      (tester) async {
+    await openScreen(tester, const SettingsScreen());
+    expect(find.text('Why it would not start'), findsNothing,
+        reason: 'a running engine is being reported as a failed start');
+  });
+}
+
+/// The engine refused to start and said why — `FakeEngine` answers everything
+/// else from the fixture, so the rest of the screen renders its steady state.
+class _RefusingEngine extends FakeEngine {
+  static const refusal =
+      'MI CS was started from a Low-integrity location: it cannot write its '
+      'state database ("attempt to write a readonly database") or reach the '
+      'privileged helper';
+
+  @override
+  EngineState get state => EngineState.engineMissing;
+
+  @override
+  String? get lastFailure => refusal;
+
+  @override
+  Stream<EngineState> get statusStream =>
+      Stream<EngineState>.value(EngineState.engineMissing);
 }

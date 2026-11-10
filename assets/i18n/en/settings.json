@@ -21,6 +21,7 @@
     "settings.dnd":  "Do not disturb",
     "settings.dndHint":  "Silences everything below CRITICAL.",
     "settings.engine":  "Engine",
+    "settings.engine.lastError":  "Why it would not start",
     "settings.enginePath":  "Engine executable",
     "settings.guardAutostart":  "Start the process guard with the engine",
     "settings.guardAutostartHint":  "Real-time process monitoring starts with the engine; it outlives the window only when «Keep running in the background» is on.",

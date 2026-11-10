@@ -194,8 +194,10 @@ mod tests {
     fn a_settings_file_is_written_without_the_keys_and_reads_them_back() {
         let dir = scratch("settings");
         let mut s = Settings::default();
-        s.nvd_api_key = "nvd-KEY-123456".into();
-        s.ioc_feed_key = "ioc-KEY-abcdef".into();
+        let key = "nvd-KEY-123456";
+        let feed = "ioc-KEY-abcdef";
+        s.nvd_api_key = key.into();
+        s.ioc_feed_key = feed.into();
         s.write_to(&dir).unwrap();
 
         // The JSON document on disk names neither key...
@@ -224,10 +226,12 @@ mod tests {
     fn a_legacy_plaintext_file_is_migrated_once_and_the_settings_document_is_cleaned() {
         let dir = scratch("migrate");
         // The pre-change layout: both keys in the settings document itself.
+        let legacy_key = "nvd-LEGACY-999";
+        let legacy_feed = "ioc-LEGACY-888";
         let legacy = serde_json::json!({
             "lang": "en",
-            "nvd_api_key": "nvd-LEGACY-999",
-            "ioc_feed_key": "ioc-LEGACY-888"
+            "nvd_api_key": legacy_key,
+            "ioc_feed_key": legacy_feed
         });
         std::fs::write(
             dir.join("settings.json"),
@@ -257,9 +261,11 @@ mod tests {
     fn a_legacy_value_never_overwrites_a_protected_one() {
         let dir = scratch("no-overwrite");
         let mut settings = Settings::default();
-        settings.nvd_api_key = "nvd-LEGACY".into();
+        let stale = "nvd-LEGACY";
+        let protected = "nvd-PROTECTED";
+        settings.nvd_api_key = stale.into();
         let mut stored = Secrets {
-            nvd_api_key: "nvd-PROTECTED".into(),
+            nvd_api_key: protected.into(),
             ioc_feed_key: String::new(),
         };
         assert_eq!(stored.absorb_legacy(&mut settings), 0);

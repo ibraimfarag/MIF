@@ -241,8 +241,8 @@
 > exits 0 only for an artifact a stranger's Windows would trust (its `-SelfTest` proves the
 > instrument against a self-signed control and `kernel32.dll`). What waits on the owner is **one
 > publish click and the answers**, not a purchase. §0.2 and the register count were reconciled on
-> 2026-11-08 with what actually ran; the register is **12 open rows (1 HIGH, 3 MED, 8 LOW) out of
-> 24** (counted from the table on 2026-11-08, not carried over), and no page any longer describes a *run* as waiting on a human.
+> 2026-11-08 with what actually ran; the register is **11 open rows (1 HIGH, 3 MED, 7 LOW) out of
+> 24** (recounted from the table on 2026-11-10, after small step 9 closed the engine-refusal row; not carried over), and no page any longer describes a *run* as waiting on a human.
 
 ## 0. Resume here — a new session starts with this section
 
@@ -251,34 +251,26 @@
 Open a fresh session and paste exactly this:
 
 > اقرأ docs/TODO.md §0 (وبالخصوص **§0.6** و§0.3c) و docs/ROADMAP.md. جدول §0.6 هو
-> قائمة الناقص كاملة — خُد **صف واحد** في المرة. الأربعة اللي طلبها المستخدم 2026-11-08
-> هي **صفوف 14–17**: حياة المحرك (**X يقفل والمحرك يخرج**، مع إعداد «خلّيه في الخلفية»)،
-> بانل التراي المصمم، «افحص بـ MI CS» من قائمة الويندوز، والجدار اللحظي (WFP) — وصف 17
-> **شريحة (أ)** اتعملت في 2026-11-08 (provider و sublayer وفلاتر دائمة مملوكة لـ MI CS
-> عبر الـ helper، D-042) بكودها واختباراتها و `scripts\verify-wfp.ps1`، لكن **القياس الحي
-> لكتابة فعلية لسه ناقص**: محتاج أدمن — شغّل `scripts\verify-wfp.ps1` في شل مرتفع (أو
-> أعد تركيب `MICSHelper` من Settings → Engine) وده أول حاجة. و**شريحة (ب)** كمان اتعملت
-> في 2026-11-08 (D-043): قايمة الاتصالات بقت الأربع جداول مع IPv6، والمحرك هو اللي
-> بيبني مواصفة الحجب من صف الاتصال نفسه، وفي زر حجب لكل صف وراه تأكيد —
-> و`scripts\verify-connections.ps1` بيعدّي **23 فحص** بدون أدمن، ونفس قياس الكتابة
-> الحقيقي لسه مستني نفس الشل المرتفع. و**شريحة (ج)** اتعملت في 2026-11-09 (D-044):
-> الـ sublayer والفلاتر بقى ليهم سجل جنبهم، و`fw.wfp.watch` بيقارنه بالجهاز
-> (`guarded` / `tampered` بالاسم / `clear` / `unrecorded` / `unknown`)، وأي تلاعب
-> بيعمل **إنذار HIGH واحد** في الـ incidents وكارت — و`scripts\verify-wfp-watch.ps1`
-> بيعدّي **38 فحص** بدون أدمن (سيب فحص واحد: قراءة الجهاز الحقيقية محتاجة أدمن)،
-> فصف 17 بقى **التلات شرايح مكتوبة** ومستني نفس الشل المرتفع عشان الدليل الحي.
-> وفيه كمان **نشر `v0.1.0`**
-> (كليكة مجانية واحدة) لو حضرتك هتعملها، و**هـ1** (النصين: فيد التحديث الافتراضي
-> المتجمّع في المحرك — D-046 — وتوقيع المانيفست مع تثبيت البصمة — D-047، الاتنين خلصوا
-> 2026-11-09)، و**صف 13**. وكل صف بدليل القياس اللي
-> اسمه في الجدول. **مفيش شراء في المشروع خالص** (D-035): أي صف فيه «شهادة» يبقى
-> **مقفول مش مستني**. متكتبش أرقام من غير قياس، وشغّل
+> قائمة الناقص كاملة — خُد **صف واحد** في المرة. **الخطوات الصغيرة التسعة (§0.5) خلصت**،
+> آخرها الخطوة 9 (`ed3e219`: رفض المحرك بقى يوصل للشاشة بسببه)، واللي فاضل هو **المتوسط
+> والكبير**. أقربهم **صف 9** — صفوف السجل في §7: **11 صف مفتوح (1 HIGH، 3 MED، 7 LOW)
+> من 24** بعد عدّ 2026-11-10، خُد أرخصهم واحد واحد وبنفس نمط الخطوتين 8 و9: إصلاح + اختبار
+> يثبته + قياس حقيقي + كوميت واحد فيه التوثيق كمان. بعده **صف 13** (نصف F-11 الباقي:
+> مانيفست المحرك متجمّد على الهاشات الموقّعة، فإعادة بناء بتوقيع تاني مش بتطابق).
+> و**نشر `v0.1.0`** كليكة واحدة لو حضرتك هتعملها. **صفوف 14–17 اللي طلبتها قفلت بقياسات**
+> (D-039…D-045، ودليل الجدار اللحظي في صف 17) — متعيدهاش. أي صف تاني إما مقفول بقياس أو
+> موقوف على حاجة مش موجودة: شهادة موثوقة (D-035، **مفيش شراء في المشروع خالص**)، تطبيق
+> ARM64 (مفيش Flutter Windows ARM64 SDK)، رنر `windows-11-arm`، أو **ز2-د** (D-023 +
+> endpoint الجسر). متكتبش أرقام من غير قياس، وشغّل
 > `scripts\pipeline.ps1 -Tier fast` قبل الكوميت.
 
-**Resume point (2026-11-09, after the WFP slices were measured).** The last committed steps are the
-**WFP slices** ((a) `9c353e5`, (b) and (c) on the commits above it), then **D-045** (`52b69d3`, the
+**Resume point (2026-11-10, after the nine small steps were closed).** The last committed steps are
+**D-046/D-047** (`5a9949b`, `f621a3d` — the compiled-in update feed and the signature over the
+manifest) and **small step 9** (`ed3e219` — the engine's refusal reaching the screen); before them,
+the **WFP slices** ((a) `9c353e5`, (b) and (c) on the commits above it), then **D-045** (`52b69d3`, the
 bug the first elevated run found) and its probe instruments (`4709011`).
-The register is **12 open rows** (1 HIGH, 3 MED, 8 LOW, counted from §7 on 2026-11-08); §0.6 rows
+The register is **11 open rows** (1 HIGH, 3 MED, 7 LOW, recounted from §7 on 2026-11-10 — small step
+9 closed the LOW row about an engine that cannot say why it would not start); §0.6 rows
 14, 15, 16 **and now 17** are
 **closed with measurements** (D-039, D-040, D-041, D-042/D-043/D-044/D-045). Row 17's close is the
 2026-11-09 elevated run: `scripts\reset-wfp.ps1` **7 passed, 0 skipped, 0 failed** (and it found the
@@ -452,10 +444,10 @@ both binaries `Valid`).
    in و4 (2026-11-03): 0.156–0.521 % of one core over four windows, median
    0.417 %; §7 carries the configuration.**
 
-**This section is empty now**, and so is the rest of §0.5: **all eight small steps are
+**This section is empty now**, and so is the rest of §0.5: **all nine small steps are
 done**. What is left is no longer "small steps" — it is counted in **§0.6** (the one
 table) with the order and estimates in **`docs/ROADMAP.md`**. Short version, as of
-2026-11-09: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured, and so is
+2026-11-10: **و1, و3, و4, ب2, ج1–ج3, ط2, د1, د2 and د4** are done and measured, and so is
 **هـ1** — the compiled-in feed (D-046) *and* the signature over the manifest with its
 thumbprint pin (D-047), measured by `scripts\verify-update.ps1`, now the `update.verify`
 step of `-Tier full`. What
@@ -786,11 +778,12 @@ order the user picked (small → medium → large), and it is finished**
 
 **و — the register (parallel, not a phase)**
 
-`docs/TODO.md` §7 carries **12 open rows (1 HIGH, 3 MED, 8 LOW)** out of 24 —
-recounted from the table itself on 2026-11-03, after و4 closed six of them (the
+`docs/TODO.md` §7 carries **11 open rows (1 HIGH, 3 MED, 7 LOW)** out of 24 —
+recounted from the table itself on 2026-11-10. و4 had closed six of them (the
 incomplete package, the merged-audit ages, the blocking `vuln.scan`, the plaintext
 keys, the guard cost, the portable caller check, the AUMID attribution) and the
-dark-mode and `netsh` firewall rows closed earlier. The MED ones
+dark-mode and `netsh` firewall rows closed earlier, and small step 9 closed the LOW
+row about an engine that cannot say why it would not start. The MED ones
 worth pulling forward once the phases above allow it: **no real-time file watching**
 (the scheduled half landed with و1, D-027), the canary checker being poll-based, and
 Defender tamper protection.
@@ -938,6 +931,7 @@ what "next" means.
 | 6 | ~~Icon pass: `test/icon_test.dart` + `app_icon.ico` sizes, per §"Icon sizes required"~~ | **done** (verified in small step 6) — the test pins the ten sizes on all three `.ico` files and 6 assertions pass |
 | 7 | ~~`docs/PROTECTION-MATRIX.md` as a standalone sheet a stranger can read~~ | **done** (verified in small step 7) — 10 sections, per-layer sees/detects/blocks, evidence table; README links it |
 | 8 | ~~Remaining LOW register rows that are cheap: obfuscation/manifest text, the caller check's `%PROGRAMDATA%` fallback note, and any row whose fix is one file~~ | **done** (small step 8) — the two notes are written into `THREAT-MODEL.md` (F-11 new, F-2 extended) and the README; the register rows now point at them |
+| 9 | ~~The register's *when the engine cannot start at all, the UI cannot say why* row, and §0.6 row 10's two documentation debts~~ | **done** (small step 9) — a start that fails re-runs the engine once with stderr piped, keeps the last twelve lines it printed and shows them in Settings → Engine under *Why it would not start* (`test/engine_refusal_test.dart` for the tail and its bound, the two `settings:` cases in `test/ui_screens_test.dart` for the sentence reaching the screen); the i18n diagram lists all 19 modules; and `verify-installer.ps1` asserts the 70 files the per-user variant installs |
 
 **Medium — a subsystem or a build leg**
 
@@ -1043,6 +1037,8 @@ regenerated report is in the commit. Separately, and outside the tier:
 4 s**, and the RPC contract against the same debug binary **87 cases, 0 failed**
 (73 methods, 109 controls).
 
+**Re-run 2026-11-10 for the engine-refusal row (small step 9): green, 4 of 4, 66.1 s — 200 engine tests, `flutter test` 167, `engine.clippy` clean.** The first attempt failed `qa_report_test`: adding a Dart test file moves the report's own count (28 → 29 files, 132 → 137 declared cases), which is the gate catching the change rather than a defect — `qa/report.md`/`.html` are regenerated in this commit and the counts above are the regenerated ones.
+
 **The constraint that shapes every row:** this is a free, open-source project with **no
 budget** — nothing can be bought, not a certificate, not a tool, not a service. Every
 row that used to say "buy" now either has a free substitute or is written down as out
@@ -1060,8 +1056,9 @@ somebody who signs for free.
 | 6 | **A Windows-on-ARM app download** — the engine builds, links and is PE-checked for `aarch64-pc-windows-msvc`, and CI runs its tests on real ARM64; the **app** has no SDK | ✅ | **Flutter** (no Windows ARM64 SDK: 0 of 747 archives, measured 2026-11-04) | upstream; the packaging job runs the x64 SDK under emulation until then |
 | 7 | **ز2-د — crash-report delivery** | ✅ engineering only | **D-023** (where reports may go) + the Open WA bridge endpoint | your destination answer first, then the sender |
 | 8 | **The six open decisions** (`docs/OPEN-DECISIONS.md`) | ✅ | **your answers**, one line each | each one has a recommendation; none of them blocks the rest |
-| 9 | **12 open rows in the §7 register** — **1 HIGH, 3 MED, 8 LOW** out of 24 (counted 2026-11-08) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; the closed one is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall |
-| 10 | **Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship | ✅ | nobody | one edit each; tracked here so it is not lost |
+| 9 | **11 open rows in the §7 register** — **1 HIGH, 3 MED, 7 LOW** out of 24 (recounted 2026-11-10, after small step 9 closed the row about an engine that cannot say why it would not start) — and the one the 2026-11-07 acceptance run found as a real defect (a firewall rule whose name already starts with `MICS-` was prefixed twice and could then never be removed by the name that was given) is **closed 2026-11-08** with its measurements in the register row | ✅ | nobody, or one measurement each | work the rows one at a time; the closed one is one function that decides a rule name in one place (`owned_rule_name`), a unit test over five spellings, two new refusal cases in `qa\methods.json` and four new checks in `scripts\verify-firewall.ps1` that ran against this machine's firewall |
+| 10 | ~~**Residual documentation debt**: `assets\i18n\README.md`'s diagram lists 16 of the 19 modules, and `scripts\verify-installer.ps1` still asserts `-ge 60` files against the 70 that ship~~ | ✅ | — | **closed (small step 9)**: the diagram lists all 19 modules, and the check asserts the 70 files the per-user variant installs — the count `docs/ROADMAP.md` §2 already records for **ب3** |
+erify-installer.ps1` still asserts `-ge 60` files against the 70 that ship~~ | ✅ | — | **closed (small step 9)**: the diagram lists all 19 modules, and the check asserts the 70 files the per-user variant installs — the count `docs/ROADMAP.md` §2 already records for **ب3** |
 | 11 | **The two ARM64 CI legs are informational** (`continue-on-error`) | ✅ | a green run on `windows-11-arm` | watch them until a run says what they produce; they are not gates yet |
 | 12 | ~~**`LICENSE` was a 5-line placeholder**~~ | ✅ | — | **closed in this pass**: the verbatim GPL-3.0 text, 35,149 bytes / 553 lines |
 | 13 | **The engine is the one file a rebuild cannot match** — `MICS_MANIFEST` records the SHA-256 of every other shipped file *as signed*, so a rebuild signed with another key changes that document and therefore `mics-engine.exe` (this is F-11's remaining half, and `verify-reproducible.ps1` accepts it only after proving the difference is the signature) | ✅ engineering only | a **D-025 revision** + the work | make the document cover **content** instead of signatures: inject the payload hash `Get-MicsUnsignedHash` already computes, make the engine's start-up self-check hash the same way (the certificate table, the optional-header checksum and the security directory are not the code), record in D-025 why, and then delete the "explained" verdict from `verify-reproducible.ps1` because the engine matches too |
@@ -5684,7 +5681,8 @@ signing certificate respectively), so this is the work that is always available.
 | ~~LOW~~ | ~~`nvd_api_key` / `ioc_feed_key` are plaintext in `settings.json`~~ — **closed 2026-11-03 (و4)**: both keys now live in `<data dir>\secrets.dat`, DPAPI-protected at machine scope (the primitive the quarantine master key uses) behind a `MS1\0` header, written before the document and replaced atomically; `settings.json` no longer holds them at all, a file written by an older build is migrated on the next start (the plaintext is taken out and the document rewritten without it, idempotently), and the proving test asserts that neither the document nor the secrets file contains the value that went in. **Honest limit**: machine-scope DPAPI binds the blob to the computer, not to a user, so another local account can still ask Windows to decrypt it (`THREAT-MODEL.md` F-5) — what it removes is the plaintext copy that travelled in backups, shared folders and pasted logs | `settings.rs`, `secrets.rs`, THREAT-MODEL F-5 |
 | ~~LOW~~ | ~~**Dark mode is not contrast-audited**~~ — closed by small step 4: the dark palette was measured with the same 29 pairs (7 below their bar: the border at 1.32/1.21, secondary text at 4.06/3.73, `onError` 3.67, and two composited tints), fixed, and frozen in `test/dark_contrast_audit_test.dart`; both modes now assert 29 of 29 (`docs/CONTRAST.md`) | `app_theme.dart`, `test/dark_contrast_audit_test.dart` |
 | ~~LOW~~ | ~~**No signed integrity manifest**, so a repackaged copy is not detectable *by the app itself*~~ — **closed 2026-11-03 (ج2, both commits)**, with its honest limit written down: the shipped engine carries a SHA-256 manifest of every other shipped file inside its own signature, re-reads it at start-up, re-hashes the folder it runs from and reports `ok` / `untrusted-certificate` / `unverified` in `status` — About shows the line, and a manifest that disagrees with the files raises a card naming them. `make-release.ps1` builds and injects it, `verify-manifest.ps1` proves the package against it, and `-Tier release` refuses one it fails. What stays open is in `THREAT-MODEL.md` F-11: a from-source rebuild re-signed with another key, plus the engine's manifest recording signed hashes rather than content (§0.6 row 13) | P5, THREAT-MODEL F-11, `engine/src/selfcheck.rs` |
-| LOW | **When the engine cannot start at all, the UI cannot say why.** The engine's refusal is one excellent sentence — `MI CS was started from a Low-integrity location (…): it cannot write its state database ("attempt to write a readonly database") or reach the privileged helper … run the installed copy in %LOCALAPPDATA%\MI CS, or extract the release ZIP outside a web root or sandbox folder` — and the app spawns it with `ProcessStartMode.detached`, so that text goes to a discarded stderr: the user sees "engine missing" and a retry that cannot succeed. Measured 2026-11-07 by staging the same package in a Low-labelled folder (trap 33), where the portable copy failed identically. **Fix direction:** capture the child's stderr on the first failed connect (normal mode, drain it, then let the process go), or have the engine leave the refusal where the app already reads — the log tail it shows on the crash screen | `lib\core\ipc\ipc_client.dart`, `engine\src\main.rs:199` |
+| ~~LOW~~ | ~~**When the engine cannot start at all, the UI cannot say why.**~~ — **closed 2026-11-10 (small step 9):** a start that fails now re-runs the engine once with stderr piped (the detached spawn throws it away), keeps the **last twelve lines it printed** and shows them in Settings → Engine under *Why it would not start*, so the Low-integrity refusal below reaches the user instead of a retry that cannot work. Proved by `test/engine_refusal_test.dart` (the tail, its 12-line bound, and a line split across two stderr chunks) and by the two `settings:` cases in `test/ui_screens_test.dart` (the sentence is on screen; a running engine shows nothing). The engine's refusal is one excellent sentence — `MI CS was started from a Low-integrity location (…): it cannot write its state database ("attempt to write a readonly database") or reach the privileged helper … run the installed copy in %LOCALAPPDATA%\MI CS, or extract the release ZIP outside a web root or sandbox folder` — and the app spawns it with `ProcessStartMode.detached`, so that text goes to a discarded stderr: the user sees "engine missing" and a retry that cannot succeed. Measured 2026-11-07 by staging the same package in a Low-labelled folder (trap 33), where the portable copy failed identically. ~~**Fix direction:** capture the child's stderr on the first failed connect (normal mode, drain it, then let the process go), or have the engine leave the refusal where the app already reads — the log tail it shows on the crash screen~~ | `lib\core\ipc\ipc_client.dart`, `lib\features\settings\screens\settings_screen.dart`, `engine\src\main.rs:199` |
+eatures\settings\screens\settings_screen.dart`, `engine\src\main.rs:199` |
 
 ## Icon sizes required for the application
 

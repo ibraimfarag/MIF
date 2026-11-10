@@ -242,7 +242,7 @@ try {
   $installedFiles = 0
   if (Test-Path $install) { $installedFiles = (Get-ChildItem $install -Recurse -File | Measure-Object).Count }
   Note "$installedFiles files in the install folder"
-  Check ($installedFiles -ge 60) "the install holds the whole package ($installedFiles files)"
+  Check ($installedFiles -ge 70) "the install holds the whole package ($installedFiles files, 70 shipped)"
 
   Check (Test-Path -LiteralPath $smLnk) "the Start-Menu shortcut exists"
   Check (Test-Path -LiteralPath $smUninstallLnk) "the Start-Menu uninstall shortcut exists"

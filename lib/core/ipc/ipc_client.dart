@@ -73,6 +73,13 @@ class EngineIpc {
   EngineState _state = EngineState.stopped;
   EngineState get state => _state;
 
+  /// Why the last start attempt failed, in the engine's own words when it had
+  /// any. The engine is started detached, so a refusal like "started from a
+  /// Low-integrity location" is written to a stderr nobody reads; without this
+  /// the user sees "engine missing" and a retry that cannot succeed.
+  String? _lastFailure;
+  String? get lastFailure => _lastFailure;
+
   /// Extra environment applied when *this* app has to start the engine.
   Map<String, String> spawnEnv = {};
 
@@ -193,6 +200,7 @@ class EngineIpc {
     //    exits immediately, and `status.pid` below decides who owns the pipe.
     final path = resolveEnginePath();
     if (!File(path).existsSync()) {
+      _lastFailure = 'mics-engine.exe is not at $path';
       _setState(EngineState.engineMissing);
       return false;
     }
@@ -211,8 +219,9 @@ class EngineIpc {
       _spawnedPid = spawned.pid;
       _ownsEngine = false;
       _ownershipChecked = false;
-    } catch (_) {
+    } catch (e) {
       _spawnedPid = null;
+      _lastFailure = 'the engine could not be started ($e)';
       _setState(EngineState.engineMissing);
       _scheduleRestart();
       return false;
@@ -226,9 +235,94 @@ class EngineIpc {
       _attach(started);
       return true;
     }
+    // Nothing is serving the pipe. What the engine said on the way down is the
+    // only thing that makes this actionable, and the detached spawn discarded
+    // it — so ask once more, with stderr piped. The probe is bounded and runs at
+    // most once per failure episode: `_lastFailure` is cleared by `_attach`.
+    if (_lastFailure == null) {
+      final probed = await _probeStartFailure(path);
+      if (probed.connection != null) {
+        _attach(probed.connection!);
+        return true;
+      }
+      _lastFailure = probed.reason;
+    }
     _setState(EngineState.engineMissing);
     _scheduleRestart();
     return false;
+  }
+
+  /// One bounded second start whose only purpose is to hear *why* the first one
+  /// did not answer.
+  ///
+  /// `_connect` starts the engine detached, which discards its stdio; the
+  /// refusals worth showing the user — a Low-integrity folder, a command line
+  /// the engine will not take — are printed to stderr and nothing else. This
+  /// runs the same command once with stderr piped and keeps the last lines.
+  ///
+  /// Safe to run whenever the pipe is silent: the engine's single-instance mutex
+  /// makes a duplicate harmless (the loser exits at once), and if *this* copy is
+  /// the one that ends up serving the pipe, it is attached to and owned rather
+  /// than reported as a failure.
+  Future<({PipeConnection? connection, String? reason})> _probeStartFailure(
+      String path) async {
+    final Process probe;
+    try {
+      probe = await Process.start(
+        path,
+        ['service', '--parent', '$pid'],
+        environment: spawnEnv.isEmpty
+            ? null
+            : {...Platform.environment, ...spawnEnv},
+      );
+    } catch (e) {
+      return (connection: null, reason: 'the engine could not be started ($e)');
+    }
+
+    final tail = <String>[];
+    final stderrDrain = keepTail(probe.stderr, tail);
+    // stdout is drained too: a child must never block on a full pipe.
+    final stdoutDrain = probe.stdout.drain<void>();
+
+    // A refusal exits at once, and the exit *is* the answer; a healthy start
+    // keeps running and gets the pipe wait instead.
+    int? exitCode;
+    try {
+      exitCode = await probe.exitCode
+          .timeout(const Duration(milliseconds: 800));
+    } on TimeoutException {
+      exitCode = null;
+    }
+    if (exitCode != null) {
+      await stderrDrain.cancel();
+      unawaited(stdoutDrain.catchError((Object _) {}));
+      return (
+        connection: null,
+        reason: tail.isNotEmpty
+            ? tail.join('\n')
+            : 'the engine exited at once with code $exitCode',
+      );
+    }
+
+    final connection = await PipeConnection.tryConnect(
+      timeout: const Duration(milliseconds: 2500),
+    );
+    if (connection != null) {
+      // This copy is the engine now. Keep draining its stderr — an unread pipe
+      // would eventually block it — and let ownership see the pid we started.
+      _spawnedPid = probe.pid;
+      return (connection: connection, reason: null);
+    }
+    probe.kill();
+    await probe.exitCode.timeout(const Duration(seconds: 1), onTimeout: () => -1);
+    await stderrDrain.cancel();
+    unawaited(stdoutDrain.catchError((Object _) {}));
+    return (
+      connection: null,
+      reason: tail.isNotEmpty
+          ? tail.join('\n')
+          : 'the engine started but never answered on the pipe',
+    );
   }
 
   void _attach(PipeConnection conn) {
@@ -236,6 +330,7 @@ class EngineIpc {
     conn.lines.listen(_handleLine);
     conn.onClosed.listen((reason) => _handleDisconnect(reason));
     _restartBackoffSeconds = 1;
+    _lastFailure = null;
     _setState(EngineState.running);
     _startHeartbeat();
   }
@@ -381,6 +476,29 @@ class EngineException implements Exception {
 }
 
 enum EngineState { stopped, running, reconnecting, engineMissing }
+
+/// Keeps the last [keep] non-empty lines of [stream] in [into].
+///
+/// A refusal is a sentence at the *end* of whatever the engine printed on its
+/// way down, so the tail is the part worth showing the user and the buffer is
+/// bounded — an engine that died mid-scan can print a great deal. The
+/// subscription comes back because the caller decides when to stop listening: a
+/// process that is still running has to keep being drained or it blocks.
+StreamSubscription<String> keepTail(
+  Stream<List<int>> stream,
+  List<String> into, {
+  int keep = 12,
+}) {
+  return stream
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) {
+    final text = line.trim();
+    if (text.isEmpty) return;
+    into.add(text);
+    if (into.length > keep) into.removeAt(0);
+  }, onError: (Object _) {});
+}
 
 final engineIpcProvider = Provider<EngineIpc>((ref) {
   final ipc = EngineIpc();

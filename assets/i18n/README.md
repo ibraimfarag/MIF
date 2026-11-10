@@ -7,7 +7,7 @@ assets/i18n/
   ar/  app.json  nav.json  engine.json  dashboard.json  common.json
        audit.json  scanner.json  network.json  ids.json  vulns.json
        guard.json  canaries.json  hardening.json  incidents.json
-       reports.json  settings.json
+       reports.json  settings.json  helper.json  intel.json  sync.json
   en/  (same files, same keys)
 ```
 

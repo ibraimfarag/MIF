@@ -21,6 +21,7 @@
     "settings.dnd":  "وضع عدم الإزعاج",
     "settings.dndHint":  "بيسكّت كل حاجة أقل من «حرج».",
     "settings.engine":  "المحرك",
+    "settings.engine.lastError":  "ليه ماشتغلش",
     "settings.enginePath":  "مسار المحرك",
     "settings.guardAutostart":  "تشغيل حارس العمليات مع المحرك",
     "settings.guardAutostartHint":  "المراقبة اللحظية بتبدأ مع المحرك؛ ومش بتكمل بعد قفل النافذة غير لو «سيبه شغّال في الخلفية» مفتوح.",

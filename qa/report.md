@@ -19,7 +19,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 28 files | 132 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Dart tests | 29 files | 137 declared cases (a floor: loops add more at run time) | `flutter.test` step |
 | Engine tests | 26 modules | 200 declared cases | `engine.test` step |
 | Pipeline steps | 13 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
@@ -217,6 +217,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/canary_status_test.dart` | 4 |
 | `test/crash_report_model_test.dart` | 3 |
 | `test/dark_contrast_audit_test.dart` | 0 |
+| `test/engine_refusal_test.dart` | 3 |
 | `test/handoff_test.dart` | 12 |
 | `test/i18n_lint_test.dart` | 1 |
 | `test/i18n_parity_test.dart` | 6 |
@@ -235,12 +236,12 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/settings_model_test.dart` | 6 |
 | `test/sound_assets_test.dart` | 2 |
 | `test/tray_panel_test.dart` | 4 |
-| `test/ui_screens_test.dart` | 8 |
+| `test/ui_screens_test.dart` | 10 |
 | `test/ui_shell_test.dart` | 3 |
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **132** in 28 files |
+| **total** | **137** in 29 files |
 
 ### Engine: the modules under engine/src with tests
 
