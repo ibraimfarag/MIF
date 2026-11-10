@@ -148,6 +148,12 @@ Honesty is a feature. Today, MI CS does **not**:
   actually has instead of assuming it, and a decoy MI CS has just written stays
   quiet for 90 s because the first thing to open a new file on Windows is usually
   Defender or the indexer;
+- hash a **process as it starts**: the guard matches process creation against
+  JSON rules, and it does not read the image's SHA-256 — hashing every process
+  start was judged too hot — so a known-bad hash that matches no rule is caught
+  by a **scan**, not at start. That is a deliberate limit and the guard reports it
+  as a fact (`ioc.hash_checked_at_process_start` in `guard.status`) instead of
+  leaving it to a comment (D-048, `docs/PROTECTION-MATRIX.md` §4.1);
 - watch files **as they change**: a scheduled scan walks the folder you named
   every few hours (and only while the engine is running — the engine starts with
   MI CS and, by default, ends when you close it, D-039), so a file that appears
@@ -356,7 +362,7 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 |---|---|---|---|
 | **L1 Network Gate** | Windows Firewall through its own API: default-deny outbound, `MICS-*` rules, per-country CIDR blocking | Unwanted outbound traffic and known-bad ranges, once rules exist | No deep packet inspection — it is policy, not an inline filter |
 | **L2 Attack Radar** | Managed hosts-file domain blocklist + GeoIP tables from synced blocklists | Name resolution to known malicious/tracking domains, for every app | Raw-IP traffic, DoH inside apps, no packet inspection |
-| **L3 Response** | Process guard (2 s poll unelevated, kernel ETW when elevated), Sigma-like rules, kill-tree, canaries, incident correlator | Suspicious process creation, persistence attempts, ransomware-style decoy touches | Not a kernel driver; an attacker who is already admin is out of scope |
+| **L3 Response** | Process guard (2 s poll unelevated, kernel ETW when elevated), Sigma-like rules, kill-tree, canaries, incident correlator | Suspicious process creation, persistence attempts, ransomware-style decoy touches | Not a kernel driver; an attacker who is already admin is out of scope; a process **image is not hash-checked at start** — rules match name/parent/command line, and a scan owns the hash dimension (D-048) |
 | **L4 File Engines** | Triage scanner: SHA-256 vs local IOC cache, then YARA rules | Known-bad files by hash and by pattern | No ClamAV signatures, no CAPA, no unpacking |
 | **L5 Mind** | Incident correlation (kill-chain timeline) + assistant: built-in AR/EN templates, optionally a **local** LLM (LM Studio) | Alert fatigue — related events become one incident with a story | The command bar is rule-based (regex intents), not an LLM planner |
 
@@ -518,11 +524,11 @@ powershell -ExecutionPolicy Bypass -File scripts\pipeline.ps1 -Tier fast -Only f
 ```
 
 **fast** is what runs before every commit: **181 s** on the cold run at `173224a`, and
-**76.9 s** on the last timed run (2026-11-07, warm caches). The counted surfaces below are
-the ones `qa\report.md` generates (2026-11-09): `flutter analyze` (no issues — an info is a
-failure), `flutter test` (**132 declared cases across 28 files**, including the two contrast
+**57.6 s** on the last timed run (2026-11-10, warm caches). The counted surfaces below are
+the ones `qa\report.md` generates (2026-11-10): `flutter analyze` (no issues — an info is a
+failure), `flutter test` (**137 declared cases across 29 files**, including the two contrast
 audits and the i18n parity/lint gates over **19 module files / 299 keys per language**),
-`cargo test` (**200 declared cases across 26 modules**) and
+`cargo test` (**201 declared cases across 26 modules**) and
 `cargo clippy --release -- -D warnings` (clean). Those counts are
 floors — loops and generated cases add more at run time, and `qa\report.md` is the
 generated table that the fast tier itself refuses to let drift. **full** adds the

@@ -1182,6 +1182,26 @@ mod tests {
     }
 
     #[test]
+    fn the_guard_status_states_that_process_start_does_not_hash() {
+        // The ETW callback used to load the IOC hash list and then drop it, and
+        // the comment beside it claimed flatly that no scan scheduler existed
+        // (one landed with D-027). The fix is that the coverage fact lives in
+        // one place: this is the pin that keeps `guard.status` honest if someone
+        // ever turns on hashing at start — they would have to change this fact
+        // and the docs, not just a comment.
+        let ioc = crate::guard::ioc_hash_coverage();
+        assert_eq!(
+            ioc["hash_checked_at_process_start"], serde_json::json!(false),
+            "the process-start path does not hash images; if that changed, this fact and PROTECTION-MATRIX §4.1 must change with it"
+        );
+        let reason = ioc["reason"].as_str().unwrap_or_default();
+        assert!(
+            reason.contains("D-027") && reason.contains("scan job"),
+            "the reason has to name where the hash dimension actually lives: {reason}"
+        );
+    }
+
+    #[test]
     fn audit_sections_are_parsed_or_refused_never_ignored() {
         use serde_json::json;
         let sections = crate::platform::traits::requested_sections;

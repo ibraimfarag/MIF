@@ -267,9 +267,12 @@ parent image and command-line substring, with severity and `action: alert|kill`.
 - **Rules are name/cmdline patterns.** Rename the binary or use a different living-
   off-the-land tool and the rule does not fire; there is no file/registry/network
   behaviour in the rule language (`child_cmd_contains` is the only data predicate).
-- **The process hash is not checked.** The ETW callback loads the IOC hash list and
-  then does nothing with it — hashing every process start was judged too hot
-  (`guard/etw.rs`); the scanner owns the hash dimension.
+- **The process hash is not checked at start.** Hashing every process creation was
+  judged too hot, so the ETW callback does not hash the image (it used to load the
+  IOC hash list and drop it; that dead load is gone). The scan job owns the hash
+  dimension (scheduled or manual, D-027), and `guard.status` reports the limit as a
+  fact — `ioc.hash_checked_at_process_start: false` with its reason — so the
+  surface cannot imply coverage this path does not have.
 - **Starter content.** Six bundled rules. The shipped pack demonstrates the
   mechanism; it is not a behavioural signature database.
 

@@ -11,7 +11,6 @@ use ferrisetw::EventRecord;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::{emit_public, load_rules, rule_matches, GuardEvent};
-use crate::storage::sqlite::Storage;
 
 static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -25,9 +24,6 @@ pub fn is_active() -> bool {
 /// to the poll loop.
 pub fn start() -> bool {
     ETW_ACTIVE.store(false, Ordering::SeqCst);
-
-    let storage = Storage::open().ok();
-    let ioc_hashes = storage.map(|s| s.dump_ioc_hashes().unwrap_or_default()).unwrap_or_default();
 
     let callback = move |record: &EventRecord, locator: &SchemaLocator| {
         let Ok(schema) = locator.event_schema(record) else {
@@ -76,10 +72,12 @@ pub fn start() -> bool {
                 }
             }
         }
-        // IOC hash check happens on-demand later (hashing at every start is
-        // too hot); the scanner covers the hash dimension when a scan runs.
-        // There is no scan scheduler yet, so this is not a safety net.
-        let _ = ioc_hashes;
+        // No image-hash check here on purpose: hashing every process creation
+        // was judged too hot (PROTECTION-MATRIX §4.1), so a known-bad hash that
+        // matches no behavioural rule is not caught at start. The scan job owns
+        // that dimension (D-027, scheduled or manual), and `guard.status`
+        // reports the limit through `super::ioc_hash_coverage` rather than
+        // implying coverage this path does not have.
     };
 
     let provider = Provider::kernel(&kernel_providers::PROCESS_PROVIDER)

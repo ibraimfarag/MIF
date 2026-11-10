@@ -401,6 +401,18 @@ pub(crate) fn taskkill_call(pid: u32) -> crate::platform::windows::process::Tool
     .args(["/T", "/F"])
 }
 
+/// What the process-start path does with the IOC hash list, as a fact the
+/// surface can report instead of a comment: it does **not** check the image
+/// hash at start — hashing every process creation was judged too hot — so the
+/// scan job owns that dimension (D-027). Kept as one named fact so
+/// `guard.status`, `PROTECTION-MATRIX.md` §4.1 and the code cannot drift apart.
+pub(crate) fn ioc_hash_coverage() -> serde_json::Value {
+    json!({
+        "hash_checked_at_process_start": false,
+        "reason": "hashing every process image at start was judged too hot; the scan job checks file hashes (D-027)",
+    })
+}
+
 /// JSON status for the UI.
 pub fn status_json() -> serde_json::Value {
     json!({
@@ -411,5 +423,8 @@ pub fn status_json() -> serde_json::Value {
         // What the decoys cover, and whether a read-only open would be seen on
         // this volume at all (measured, never assumed).
         "canaries": canary::status_json(),
+        // What the process-start path does with the IOC hash list, so the
+        // surface never implies hash coverage it does not have.
+        "ioc": ioc_hash_coverage(),
     })
 }

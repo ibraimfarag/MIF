@@ -2845,3 +2845,58 @@ thumbprint pin) and §7's هـ1, and closes the "nothing verifies a signature ov
 D-046 left open. **Does not commit us to:** a second trust store, trusting a signature because it
 verified (the pin decides), a revocation check, a timestamp authority for the manifest, signing the
 *installer* with the same lane (it publishes no feed), or verifying the feed from CI.
+
+## D-048 — The guard says what it does not check, and the surface carries the fact
+
+**Status:** accepted (2026-11-10)
+
+**Context.** `guard::etw::start` opened the store, read `dump_ioc_hashes()` into a `HashMap` on every
+guard start, and then discarded it (`let _ = ioc_hashes;`) — and the comment that justified the waste
+was **false**: "There is no scan scheduler yet, so this is not a safety net." A scan scheduler landed
+with **D-027** on 2026-11-03. The limit itself is real and deliberate (hashing every process creation
+was judged too hot), but it lived in two places that disagreed — a comment a reader could not trust,
+and `PROTECTION-MATRIX.md` §4.1, which stated it correctly — so the *documentation* had drifted from
+the code in the direction that hides coverage rather than the direction that invents it. D-032 set the
+precedent for the canary half of the same subsystem: a limit that matters gets a verdict on the
+surface, not an implication of coverage.
+
+**Decision.** The process-start path does **not** hash the image, and that is a **fact in one
+function** the surface reports:
+
+1. **One fact, one place.** `guard::ioc_hash_coverage()` answers
+   `{hash_checked_at_process_start: false, reason: "hashing every process image at start was judged
+   too hot; the scan job checks file hashes (D-027)"}`. It is the only place in the code that states
+   the limit; the ETW callback's comment points at it rather than restating it, so the two cannot
+   drift apart again.
+2. **The surface carries it.** `guard.status` returns it under `ioc`, beside `canaries`, in the idiom
+   D-032 established. The guard screen reads only `running` and `rules`, so this is additive and
+   breaks no client; `guard.status`'s registered result is `object`, so the contract is unchanged.
+3. **The dead load and the false sentence are deleted.** The callback no longer opens the store for a
+   list it does not use, `Storage` is no longer imported there, and "there is no scan scheduler yet" is
+   removed rather than reworded — the scan job owns the hash dimension, scheduled or manual.
+4. **A test pins it.** `engine/src/tests.rs::the_guard_status_states_that_process_start_does_not_hash`
+   fails if the fact flips or if the reason stops naming where the hash dimension actually lives, so
+   turning hashing on at start means changing this fact, the test and §4.1 — not just a comment.
+
+**Measured** (2026-11-10, unelevated shell, no network, no machine changes): `scripts\pipeline.ps1
+-Tier fast` **green, 4 of 4** — **74.7 s** on the first green run (`flutter.analyze` 17.3 s,
+`flutter.test` 37.3 s, `engine.test` 8.3 s, `engine.clippy` 11.8 s) and **57.6 s** on the re-run of
+the frozen tree, with `engine.clippy` cached (2.3 s) — and `cargo test` at **201 passed / 0 failed**.
+The first
+attempt failed `qa_report_test`, which is the gate doing its job rather than a defect: one new engine
+case moves the report's per-file count (`engine/src/tests.rs` 55 → 56, total 200 → 201), and the
+regenerated `qa/report.md`/`qa/report.html` are in this commit. Nothing here is a probe: no elevation,
+no firewall, no file outside the repository.
+
+**Not measured, and open.** The cost of hashing a process image at start is still a **judgement, not a
+number** — nothing here measures it against a real process-start rate, which is why the reason string
+states the judgement instead of quoting a figure. A machine that wants hash-at-start would have to
+measure that first, and the measurement needs an elevated ETW session to see real process starts, so
+it is out of reach of this unelevated run. The row stays *closed* because its actual defect was the
+dead load and the untrue comment, not the deliberate limit.
+
+**Advances** §7's LOW row (the guard's ETW callback loads the IOC hash list and never uses it) and
+`PROTECTION-MATRIX.md` §4.1. **Does not commit us to:** hashing at process start, a second or key-free
+hash feed (that row stays open and needs an external source), a minifilter for file events, feeding
+the guard's rules from the IOC list, or any change to the poll fallback — unelevated, that path is
+unchanged.
