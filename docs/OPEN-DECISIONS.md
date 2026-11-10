@@ -1,7 +1,9 @@
 # The open decisions, one page each
 
 These are the six answers that stop work which is otherwise ready (`docs/TODO.md` §0.2,
-item 3) — **four still wait on you**: (c) was settled by D-035 and (f) is answered and
+item 3) — **three still wait on you**: (c) was settled by D-035 **and implemented ahead of time by
+D-051** (the pin is the certificate the engine carries, and the release name is only what a build
+with no signature of its own falls back to), and (f) is answered and
 implemented by D-049, and both are left in place rather than deleted. Each brief says **what the code does today** - read out of the source or measured,
 not remembered - then the options, what each costs, and what I would pick. Nothing here
 needs a meeting: answering in one line per item is enough. For example:
@@ -11,7 +13,8 @@ needs a meeting: answering in one line per item is enough. For example:
 4: ip feed, measure the ceiling first               5: not yet     6: permissive + English fallback
 ```
 
-Two of the six are already answered by the code, D-035 settled (c) and D-049 answered and
+Two of the six are already answered by the code, D-035 settled (c) — and D-051 did it, so the line
+above prints today — and D-049 answered and
 implemented (f). They are kept here so the list stays
 honest rather than getting quietly shorter.
 
@@ -82,7 +85,22 @@ if you want document-borne malware to be in scope at all; (3) only with a licenc
 
 ---
 
-## 3. The update pin: certificate name, or thumbprint? (D-016)
+## 3. The update pin: certificate name, or thumbprint? (D-016) — **settled and implemented ahead of time (D-051, 2026-11-11)**
+
+**Settled, as recommended here: option (3), "both, in order" — and it landed before ب5 rather than
+with it.** The pin is now `signature::Pin`: `Thumbprint` when this build has a certificate of its own
+— read out of the engine's **own** image as the thumbprint of the certificate inside its Authenticode
+blob, or taken from `MICS_UPDATE_SIGNER_THUMBPRINT` (the environment override D-047 added) — and
+`Name(EXPECTED_SIGNER_CN)` only for a build with no signature of its own, which reports `pinned:
+false` instead of calling the name check a pin. The payload check, the manifest's `judge()` and
+`trust()` all compare that one value, and `require_signed_by` (the name-only entry point) is gone.
+Two consequences worth stating plainly: a CA-signed release **recognises itself** instead of refusing
+itself at the payload check, and a certificate with the very same CN from somebody else is refused.
+Nothing here needs an answer from you any more — buying or being donated a certificate is a drop-in
+with no code change. Full entry and numbers: **D-051**; the residual that is *not* a pinning gap (the
+pin comes out of the file under question, so a re-signed copy pins its own certificate) is in
+`docs/THREAT-MODEL.md` F-3. The brief below is kept as the record of what was decided, with its
+line numbers as they were on 2026-11-06.
 
 **What is blocked.** Nothing today - updates work. This is about how much a forged or
 mismatched signer can get away with.
@@ -127,6 +145,16 @@ certificate.
 default), three tests (right thumbprint accepted, wrong thumbprint refused even with the
 right CN, empty setting = today's behaviour), and the docs. It is only worth doing *before*
 ب5 if you want the answer pre-wired; otherwise it can ride along with ب5.
+
+**What it cost in the end (measured 2026-11-11, D-051).** A day rather than an hour, and the
+difference is instructive: there was no `update_pin_thumbprint` setting to add, because D-047 had
+already pinned the *manifest* to the certificate over the engine and an environment override — so the
+work was not "add a second pin" but "make the one pin hold both identities and make every check use
+it", which meant the payload check, the manifest judge and `trust()` in one pass, and deleting the
+name-only entry point. No setting was added at all: the certificate the engine carries is the pin,
+which is one fewer thing to configure and one fewer thing to leave empty. The environment override
+became a validation with an error instead of a silent fallback. Six new engine cases, a clean clippy,
+`verify-update.ps1` 45/0/0, and the fast tier green.
 
 ---
 

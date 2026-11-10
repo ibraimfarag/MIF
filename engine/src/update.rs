@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use crate::platform::windows::process::ToolCall;
 use crate::platform::windows::signature::{
-    pinned_update_thumbprint, verify_detached, VerifiedSigner, EXPECTED_SIGNER_CN,
+    require_signed_by_pin, update_pin, verify_detached, Pin, VerifiedSigner,
 };
 use crate::sync::SyncManager;
 
@@ -109,10 +109,11 @@ struct Verified {
 
 /// Fetches the signature beside `manifest_url` and verifies it over `raw`.
 ///
-/// The pin is [`pinned_update_thumbprint`]: the environment's test hook, or the
-/// certificate over this executable. A build with neither still verifies the
-/// signature and still has to recognise the signer's name — an update feed that
-/// cannot be checked is refused with that reason, not read anyway.
+/// The pin is [`update_pin`]: the environment's test hook, or the certificate over
+/// this executable, or — for a build with neither — the release name. A build with
+/// no pin of its own still verifies the signature and still has to recognise that
+/// name; an update feed that cannot be checked is refused with that reason, not read
+/// anyway.
 async fn verify_manifest(sm: &SyncManager, manifest_url: &str, raw: &[u8]) -> Result<Verified> {
     let sig_url = signature_url(manifest_url);
     let signature = sm
@@ -126,7 +127,7 @@ async fn verify_manifest(sm: &SyncManager, manifest_url: &str, raw: &[u8]) -> Re
         })?;
     let signer = verify_detached(raw, &signature)
         .with_context(|| format!("the manifest at {manifest_url} was refused"))?;
-    let pinned = judge(pinned_update_thumbprint()?, &signer, manifest_url)?;
+    let pinned = judge(&update_pin()?, &signer, manifest_url)?;
     Ok(Verified { signer, pinned })
 }
 
@@ -136,26 +137,19 @@ async fn verify_manifest(sm: &SyncManager, manifest_url: &str, raw: &[u8]) -> Re
 ///
 /// Pure on purpose: the refusals below are the whole policy of F-3's feed half,
 /// and they are checked in unit tests rather than only against a live feed.
-fn judge(pin: Option<String>, signer: &VerifiedSigner, manifest_url: &str) -> Result<bool> {
+fn judge(pin: &Pin, signer: &VerifiedSigner, manifest_url: &str) -> Result<bool> {
+    if pin.accepts(signer.name.as_deref(), Some(&signer.thumbprint)) {
+        return Ok(matches!(pin, Pin::Thumbprint(_)));
+    }
     match pin {
-        Some(pin) if pin == signer.thumbprint => Ok(true),
-        Some(pin) => bail!(
-            "the manifest at {manifest_url} was refused: it is signed by {}, and this engine pins {pin}",
-            describe(signer)
+        Pin::Thumbprint(_) => bail!(
+            "the manifest at {manifest_url} was refused: it is signed by {}, and this engine pins {}",
+            describe(signer),
+            pin.describe()
         ),
-        None if signer
-            .name
-            .as_deref()
-            .is_some_and(|name| name.eq_ignore_ascii_case(EXPECTED_SIGNER_CN)) =>
-        {
-            // A development build: nothing of its own to pin. The signature still
-            // had to verify and the name still had to be ours, and the caller
-            // reports `pinned: false` rather than calling this the same check.
-            Ok(false)
-        }
-        None => bail!(
+        Pin::Name(cn) => bail!(
             "the manifest at {manifest_url} was refused: it is signed by {}, and this engine \
-             carries no signature of its own to pin, so the signer must be {EXPECTED_SIGNER_CN}",
+             carries no signature of its own to pin, so the signer must be {cn}",
             describe(signer)
         ),
     }
@@ -229,18 +223,19 @@ pub fn apply(staged_zip: &std::path::Path) -> Result<String> {
     // The zip root may be MICS-portable/ or flat — find mics-engine.exe.
     let src_root = find_root(&extract_dir).context("update zip missing mics-engine.exe")?;
 
-    // F-3: the extracted binaries must be signed by the MI CS certificate *and*
-    // pass Windows' own chain check before they may replace the running ones. The
-    // manifest's SHA-256 only proves the archive is the one the manifest
-    // described; this proves who produced the binaries inside.
+    // F-3: the extracted binaries must be signed by the certificate this engine
+    // pins *and* pass Windows' own chain check before they may replace the running
+    // ones. The manifest's SHA-256 only proves the archive is the one the manifest
+    // described; this proves who produced the binaries inside. The pin is the same
+    // one the manifest's signature was judged by (D-051): with a real certificate in
+    // use the *thumbprint* is what is compared, because the release name can no
+    // longer be `MI CS Code Signing` at all.
+    let pin = update_pin()?;
     for name in ["mics-engine.exe", "mics_app.exe"] {
         let candidate = src_root.join(name);
         if candidate.exists() {
-            crate::platform::windows::signature::require_signed_by(
-                &candidate,
-                crate::platform::windows::signature::EXPECTED_SIGNER_CN,
-            )
-            .with_context(|| format!("update payload refused: {name}"))?;
+            require_signed_by_pin(&candidate, &pin)
+                .with_context(|| format!("update payload refused: {name}"))?;
         }
     }
 
@@ -294,6 +289,7 @@ fn copy_over(src: &PathBuf, dst: &PathBuf) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::windows::signature::EXPECTED_SIGNER_CN;
 
     fn signer(name: &str, thumbprint: &str) -> VerifiedSigner {
         VerifiedSigner {
@@ -328,14 +324,18 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_is_judged_by_the_pin_and_then_by_the_name() {
+    fn a_manifest_is_judged_by_the_thumbprint_pin() {
         // The pin decides, and a signature by another key is refused with both
         // thumbprints named so the refusal can be checked.
         let ours = signer(EXPECTED_SIGNER_CN, OURS);
-        assert_eq!(judge(Some(OURS.to_string()), &ours, "u").unwrap(), true);
+        let pin = Pin::Thumbprint(OURS.to_string());
+        assert!(
+            judge(&pin, &ours, "u").unwrap(),
+            "the pinned certificate must be accepted"
+        );
 
         let other = signer(EXPECTED_SIGNER_CN, &"b".repeat(40));
-        let refused = judge(Some(OURS.to_string()), &other, "https://host/u.json")
+        let refused = judge(&pin, &other, "https://host/u.json")
             .expect_err("a signature by another key must be refused");
         let message = format!("{refused:#}");
         assert!(message.contains(OURS), "names the pin: {message}");
@@ -343,14 +343,38 @@ mod tests {
     }
 
     #[test]
+    fn the_right_release_name_does_not_save_the_wrong_thumbprint() {
+        // D-016's residual, now refused: a certificate that a CA issued with the
+        // release CN in it is not the certificate this engine pins. The name is
+        // identical, so only the thumbprint can tell them apart — which is the
+        // whole reason decision (c) moved the pin (D-051).
+        let impostor = signer(EXPECTED_SIGNER_CN, &"e".repeat(40));
+        let refused = judge(
+            &Pin::Thumbprint(OURS.to_string()),
+            &impostor,
+            "https://host/u.json",
+        )
+        .expect_err("the same CN from another key is not the pinned certificate");
+        let message = format!("{refused:#}");
+        assert!(
+            message.contains(EXPECTED_SIGNER_CN) && message.contains(OURS),
+            "the refusal names the name it did not accept and the pin it wanted: {message}"
+        );
+    }
+
+    #[test]
     fn a_development_engine_falls_back_to_the_name_and_says_so() {
         // No pin: a dev engine has no signature of its own. The name still has to
         // be the release name, and the answer reports the weaker check as weaker.
+        let pin = Pin::Name(EXPECTED_SIGNER_CN);
         let ours = signer(EXPECTED_SIGNER_CN, OURS);
-        assert_eq!(judge(None, &ours, "u").unwrap(), false);
+        assert!(
+            !judge(&pin, &ours, "u").unwrap(),
+            "a name-only check must report itself as the weaker one"
+        );
 
         let impostor = signer("Some Other Signer", &"c".repeat(40));
-        let refused = judge(None, &impostor, "https://host/u.json")
+        let refused = judge(&pin, &impostor, "https://host/u.json")
             .expect_err("a different name must be refused when there is no pin");
         let message = format!("{refused:#}");
         assert!(
@@ -363,6 +387,6 @@ mod tests {
             name: None,
             thumbprint: "d".repeat(40),
         };
-        assert!(judge(None, &nameless, "u").is_err());
+        assert!(judge(&pin, &nameless, "u").is_err());
     }
 }

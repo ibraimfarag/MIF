@@ -6,13 +6,20 @@
 //! Windows trusts" is not the answer — the caller passes the name it expects and a
 //! different certificate is refused (`docs/THREAT-MODEL.md` F-3, D-016).
 //!
-//! For a *binary*, the name is compared, not the thumbprint: the release
-//! certificate is created locally and can be re-issued, and the certificate's
-//! subject is the part a buyer/user can read in Explorer. The trade-off is written
-//! down in D-016 — a thumbprint pin would also have to be updated by the release
-//! script. For the update *feed* the same trade-off is settled the other way
-//! (D-047): the signature is checked against the thumbprint of whatever signed this
-//! engine, because nothing else in that path builds a chain.
+//! For a *binary*, the release certificate is created locally and can be
+//! re-issued, and the certificate's subject is the part a buyer/user can read in
+//! Explorer, so D-016's first answer was to compare the subject name. That answer
+//! expired the moment a real certificate was priced: no CA may issue
+//! `CN=MI CS Code Signing` at all (CA/B CSCBR §9.2.2 requires the verified legal
+//! name), so the name pin would refuse our own release. D-051 settles it the way
+//! `docs/OPEN-DECISIONS.md` item 3 recommended and decision (c) made binding —
+//! [`Pin`]: the **thumbprint this copy knows** (the environment hook a probe sets,
+//! or the certificate over the running engine) when there is one, and the release
+//! CN only when there is none, which is a build that carries no signature at all.
+//!
+//! One pin, used by every step that decides whether a file is ours: the update
+//! *feed*'s detached signature (D-047), the *payload*'s binaries before they may
+//! replace the running ones, and the package self-check's [`Trust`] answer.
 //!
 //! [`Trust`] is the same question asked with the answer ج2 needs (D-025): a
 //! package that is ours but signed with a certificate this Windows has not
@@ -50,9 +57,16 @@ use windows::Win32::Security::WinTrust::{
 /// `ERROR_SUCCESS`; anything else from `WinVerifyTrust` is a refusal.
 const TRUST_OK: i32 = 0;
 
-/// The subject common name of the certificate the release is signed with. It is a
-/// release contract: `scripts/make-release.ps1 -Sign` uses this name, and an update
-/// signed with anything else is refused.
+/// The subject common name of the certificate a **development** release is signed
+/// with, and the fallback half of [`Pin`]: `scripts/make-release.ps1 -Sign` uses
+/// this name when it signs with the locally created certificate
+/// (`scripts/codesign-cert.ps1`), and a copy that carries no signature of its own
+/// accepts this name and nothing else (D-016).
+///
+/// It is no longer the whole contract, and it cannot be: a publicly trusted CA is
+/// required to put the certificate holder's *verified legal name* in
+/// `subject:commonName` (CA/B CSCBR §9.2.2), so no such certificate will ever read
+/// `MI CS Code Signing` — a released copy pins the thumbprint instead (D-051).
 pub const EXPECTED_SIGNER_CN: &str = "MI CS Code Signing";
 
 /// The test hook that pins an update manifest to a thumbprint (D-047).
@@ -187,8 +201,60 @@ unsafe fn thumbprint_of(cert: *const CERT_CONTEXT) -> Option<String> {
     Some(hex::encode(buffer))
 }
 
-/// The thumbprint an update manifest's signer must carry, or `None` when this
-/// engine has nothing of its own to pin (D-047).
+/// The certificate an update path will accept, in the order decision (c) settled
+/// (D-016, D-051).
+///
+/// `Thumbprint` is the one identity a certificate cannot be talked into: it is the
+/// hash of the certificate's own bytes, so a CA that failed identity validation
+/// cannot produce it. `Name` is what is left for a build that carries no signature
+/// of its own — a `cargo build`, where the release CN is the only contract there is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pin {
+    /// The SHA-1 thumbprint of the one certificate this copy signs and accepts,
+    /// lowercase hex.
+    Thumbprint(String),
+    /// The subject common name of a development release, [`EXPECTED_SIGNER_CN`].
+    Name(&'static str),
+}
+
+impl Pin {
+    /// Whether this signer is the one the pin names.
+    ///
+    /// Both identities are compared case-insensitively, and either may be missing:
+    /// a file whose signature Windows refuses has no name and no thumbprint to
+    /// offer, and that is a refusal rather than a match.
+    pub fn accepts(&self, name: Option<&str>, thumbprint: Option<&str>) -> bool {
+        match self {
+            Pin::Thumbprint(pinned) => thumbprint.is_some_and(|got| got.eq_ignore_ascii_case(pinned)),
+            Pin::Name(cn) => name.is_some_and(|got| got.eq_ignore_ascii_case(cn)),
+        }
+    }
+
+    /// The pin as a refusal has to name it: what was expected, in the terms the
+    /// reader can check (`docs/THREAT-MODEL.md` F-3).
+    pub fn describe(&self) -> String {
+        match self {
+            Pin::Thumbprint(pinned) => format!("the certificate with thumbprint {pinned}"),
+            Pin::Name(cn) => format!("\"{cn}\""),
+        }
+    }
+}
+
+/// The pin every update decision uses: the thumbprint this copy knows, the release
+/// CN only when it knows none (D-051).
+///
+/// This is deliberately the *same* value the feed has been pinned to since D-047 —
+/// one function, so the manifest's signature, the payload's binaries and the
+/// package self-check cannot drift into accepting different certificates.
+pub fn update_pin() -> Result<Pin> {
+    Ok(match pinned_update_thumbprint()? {
+        Some(thumbprint) => Pin::Thumbprint(thumbprint),
+        None => Pin::Name(EXPECTED_SIGNER_CN),
+    })
+}
+
+/// The thumbprint the update path's signers must carry, or `None` when this engine
+/// has nothing of its own to pin (D-047).
 ///
 /// Order: [`ENV_UPDATE_SIGNER_THUMBPRINT`] when the environment sets one, then the
 /// certificate that signed *this executable* — read out of its own Authenticode
@@ -197,7 +263,7 @@ unsafe fn thumbprint_of(cert: *const CERT_CONTEXT) -> Option<String> {
 ///
 /// `None` means this engine carries no signature at all: a development build. The
 /// caller keeps the signature check and the name check, and reports which of the
-/// two pins it used rather than pretending they are the same.
+/// two pins it used rather than pretending they are the same — see [`update_pin`].
 pub fn pinned_update_thumbprint() -> Result<Option<String>> {
     if let Some(value) = std::env::var_os(ENV_UPDATE_SIGNER_THUMBPRINT) {
         return normalise_thumbprint(&value.to_string_lossy()).map(Some);
@@ -306,19 +372,43 @@ unsafe fn signer_from_state(state: HANDLE) -> Option<String> {
     unsafe { display_name(cert) }
 }
 
-/// Refuses a file unless it carries a valid signature from `expected_cn`.
-pub fn require_signed_by(path: &std::path::Path, expected_cn: &str) -> Result<()> {
-    match signer_name(path)? {
-        None => bail!(
+/// Refuses a file unless it carries a valid signature from the certificate `pin`
+/// names (D-051).
+///
+/// Windows still has to accept the signature — an expired, revoked or edited file
+/// never gets this far — and then the identity is the pin's to decide: the
+/// thumbprint of the certificate inside the file, or the release CN when this copy
+/// has no certificate of its own. Both halves are needed: the chain check is what
+/// rejects a changed byte, and the pin is what rejects a *valid* signature from
+/// somebody else.
+pub fn require_signed_by_pin(path: &std::path::Path, pin: &Pin) -> Result<()> {
+    let Some(name) = signer_name(path)? else {
+        bail!(
             "{} has no valid Authenticode signature - refusing to use it",
             path.display()
-        ),
-        Some(name) if name.eq_ignore_ascii_case(expected_cn) => Ok(()),
-        Some(name) => bail!(
-            "{} is signed by \"{name}\", not \"{expected_cn}\" - refusing to use it",
-            path.display()
-        ),
+        );
+    };
+    // The thumbprint is read from the file's own certificate table rather than from
+    // the verify state, so a pinned copy is decided by the bytes it was signed with
+    // and not by the chain Windows happened to build.
+    let thumbprint = embedded_signer_thumbprint(path);
+    if pin.accepts(Some(&name), thumbprint.as_deref()) {
+        return Ok(());
     }
+    let ours = embedded_signer_name(path).unwrap_or(name.clone());
+    bail!(
+        "{} is signed by {ours:?}{}, and this {} pins {} - refusing to use it",
+        path.display(),
+        thumbprint
+            .as_deref()
+            .map(|t| format!(" (thumbprint {t})"))
+            .unwrap_or_default(),
+        match pin {
+            Pin::Thumbprint(_) => "engine",
+            Pin::Name(_) => "build",
+        },
+        pin.describe()
+    )
 }
 
 /// What ج2 needs to know about a shipped file, in D-025's terms.
@@ -331,37 +421,53 @@ pub fn require_signed_by(path: &std::path::Path, expected_cn: &str) -> Result<()
 /// distinction can be shown to the user instead of being flattened away.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Trust {
-    /// A chain Windows trusts, ending at our own certificate.
+    /// A chain Windows trusts, ending at the certificate this copy pins (D-051).
     Ours,
-    /// Our certificate is embedded and the signature verifies, but this Windows
+    /// That certificate is embedded and the signature verifies, but this Windows
     /// does not trust its root. Nothing is wrong with the file.
     UntrustedRoot,
-    /// No signature, somebody else's, or one that does not verify (a changed
-    /// byte, an expired certificate, a rewritten certificate table).
+    /// No signature, a signature that does not verify (a changed byte, an expired
+    /// certificate, a rewritten certificate table), or one this copy does not pin.
     NotOurs,
 }
 
-/// Classifies `path` against the release certificate named by
-/// [`EXPECTED_SIGNER_CN`].
+/// Classifies `path` against the certificate this copy pins (D-025, D-051).
+///
+/// `Ours` is now "signed, and the chain Windows built ends somewhere it trusts, and
+/// the signer is the pinned certificate" — the pin being [`update_pin`], so a
+/// release signed by a real CA recognises itself by thumbprint where the old
+/// release *name* could never match again (D-051). What this deliberately gives up
+/// is written down in `docs/THREAT-MODEL.md` F-3: a copy re-signed by a third party
+/// pins *its own* certificate and therefore reads as `Ours` here. An engine cannot
+/// authenticate itself — the file under question is where the pin comes from — so
+/// the teeth against a hand-delivered package stays what it always really was, the
+/// hashes of the files beside it (still checked) and the publisher name Windows
+/// shows; on the *update* path the same pin is a real comparison, because the
+/// payload is a different file from the engine holding the pin.
 pub fn trust(path: &std::path::Path) -> Result<Trust> {
     let (status, name) = verify(path)?;
-    if status == TRUST_OK {
-        return Ok(match name {
-            Some(n) if n.eq_ignore_ascii_case(EXPECTED_SIGNER_CN) => Trust::Ours,
-            _ => Trust::NotOurs,
-        });
-    }
-    // A refused chain is only "our certificate, not trusted here" when Windows
-    // says exactly that *and* the certificate inside the file is ours. Anything
-    // else — a changed byte is `TRUST_E_BAD_DIGEST`, not an untrusted root — is
-    // a signature that no longer covers the file.
-    if status as u32 == CERT_E_UNTRUSTEDROOT.0 as u32
-        && embedded_signer_name(path)
-            .is_some_and(|n| n.eq_ignore_ascii_case(EXPECTED_SIGNER_CN))
-    {
-        return Ok(Trust::UntrustedRoot);
-    }
-    Ok(Trust::NotOurs)
+    let pin = update_pin()?;
+    // A refused chain is only "our certificate, not trusted here" when Windows says
+    // exactly that *and* the certificate inside the file is one this copy pins.
+    // Anything else — a changed byte is `TRUST_E_BAD_DIGEST`, not an untrusted root —
+    // is a signature that no longer covers the file.
+    let pinned = match status {
+        TRUST_OK => Trust::Ours,
+        s if s as u32 == CERT_E_UNTRUSTEDROOT.0 as u32 => Trust::UntrustedRoot,
+        _ => return Ok(Trust::NotOurs),
+    };
+    let embedded = embedded_signer_identity(path);
+    let (name, thumbprint) = match embedded {
+        Some(signer) => (signer.name, Some(signer.thumbprint)),
+        // No readable certificate table at all: an unsigned file, or a signature
+        // this Windows accepted without a signer we can name.
+        None => (name, None),
+    };
+    Ok(if pin.accepts(name.as_deref(), thumbprint.as_deref()) {
+        pinned
+    } else {
+        Trust::NotOurs
+    })
 }
 
 /// The subject display name of the certificate embedded in a file's signature,
@@ -378,6 +484,14 @@ pub fn trust(path: &std::path::Path) -> Result<Trust> {
 /// hashes it checks are what report a missing file.
 pub fn embedded_signer_name(path: &std::path::Path) -> Option<String> {
     embedded_identity(path).and_then(|signer| signer.name)
+}
+
+/// Both halves of the certificate embedded in a file's signature — the name
+/// [`embedded_signer_name`] reads, and the thumbprint
+/// [`embedded_signer_thumbprint`] reads — out of the same PKCS#7 walk, for callers
+/// that decide with a [`Pin`] and need whichever half it names (D-051).
+pub fn embedded_signer_identity(path: &std::path::Path) -> Option<VerifiedSigner> {
+    embedded_identity(path)
 }
 
 /// The SHA-1 thumbprint of the certificate embedded in a file's signature, read
@@ -562,22 +676,20 @@ mod tests {
     }
 
     #[test]
-    fn the_identity_pin_accepts_our_certificate_and_refuses_another_name() {
+    fn the_name_pin_accepts_our_certificate_and_refuses_another() {
         let Some(release) = signed_release() else {
             eprintln!("no signed release artifact to test against - skipped");
             return;
         };
-        // The name published with the release is what `update.rs` pins.
-        let name = signer_name(&release)
-            .expect("query the release binary")
-            .expect("the release binary must be signed");
-        assert_eq!(name, EXPECTED_SIGNER_CN, "the release certificate's CN moved");
-
+        // The name half of the pin is what an engine with nothing of its own has to
+        // work with: the certificate over the release has to carry the release name,
+        // and any other name is refused with the actual signer named.
+        let ours = Pin::Name(EXPECTED_SIGNER_CN);
         assert!(
-            require_signed_by(&release, EXPECTED_SIGNER_CN).is_ok(),
-            "our own signature must be accepted"
+            require_signed_by_pin(&release, &ours).is_ok(),
+            "our own signature must be accepted by the release name"
         );
-        let other = require_signed_by(&release, "Some Other Signer");
+        let other = require_signed_by_pin(&release, &Pin::Name("Some Other Signer"));
         assert!(
             other.is_err(),
             "a certificate with a different CN must be refused"
@@ -586,6 +698,93 @@ mod tests {
         assert!(
             message.contains("MI CS Code Signing"),
             "the refusal must name the actual signer: {message}"
+        );
+    }
+
+    #[test]
+    fn a_pin_is_decided_by_the_half_it_names() {
+        // The two pins are not interchangeable: the thumbprint half must not be
+        // satisfied by a name, and the name half must not be satisfied by a
+        // thumbprint (D-051).
+        let thumbprint = Pin::Thumbprint("a".repeat(40));
+        assert!(
+            thumbprint.accepts(Some(EXPECTED_SIGNER_CN), Some(&"a".repeat(40))),
+            "the pinned certificate is accepted"
+        );
+        assert!(
+            !thumbprint.accepts(Some(EXPECTED_SIGNER_CN), Some(&"b".repeat(40))),
+            "another certificate with the right name is not the pin"
+        );
+        assert!(
+            !thumbprint.accepts(Some(EXPECTED_SIGNER_CN), None),
+            "a pin nothing can offer is a refusal, not a match"
+        );
+
+        let name = Pin::Name(EXPECTED_SIGNER_CN);
+        assert!(name.accepts(Some(EXPECTED_SIGNER_CN), None));
+        assert!(!name.accepts(Some("Some Other Signer"), Some(&"a".repeat(40))));
+        assert!(!name.accepts(None, Some(EXPECTED_SIGNER_CN)));
+    }
+
+    #[test]
+    fn the_thumbprint_pin_accepts_our_binary_and_refuses_a_name_alike() {
+        let Some(release) = signed_release() else {
+            eprintln!("no signed release artifact to test against - skipped");
+            return;
+        };
+        // The pin the update path builds out of a real release is the thumbprint of
+        // the certificate over the engine itself, which is what makes the payload
+        // check survive a certificate whose CN a CA chose (D-051).
+        let thumbprint = embedded_signer_thumbprint(&release)
+            .expect("a signed release carries the certificate it is pinned to");
+        let pin = Pin::Thumbprint(thumbprint.clone());
+        assert!(
+            require_signed_by_pin(&release, &pin).is_ok(),
+            "the pinned certificate must be accepted"
+        );
+
+        // Same file, same *name*, one different thumbprint: refused, and the
+        // refusal says which thumbprint it wanted.
+        let other = Pin::Thumbprint("f".repeat(40));
+        let refused = require_signed_by_pin(&release, &other)
+            .expect_err("the pinned thumbprint is the whole check");
+        let message = format!("{refused:#}");
+        assert!(message.contains(&thumbprint), "names the signer: {message}");
+        assert!(message.contains(&"f".repeat(40)), "names the pin: {message}");
+    }
+
+    #[test]
+    fn an_unsigned_payload_is_refused_by_either_pin() {
+        // The payload check's first question is unchanged: no signature, no
+        // install. Both halves of the pin have to answer it the same way.
+        let path = temp_path("pin-unsigned");
+        std::fs::write(&path, b"MZ this is not a signed binary").expect("write the fake exe");
+        let by_name = require_signed_by_pin(&path, &Pin::Name(EXPECTED_SIGNER_CN));
+        let by_thumbprint = require_signed_by_pin(&path, &Pin::Thumbprint("a".repeat(40)));
+        let _ = std::fs::remove_file(&path);
+
+        for (which, refused) in [("name", by_name), ("thumbprint", by_thumbprint)] {
+            let message = format!("{refused:?}");
+            assert!(
+                message.contains("no valid Authenticode signature"),
+                "the {which} pin must refuse an unsigned file by its signature: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_build_with_no_signature_of_its_own_falls_back_to_the_release_name() {
+        // `cargo test` runs an unsigned test binary under the environment hook's
+        // default, so this is exactly the development case: the pin is the CN, not
+        // a thumbprint, and it is the *fallback* rather than the contract
+        // (decision (c), D-016).
+        if std::env::var_os(ENV_UPDATE_SIGNER_THUMBPRINT).is_some() {
+            eprintln!("the environment pins a thumbprint - the fallback is not what runs");
+            return;
+        }
+        assert_eq!(
+            update_pin().expect("build the pin"),
+            Pin::Name(EXPECTED_SIGNER_CN)
         );
     }
 
@@ -683,13 +882,17 @@ mod tests {
             eprintln!("no signed release artifact to test against - skipped");
             return;
         };
-        // The embedded certificate is ours whatever this Windows thinks of the
-        // chain, which is what lets the package's self-check stay quiet on a
-        // machine that has not trusted the root yet.
-        assert_eq!(
-            embedded_signer_name(&release).as_deref(),
-            Some(EXPECTED_SIGNER_CN),
-            "the certificate inside a signed release must be the release one"
+        // The embedded certificate is the one this copy pins whatever this Windows
+        // thinks of the chain, which is what lets the package's self-check stay
+        // quiet on a machine that has not trusted the root yet, and what a release
+        // signed by a real CA still recognises as itself (D-051).
+        let signer = embedded_signer_identity(&release)
+            .expect("a signed release embeds the certificate it was signed with");
+        assert!(
+            update_pin()
+                .expect("build the pin")
+                .accepts(signer.name.as_deref(), Some(&signer.thumbprint)),
+            "the certificate inside a signed release must be the release one: {signer:?}"
         );
         let verdict = trust(&release).expect("classify the release binary");
         assert!(

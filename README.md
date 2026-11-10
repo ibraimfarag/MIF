@@ -39,7 +39,10 @@ explains, and suggests the next action instead of dumping raw data.
 > What is left is short and entirely free: **publish the draft** (one click),
 > a publicly trusted certificate (ب5 — the Store account or OSSign; **هـ1** is done,
 > the update manifest's URL, its signature and the thumbprint pin all landed on
-> 2026-11-09, D-046/D-047), the engine manifest's signed hashes,
+> 2026-11-09, D-046/D-047, and the pin that signature is judged against became the
+> certificate the engine itself carries on 2026-11-11, D-051 — so a CA-signed
+> release recognises itself and a same-name certificate from somebody else is
+> refused), the engine manifest's signed hashes,
 > and the register rows — priorities and estimates in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md), and the one-table answer in
 > [`docs/TODO.md`](docs/TODO.md) §0.6. Live status:
@@ -166,14 +169,21 @@ Honesty is a feature. Today, MI CS does **not**:
   (IOC hash cache + YARA) only;
 - promise that an update is signed by *us* and not just by *someone*: the payload
   must carry an embedded Authenticode signature that Windows trusts
-  (`docs/THREAT-MODEL.md` F-3). Today that check pins the signer's **name**, and the
-  name cannot survive contact with a real certificate: CSCBR §9.2.2 requires the
-  subject CN to be the verified legal name, so **no CA can ever issue
-  `CN=MI CS Code Signing`** (measured 2026-11-06, `docs/COST.md` §2). The pin has to
-  move to the certificate's **thumbprint** — which is also the only version of the
-  check that means anything, because a name is claimable and a thumbprint is not —
-  in the same release that first carries a certificate, or `engine/src/update.rs`
-  refuses our own update (D-016);
+  (`docs/THREAT-MODEL.md` F-3). That check pins the **certificate over this very
+  engine** whenever the build has one — its own thumbprint, read out of the file
+  itself, or `MICS_UPDATE_SIGNER_THUMBPRINT` — and drops to the release name
+  `CN=MI CS Code Signing` only for a build with no signature of its own, which
+  reports itself as `pinned: false` rather than calling that a pin (D-051). The
+  name alone could not have survived a real certificate — CSCBR §9.2.2 requires
+  the subject CN to be the verified legal name, so **no CA can ever issue
+  `CN=MI CS Code Signing`** (measured 2026-11-06, `docs/COST.md` §2) — which is
+  why the pin moved **before** ب5 rather than with it: the first CA-signed release
+  used to refuse itself at the payload check (`engine/src/update.rs`, D-016);
+- what is *not* pinned, stated plainly: the pin comes out of the file under
+  question, so a copied install that somebody re-signed carries its own
+  certificate and pins that (`docs/THREAT-MODEL.md` F-3). On the update path the
+  payload is a different file from the engine judging it, and there the pin has
+  teeth;
 - guarantee that "fix" buttons work without administrator rights: firewall,
   hosts-file and hardening changes are privileged. The app installs its
   **privileged helper** with one Windows prompt the first time you use such a
@@ -774,8 +784,13 @@ ClamAV ولا CAPA ولا Suricata؛ الفخاخ بتتكشف بالـ polling 
 الفولدر كل كام ساعة والمحرك لازم يكون شغال، فملف يظهر ويتشال بين الاتنين مش
 بيتشاف (المراقبة المستمرة `ReadDirectoryChangesW`/USN قرار لسه محتاج يتاخد)؛
 مفيش أي طلبات لـ VirusTotal — لا عميل ولا مفتاح تدخله؛
-التحديث لازم يكون موقّع بشهادتنا (`CN=MI CS Code Signing`) وويندوز يثق فيها — بس
-التثبيت على **اسم** الموقّع مش على بصمته (thumbprint)؛ ملفات التنفيذ **غير موقّعة**
+التحديث لازم يكون موقّع بشهادتنا وويندوز يثق فيها، والتثبيت على **الشهادة نفسها**
+(بصمة الشهادة اللي على المحرك، أو `MICS_UPDATE_SIGNER_THUMBPRINT`) — والاسم
+`CN=MI CS Code Signing` بقى الاحتياطي لبناء من غير توقيع بتاعه، وبيقول عن نفسه
+`pinned: false` بدل ما يسمّي الفحص ده «دبوس» (D-051)؛ واللي **مش** مثبَّت بصراحة:
+الدبوس بيتقرا من الملف اللي بنحكم عليه، فنسخة حد تاني وقّعها من جديد بتبقى شايلة
+شهادتها هي — على مسار التحديث الحمولة ملف تاني غير المحرك اللي بيحكم، وهناك الدبوس
+بيمسك؛ ملفات التنفيذ **غير موقّعة**
 فوندوز بيقول «ناشر غير معروف»؛ وضغطة UAC الواحدة على المثبّت **لسه محتاجة تتجرّب
 بإيدك** على نسخة per-machine — الكود والاختبارات والرفض الآمن جاهزين ومُتأكَّد منهم
 من غير صلاحيات، والكليكة نفسها هي اللي مقياسها مستنيك.
@@ -901,8 +916,10 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 و`mics-engine.exe` وكل الـ DLLs **قبل** الهاش والـ zip، فويّندوز بيبقى عنده ناشر
 يسمّيه بدل ما يرفض التطبيق. و`CN=MI CS Code Signing` ده **مقبول في شهادة ذاتية
 وعمره ما هيتكرر في شهادة CA**: CSCBR §9.2.2 بيفرض إن الـ CN يبقى الاسم القانوني
-المتحقَّق منه، فمفيش CA هتصدر الاسم ده — وعشان كده التثبيت (pin) بيتحوّل لـ
-**thumbprint** في نفس الإصدار اللي فيه شهادة (D-016/D-035). والتوقيع الذاتي ثقة
+المتحقَّق منه، فمفيش CA هتصدر الاسم ده — وعشان كده التثبيت (pin) بقى على **الشهادة
+نفسها** (بصمتها) **قبل** ما شهادة حقيقية توجد (D-016/D-035/D-051): المحرك بيقرا
+بصمة الشهادة اللي على صورته هو ويقارن بيها، والاسم بقى احتياطي لبناء مش موقّع بس،
+يعني شراء أو إهداء شهادة بقى حاجة تتحط مش كود يتغيّر. والتوقيع الذاتي ثقة
 **محلية** بس — بيشيل الرسالة على جهازك، لكنه مش سمعة عامة، والمشروع ده **مش بيشتري**
 شهادة عامة (D-035): اللي بيحلّ مكانها إن النسخة تبقى **قابلة للفحص** — البيان
 الموقّع جوّه المحرك، والهاشات المنشورة جنب الأرشيف، ولوج البناء اللي طلّع الاتنين.

@@ -136,10 +136,10 @@ pub fn start(announce: bool) {
         ),
         Integrity::UntrustedCertificate => tracing::info!(
             "package integrity: {version}, {} listed file(s) match and the engine is signed by \
-             \"{}\", but this Windows does not trust that certificate yet (self-signed build); \
+             {}, but this Windows does not trust that certificate yet (self-signed build); \
              nothing is wrong with this copy",
             report.files,
-            signature::EXPECTED_SIGNER_CN
+            signer_of(&own_exe()).unwrap_or_else(|| "a certificate with no readable name".into())
         ),
         Integrity::Unverified => {
             let detail = report
@@ -187,10 +187,15 @@ pub fn check(exe: &Path) -> Report {
     };
     let state = classify(failures.is_empty(), trust);
     if state == Integrity::Unverified && detail.is_none() {
-        detail = Some(format!(
-            "the engine is not signed by \"{}\"",
-            signature::EXPECTED_SIGNER_CN
-        ));
+        // The files match the manifest, so what is left is the engine's own
+        // signature: unsigned, changed after it was signed, or signed by a
+        // certificate this copy does not pin (D-025, D-051). The line names the
+        // certificate that is actually there when there is one — asserting the
+        // release CN here was wrong the moment a real certificate was possible.
+        detail = Some(match signer_of(exe) {
+            Some(signer) => format!("the engine is signed by {signer}, which this copy does not pin"),
+            None => "the engine carries no valid signature of its own".to_string(),
+        });
     }
 
     Report {
@@ -211,6 +216,17 @@ fn classify(files_match: bool, trust: Trust) -> Integrity {
         (true, Trust::UntrustedRoot) => Integrity::UntrustedCertificate,
         (true, Trust::NotOurs) => Integrity::Unverified,
     }
+}
+
+/// The certificate an executable carries, as the two lines D-051 wants read out of
+/// it: the subject name Windows shows, and the thumbprint an update pin compares.
+/// `None` for a copy with no readable signature at all — an unsigned local build.
+fn signer_of(exe: &Path) -> Option<String> {
+    let signer = signature::embedded_signer_identity(exe)?;
+    Some(match signer.name {
+        Some(name) => format!("{name:?} (thumbprint {})", signer.thumbprint),
+        None => format!("the certificate with thumbprint {}", signer.thumbprint),
+    })
 }
 
 /// A report for a copy that cannot be proved, with its one-line reason.

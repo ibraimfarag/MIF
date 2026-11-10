@@ -20,7 +20,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 30 files | 148 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 26 modules | 201 declared cases | `engine.test` step |
+| Engine tests | 26 modules | 206 declared cases | `engine.test` step |
 | Pipeline steps | 13 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
@@ -264,7 +264,7 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/platform/windows/pids.rs` | 2 |
 | `engine/src/platform/windows/pipe.rs` | 3 |
 | `engine/src/platform/windows/process.rs` | 4 |
-| `engine/src/platform/windows/signature.rs` | 10 |
+| `engine/src/platform/windows/signature.rs` | 14 |
 | `engine/src/platform/windows/timing.rs` | 1 |
 | `engine/src/scanner/mod.rs` | 6 |
 | `engine/src/scanner/yara_engine.rs` | 4 |
@@ -272,9 +272,9 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 10 |
 | `engine/src/tests.rs` | 56 |
-| `engine/src/update.rs` | 3 |
+| `engine/src/update.rs` | 4 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **201** in 26 modules |
+| **total** | **206** in 26 modules |
 
 ## What runs where
 

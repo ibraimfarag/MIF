@@ -42,6 +42,13 @@ $script:MicsManifestFormat = 1
 # pins the same name in `EXPECTED_SIGNER_CN`; verify-manifest.ps1 refuses a
 # package whose engine is signed by anybody else, and test/package_integrity_test.dart
 # fails if the two spellings ever drift apart.
+#
+# Since D-051 this is the *fallback* rather than the whole identity: the engine
+# pins the certificate over its own image by thumbprint whenever that build has a
+# signature of its own, and verify-manifest.ps1 reads the same environment hook
+# (`MICS_UPDATE_SIGNER_THUMBPRINT`) the engine reads, so a release signed with a
+# bought or donated certificate is accepted by name-free comparison instead of
+# failing this gate on the one CN no CA may issue.
 $script:MicsSignerCn = "MI CS Code Signing"
 
 if (-not ("MicsManifest" -as [type])) {

@@ -58,6 +58,16 @@ change. What replaces the certificate is the free, checkable evidence D-035
 names. Read D-035 before touching anything about signing, SmartScreen or the
 `CN=MI CS Code Signing` pin.
 
+**Amendment (2026-11-11, D-051 — the pin is the certificate, not the name).** Points 3 and 4 below
+are superseded *as contracts*, and kept as the record of what was decided in 2026-11-03. The pin is
+now `signature::Pin`: the **thumbprint of the certificate over the engine itself** whenever this
+build has a certificate of its own (or `MICS_UPDATE_SIGNER_THUMBPRINT` says which one), and
+`CN=MI CS Code Signing` only where it does not — an unsigned development binary. The name is still
+what `scripts/make-release.ps1 -Sign` publishes, and still what an unsigned build checks, so the
+release procedure below is unchanged; what changed is that a CA-signed release no longer refuses
+itself, and a certificate with the same CN issued by somebody else is no longer accepted. Read D-051
+before touching the pin.
+
 ---
 
 ## D-003 — Architectures: x64 + ARM64, optional x86 CLI only
@@ -3036,3 +3046,114 @@ pack is visible.
 `i18nModules` drift it was hiding with it. **Does not commit us to:** making a failed pack a startup
 error, disabling the picker for a language whose pack is empty, a second source of truth about which
 languages are reachable, or a pack loader that can reload without a restart.
+
+---
+
+## D-051 — The pin is a certificate, not a name: the thumbprint of the engine's own signer, and the release CN only where there is no signature of its own
+
+**Status:** accepted (2026-11-11).
+
+**Context.** §7's LOW row ("the update pin is the signer's subject name, not its thumbprint") is
+D-016's residual, and `docs/OPEN-DECISIONS.md` item 3 had already been asking the same question with
+the same recommendation. Two measurements turn it from a preference into a defect:
+
+- **No CA will ever issue the CN the pin compares.** CA/B CSCBR §9.2.2 requires
+  `subject:commonName` to be the verified legal name, measured 2026-11-06 (the row and item 3 carry
+  the finding). `MI CS Code Signing` exists only in the certificate
+  `scripts\codesign-cert.ps1` creates locally, so the day ب5's certificate exists the name check
+  stops matching — and the place it breaks is the worst one: `update.rs`'s payload check, run over
+  the two binaries of an update archive, would refuse the release **it is part of** ("signed by X,
+  not MI CS Code Signing") and the package self-check would report the engine as a foreign signer on
+  its own machine.
+- **A thumbprint alone is the mirror-image fault.** The local certificate is re-issued whenever
+  `codesign-cert.ps1` runs, and a re-issued certificate is a new thumbprint; every acceptance run
+  after that would refuse its own engine.
+
+Which is why the row wrote its own fix down: **thumbprint when there is one to pin, the release CN
+otherwise**, and every check that used to compare a name compares the pin instead.
+
+**Decision.** One value, `signature::Pin` — `Pin::Thumbprint(hex)` or `Pin::Name(cn)` — with one
+place that builds it and one comparison that decides, so no caller can pick the weaker half by
+accident:
+
+- **`update_pin()` builds it**, in order: `MICS_UPDATE_SIGNER_THUMBPRINT` when the environment sets
+  one (D-047's operator hook, and a value that is not 40 hex digits is an **error** rather than a
+  silent fallback), else the thumbprint of the certificate inside **this engine's own** Authenticode
+  blob — read out of the certificate table with no chain built, so it answers the same on a machine
+  that has not trusted the root yet — else `Pin::Name(EXPECTED_SIGNER_CN)`. That last branch is the
+  development build and only the development build: an unsigned `cargo build`/`cargo test` binary
+  has no certificate of its own to pin, so every configuration that ships pins a certificate.
+- **`require_signed_by_pin(path, &pin)` replaces `require_signed_by(path, cn)`** — one path, not two.
+  Windows still has to accept the signature (a changed byte never reaches the comparison), and then
+  the pin decides the identity: a `Thumbprint` pin compares the file's own certificate thumbprint, a
+  `Name` pin the display name, case-insensitively as before. The update path's payload check calls it
+  for both binaries in the archive, which is the half that was actually broken.
+- **`judge(&pin, signer, url)`** is the same policy one level up, over the detached PKCS#7 that signs
+  `update.json` (D-047), and it still reports *which* pin decided — `pinned: true` only for a
+  thumbprint comparison — so the update screen never calls the weaker check a pin.
+- **`trust(path)`** classifies a file against the pin, keeping D-025's table exactly as it was
+  (`Ours` / `UntrustedRoot` / `NotOurs`), and the package self-check's refusal line now **names the
+  certificate it found** (subject and thumbprint) instead of asserting the release CN, which on a
+  CA-signed build would have been a false sentence in the log.
+- **`scripts\verify-manifest.ps1` moves with it, or the claim is only half true.** The release gate
+  refuses a package whose engine is not signed by us, and it asked that question by name
+  (`$script:MicsSignerCn` in `manifest-resource.ps1`, kept in step with `EXPECTED_SIGNER_CN` by
+  `test/package_integrity_test.dart`) — so the first CA-signed release would have passed the engine's
+  own check and failed the gate that runs before publishing, which is the same defect one file over.
+  The gate now reads the **same hook the engine reads**: `MICS_UPDATE_SIGNER_THUMBPRINT` when it is
+  set (and a value that is not 40 hex digits is a refusal, not a fallback), the release CN otherwise.
+  Nothing new to configure, and the constant that used to be the whole check is now its fallback.
+
+**What this closes, and what it does not.** Closed: the half that would have broken the day a real
+certificate exists — a CA-signed release recognises itself, and a *different* certificate carrying
+the very same CN is refused, which is D-016's residual and AP-4's scenario for a forged feed.
+
+Still open, and now stated in `docs/THREAT-MODEL.md` F-3's fix line rather than implied: the pin is
+read **out of the file under question**, so an engine copy that somebody re-signed pins its *own*
+certificate and `trust()` still answers `Ours` — an engine cannot authenticate itself, and what
+answers for a hand-delivered copy remains the file hashes the signed manifest lists and the publisher
+name Windows shows. On the **update** path the same pin is a real comparison, because the payload is
+a different file from the engine holding it — that is the direction a forged update arrives from, and
+that is the direction the pin now has teeth in.
+
+**Measured.** `cargo test` **206 passed, 0 failed** (five new cases around the pin and two renamed so
+the counts stay honest — `signature.rs` 10 → 14 declared, `update.rs` 3 → 4: a `Thumbprint` pin
+accepts the pinned certificate and refuses a same-name certificate, each half is decided by the half
+it names, an unsigned file is refused by either pin, an engine with no signature of its own falls
+back to the release name, the manifest is judged by the thumbprint, and the right release name does
+not save the wrong thumbprint); `cargo clippy --all-targets` **clean**, which cost the deletion of the
+now-unused `require_signed_by` rather than leaving a second, weaker entry point in place. The
+file-level cases ran against a **real signed artifact** rather than a fixture — `dist\MICS-portable\mics-engine.exe`, status `Valid`,
+subject `CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`, thumbprint `1F08A3EF6CDF5E93394DAC3CBCB5276381CC47E0` — so "the
+right thumbprint is accepted" and "the wrong thumbprint is refused while the name is identical"
+compare real certificate bytes. `scripts\verify-update.ps1` was then re-run against an engine built
+from this source, deliberately **unsigned** so that both halves of the pin are exercised rather than
+one: **45 passed, 0 failed, 0 skipped** in 9 s — part 7 refuses a correctly signed feed under a pin
+that is not its signer, naming both thumbprints in the refusal ("signed by … `f250975f…`, and this
+engine pins the certificate with thumbprint `11fbddbb…`"), and part 8 is the fallback itself, where
+an engine with no signature of its own reports `pinned: false` and requires the release name instead
+of claiming a pin. The manifest-level policy, its refusals and their wording therefore all hold with
+a `Pin` where the CN used to be.
+
+The release gate was then measured the same way, on the signed package that is in the tree
+(`dist\MICS-portable`, 68 files, engine `Valid`, thumbprint `1F08A3EF...`), three pins and three
+exit codes: **no hook set** → `RESULT: PASS` (the CN fallback, exactly as before) **exit 0**; the
+hook set to **the engine's own thumbprint** → `RESULT: PASS` **exit 0**; the hook set to **another
+certificate** → refused **exit 1** with `mics-engine.exe is not signed by thumbprint FFFF... (status
+Valid, signer CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS) (thumbprint 1F08A3EF...))`, and a hook
+that is not a thumbprint refused **exit 1** before any file is read. `scripts\verify-tamper.ps1`,
+which drives that gate through its callers and the engine's own reporting, stays green on the changed
+script: **41 checks, 0 failures, 100.8 s** — the same counts as its 2026-11-03 run.
+
+**Not measured, and open.** No certificate that a CA issued exists to try, so "a real certificate
+recognises itself" rests on the same code path a re-signed copy would take, not on such an artifact;
+and the `Ours`-on-a-re-signed-copy hole is stated, not demonstrated (proving it means minting a
+second certificate and re-signing a copy, which is a waiver-maker rather than a test).
+
+**Advances** §7's LOW row (the update pin is the signer's subject name) — closed; and
+`docs/OPEN-DECISIONS.md` item 3 stops waiting, since its own recommended answer — "both, in order" —
+is what landed. The decisions still waiting on the owner are **three**, not four. **Does not commit
+us to:** buying, donating or configuring a certificate; a Settings field for the thumbprint (the
+environment hook is the operator's way in, as with the feed in D-046/D-047); pinning a CN in the
+binary for a certificate that does not exist yet; a key (SPKI) pin that would survive re-issuance; or
+putting the app's own signature under the same pin.

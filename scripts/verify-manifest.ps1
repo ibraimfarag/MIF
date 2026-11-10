@@ -19,7 +19,10 @@
        the recorded one;
     4. the engine's own signature is the one this project signs with - `Valid`, or
        an untrusted root with the same subject on a machine that has not trusted
-       the self-signed certificate yet, and always the pinned CN. A `HashMismatch`
+       the self-signed certificate yet, and always the pinned identity: the
+       certificate's **thumbprint** when `MICS_UPDATE_SIGNER_THUMBPRINT` is set
+       (the hook the engine reads too, D-051), the release common name otherwise.
+       A `HashMismatch`
        means the bytes changed after signing, no signer at all means the document
        has lost its authenticity (someone stripped the signature and kept the
        manifest), and another subject is another publisher: all three refuse the
@@ -67,6 +70,23 @@ if (-not (Test-Path -LiteralPath $engine)) {
 $signature = Get-AuthenticodeSignature $engine
 $signer = ""
 if ($signature.SignerCertificate) { $signer = $signature.SignerCertificate.Subject }
+
+# Which publisher is ours, asked the way the engine asks it (D-051): the
+# thumbprint when one is configured - `MI CS Code Signing` is a CN the day a
+# certificate is bought, and no CA may issue that string - and the release
+# common name otherwise. `scripts\make-release.ps1`, the engine and this probe
+# all read the one hook below, so a certificate that changes the publisher name
+# is a settings change rather than a code change.
+$pinThumbprint = $env:MICS_UPDATE_SIGNER_THUMBPRINT
+$pinIsThumbprint = -not [string]::IsNullOrWhiteSpace($pinThumbprint)
+if ($pinIsThumbprint -and ($pinThumbprint -notmatch '^[0-9A-Fa-f]{40}$')) {
+  Write-Output "RESULT: FAIL - MICS_UPDATE_SIGNER_THUMBPRINT is not a 40-digit certificate thumbprint: $pinThumbprint"
+  exit 1
+}
+$pinnedPrint = ""
+if ($signature.SignerCertificate) {
+  $pinnedPrint = $signature.SignerCertificate.Thumbprint
+}
 
 $json = Read-MicsManifestResource -Exe $engine
 if (-not $json) {
@@ -129,16 +149,27 @@ foreach ($entry in $manifest.Files) {
 # covers it. Three ways it can stop being ours, and all three refuse the package:
 # the bytes changed after signing (`HashMismatch`), the signature was stripped or
 # never made (no signer certificate - the manifest then has nothing behind it),
-# or somebody else signed it (the CN pin `signature.rs` enforces at run time).
+# or somebody else signed it (the pin `signature.rs` enforces at run time, D-051:
+# the certificate's thumbprint when one is configured, else the release CN).
 $signed_by_us = $false
 if ($signature.SignerCertificate) {
-  $signed_by_us = $signature.SignerCertificate.Subject -like "*CN=$script:MicsSignerCn,*"
+  if ($pinIsThumbprint) {
+    $signed_by_us = ($pinnedPrint -ieq $pinThumbprint)
+  } else {
+    $signed_by_us = $signature.SignerCertificate.Subject -like "*CN=$script:MicsSignerCn,*"
+  }
+}
+$pinLabel = if ($pinIsThumbprint) { "thumbprint $pinThumbprint" } else { "'$script:MicsSignerCn'" }
+$sawLabel = if ($signature.SignerCertificate) {
+  "signer $signer (thumbprint $pinnedPrint)"
+} else {
+  "no signer"
 }
 if ($signature.Status -eq "HashMismatch") {
   $failures.Add("mics-engine.exe changed after it was signed (HashMismatch): the manifest it carries is not trustworthy")
 } elseif (-not $signed_by_us) {
-  $failures.Add(("mics-engine.exe is not signed by '{0}' (status {1}{2}): the manifest it carries is not authentic" -f `
-      $script:MicsSignerCn, $signature.Status, $(if ($signer) { ", signer $signer" } else { ", no signer" })))
+  $failures.Add(("mics-engine.exe is not signed by {0} (status {1}, {2}): the manifest it carries is not authentic" -f `
+      $pinLabel, $signature.Status, $sawLabel))
 } elseif ($signature.Status -ne "Valid" -and $signature.Status -ne "UnknownError") {
   $failures.Add(("mics-engine.exe signature is {0}: {1}" -f $signature.Status, $signature.StatusMessage))
 }
