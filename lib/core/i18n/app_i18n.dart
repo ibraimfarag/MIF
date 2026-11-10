@@ -94,6 +94,13 @@ final Map<String, String> bundledLangs = {
 
 /// Every translation module, in load order. Order does not matter for lookup
 /// (keys are flat and unique) but keeps the asset list predictable.
+///
+/// Every entry here is a file every language folder ships, and
+/// `test/lang_registry_test.dart` enforces it in both directions: a module the
+/// loader asks for and no folder carries is one failed read per language on
+/// every start, which stayed invisible while the loader swallowed it silently
+/// (D-050 — `about` was that entry, and the About surface's copy lives with
+/// `settings`).
 const i18nModules = <String>[
   'app',
   'nav',
@@ -114,30 +121,99 @@ const i18nModules = <String>[
   'settings',
   'helper',
   'sync',
-  'about',
 ];
+
+/// Reads one pack file. Injectable so a test can refuse a whole language the
+/// way a `pubspec.yaml` that forgets its asset folder does (D-050).
+typedef PackReader = Future<String> Function(String assetPath);
+
+/// What one language's load left behind: how many module files were read, how
+/// many threw, and the asset path of the first one that did.
+class PackLoad {
+  const PackLoad(this.code, this.modules, this.failed, this.firstFailure);
+
+  final String code;
+  final int modules;
+  final int failed;
+  final String? firstFailure;
+
+  bool get complete => failed == 0;
+
+  /// Every module failed, so nothing at all was read: the folder is not in the
+  /// asset list. That is a different fact from an unread module (D-050).
+  bool get nothingLoaded => modules > 0 && failed == modules;
+}
+
+/// The one line a pack that did not fully load leaves in the log, or `null`
+/// when it loaded every module.
+///
+/// One line per language, and the two cases are worded apart on purpose: a
+/// folder the asset list does not carry is a defect in the build, while a single
+/// unread module is the gap the loader deliberately tolerates (D-050).
+String? i18nPackLoadNote(PackLoad load) {
+  if (load.complete) return null;
+  if (load.nothingLoaded) {
+    return 'i18n: no pack loaded for "${load.code}" - assets/i18n/${load.code}/ '
+        'is not in the asset list (see pubspec.yaml "assets:"), so every key '
+        'falls back to English, then to its own name';
+  }
+  return 'i18n: ${load.failed} of ${load.modules} module(s) did not load for '
+      '"${load.code}" (first: ${load.firstFailure ?? 'unknown'}) - the keys '
+      'they carry fall back to English, then to their own names';
+}
 
 final i18nProvider =
     AsyncNotifierProvider<I18nLoader, Map<String, Map<String, String>>>(
         I18nLoader.new);
 
 class I18nLoader extends AsyncNotifier<Map<String, Map<String, String>>> {
+  I18nLoader({PackReader? read, void Function(String line)? log})
+      : _read = read ?? _fromBundle,
+        _log = log ?? _toStderr;
+
+  static Future<String> _fromBundle(String assetPath) =>
+      rootBundle.loadString(assetPath);
+
+  static void _toStderr(String line) => stderr.writeln(line);
+
+  final PackReader _read;
+  final void Function(String line) _log;
+
+  /// What each language's load left behind, in `bundledLangs` order - the fact
+  /// behind the log line, and behind the sentence Settings shows when a bundled
+  /// language loaded nothing (D-050).
+  final List<PackLoad> loads = [];
+
   @override
   Future<Map<String, Map<String, String>>> build() async {
+    loads.clear();
     final tables = <String, Map<String, String>>{};
     for (final code in bundledLangs.keys) {
       final table = <String, String>{};
+      var failed = 0;
+      String? firstFailure;
       for (final module in i18nModules) {
+        final path = 'assets/i18n/$code/$module.json';
         try {
-          final raw = await rootBundle
-              .loadString('assets/i18n/$code/$module.json');
+          final raw = await _read(path);
           final decoded = (jsonDecode(raw) as Map).cast<String, dynamic>();
           decoded.forEach((k, v) => table[k] = v.toString());
         } catch (_) {
           // A module that has not been translated yet must not break the app;
-          // missing keys fall back to English or surface the key itself.
+          // missing keys fall back to English or surface the key itself. The
+          // same tolerance covers a whole folder the build does not carry, but
+          // that one is *reported*: one log line per language, and Settings
+          // names the language it left empty (D-050). Throwing instead would
+          // replace a degraded UI with none at all - `lib/main.dart` gates the
+          // first frame on this provider ever having a value.
+          failed++;
+          firstFailure ??= path;
         }
       }
+      final load = PackLoad(code, i18nModules.length, failed, firstFailure);
+      loads.add(load);
+      final note = i18nPackLoadNote(load);
+      if (note != null) _log(note);
       tables[code] = table;
     }
     return tables;
@@ -148,6 +224,16 @@ String lookup(
     Map<String, Map<String, String>> tables, AppLang lang, String key) {
   return tables[lang.code]?[key] ?? tables['en']?[key] ?? key;
 }
+
+/// Whether the pack for a bundled [code] loaded any key at all.
+///
+/// The tables alone cannot tell "nothing translated yet" from "this build does
+/// not carry the folder" - both are empty - which is why the loader classifies
+/// the load ([PackLoad]) and the screen names the language it left empty
+/// (D-050). Every bundled language is expected to load, so empty is a fact
+/// about the build rather than about the user's settings.
+bool packLoaded(Map<String, Map<String, String>> tables, String code) =>
+    (tables[code] ?? const <String, String>{}).isNotEmpty;
 
 // ---------- settings: engine is the source of truth (D-008) ----------
 

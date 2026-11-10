@@ -2961,3 +2961,78 @@ ends, that the stored tag survives, and that the tag is named.
 **Does not commit us to:** validating `lang` in the engine against a list of shipped languages (the
 engine must not need a release per language), a second or third bundled pack, packaging languages so one
 can be installed at run time, or translating the notice into the language that is missing.
+
+---
+
+## D-050 — A pack that did not load is a fact: one line in the log, and the language named in Settings
+
+**Status:** accepted (2026-11-10)
+
+**Context.** §7's LOW row: a language folder `pubspec.yaml` does not declare renders every key raw, and
+silently. `I18nLoader` catches every failed asset read on purpose — a module nobody has translated yet
+must not break the app — and a *whole* folder takes the same path: a language the picker offers, whose
+pack loads as an empty table, is indistinguishable from a language nobody has translated, because
+`lookup` falls back per key and never complains. The repository cannot ship one
+(`test/lang_registry_test.dart` fails and `lib/main.dart` gates the first frame on the packs ever having
+a value, so a build that lost a folder never starts), but a *built* app has no such gate: it degrades
+quietly, `dashboard.title` on screen, with nothing anywhere to explain it.
+What the row left open was therefore the **report** rather than the failure, and the reason it left it
+open is the reason it cannot be a failure: throwing would replace a degraded UI with none at all,
+because that same first-frame gate would then wait forever.
+
+**Decision.** The swallow is classified instead of silent, and the fact reaches both places it can.
+
+- `I18nLoader.build` collects one `PackLoad(code, modules, failed, firstFailure)` per language, and
+  `i18nPackLoadNote` turns it into **one** line — or `null` when that language loaded completely, so a
+  correct build stays quiet. One line per language that lost anything, never one per module.
+- The two cases are worded apart, because only one of them is a defect: a folder the asset list does not
+  carry says `no pack loaded for "en" - assets/i18n/en/ is not in the asset list (see pubspec.yaml
+  "assets:")`, an unread module says `N of M module(s) did not load ... (first: <path>)`, and the
+  tolerance stays for that second kind.
+- The reader and the sink are both injectable
+  (`I18nLoader({PackReader? read, void Function(String)? log})`, defaults `rootBundle.loadString` and
+  `stderr.writeln`), so a test can refuse an asset exactly the way the bundle does and read the line
+  back rather than scrape a process's `stderr`. `I18nLoader.loads` keeps the classification visible for
+  the same reason.
+- The screen reads the *fact*, not the log: this is a Windows GUI app, and `stderr` exists only when a
+  console is attached (`windows/runner/main.cpp` attaches to a parent console; a Start-menu launch has
+  none). `packLoaded(tables, code)` therefore feeds one line under the language picker
+  (`settings.languagePackMissing`, `{language}` filled from `AppLang.nativeName` — the same script-safe
+  choice D-049 made in the picker). It sits beside D-049's notice and answers a different question: that
+  one is about the stored **tag**, this one about the **build**.
+- `i18nModules` gained the check it never had: every entry is a file every language ships, in **both**
+  directions (`test/lang_registry_test.dart`). The list carried a stale `about` entry, so every start of
+  every language read a file that was not there — the entry is gone (the About surface's copy lives with
+  `settings`) and the first run of the new tests is what found it. `assets/i18n/README.md` now names the
+  `pubspec.yaml` step it used to leave implicit, which is how the defect was reachable at all.
+
+**Why.** Reporting beats failing for one mechanical reason: `lib/main.dart` gates the first frame on
+`i18nProvider` ever having a value, so an exception in the loader is a splash that never ends — a broken
+language would take the whole app with it. Reporting beats *not* reporting for the row's reason: a user
+reading `dashboard.title` had nothing to read and a developer had nothing to grep. `stderr` alone is not
+enough either, hence the screen: the log is for whoever is looking, the sentence for whoever is not.
+
+**Measured** (2026-11-10, unelevated shell, no network, no machine changes): `scripts\pipeline.ps1
+-Tier fast` **green, 4 of 4 — 65.0 s** (`flutter.analyze` 17.9 s, `flutter.test` 32.2 s,
+`engine.test` 12.3 s, `engine.clippy` 2.6 s), with `flutter test` at **178 passed, 6 of them new**, and
+the engine untouched at **201 passed / 0 failed**. The new cases: four in `test/i18n_pack_load_test.dart`
+— the first reads the **real** bundle through the loader the app builds, and a correct build must load a
+pack for every bundled language and log *nothing* — one in `test/ui_screens_test.dart`, and one in
+`test/lang_registry_test.dart`. The first attempt failed `qa_report_test`, the gate doing its job rather
+than a defect: six Dart cases move the report's counts (142 → **148** declared cases, 29 → 30 files), and
+the regenerated `qa/report.md`/`qa/report.html` are in this commit. Both halves were then re-run with the
+fix reverted: with the log call silenced exactly the two log cases fail, and with the screen line removed
+the widget case fails (`Found 0 widgets`) — the difference between a pin and a description.
+
+**Not measured, and open.** No real broken build was run: the demonstration is the loader reading the
+real bundle *inside* `flutter test` with a reader that refuses one folder, which is the same code path
+the app runs but not the same artifact, and nothing checks that the shipped installer's asset list
+carries both folders (`scripts\verify-installer.ps1` counts files; it does not ask the loader). No user
+has been watched reading the Settings sentence, so its wording is a guess at their situation. A module
+that fails to load still reaches no screen at all, deliberately — the log is the only place a partial
+pack is visible.
+
+**Advances** §7's LOW row (a language folder `pubspec.yaml` does not declare) — closed, and the
+`i18nModules` drift it was hiding with it. **Does not commit us to:** making a failed pack a startup
+error, disabling the picker for a language whose pack is empty, a second source of truth about which
+languages are reachable, or a pack loader that can reload without a restart.

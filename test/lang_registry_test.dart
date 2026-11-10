@@ -40,6 +40,19 @@ void main() {
             '${reference.difference(known)}');
   });
 
+  test('every module the loader reads is shipped by every language', () {
+    // The other direction of the same seam. The loader asks for `i18nModules`
+    // and tolerates a file it cannot read, so a module list carrying an entry no
+    // folder ships cost one failed read per language on every start and nothing
+    // else — invisible until the loader was made to report what it dropped
+    // (`about` was exactly that entry, D-050).
+    final shipped = _moduleFiles(AppLang.all.first.code);
+    final asked = {for (final m in i18nModules) '$m.json'};
+    expect(asked.difference(shipped), isEmpty,
+        reason: 'i18nModules lists ${asked.difference(shipped)}, which no pack '
+            'ships, so the loader reads a file that is not there');
+  });
+
   test('every bundled language is declared as an asset', () {
     // The loader swallows a failed asset read on purpose ("a module that has not
     // been translated yet must not break the app"), so a language folder that

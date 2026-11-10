@@ -227,6 +227,36 @@ void main() {
     expect(mounted.container.read(rtlProvider), isTrue);
   });
 
+  // The sibling fact of the tag above, and the one a running app used to keep
+  // to itself: a language that *is* bundled - so the picker offers it and the
+  // engine may have stored it - whose folder this build's asset list does not
+  // carry. The pack loads empty, every key of it falls back, and nothing said so
+  // (D-050). The screen names the language, and lets the user leave it.
+  testWidgets('settings: a bundled language whose pack did not load is named',
+      (tester) async {
+    final mounted = await openScreen(tester, const SettingsScreen(),
+        engine: FakeEngine(initialLang: 'ar'), i18n: _PackWithoutAr.new);
+
+    // The stored tag is fine, so the D-049 line must not be the one shown.
+    expect(find.textContaining('«ar»'), findsNothing,
+        reason: 'a bundled language is not an unrenderable tag');
+    expect(find.text('Language'), findsOneWidget,
+        reason: 'the rest of the screen falls back to the English pack');
+    expect(find.textContaining('does not carry the pack for العربية'),
+        findsOneWidget,
+        reason: 'nothing on the screen names the language whose pack is empty');
+
+    // The picker is the way out of it, and the notice follows the language.
+    await tester.tap(find.byType(DropdownButton<AppLang>));
+    await settle(tester);
+    await tester.tap(find.text('English').last);
+    await settle(tester);
+    expect(mounted.engine.lastParams('settings.set'), {'lang': 'en'});
+    expect(find.text('Language'), findsOneWidget);
+    expect(find.textContaining('does not carry the pack for'), findsNothing,
+        reason: 'the notice outlived the language whose pack is empty');
+  });
+
   // The scan schedule (و1, D-027). The engine owns the timer, so the only thing
   // the UI can get wrong is the write: an interval the engine would refuse, a
   // dropdown that shows a value it did not store, or a folder that never leaves
@@ -379,4 +409,16 @@ class _RefusingEngine extends FakeEngine {
   @override
   Stream<EngineState> get statusStream =>
       Stream<EngineState>.value(EngineState.engineMissing);
+}
+
+/// The real packs with one language left empty — how a folder this build's
+/// asset list does not carry arrives in the app: the loader tolerates the read
+/// failure and the table stays empty (D-050).
+class _PackWithoutAr extends FixedI18n {
+  @override
+  Future<Map<String, Map<String, String>>> build() async {
+    final tables = await super.build();
+    tables[AppLang.ar.code] = <String, String>{};
+    return tables;
+  }
 }

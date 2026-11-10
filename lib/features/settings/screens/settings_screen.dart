@@ -24,6 +24,10 @@ class SettingsScreen extends ConsumerWidget {
     final async = ref.watch(settingsProvider);
     final ipc = ref.watch(engineIpcProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    // What the packs actually loaded, for the one fact a picker cannot show:
+    // a bundled language whose folder this build does not carry (D-050).
+    final i18n =
+        ref.watch(i18nProvider).value ?? const <String, Map<String, String>>{};
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -111,6 +115,20 @@ class SettingsScreen extends ConsumerWidget {
                     context
                         .tr('settings.languageMissing')
                         .replaceAll('{tag}', s.storedLangTag),
+                    style: TextStyle(color: AppColors.orange, fontSize: 12),
+                  ),
+                ),
+              // The sibling fact of the line above, for a language that *is*
+              // bundled: its folder is not in this build's asset list, so it
+              // loaded as an empty table and every key of it falls back. The
+              // stored tag is not what is wrong here - the build is (D-050).
+              if (!packLoaded(i18n, s.lang.code))
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    context
+                        .tr('settings.languagePackMissing')
+                        .replaceAll('{language}', s.lang.nativeName),
                     style: TextStyle(color: AppColors.orange, fontSize: 12),
                   ),
                 ),

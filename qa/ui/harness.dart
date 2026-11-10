@@ -93,6 +93,7 @@ Future<Mounted> openScreen(
   Widget screen, {
   FakeEngine? engine,
   List<String> otherRoutes = const [],
+  I18nLoader Function()? i18n,
 }) async {
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
@@ -119,7 +120,7 @@ Future<Mounted> openScreen(
   // preload frame and the real frame share one container.
   final overrides = [
     engineIpcProvider.overrideWithValue(fake),
-    i18nProvider.overrideWith(FixedI18n.new),
+    i18nProvider.overrideWith(i18n ?? FixedI18n.new),
   ];
   await tester.pumpWidget(
       ProviderScope(overrides: overrides, child: const SizedBox.shrink()));
