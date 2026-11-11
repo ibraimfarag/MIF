@@ -534,6 +534,20 @@ is closed on eligibility and on money at the same time.
    different verifier (a Sigstore client and its own pin, D-047's open list) rather than
    the CMS check that is in place now.
 
+6. **The pin assumes one identity across releases, and the lane mints a new one per build (measured
+   2026-11-11).** D-051 made the update pin the certificate the engine itself carries, which is right
+   for a key that is meant to be kept — so a certificate that is *thrown away after every build* turns
+   the pin into a refusal of the next release. That is where the lane stands: `make-release.ps1` ends
+   by saying "the throwaway signing key does not outlive the build it signed", and the evidence is a
+   pile — 12 distinct certificates with the identical subject `CN=MI CS Code Signing, O=Mourad Ibrahim
+   (MI CS)` in this user's certificate stores when they were counted, one per signing run, plus the
+   one on the published `v0.1.0`. The repair is not code and costs nothing: mint one certificate, keep
+   it as the `MICS_PFX` and `MICS_PFX_PASSWORD` repository secrets (D-034's wiring, already in place),
+   and the same throwaway lane becomes a stable identity — which is also the only shape in which a
+   route-A or route-B certificate could be swapped in later without a release being refused by the
+   release before it. Until then the row is **ب7** in `docs/ROADMAP.md` and §7 of `docs/TODO.md`, with
+   one deadline: before the next publish.
+
 ## 8. Sources, all read 2026-11-07
 
 | What | Where |

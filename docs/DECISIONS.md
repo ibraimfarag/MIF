@@ -3116,6 +3116,23 @@ name Windows shows. On the **update** path the same pin is a real comparison, be
 a different file from the engine holding it — that is the direction a forged update arrives from, and
 that is the direction the pin now has teeth in.
 
+**One precondition this pin places on the release lane — measured 2026-11-11, not met yet.** A
+thumbprint pin only means something if what it will judge is signed by the **same** certificate, and
+the lane mints one per build: `make-release.ps1` says so in its own closing line ("the throwaway
+signing key does not outlive the build it signed") while `scripts\codesign-cert.ps1` keeps the
+certificate as a PFX in the job's TEMP. Counted on the day the published release was verified, this
+machine's user stores held **12 distinct certificates** with the identical subject
+`CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)` (24 store entries across
+`Cert:\CurrentUser\TrustedPublisher`, `TrustedPeople` and `My`), and the published `v0.1.0` adds a
+thirteenth on the artifact itself — the pile that made D-016's CN pin look reasonable is exactly what
+a thumbprint pin must not be aimed across releases. So the next release, signed by a fresh
+certificate, would be refused by the engine inside the published one: fail-closed (no update, never a
+wrong accept), impossible to hit yet because nothing carrying this decision is published, and
+repairable without code — one certificate kept in the `MICS_PFX` and `MICS_PFX_PASSWORD` secrets
+(D-034's wiring, load-bearing now for a second reason), with `MICS_UPDATE_SIGNER_THUMBPRINT` as the
+operator's override. Recorded as the register's new MED row and `docs/TODO.md` §0.6 row 18 (**ب7**),
+whose only deadline is the next publish.
+
 **Measured.** `cargo test` **206 passed, 0 failed** (five new cases around the pin and two renamed so
 the counts stay honest — `signature.rs` 10 → 14 declared, `update.rs` 3 → 4: a `Thumbprint` pin
 accepts the pinned certificate and refuses a same-name certificate, each half is decided by the half

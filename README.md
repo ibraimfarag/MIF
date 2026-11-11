@@ -7,15 +7,20 @@ multi-layer defense wall, malware scanner, real-time process monitor,
 vulnerability scanner and hardening center — with an interface that prioritises,
 explains, and suggests the next action instead of dumping raw data.
 
-> **Status: pre-release, and nothing is published yet.** Every feature below is
+> **Status: `v0.1.0` is published, and the signature is the only thing the release
+> page lacks.** Every feature below is
 > implemented and covered by tests, the portable package and its installer are built
 > and verified, and the package carries a signed manifest of itself that the app
 > checks at start-up (see *Is this copy the published one?*). The first build,
 > `v0.1.0`, was built and verified by the
-> [Release workflow](.github/workflows/release.yml) and sits in GitHub Releases as a
-> **draft**: publishing it is one free click, and until that click there is nothing
-> to download — [Download](#download) lists the assets it will carry and how to check
-> them. The acceptance run that needed a human **ran on 2026-11-07**: the per-machine
+> [Release workflow](.github/workflows/release.yml) and the owner **published it on
+> 2026-11-10** — four assets, and the hashes of three of them were re-checked against
+> the published `SHA256SUMS` on 2026-11-11, and the portable package against its own
+> signed manifest ([Download](#download) has the numbers and how to repeat them).
+> What is *not* in that download is anything that landed after it was built on
+> 2026-11-05 14:18:45 — the default update feed (D-046), the manifest's signing
+> (D-047), the two language decisions (D-049, D-050) and the update pin (D-051) are
+> in `main` and will be in the next release. The acceptance run that needed a human **ran on 2026-11-07**: the per-machine
 > installer was taken through install → helper creation → a privileged operation with
 > no prompt → uninstall, one UAC prompt each, with the product, the service and the
 > shortcuts all gone afterwards and the state folder kept on purpose. Two things are
@@ -36,16 +41,21 @@ explains, and suggests the next action instead of dumping raw data.
 > Windows ARM64 SDK (0 of the 747 archives it lists mention arm64, measured
 > 2026-11-04) — the release workflow asks that runner for the x64 SDK and marks
 > both ARM64 jobs informational until they have a green run — see *Requirements*).
-> What is left is short and entirely free: **publish the draft** (one click),
-> a publicly trusted certificate (ب5 — the Store account or OSSign; **هـ1** is done,
+> What is left is short and entirely free: a publicly trusted certificate (ب5 — the Store
+> account or OSSign; **هـ1** is done,
 > the update manifest's URL, its signature and the thumbprint pin all landed on
 > 2026-11-09, D-046/D-047, and the pin that signature is judged against became the
 > certificate the engine itself carries on 2026-11-11, D-051 — so a CA-signed
 > release recognises itself and a same-name certificate from somebody else is
-> refused), the engine manifest's signed hashes,
+> refused; the pin does assume the release is signed by **one** identity, which the
+> release lane does not do yet — D-051 and the register row it created in
+> [`docs/TODO.md`](docs/TODO.md) §7), the engine manifest's signed hashes,
 > and the register rows — priorities and estimates in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md), and the one-table answer in
-> [`docs/TODO.md`](docs/TODO.md) §0.6. Live status:
+> [`docs/TODO.md`](docs/TODO.md) §0.6 — plus one engineering row the
+> 2026-11-11 verification of the published release created: `v0.1.0` was signed by a
+> certificate minted for that build, so a release lane that keeps minting a fresh one
+> would have each engine refusing the next release's payload. Live status:
 > [`docs/TODO.md`](docs/TODO.md). Design decisions:
 > [`docs/DECISIONS.md`](docs/DECISIONS.md). What is waiting on an
 > answer: [`docs/OPEN-DECISIONS.md`](docs/OPEN-DECISIONS.md).
@@ -54,24 +64,28 @@ explains, and suggests the next action instead of dumping raw data.
 
 ## Download
 
-**There is no published download yet.** The first build, `v0.1.0`, was built and verified by
-the [Release workflow](.github/workflows/release.yml) on GitHub's own runners — never on a
-developer machine — and it sits on the [Releases page](https://github.com/ibraimfarag/MIF/releases)
-as a **draft release** (D-031). A draft is invisible to everyone but the owner, so the page
-shows no releases at all until one click publishes it. That click is free and is the only
-thing between this project and a download; it is deliberately a human step, because the
+**The download is live**, on the [Releases page](https://github.com/ibraimfarag/MIF/releases/tag/v0.1.0):
+`v0.1.0` was built and verified by the
+[Release workflow](.github/workflows/release.yml) on GitHub's own runners — never on a
+developer machine — and its four assets were published on 2026-11-10 (D-031: the build
+and the publish are separate steps, and the publish itself stays a human action, because the
 builds are not signed by a publicly trusted certificate (D-035, D-036) and a warning should not be
-delivered to strangers by a robot.
+delivered to strangers by a robot):
 
-Until then, [build it from source](#building-from-source) — the same three commands the
-workflow runs. When the draft is published, the release will carry:
+| File | What it is | Measured 2026-11-11 |
+|---|---|---|
+| `MICS-setup-0.1.0-x64.exe` | The installer: one UAC prompt, Start-Menu and desktop shortcuts, an entry in Apps & features, an uninstaller — and the privileged helper. **Recommended.** | 16,642,682 bytes, SHA-256 `5cd206db…f84f5`, **not signed** (see below) |
+| `MICS-portable-0.1.0-x64.zip` | The portable package: unpack it anywhere and run `mics_app.exe`. Nothing registered, nothing to uninstall. | 23,111,206 bytes, SHA-256 `1eafe3ee…fe6b0`, 69 files |
+| `SHA256SUMS` | The SHA-256 of exactly the files above, written by the run that built them. | re-checked: all three hashes match the downloaded bytes |
+| `report.md` | The QA report of that same run. | SHA-256 `8bc5fab2…846a16` |
 
-| File | What it is |
-|---|---|
-| `MICS-setup-0.1.0-x64.exe` | The installer: one UAC prompt, Start-Menu and desktop shortcuts, an entry in Apps & features, an uninstaller — and the privileged helper. **Recommended.** |
-| `MICS-portable-0.1.0-x64.zip` | The portable package: unpack it anywhere and run `mics_app.exe`. Nothing registered, nothing to uninstall. |
-| `SHA256SUMS` | The SHA-256 of exactly the files above, written by the run that built them. |
-| `report.md` | The QA report of that same run. |
+The portable package also holds to its own manifest: pointed at the unpacked download,
+`scripts\verify-manifest.ps1` reports `PASS - all 67 listed file(s) hash as the signed manifest
+says`, and the engine inside it is signed by `CN=MI CS Code Signing, O=Mourad Ibrahim (MI CS)`
+(thumbprint `E04CE197…531C3CF5`, issued 2026-11-04). The **installer carries no signature at
+all** — `Get-AuthenticodeSignature` says `NotSigned`, which is why the *SHA256SUMS* line, not a
+publisher name, is what to check on the file you actually run; signing the installer is part of
+what the certificate route (D-036) adds.
 
 Check what you downloaded before you run it:
 
@@ -80,12 +94,16 @@ Get-FileHash .\MICS-setup-0.1.0-x64.exe -Algorithm SHA256
 ```
 
 The hash it prints has to be the hash `SHA256SUMS` lists for that file. Both were produced in
-the same run that built the bytes, so they also tell you the download arrived whole.
+the same run that built the bytes, so they also tell you the download arrived whole. To build
+from source instead, the same three commands the workflow runs are in
+[Building from source](#building-from-source).
 
 **Windows will say "Unknown publisher", and SmartScreen may warn.** That is expected, not a
-sign of a bad download: these builds carry the project's own signature and its manifest of
-every shipped file (which the app checks at start-up), but no *publicly trusted* certificate
-and therefore no public reputation. This project does not buy one (D-035), and two free
+sign of a bad download: the engine and the app inside the package carry the project's own
+signature and a signed manifest of every shipped file (which the app checks at start-up), but
+no *publicly trusted* certificate
+and therefore no public reputation. The installer you double-click carries no signature at
+all, so the published hashes are its only anchor. This project does not buy one (D-035), and two free
 routes for it are now on record (D-036, [`docs/SIGNING.md`](docs/SIGNING.md)): the Microsoft
 Store re-signs an MSIX package for free after certification — available today, the work is
 packaging, and the shape submitted first installs with no administrator at all (D-038) —
@@ -266,9 +284,9 @@ flutter test --no-pub tool\write_screenshots_test.dart
 Today MI CS ships as a **portable folder and a portable archive**, and as an
 **installer** (`MICS-setup-<version>-x64.exe`, built with NSIS from the same
 package — one UAC prompt, a Start-Menu entry, a desktop icon, an entry in Apps &
-features, and an uninstaller). **Neither is published yet** — the first release is a
-draft waiting for one click ([Download](#download)) — so build one first with
-[Building from source](#building-from-source); the steps below are the same either
+features, and an uninstaller). Both are published for `v0.1.0`
+([Download](#download)); to build one from this tree instead, use
+[Building from source](#building-from-source) — the steps below are the same either
 way. Pick one:
 
 **Installer (recommended).** Run `MICS-setup-<version>-x64.exe` and click through
@@ -609,8 +627,9 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-tamper.ps1
 
 # The published bytes are the ones this source produces (rebuilds, then compares):
-# point it at an archive cut reproducibly - the v0.1.0 draft predates this, so it
-# reports real differences rather than the signature-shaped ones (REPRODUCIBLE.md 6)
+# point it at an archive cut reproducibly - the published v0.1.0 was built on
+# 2026-11-05, before this existed, so it reports real differences rather than the
+# signature-shaped ones (REPRODUCIBLE.md 6)
 powershell -ExecutionPolicy Bypass -File scripts\verify-reproducible.ps1 -Reference <the published zip>
 powershell -ExecutionPolicy Bypass -File scripts\verify-reproducible.ps1 -SelfTest
 
@@ -865,8 +884,9 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 
 **اللي فاضل:** كل المتبقي — بالمراحل والأولوية والوقت التقريبي وترتيب الشغل — في
 [`docs/ROADMAP.md`](docs/ROADMAP.md)، والجدول الكامل في [`docs/TODO.md`](docs/TODO.md)
-§0.6. وأول حاجة فيه مش شراء: **نشر نسخة `v0.1.0`** — هي مبنية ومتحققة بالفعل وواقفة
-في GitHub Releases كـ **draft**، والكليكة اللي بتنشرها مجانية (D-031)؛ ومفيش أي حاجة
+§0.6. وأول حاجة فيه مش شراء: **نشر نسخة `v0.1.0`** — وهي **اتنشرت فعلًا 2026-11-10**،
+بأربع ملفات على [صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases/tag/v0.1.0)؛
+واللي فاضل منها هو **التوقيع العام** بس، ومفيش أي حاجة
 في المشروع محتاجة فلوس، لأن المشروع مفتوح المصدر وميزانيته صفر (D-035). وحتى
 **الشهادة العامة** بقى لها طريقتين مجانيين مسجّلين في
 [`docs/SIGNING.md`](docs/SIGNING.md) (D-036): **Microsoft Store** بيعيد توقيع حزمة
@@ -941,18 +961,21 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Sign
 `Get-FileHash .\MICS-portable-0.1.0-x64.zip -Algorithm SHA256` وقارنه بالـ
 `SHA256SUMS`. ولو الـ zip اتنزّل من النت، اعمل له `Unblock-File` **قبل** ما تفكّه.
 
-**من فين تنزّل:** لسه **مفيش حاجة منزّلة للعامة**. الإصدار الأول `v0.1.0` اتبنى
-واتفحص على runners جيت هاب نفسها، وواقف على
-[صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases) كـ **draft** — والـ
-draft مش باين لحد غير صاحب المستودع، فالصفحة بتوريك «There aren't any releases here»
-لحد ما تتضغط كليكة النشر، وهي مجانية وبيد بشر (D-031). لحد ساعتها ابنيها من السورس
-([Building from source](#building-from-source)) — ولما تتنشر هتلاقي المثبّت
+**من فين تنزّل:** من [صفحة الإصدارات](https://github.com/ibraimfarag/MIF/releases/tag/v0.1.0)
+— الإصدار الأول `v0.1.0` اتبنى واتفحص على runners جيت هاب نفسها، وصاحبه **نشره 2026-11-10**
+(D-031: البناء والنشر خطوتين، والنشر بيد بشر). هتلاقي المثبّت
 `MICS-setup-0.1.0-x64.exe` والنسخة المحمولة `MICS-portable-0.1.0-x64.zip` مع
-`SHA256SUMS` و`report.md`. ولسه مفيش توقيع عام بشهادة موثوقة — المشروع **مش بيشتري**
+`SHA256SUMS` و`report.md` — واتأكدت من التلات هاشات بنفسي 2026-11-11، وفكّيت الـ zip
+وشغّلت `scripts\verify-manifest.ps1` عليه: **PASS، 67 ملف مطابقين للبيان الموقّع**.
+واملاحظتين اللي لازم تعرفهم: **المثبّت نفسه مش موقّع خالص** (`NotSigned`)، فالهاشات هي
+اللي تتأكد منها قبل ما تشغّله؛ والملفات دي اتبنت **2026-11-05**، يعني اللي اتضاف بعد
+كده (توقيع المانيفست، دبوس التحديث، قرارات اللغة) لسه في `main` ومش في التنزيل.
+ولسه مفيش توقيع عام بشهادة موثوقة — المشروع **مش بيشتري**
 شهادة (D-035)، والطريقتين المجانيين اللي اتلقّوا (Microsoft Store و OSSign) لسه
 متنفّذوش (D-036) — فـ ويندوز هيقول «ناشر غير معروف» وSmartScreen ممكن يحذّر؛ اللي
 بتعتمد عليه دلوقتي بدل الشهادة: البيان الموقّع جوّه المحرك والهاشات المنشورة جنب
-الأرشيف.
+الأرشيف. ولو عايز تبنيها بنفسك من السورس، الخطوات في
+([Building from source](#building-from-source)).
 
 **الحالة الحالية:** التطبيق شغال فعليًا: بيرفع المحرك، بيعمل فحص حقيقي،
 بيسجّل النتائج، وبيكمّل أي فحص اتقطع، وبطلّع كارت على سطح المكتب لكل حدث، والحزمة
@@ -962,9 +985,11 @@ draft مش باين لحد غير صاحب المستودع، فالصفحة ب�
 المنتج كله بيطلب UAC **مرة واحدة** — وده **اتقاس خلاص (2026-11-07)**: تثبيت بكليكة
 واحدة، الخدمة اتعملت واشتغلت، والعمليات المميّزة اتنفّذت من غير أي برومبت تاني،
 والإزالة بكليكة واحدة شالت المنتج والخدمة. **اللي فاضل بالفعل جدول واحد** في
-[`docs/TODO.md`](docs/TODO.md) §0.6: **نشر `v0.1.0`** (كليكة مجانية واحدة، وهو
-الوحيد HIGH)، وشغل هندسي مجاني (**هـ1**، وصفوف السجل، وبيان المحرك اللي بيسجّل
-هاشات موقّعة بدل المحتوى)، وحاجة واحدة **مفتوحة مجانًا**: **توقيع عام** — مش هيتم شراؤه (D-035)، وله
+[`docs/TODO.md`](docs/TODO.md) §0.6: شغل هندسي — وأوله **ب7: هوية توقيع واحدة لكل
+إصدار**، لأن `v0.1.0` اتوقّع بشهادة اتصنعت للبناء ده وحده، فمحرك الإصدار الجاي هيرفض
+حمولة موقّعة بشهادة تانية (رفض، مش قبول غلط — بس عيب يتصلّح قبل النشر الجاي)، وحلّه مش
+كود: شهادة واحدة تتخزّن في secrets باسم `MICS_PFX`. وبعده (**هـ1**، وصفوف السجل، وبيان
+المحرك اللي بيسجّل هاشات موقّعة بدل المحتوى)، وحاجة واحدة **مفتوحة مجانًا**: **توقيع عام** — مش هيتم شراؤه (D-035)، وله
 طريقتين مجانيين (D-036) محتاجين شغل تغليف أو انتظار، مش فلوس؛ وحاجتين **مقفولتين
 مش مستنيتين**: نسخة Windows على ARM للتطبيق (Flutter مفيش عنده SDK لـ ARM64،
 والمحرّك بيتبني ويتفحص)، و**ز2-د** (توصيل تقارير الانهيار — محتاج قرار D-023).
