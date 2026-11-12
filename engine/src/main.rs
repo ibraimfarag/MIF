@@ -441,7 +441,7 @@ async fn run() -> Result<()> {
             emit(&serde_json::to_value(privileged::status())?, json)?;
         }
         None => {
-            println!("MI CS Engine v0.1.0");
+            println!("MI CS Engine v{}", env!("CARGO_PKG_VERSION"));
             println!("Use --help for more information");
         }
     }
