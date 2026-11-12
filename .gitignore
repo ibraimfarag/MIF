@@ -68,3 +68,7 @@ engine/nul
 /.dart_home/
 /_acl_recovery/
 dist/
+
+# Agent scratch — Claude Code worktrees and Mimosa hook state — local only, never shipped
+/.claude/
+.mimosa/
