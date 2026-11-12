@@ -655,10 +655,13 @@ fn is_language_tag(tag: &str) -> bool {
 ///
 /// `scripts\make-release.ps1` writes the same `update.json` beside the archive it
 /// publishes and the Release workflow uploads it with the rest of the assets, so
-/// `releases/latest/download/update.json` resolves as soon as a release is
-/// *published*. A draft serves its assets to nobody, so until the v0.1.0 draft is
-/// published this URL answers 404 and the Updates screen says that rather than
-/// pretending to be up to date (§0.6 row 1 is that click).
+/// `releases/latest/download/update.json` resolves as soon as a release built by
+/// that lane is *published*. A draft serves its assets to nobody, and a published
+/// release serves only the assets its own run uploaded: `v0.1.0` was created
+/// 2026-11-05 and its four assets were frozen that day, four days before the
+/// manifest upload landed, so this URL answers 404 today and the Updates screen
+/// says that rather than pretending to be up to date (§0.6 row 1 is the publish
+/// click, row 5 carries the measurement).
 pub const DEFAULT_UPDATE_MANIFEST_URL_STABLE: &str =
     "https://github.com/ibraimfarag/MIF/releases/latest/download/update.json";
 

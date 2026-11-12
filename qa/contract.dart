@@ -13,7 +13,7 @@
 // What it refuses to do is as important as what it does: a `mutating`, `network`
 // or `desktop` method never runs its happy path (see qa/methods.json), because
 // this harness must be safe on the machine that is being protected. Those rows
-// still have to exist, so the surface is complete and countable: 62 methods, of
+// still have to exist, so the surface is complete and countable: 73 methods, of
 // which the run reports how many answered for real and how many were classified
 // with a reason.
 

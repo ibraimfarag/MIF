@@ -13,7 +13,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
 | JSON-RPC methods | 73 rows in `qa/methods.json` | 73 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 74 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| Contract cases | 73 declared in the registry, 17 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens, 1 surface and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
 | Controls | 109 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
@@ -32,9 +32,9 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 |---|---|---|---|
 | `desktop` | 2 | 0 | 2 |
 | `mutating` | 22 | 12 | 10 |
-| `network` | 4 | 0 | 4 |
+| `network` | 5 | 0 | 5 |
 | `pure` | 6 | 6 | 0 |
-| `read` | 26 | 26 | 0 |
+| `read` | 25 | 25 | 0 |
 | `sandbox` | 13 | 13 | 0 |
 
 ### Every method
@@ -111,11 +111,11 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `sync.now` | `network` | 0 | yes |
 | `sync.status` | `read` | 1 |  |
 | `update.apply` | `sandbox` | 1 |  |
-| `update.check` | `read` | 1 |  |
+| `update.check` | `network` | 0 | yes |
 | `update.download` | `network` | 0 | yes |
 | `vuln.scan.start` | `network` | 0 | yes |
 
-### The 16 methods that are classified not to run
+### The 17 methods that are classified not to run
 
 Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so "n/a" cannot pass as one.
 
@@ -135,6 +135,7 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `service.remove` | `mutating` | deletes the HKCU Run autostart entry |
 | `shutdown` | `mutating` | Ends the engine the harness is talking to; proved end to end by scripts\verify-lifecycle.ps1 instead. |
 | `sync.now` | `network` | fetches the configured intel feeds |
+| `update.check` | `network` | fetches the configured update manifest |
 | `update.download` | `network` | downloads the configured update manifest |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 

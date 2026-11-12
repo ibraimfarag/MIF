@@ -45,7 +45,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>74 declared in the registry, 16 classified not to run</td>
+      <td>73 declared in the registry, 17 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -129,9 +129,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>network</code></td>
-      <td class="num">4</td>
+      <td class="num">5</td>
       <td class="num">0</td>
-      <td class="num">4</td>
+      <td class="num">5</td>
     </tr>
     <tr>
       <td><code>pure</code></td>
@@ -141,8 +141,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>read</code></td>
-      <td class="num">26</td>
-      <td class="num">26</td>
+      <td class="num">25</td>
+      <td class="num">25</td>
       <td class="num">0</td>
     </tr>
     <tr>
@@ -584,9 +584,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>update.check</code></td>
-      <td><code>read</code></td>
-      <td class="num">1</td>
-      <td></td>
+      <td><code>network</code></td>
+      <td class="num">0</td>
+      <td>yes</td>
     </tr>
     <tr>
       <td><code>update.download</code></td>
@@ -602,7 +602,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h3>The 16 methods that are classified not to run</h3>
+<h3>The 17 methods that are classified not to run</h3>
 <p>Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so &quot;n&#47;a&quot; cannot pass as one.</p>
 <table>
   <thead><tr>
@@ -680,6 +680,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>sync.now</code></td>
       <td><code>network</code></td>
       <td>fetches the configured intel feeds</td>
+    </tr>
+    <tr>
+      <td><code>update.check</code></td>
+      <td><code>network</code></td>
+      <td>fetches the configured update manifest</td>
     </tr>
     <tr>
       <td><code>update.download</code></td>

@@ -53,8 +53,13 @@
   verified" half.
 
   What this probe does NOT prove:
-    * that the published default answers - the v0.1.0 draft is not published yet
-      (section 0.6 row 1 is that click), so that URL is a 404 until then;
+    * that the published default answers - `v0.1.0` is published (2026-11-10,
+      section 0.6 row 1 is that click) but carries no `update.json`: its assets
+      are the zip, the installer, `report.md` and `SHA256SUMS`, so
+      `releases/latest/download/update.json` answers 404 today. The Release
+      workflow uploads `dist/update.json` and its `.sig` with the rest of the
+      assets (`.github/workflows/release.yml`), so the next published release is
+      what makes that URL answer - measured on 2026-11-12;
     * that a real release ZIP extracts and replaces the running binaries: that
       needs a signed payload (D-016) and belongs to the release gate;
     * that `scripts/make-release.ps1 -Sign` signs the manifest it publishes: that

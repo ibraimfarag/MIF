@@ -496,10 +496,9 @@
     },
     {
       "method": "update.check",
-      "class": "read",
-      "params": null,
-      "expect": "object",
-      "note": "With no manifest URL configured the answer is disabled without any traffic."
+      "class": "network",
+      "skip": "fetches the configured update manifest",
+      "note": "Outbound traffic, and not only when the user configured a URL: with nothing saved the engine falls back to the channel's compiled-in feed (D-046, engine\\src\\settings.rs), so a sandbox with an empty data dir still reaches github.com. This row was classed `read` on the belief that an unconfigured engine answers `disabled` and stays silent - that belief was false, and on 2026-11-12 the case was the one red case in a `-Tier full` run (a DNS failure, and a 404 either way: the published v0.1.0 carries no update.json). The update path is measured against a local feed by scripts\\verify-update.ps1; what the *published* feed answers is what docs\\TODO.md 0.6 row 1 checks against a release."
     },
     {
       "method": "crash.list",
