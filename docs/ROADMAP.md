@@ -143,7 +143,7 @@ the remaining counts, with a reason per row, under a ratchet that may only fall.
 
 | Phase | What it contains | Status | Priority | Est. | Blocked on |
 |---|---|---|---|--:|---|
-| **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **published 2026-11-10; only the signature is left** — portable ZIP + installer + local signing work, the signing wiring waits for nothing (**D-034**: a certificate is two repository secrets), and the **certificate is not purchased** (**D-035**) but is no longer *closed*: **D-036** (2026-11-07) found two free routes in [`docs/SIGNING.md`](SIGNING.md) — the Store re-signing an MSIX, available today, and OSSign at ~2027-04-27 — while the free substitutes (the manifest, the hashes, a reproducible build) stay load-bearing; `v0.1.0` is **published**, and verifying it against its own release page on 2026-11-11 left one free engineering row behind it (**ب7**, one signing identity per release — P4 below) | 🔴 **HIGH**, but only its signature half — the download half closed 2026-11-10 | 1–2 h for ب7; the certificate is free | **nothing from you right now**; the next publish waits on ب7 |
+| **ب — P4 release engineering** | NSIS installer, helper install folded in, ARM64 leg, real signature, public release | **published 2026-11-10; only the signature is left** — portable ZIP + installer + local signing work, the signing wiring waits for nothing (**D-034**: a certificate is two repository secrets), and the **certificate is not purchased** (**D-035**) but is no longer *closed*: **D-036** (2026-11-07) found two free routes in [`docs/SIGNING.md`](SIGNING.md) — the Store re-signing an MSIX, available today, and OSSign at ~2027-04-27 — while the free substitutes (the manifest, the hashes, a reproducible build) stay load-bearing; `v0.1.0` is **published**, and verifying it against its own release page on 2026-11-11 left one free engineering row behind it (**ب7**, one signing identity per release — P4 below, whose engineering half landed 2026-11-12: a probe that measures one PFX = one identity, and a release report that names the identity and warns when it cannot outlive the build). **2026-11-12: Full pipeline (fast/full/release) green with local self-signed identity.** | 🔴 **HIGH**, but only its signature half — the download half closed 2026-11-10 | 1–2 h for ب7; the certificate is free | **one secret**: keep a certificate in `MICS_PFX`/`MICS_PFX_PASSWORD`, and the next publish stops waiting on ب7 |
 | **ج — P5 trust & integrity** | build hardening, signed file manifest + startup self-check, README rewrite | **done** — build hardening (ج1, D-021), the integrity manifest end to end (ج2, 2026-11-03), the tamper proof (ط2, 2026-11-03), the threat model and protection matrix, and the README rewrite (**ج3**, 2026-11-03); **verified on the installed artifact 2026-11-07**: the engine in `C:\Program Files\MI CS` re-hashed **68 of 68** listed files at start-up and reported our signer as `untrusted-certificate` (the honest middle state). **F-11's reproducible build landed 2026-11-08** — the phase's last open piece, and the **substitute** for a certificate (D-035) rather than a nicety: `make-release.ps1 -Reproducible` takes the build time from the revision, asks both linkers for `/Brepro` and writes the archive without the clock, `scripts\verify-reproducible.ps1 -Reference <zip>` rebuilds and compares every file (PE files on their signature-independent content hash), and [`docs/REPRODUCIBLE.md`](REPRODUCIBLE.md) is the recipe. Run end to end on the same day: a rebuild signed with its own self-signed key matched **60 of 69 files byte for byte, 7 on content, and left 2 explained** — the engine and the `VERSION` line that repeats its content hash — with 0 unexpected differences. Unchanged by it: `mics-engine.exe` alone is not byte-comparable, because `MICS_MANIFEST` records the other files' hashes *as signed* — TODO §0.6 row 13 | ✅ | — | nothing |
 | **د — P6 QA** | pipeline entry point **[done]** (ز0), `qa/` contract harness over every JSON-RPC method **[done]** (د1), every screen and control **[done]** (د2), the committed QA report with coverage gates **[done]** (د4/د5), E2E on the built artifact **[done 2026-11-07]** (د3) | **done** — see the د3 row for the measured install/uninstall/privileged-op run | ✅ | — | nothing |
 | **ز — P8 interface & reliability** | language off the title bar into a Settings dropdown (multi-language + direction) **[done, 2026-11-01]**, crash/hang detection with a bug ID **[capture + hang detector done, and the bug-id surface in Settings done, 2026-11-02; delivery next]**, in-app cards in the bottom corner per direction **[done, 2026-11-02, D-024]**, opt-in delivery (webhook/SMTP/**Open WhatsApp bridge**) | **partly done** (ز1, ز2-أ, ز2-ب, ز2-ج, ز3) — only delivery is left | 🟠 MED | 6–10 h | ز2-د needs D-023 + the bridge endpoint |
@@ -230,11 +230,24 @@ the project returns to afterwards.
    takes its place here is **ب7: one signing identity per release, before the next publish.**
    `make-release.ps1` mints a certificate for each build, and D-051's pin is the identity of that
    build — so a second release signed by a second certificate would be refused by the first
-   (fail-closed, but a defect). Free, and no code change: mint one certificate and keep it as the
-   `MICS_PFX`/`MICS_PFX_PASSWORD` secrets, or set `MICS_UPDATE_SIGNER_THUMBPRINT`. **ب5 is no
-   longer a prerequisite** for anything — nothing is bought (D-035) and the signature has two free
-   routes (D-036, `docs/SIGNING.md`), neither of which blocks a download: the Store route is
-   packaging work and the OSSign route is a calendar row.
+   (fail-closed, but a defect). Free, and nothing left that code can do: the lane keeps one
+   certificate once it is given one, and both halves of "given one" are now built and measured —
+   `scripts\verify-signer-identity.ps1` (new, **18 checks**) signs scratch manifests with one PFX
+   twice and with a second PFX once, and shows the first pair carrying one thumbprint (equal to the
+   certificate inside the PFX) while the second carries another one, which is what the engine refuses
+   (`scripts\verify-update.ps1`, cases 4 and 7); the same probe holds the names end to end — the
+   workflow's `secrets.MICS_PFX` → `MICS_PFX_B64` → the lane's `-PfxPath`, one `@signArgs` for the
+   binaries and the feed, and the four readers of `MICS_UPDATE_SIGNER_THUMBPRINT`. A release report
+   now prints `pinned : <thumbprint>` (the certificate the engine over that build will trust when it
+   judges the *next* release) and, when the identity is the throwaway one, a `WARN` saying the key is
+   deleted before the script returns and no later release can be signed by it. **So what remains is
+   one secret, not one commit**: keep a certificate in `MICS_PFX`/`MICS_PFX_PASSWORD`
+   (`docs/SIGNING.md` section 7 item 6 has the copy-paste recipe), and the environment hook
+   `MICS_UPDATE_SIGNER_THUMBPRINT` is *not* a substitute — it has to name the next release's
+   certificate, which is only knowable once an identity is kept. **ب5 is no longer a prerequisite**
+   for anything — nothing is bought (D-035) and the signature has two free routes (D-036,
+   `docs/SIGNING.md`), neither of which blocks a download: the Store route is packaging work and the
+   OSSign route is a calendar row.
 
 9. ~~**The register's "engine missing and no reason given" row, with §0.6 row 10**~~ —
    **done 2026-11-10** (small step 9): a failed start re-runs the engine once with
@@ -247,8 +260,10 @@ the project returns to afterwards.
 
 Recounted **2026-11-07**; the long form with the measured state is `docs/TODO.md` §0.2.
 
-**Neither acceptance item is waiting on you any more** — both ran on 2026-11-07, and
-what is left is **one free click** (ب6) plus the four decisions in item 3 that still wait on you (of six briefs, (c) is settled and (f) is answered).
+**Neither acceptance item is waiting on you any more** — both ran on 2026-11-07, the publish click
+was made on 2026-11-10, and what is left is **one secret and a minute of your time** (ب7: mint one
+release certificate, keep it as `MICS_PFX` + `MICS_PFX_PASSWORD` — the recipe is
+`docs/SIGNING.md` section 7 item 6) plus the four decisions in item 3 that still wait on you (of six briefs, (c) is settled and (f) is answered).
 
 1. **د3 — done, measured 2026-11-07.** The per-machine setup rebuilt from `main`
    (`dist\MICS-setup-0.1.0-x64.exe`, 16,730,142 bytes, `sha256 8984C194…`) installed all
