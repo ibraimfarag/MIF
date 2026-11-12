@@ -19,7 +19,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 30 files | 148 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Dart tests | 31 files | 150 declared cases (a floor: loops add more at run time) | `flutter.test` step |
 | Engine tests | 26 modules | 206 declared cases | `engine.test` step |
 | Pipeline steps | 14 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
@@ -240,10 +240,11 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/tray_panel_test.dart` | 4 |
 | `test/ui_screens_test.dart` | 12 |
 | `test/ui_shell_test.dart` | 3 |
+| `test/version_agreement_test.dart` | 2 |
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **148** in 30 files |
+| **total** | **150** in 31 files |
 
 ### Engine: the modules under engine/src with tests
 
