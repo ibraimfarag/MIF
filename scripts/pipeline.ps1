@@ -130,6 +130,23 @@ $steps = @(
         What = 'Clippy with zero warnings allowed'
     },
     @{
+        Id   = 'signer.verify'
+        Tier = 'fast'
+        Dir  = $repo
+        Run  = {
+            # One release, one signing identity (docs/TODO.md 0.6 row 18, the
+            # register's "one signing identity per release" row, D-051's amendment).
+            # It needs no engine, no build, no certificate store and no Windows SDK
+            # - it signs three scratch manifests with two PFXs it mints in memory -
+            # so it is cheap enough to run on every change, which is the point: the
+            # wiring it holds (the workflow's secret name into the lane's input, the
+            # two callers sharing one @signArgs) failed silently once already
+            # (D-047) and would fail silently again until a release refused itself.
+            powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-signer-identity.ps1')
+        }
+        What = 'One certificate gives every build one identity, and the names that carry it agree'
+    },
+    @{
         Id   = 'engine.build'
         Tier = 'full'
         Dir  = Join-Path $repo 'engine'

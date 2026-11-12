@@ -93,7 +93,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Pipeline steps</td>
-      <td>13 across 3 tiers</td>
+      <td>14 across 3 tiers</td>
       <td>the same script a human runs and CI runs</td>
       <td><code>scripts&#47;pipeline.ps1</code>, <code>.github&#47;workflows&#47;ci.yml</code></td>
     </tr>
@@ -765,12 +765,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>data\app.so</code></td>
-      <td class="num">50</td>
+      <td class="num">54</td>
       <td class="num">66</td>
       <td class="num">0</td>
       <td class="num">0</td>
-      <td class="num">1</td>
-      <td class="num">117</td>
+      <td class="num">2</td>
+      <td class="num">122</td>
     </tr>
     <tr>
       <td><code>flutter_windows.dll</code></td>
@@ -785,10 +785,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>mics-engine.exe</code></td>
       <td class="num">55</td>
       <td class="num">1</td>
-      <td class="num">1243</td>
+      <td class="num">1244</td>
       <td class="num">97</td>
       <td class="num">0</td>
-      <td class="num">1396</td>
+      <td class="num">1397</td>
     </tr>
     <tr>
       <td><code>mics_app.exe</code></td>
@@ -850,7 +850,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>data\app.so</code></td>
       <td><code>flutter</code></td>
-      <td>the AOT snapshot names the engine entry points and embedder API it links against.</td>
+      <td>the AOT snapshot names the engine entry points and embedder API it links against. Raised 50 -&gt; 54 on 2026-11-12: what the substring matches here is the framework&#39;s own platform-channel names - flutter&#47;textinput, flutter&#47;lifecycle, flutter&#47;keydata, flutter&#47;mousecursor, flutter&#47;restoration, flutter&#47;keyboard, plugins.flutter.io&#47;path_provider, dev.leanflutter.plugins&#47;screen_retriever - and the four that appeared since 2026-11-03 are channels the app&#39;s newer window and tray UI opens. None of the 54 carries a path.</td>
     </tr>
     <tr>
       <td><code>data\app.so</code></td>
@@ -860,7 +860,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>data\app.so</code></td>
       <td><code>pubspec</code></td>
-      <td>the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine.</td>
+      <td>the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine. Raised 1 -&gt; 2 on 2026-11-12: both occurrences are error messages in the snapshot that end in the file name - &quot;...is expected until you remove this plugin from pubspec.yaml&quot; and &quot;...is not in the asset list (see pubspec.yaml \&quot;assets:\&quot;)&quot; - and the second one is this project&#39;s own asset gate talking, not a path to the machine that built it.</td>
     </tr>
     <tr>
       <td><code>flutter_windows.dll</code></td>
@@ -885,7 +885,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>mics-engine.exe</code></td>
       <td><code>cargo</code></td>
-      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -&gt; 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency&#39;s own source layout, not the account that built the file: the forbidden-path check stayed green in the same run.</td>
+      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -&gt; 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency&#39;s own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -&gt; 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads <code>&#47;build\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_json-1.0.154\src\error.rs</code> - so the extra occurrence is a repeat inside the toolchain&#39;s own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits).</td>
     </tr>
     <tr>
       <td><code>mics-engine.exe</code></td>
@@ -1194,6 +1194,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>fast</code></td>
       <td><code>engine.clippy</code></td>
       <td>Clippy with zero warnings allowed</td>
+    </tr>
+    <tr>
+      <td><code>fast</code></td>
+      <td><code>signer.verify</code></td>
+      <td>One certificate gives every build one identity, and the names that carry it agree</td>
     </tr>
     <tr>
       <td><code>full</code></td>

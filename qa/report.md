@@ -21,7 +21,7 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 30 files | 148 declared cases (a floor: loops add more at run time) | `flutter.test` step |
 | Engine tests | 26 modules | 206 declared cases | `engine.test` step |
-| Pipeline steps | 13 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
+| Pipeline steps | 14 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
 ## The pipe: 73 methods
@@ -174,9 +174,9 @@ Five markers are counted, case-insensitively, over the ISO-8859-1 bytes of every
 |---|---|---|---|---|---|---|
 | `audioplayers_windows_plugin.dll` | 104 | 0 | 0 | 0 | 0 | 104 |
 | `dartjni.dll` | 0 | 101 | 0 | 0 | 0 | 101 |
-| `data\app.so` | 50 | 66 | 0 | 0 | 1 | 117 |
+| `data\app.so` | 54 | 66 | 0 | 0 | 2 | 122 |
 | `flutter_windows.dll` | 1891 | 748 | 0 | 0 | 0 | 2639 |
-| `mics-engine.exe` | 55 | 1 | 1243 | 97 | 0 | 1396 |
+| `mics-engine.exe` | 55 | 1 | 1244 | 97 | 0 | 1397 |
 | `mics_app.exe` | 39 | 0 | 0 | 0 | 0 | 39 |
 | `screen_retriever_windows_plugin.dll` | 97 | 0 | 0 | 0 | 0 | 97 |
 | `tray_manager_plugin.dll` | 60 | 0 | 0 | 0 | 0 | 60 |
@@ -190,14 +190,14 @@ This is the allowlist: the reason column is what separates a measured fingerprin
 |---|---|---|
 | `audioplayers_windows_plugin.dll` | `flutter` | the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename. |
 | `dartjni.dll` | `dart` | a third-party JNI bridge built from the Flutter engine's sources; the strings are its type and API names. |
-| `data\app.so` | `flutter` | the AOT snapshot names the engine entry points and embedder API it links against. |
+| `data\app.so` | `flutter` | the AOT snapshot names the engine entry points and embedder API it links against. Raised 50 -> 54 on 2026-11-12: what the substring matches here is the framework's own platform-channel names - flutter/textinput, flutter/lifecycle, flutter/keydata, flutter/mousecursor, flutter/restoration, flutter/keyboard, plugins.flutter.io/path_provider, dev.leanflutter.plugins/screen_retriever - and the four that appeared since 2026-11-03 are channels the app's newer window and tray UI opens. None of the 54 carries a path. |
 | `data\app.so` | `dart` | the snapshot keeps the Dart VM's own type and library names; obfuscation renames ours, not the VM's. |
-| `data\app.so` | `pubspec` | the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine. |
+| `data\app.so` | `pubspec` | the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine. Raised 1 -> 2 on 2026-11-12: both occurrences are error messages in the snapshot that end in the file name - "...is expected until you remove this plugin from pubspec.yaml" and "...is not in the asset list (see pubspec.yaml \"assets:\")" - and the second one is this project's own asset gate talking, not a path to the machine that built it. |
 | `flutter_windows.dll` | `flutter` | the prebuilt Flutter engine is a third-party binary we do not compile; its strings are the framework's own and name no account. |
 | `flutter_windows.dll` | `dart` | the Dart VM inside that engine names itself; removing it would mean rebuilding Flutter from source. |
 | `mics-engine.exe` | `flutter` | the manifest names every shipped file and 54 of them sit under data\flutter_assets\, with flutter_windows.dll making 55: these are the paths the start-up self-check hashes, not the toolchain that built the engine. |
 | `mics-engine.exe` | `dart` | the package manifest names dartjni.dll among the files it lists, so the substring appears once: that is a shipped file name, not the Dart VM living in this binary. |
-| `mics-engine.exe` | `cargo` | rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. |
+| `mics-engine.exe` | `cargo` | rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -> 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads `/build\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_json-1.0.154\src\error.rs` - so the extra occurrence is a repeat inside the toolchain's own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits). |
 | `mics-engine.exe` | `rustc` | the engine's panic, version and RUST_BACKTRACE strings name the compiler that produced them; none of them carries a path. |
 | `mics_app.exe` | `flutter` | the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger). |
 | `screen_retriever_windows_plugin.dll` | `flutter` | the plugin calls the Flutter engine's C API by name; those symbols are in its import table and are not ours to rename. |
@@ -286,6 +286,7 @@ Parsed from `scripts/pipeline.ps1`, so this table cannot drift from the script a
 | `fast` | `flutter.test` | Widget, model, i18n and contrast tests |
 | `fast` | `engine.test` | Rust unit and integration tests |
 | `fast` | `engine.clippy` | Clippy with zero warnings allowed |
+| `fast` | `signer.verify` | One certificate gives every build one identity, and the names that carry it agree |
 | `full` | `engine.build` | Release build of the engine |
 | `full` | `engine.smoke` | The built engine starts and runs its own benchmark |
 | `full` | `engine.lifecycle` | The engine ends with the app that started it, and answers a shutdown first |

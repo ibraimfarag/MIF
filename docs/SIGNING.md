@@ -548,6 +548,51 @@ is closed on eligibility and on money at the same time.
    release before it. Until then the row is **ب7** in `docs/ROADMAP.md` and §7 of `docs/TODO.md`, with
    one deadline: before the next publish.
 
+   **The recipe, once (measured mechanism: `scripts\verify-signer-identity.ps1`, 18 checks).** The
+   environment hook is not this repair — `MICS_UPDATE_SIGNER_THUMBPRINT` has to name the certificate of
+   the *next* release, which is only knowable if the identity is being kept in the first place; it
+   belongs to probes and to an operator overriding a pin on purpose. What the lane needs is a key:
+
+   ```powershell
+   # 1. One identity, minted by the repo's own script (RSA 3072, SHA-256, codeSigning EKU).
+   #    Delete %TEMP%\mics-signing first if it is there: the script reuses a PFX it finds,
+   #    and what it would find is a throwaway from some interrupted build.
+   Remove-Item "$env:TEMP\mics-signing" -Recurse -Force -ErrorAction SilentlyContinue
+   $id = & powershell -ExecutionPolicy Bypass -File scripts\codesign-cert.ps1
+   Copy-Item $id.Pfx "$env:USERPROFILE\Documents\mics-release.pfx"   # never inside the repo
+   $id.Thumbprint      # this is what every future engine pins, and what the release
+   $id.Password        # report prints as `pinned :`; the password goes to the second secret
+
+   # 2. The two repository secrets, from those two values:
+   #      MICS_PFX          = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\Documents\mics-release.pfx"))
+   #      MICS_PFX_PASSWORD = $id.Password
+   ```
+
+   From then on, `make-release.ps1` signs the binaries *and* `dist\update.json` with that certificate
+   on any machine and any runner (the workflow hands `secrets.MICS_PFX` to `MICS_PFX_B64`), and the
+   release report says which identity it used and what it pinned:
+
+   ```
+     identity: the CA certificate in MICS_PFX_B64
+     pinned : 962AF1F7... (the update path in this engine trusts this certificate and no other)
+   ```
+
+   When no identity is configured the report now says the consequence instead of leaving it in a
+   comment — `WARN : the identity above was minted for this build and its key is deleted before this
+   script returns, so no later release can be signed by it` — so a build that pins a key it is about
+   to delete is a build somebody has to read a warning to ship. The PFX is the release key: it opens
+   in whoever has it, so it belongs in the repository secrets and in one offline copy, not in a build
+   folder (`docs/COST.md` section 5 has the store-thumbprint variant, `MICS_CERT_THUMBPRINT`, for a
+   certificate whose key never leaves a token).
+
+   **Measured, and it leaves the stores alone.** The pile this item is about was **24 entries / 12
+   distinct certificates** with that one subject when it was counted on 2026-11-11, and it was the
+   same after the work below: the probe mints its two certificates in memory and never writes a store,
+   and a lane run that *does* sign — the binaries and `dist\update.json` — with a PFX from
+   `MICS_PFX_B64` leaves no entry behind either, so a stable identity does not grow the pile that made
+   the CN pin useless. What still writes to `Cert:\CurrentUser` is `scripts\codesign-cert.ps1`, the
+   development fallback, which is the path the `WARN` above is about.
+
 ## 8. Sources, all read 2026-11-07
 
 | What | Where |

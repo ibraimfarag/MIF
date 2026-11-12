@@ -3174,3 +3174,29 @@ us to:** buying, donating or configuring a certificate; a Settings field for the
 environment hook is the operator's way in, as with the feed in D-046/D-047); pinning a CN in the
 binary for a certificate that does not exist yet; a key (SPKI) pin that would survive re-issuance; or
 putting the app's own signature under the same pin.
+
+**Amendment (2026-11-12 — the identity half is built, and the release report says it out loud).** The
+precondition above ends on "repairable without code", which is true and was not enough: a repair
+nobody performs is the defect staying. Two things landed for it, neither of them in the engine.
+`scripts\verify-signer-identity.ps1` is new and measures the mechanism in seconds with **no engine,
+no build, no store write and no Windows SDK** (`sign.ps1 -DataFile` is managed code): one PFX signs
+two scratch manifests and both detached signatures carry one thumbprint, equal to the certificate
+inside that PFX; a second PFX signs a third and carries a different one — the identity the engine
+refuses, recorded here and measured there (`verify-update.ps1` part 4, a manifest signed by another
+key, and part 7, the honest feed under the wrong pin). **18 checks, 0 failed, 5.1 s.** It also holds
+the *names* end to end, which is where this area has actually broken before: the workflow's
+`secrets.MICS_PFX` → `MICS_PFX_B64` → the lane's `-PfxPath` (D-047's wiring bug, now a check rather
+than a memory), one `@signArgs` for the staged binaries and for `dist\update.json`, both refusals of a
+PFX that arrives without its password, the lane's throwaway fallback and the `Remove-Item` on the
+folder its key lives in, and the four readers of `MICS_UPDATE_SIGNER_THUMBPRINT` (`signature.rs`,
+`verify-manifest.ps1`, `verify-update.ps1`, this probe). And `make-release.ps1`'s closing report now
+names the identity instead of leaving it in a signing step's log: `pinned : <thumbprint>` — the
+certificate the engine over *that* build will trust when it judges the next release — plus a `WARN`
+when the identity is the one whose key the script deletes before it returns, because a release that
+pins a deleted key is a release no later build can update, and the difference between the two is one
+repository secret. One correction to the sentence above: `MICS_UPDATE_SIGNER_THUMBPRINT` is *not* this
+repair, it is a probe and an operator override — it has to name the certificate of the **next**
+release, which is knowable only once an identity is being kept, so the variable cannot stand in for
+keeping one. **Measured end to end** by a lane run (below). The remaining act is the owner's and takes
+a minute: `docs/SIGNING.md` section 7 item 6 is the copy-paste recipe, and the deadline is unchanged —
+before the next publish.

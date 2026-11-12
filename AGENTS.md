@@ -28,10 +28,15 @@ cargo clippy --release -- -D warnings
 cd ..
 flutter analyze --no-pub
 flutter test --no-pub
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-signer-identity.ps1
 ```
 
-If cargo complains about `.cargo-build-lock` access, set
-`CARGO_TARGET_DIR` to a writable directory (see `docs/TODO.md` §8).
+`scripts\pipeline.ps1 -Tier fast` runs all five (the last one is its `signer.verify`
+step). If cargo complains about `.cargo-build-lock`, or about removing
+`target\release\mics-engine.exe` with `Access is denied. (os error 5)`, set
+`CARGO_TARGET_DIR` to a **fresh** writable directory (see `docs/TODO.md` §8 traps 1
+and 5): the second message means a running `mics-engine.exe` still holds the old
+binary, and a `%TEMP%\mics-target` left by an earlier session is itself a trap.
 
 ## Rules
 

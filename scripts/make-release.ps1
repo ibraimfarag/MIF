@@ -369,6 +369,12 @@ if ($EnginePath) { $EnginePath = (Resolve-Path $EnginePath).Path }
 $signPfxTemp = $null
 $signArgs = @()
 $signIdentity = ""
+# Whether the identity above is one that outlives this build. It is not the same
+# question as "is the package signed": a throwaway certificate signs just as well,
+# and D-051 then pins the update path to a certificate whose private key is deleted
+# below - so an update from this build to the next one can never be signed (0.6 row
+# 18). The report at the end of this script says so where the decision is made.
+$signThrowaway = $false
 $signedRequest = $Sign -or [bool]$PfxPath -or [bool]$Thumbprint
 if ($signedRequest) {
   if ($Thumbprint) {
@@ -401,6 +407,7 @@ if ($signedRequest) {
   } else {
     $signArgs = @("-SelfSigned")
     $signIdentity = "the self-signed development certificate (no CA certificate configured - docs/COST.md section 5)"
+    $signThrowaway = $true
   }
   Write-Host "signing identity: $signIdentity"
 }
@@ -713,6 +720,13 @@ $ruleCount = (Get-ChildItem (Join-Path $staging "rules") -Recurse -File).Count
 # are taken after signing, so the zip and SHA256SUMS describe the signed files.
 $signature = (Get-AuthenticodeSignature $app).Status
 $signer = (Get-AuthenticodeSignature $app).SignerCertificate.Subject
+# The certificate the engine over *this* build will trust when it judges a later
+# release's feed (D-051). Read here, while the staging folder is still the build, and
+# reported at the end: it is the one value a reader has to compare against the next
+# release, so it belongs in the release report rather than only in the log of a
+# signing step (0.6 row 18).
+$pinnedCert = (Get-AuthenticodeSignature $engine).SignerCertificate
+$pinnedPrint = if ($pinnedCert) { $pinnedCert.Thumbprint } else { "" }
 # What Task Manager calls the engine. Empty means the version resource did not get
 # embedded, and the engine will appear under its file name instead.
 $engineName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo(
@@ -884,6 +898,24 @@ if ($signature -eq "Valid") {
   Write-Output "  signed : $signature - Windows will show 'Unknown publisher' and SmartScreen"
   Write-Output "           may ask before the first run; see the SmartScreen row in the README troubleshooting table"
   Write-Output "           (a CA certificate needs MICS_PFX + MICS_PFX_PASSWORD or MICS_CERT_THUMBPRINT, docs/COST.md section 5)"
+}
+# The identity is not a detail of this build: D-051 makes the update path inside
+# `mics-engine.exe` check a feed's signature against the certificate over the engine
+# itself, so this release's certificate is the one the *next* release has to be
+# signed with for an update to exist at all. Say which certificate that is, and when
+# it cannot be kept, say that too - a release that pins a deleted key is a release no
+# later build can update, and the difference between the two is one repository
+# secret (0.6 row 18, scripts\verify-signer-identity.ps1 measures the mechanism).
+if ($signedRequest -and $pinnedPrint) {
+  Write-Output ("  pinned : {0} (the update path in this engine trusts this certificate and no other)" -f $pinnedPrint)
+}
+if ($signThrowaway) {
+  Write-Output "  WARN   : the identity above was minted for this build and its key is deleted before"
+  Write-Output "           this script returns, so no later release can be signed by it. A user on this"
+  Write-Output "           build will refuse the next one's manifest - fail-closed, and an update from"
+  Write-Output "           here that never arrives. Fix before publishing: mint one certificate once and"
+  Write-Output "           keep it as the MICS_PFX and MICS_PFX_PASSWORD repository secrets, or put one in"
+  Write-Output "           a store and pass MICS_CERT_THUMBPRINT (docs/COST.md section 5)."
 }
 Write-Output "verify with: powershell -ExecutionPolicy Bypass -File scripts\verify-release.ps1"
 Write-Output "             powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1"

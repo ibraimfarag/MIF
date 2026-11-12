@@ -1,6 +1,6 @@
 {
   "artifact": "dist/MICS-portable",
-  "measured": "2026-11-03",
+  "measured": "2026-11-12",
   "definition": "case-insensitive substring count over the whole file, decoded as ISO-8859-1 (one byte, one character)",
   "policy": {
     "forbidden": "the profile path of the account that runs the probe, and its leaf directory: zero hits, always - the probe computes it, this file never stores it",
@@ -33,16 +33,16 @@
     "data\\app.so": {
       "counts": {
         "flutter": {
-          "count": 50,
-          "reason": "the AOT snapshot names the engine entry points and embedder API it links against."
+          "count": 54,
+          "reason": "the AOT snapshot names the engine entry points and embedder API it links against. Raised 50 -> 54 on 2026-11-12: what the substring matches here is the framework's own platform-channel names - flutter/textinput, flutter/lifecycle, flutter/keydata, flutter/mousecursor, flutter/restoration, flutter/keyboard, plugins.flutter.io/path_provider, dev.leanflutter.plugins/screen_retriever - and the four that appeared since 2026-11-03 are channels the app's newer window and tray UI opens. None of the 54 carries a path."
         },
         "dart": {
           "count": 66,
           "reason": "the snapshot keeps the Dart VM's own type and library names; obfuscation renames ours, not the VM's."
         },
         "pubspec": {
-          "count": 1,
-          "reason": "the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine."
+          "count": 2,
+          "reason": "the package name from pubspec.yaml is baked into the snapshot: it names the product, not the machine. Raised 1 -> 2 on 2026-11-12: both occurrences are error messages in the snapshot that end in the file name - \"...is expected until you remove this plugin from pubspec.yaml\" and \"...is not in the asset list (see pubspec.yaml \\\"assets:\\\")\" - and the second one is this project's own asset gate talking, not a path to the machine that built it."
         }
       }
     },
@@ -61,8 +61,8 @@
     "mics-engine.exe": {
       "counts": {
         "cargo": {
-          "count": 1243,
-          "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\\target\\release\\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\\src\\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run."
+          "count": 1244,
+          "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\\target\\release\\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\\src\\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -> 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads `/build\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_json-1.0.154\\src\\error.rs` - so the extra occurrence is a repeat inside the toolchain's own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits)."
         },
         "dart": {
           "count": 1,
