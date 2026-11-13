@@ -3375,3 +3375,50 @@ QA report is regenerated with the new case count (33 test files, 162 declared ca
 158), so the committed report and the registries agree again. What the step buys is not the wording it
 changed but the fact that the wording can no longer drift in silence: an Arabic string added tomorrow
 is checked by the same four rules, and its failure names the فصحى word that belongs there.
+
+## D-056 — The scanner never judges the product's own files
+
+**Status:** implemented (2026-11-13).
+
+**Context.** A scan pointed at a copy of the package — `dist\MICS-portable\`, the folder the
+release is staged in — reported two findings: `mics-engine.exe` and
+`rules\yara\starter.yar`, both as `yara:Suspicious_Cmd_PowerShell_Download,
+Suspicious_BAT_Certutil_Download, Suspicious_HTA_Exec`. Neither is a false *match*: the engine
+carries the command strings those rules look for (`certutil -urlcache`, `DownloadString`,
+`mshta` — the collectors shell out to them), and a rules file *is* the patterns it matches. The
+product matched itself by construction.
+
+The damage came from what happens next. Findings at `high` are quarantined **without asking**
+(`run_job`'s auto-quarantine), so the product moved **its own engine** — 24,300,976 bytes,
+`sha256 20e3b3c2…d050f54`, the very hash published in `VERSION` and `SHA256SUMS` — and its rules
+file out of the package they were run from, silently. A scheduled scan was enabled on the machine
+(the engine's own test fails `assert!(!status.enabled)` here, because that test reads live settings
+rather than a default) with its target inside the build output, so the tick re-walked `dist\` and
+left it empty: the zip, `SHA256SUMS`, `release\` and `symbols\` went too, including files no rule
+matches — which the quarantine list alone does not explain. The shipped zip, built before the
+first deletion, kept its hash (`f15b34a2…f6e2fd`, 22,684,796 bytes) and re-extracting it proved
+the payload: both restored files hashed exactly as `SHA256SUMS` says.
+
+**Decision.**
+
+- `is_product_file()` decides what a scan never queues: any `*.yar`/`*.yara` (a rules file is the
+  patterns it matches, wherever the copy lives), the `rules\` tree **of our own package only** —
+  anchored on the running engine's directory, so a user's own folder called `rules` is still
+  scanned — and the engine's own image.
+- `signed_by_us()` decides what a quarantine never moves: any file carrying the signer this engine
+  is signed with. A copy of the package somewhere else has a path that is not ours, but the release
+  certificate (`ABB0FF3D…` as pinned) is — and that is the identity that survives being copied.
+- The rules are skipped, not hidden: they count in the scan's `skipped` figure like any oversized
+  file, so the UI's numbers stay honest about what was looked at.
+- Three unit tests in `engine/src/scanner/mod.rs` hold the line: the `.yar` extension in any
+  location, the running engine's own image and sibling `rules\`, and the negative case — a user's
+  `rules` folder and a `.doc` file are still judged.
+
+**Consequences.** A copy of the package can no longer be turned into a threat by its own rules, and
+the product cannot be talked into eating itself again. `cargo test --bin mics-engine` is
+**211 passing, 1 failing**, and the failure is not this change: `the_status_serializes_the_shapes_the_ui_reads`
+asserts the schedule is off while reading the live machine, so it passes on a fresh host and fails on
+an installed one. The responsibility this does **not** take over is the alarm when our own binary is
+wrong: that stays with the tamper self-check, which pins the manifest and the signer, and it is not
+weakened by skipping our own files here. **Open:** the six `mics_app.exe` crash dumps written during
+the incident (`%LOCALAPPDATA%\CrashDumps`, 18:44–18:52) have not been read.

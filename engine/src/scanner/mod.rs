@@ -444,10 +444,16 @@ fn run_job(
             let mut stored = 0usize;
             if let Ok(qm) = QuarantineManager::new() {
                 for f in &found {
-                    if rt
-                        .block_on(qm.quarantine_file(Path::new(&f.path), &f.reason))
-                        .is_ok()
-                    {
+                    let path = Path::new(&f.path);
+                    // The product is never quarantined, and neither is a copy of
+                    // it: the rules match our engine because it contains the
+                    // strings they look for, and it carries the same certificate
+                    // that signed this engine.
+                    if is_product_file(path) || signed_by_us(path) {
+                        tracing::warn!("keeping own file out of quarantine: {}", f.path);
+                        continue;
+                    }
+                    if rt.block_on(qm.quarantine_file(path, &f.reason)).is_ok() {
                         stored += 1;
                     }
                 }
@@ -496,6 +502,56 @@ fn pct(processed: i64, total: i64) -> u32 {
     ((processed as f64 / total as f64) * 100.0).clamp(0.0, 100.0) as u32
 }
 
+/// Files the scanner must never judge: the YARA rules themselves, the `rules\`
+/// tree we ship, and this engine's own image.
+///
+/// A rules file *is* the patterns it matches, and the engine carries the command
+/// strings those patterns look for (`certutil -urlcache`, `DownloadString`,
+/// `mshta`), so the two match each other by construction. Scanning them reported
+/// the product as a threat and - because findings are quarantined without asking
+/// - moved its own engine and rules out of the package they were run from.
+///
+/// A *copy* of the package is settled at the quarantine itself, by
+/// [`signed_by_us`]: its path is not ours, but its certificate is.
+fn is_product_file(path: &Path) -> bool {
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let ext = ext.to_ascii_lowercase();
+        if ext == "yar" || ext == "yara" {
+            return true;
+        }
+    }
+    // Our own package: the layout the release is unpacked into, where `rules\`
+    // sits beside the exe. A user's own `rules\` folder is not ours to skip, so
+    // this is anchored on where this engine is running from.
+    if let Ok(own) = std::env::current_exe() {
+        if let Some(dir) = own.parent() {
+            if path.starts_with(dir.join("rules")) || path == own {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Whether `path` carries the signer this engine is signed with.
+///
+/// Our binaries are signed with the release certificate, so a package the user
+/// copied elsewhere and pointed a scan at is still the product - not something
+/// the product should quarantine out from under them.
+fn signed_by_us(path: &Path) -> bool {
+    use crate::platform::windows::signature::embedded_signer_thumbprint;
+    let Ok(own) = std::env::current_exe() else {
+        return false;
+    };
+    let Some(ours) = embedded_signer_thumbprint(&own) else {
+        return false;
+    };
+    matches!(
+        embedded_signer_thumbprint(path),
+        Some(theirs) if theirs.eq_ignore_ascii_case(&ours)
+    )
+}
+
 /// Walks the root, scores every file, and persists the queue in one batch.
 fn enumerate(storage: &Storage, job_id: &str, root: &Path) -> Result<()> {
     let mut queue: Vec<(i64, String, i64)> = Vec::new();
@@ -510,6 +566,11 @@ fn enumerate(storage: &Storage, job_id: &str, root: &Path) -> Result<()> {
             continue;
         }
         let path = entry.path();
+        // The product is not a suspect; see `is_product_file`.
+        if is_product_file(path) {
+            skipped += 1;
+            continue;
+        }
         let too_big = entry
             .metadata()
             .map(|m| m.len() > MAX_FILE_BYTES)
@@ -652,6 +713,41 @@ pub fn run_scan(root: &Path, quarantine: bool) -> Result<ScanReport> {
         .context("run_scan needs a tokio runtime")?;
     let id = start_scan(root.to_path_buf(), quarantine, rt)?;
     await_report(&id)
+}
+
+#[cfg(test)]
+mod product_file_tests {
+    use super::*;
+
+    #[test]
+    fn the_rules_are_never_scanned_as_content() {
+        // A rules file *is* the patterns it matches, so matching it is
+        // meaningless - wherever the copy of the package happens to live.
+        assert!(is_product_file(Path::new("/x/rules/yara/starter.yar")));
+        assert!(is_product_file(Path::new(r"C:\pkg\rules\yara\Starter.YARA")));
+        assert!(is_product_file(Path::new(r"C:\somewhere\notes.yar")));
+    }
+
+    #[test]
+    fn this_engines_own_image_and_rules_are_skipped() {
+        let own = std::env::current_exe().expect("the test binary runs from somewhere");
+        assert!(is_product_file(&own));
+        let shipped = own
+            .parent()
+            .expect("a file has a parent")
+            .join("rules")
+            .join("yara")
+            .join("starter.yar");
+        assert!(is_product_file(&shipped));
+    }
+
+    #[test]
+    fn a_users_files_are_still_judged() {
+        assert!(!is_product_file(Path::new("/home/u/invoice.pdf")));
+        assert!(!is_product_file(Path::new("/home/u/rulebook.doc")));
+        // A user's own folder called `rules` is not ours to skip.
+        assert!(!is_product_file(Path::new("/home/u/rules/notes.txt")));
+    }
 }
 
 #[cfg(test)]
