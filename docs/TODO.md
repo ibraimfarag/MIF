@@ -232,9 +232,9 @@
 > ends the engine rather than the window (D-053), the Explorer entry per user in
 > HKCU plus the key that enables it (D-054), and the فصحى pass with the gate that
 > keeps it (D-055).
-> The package: `MICS-portable-0.1.2-x64.zip` **22,684,796 bytes**
-> `sha256 f15b34a21050b105485ca23cb90959ed7ab1c54e89953d057810252572f6e2fd`, engine
-> `20e3b3c2…`, app `8ba89db5…`, `VERSION` built 2026-11-13 18:20:11 +02:00, signed
+> The package: `MICS-portable-0.1.2-x64.zip` **22,689,130 bytes**
+> `sha256 a4894bdb21d297b1ae2bb884393c669224aa1475f9a6ec441cf95756d4883abf`, engine
+> `5b32b31f…`, app `8584afe2…`, `VERSION` built 2026-11-13 19:43:19 +02:00 (rebuilt after D-056; no -BuildTime pinned, so the app hash moved), signed
 > by the same certificate `0.1.1` pinned (`ABB0FF3D…`), so an installed `0.1.1`
 > engine accepts the `0.1.2` feed. **No installer was built for this cut** —
 > `make-installer.ps1` was not run, so there is no `MICS-setup-0.1.2-x64.exe`
