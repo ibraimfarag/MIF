@@ -112,6 +112,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     super.dispose();
   }
 
+  /// The engine's own refusal, translated, when this app has one on record.
+  ///
+  /// The audit's error on its own reads "engine not running" — a symptom. The
+  /// client keeps what the engine said on its way down (`lastFailure` in
+  /// `ipc_client.dart`) precisely because a refusal like the Low-integrity one is
+  /// actionable and the retry button cannot fix it. Read once: this branch only
+  /// paints after an audit failed, and a retry re-runs the audit.
+  ({String what, String fix})? _engineRefusal(BuildContext context) {
+    final kind = classifyEngineFailure(ref.read(engineIpcProvider).lastFailure);
+    final suffix = switch (kind) {
+      EngineFailureKind.lowIntegrity => 'lowIntegrity',
+      EngineFailureKind.dataDirUnwritable => 'dataDir',
+      EngineFailureKind.engineMissing => 'missing',
+      EngineFailureKind.spawnFailed => 'spawn',
+      null => null,
+    };
+    if (suffix == null) return null;
+    return (
+      what: context.tr('engine.fail.$suffix'),
+      fix: context.tr('engine.fail.$suffix.fix'),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(auditProvider);
@@ -127,6 +150,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           else if (state.error != null && report == null)
             _ErrorCard(
                 message: state.error!,
+                refusal: _engineRefusal(context),
                 onRetry: () => ref.read(auditProvider.notifier).runAudit())
           else if (report != null) ...[
             Row(
@@ -577,11 +601,17 @@ class _SkeletonBoxState extends State<_SkeletonBox>
 }
 
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message, required this.onRetry});
+  const _ErrorCard({required this.message, this.refusal, required this.onRetry});
   final String message;
+
+  /// The engine's own refusal, translated, shown *above* [message] when this app
+  /// has one: "engine not running" is the symptom, this is the reason and the way
+  /// out. Null keeps the card as it always was.
+  final ({String what, String fix})? refusal;
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
+    final refusal = this.refusal;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -592,9 +622,25 @@ class _ErrorCard extends StatelessWidget {
       child: Column(children: [
         Icon(Icons.error_outline, color: AppColors.red, size: 36),
         const SizedBox(height: 12),
-        Text(message,
-            style: TextStyle(color: AppColors.muted),
-            textAlign: TextAlign.center),
+        if (refusal == null)
+          Text(message,
+              style: TextStyle(color: AppColors.muted),
+              textAlign: TextAlign.center)
+        else ...[
+          Text(refusal.what,
+              style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          Text(refusal.fix,
+              style: TextStyle(color: AppColors.muted),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          // Kept verbatim and quiet: it is what a bug report needs, not what the
+          // user is meant to read first.
+          Text('${context.tr('engine.fail.detail')}: $message',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+              textAlign: TextAlign.center),
+        ],
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: onRetry,

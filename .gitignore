@@ -72,3 +72,4 @@ dist/
 # Agent scratch — Claude Code worktrees and Mimosa hook state — local only, never shipped
 /.claude/
 .mimosa/
+/.zcode/

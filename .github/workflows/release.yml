@@ -437,7 +437,7 @@ jobs:
 
           | File | What it is |
           |---|---|
-          | `MICS-portable-@VERSION@-x64.zip` | The portable package: unpack it anywhere, run `mics_app.exe` |
+          | `MICS-portable-@VERSION@-x64.zip` | The portable package: unpack it into a folder of your own, run `mics_app.exe`. Not inside a web root — the engine will not start from a Low-integrity folder |
           | `MICS-setup-@VERSION@-x64.exe` | The installer: one UAC prompt, Start Menu and desktop shortcuts, uninstall entry |
           | `report.md` | The QA report of the run that built these files |
           | `SHA256SUMS` | Hashes of exactly the files above, made in this run |

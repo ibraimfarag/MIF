@@ -477,6 +477,45 @@ class EngineException implements Exception {
 
 enum EngineState { stopped, running, reconnecting, engineMissing }
 
+/// The shape of the engine's last refusal, so a screen can say it in the user's
+/// language instead of echoing the engine's English sentence.
+enum EngineFailureKind {
+  /// Windows gives a process the integrity label of the folder its image sits
+  /// in. From a Low-labelled folder — a web root, a sandbox output — the engine
+  /// cannot write its state database or reach the privileged helper, so it
+  /// refuses to run at all.
+  lowIntegrity,
+
+  /// The engine ran but its data directory is not writable.
+  dataDirUnwritable,
+
+  /// No `mics-engine.exe` where the app expects it.
+  engineMissing,
+
+  /// The process could not be created at all.
+  spawnFailed,
+}
+
+/// Classifies [reason] — the client's `lastFailure`, which is either the
+/// engine's own stderr tail or a line this app wrote — into something the UI can
+/// translate. Null means "nothing to add", and the caller keeps whatever message
+/// it already had.
+EngineFailureKind? classifyEngineFailure(String? reason) {
+  if (reason == null || reason.isEmpty) return null;
+  final r = reason.toLowerCase();
+  // The Low-integrity refusal also quotes "readonly database", so it has to be
+  // recognised before the data-dir case.
+  if (r.contains('low-integrity') || r.contains('low integrity')) {
+    return EngineFailureKind.lowIntegrity;
+  }
+  if (r.contains('not writable') || r.contains('readonly database')) {
+    return EngineFailureKind.dataDirUnwritable;
+  }
+  if (r.contains('is not at')) return EngineFailureKind.engineMissing;
+  if (r.contains('could not be started')) return EngineFailureKind.spawnFailed;
+  return null;
+}
+
 /// Keeps the last [keep] non-empty lines of [stream] in [into].
 ///
 /// A refusal is a sentence at the *end* of whatever the engine printed on its

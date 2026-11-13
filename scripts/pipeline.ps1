@@ -290,6 +290,22 @@ $steps = @(
             powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-tamper.ps1')
         }
         What = 'A tampered copy of the package is refused by the gate and reported by the engine'
+    },
+    @{
+        Id   = 'portable.pair'
+        Tier = 'release'
+        Dir  = $repo
+        Run  = {
+            # The archive a user downloads, not the tree it was built in: unpacked
+            # into a folder outside the repository, the pair has to start and the
+            # engine has to call its package whole. This is the failure the owner
+            # hit - the zip unpacked inside a web root, Windows labelling the folder
+            # Low integrity, and the engine refusing to start from it without
+            # saying why. `verify-manifest.ps1` above checks the *folder*; only
+            # this runs the *archive* somewhere else.
+            powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts\verify-portable-pair.ps1')
+        }
+        What = 'The published archive starts its pair from a folder outside the repository'
     }
 )
 

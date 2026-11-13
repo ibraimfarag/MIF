@@ -81,8 +81,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Dart tests</td>
-      <td>31 files</td>
-      <td>150 declared cases (a floor: loops add more at run time)</td>
+      <td>32 files</td>
+      <td>156 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
@@ -93,7 +93,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Pipeline steps</td>
-      <td>14 across 3 tiers</td>
+      <td>15 across 3 tiers</td>
       <td>the same script a human runs and CI runs</td>
       <td><code>scripts&#47;pipeline.ps1</code>, <code>.github&#47;workflows&#47;ci.yml</code></td>
     </tr>
@@ -949,6 +949,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>0</td>
     </tr>
     <tr>
+      <td><code>test&#47;engine_failure_card_test.dart</code></td>
+      <td>6</td>
+    </tr>
+    <tr>
       <td><code>test&#47;engine_refusal_test.dart</code></td>
       <td>3</td>
     </tr>
@@ -1054,7 +1058,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**150** in 31 files</td>
+      <td>**156** in 32 files</td>
     </tr>
   </tbody>
 </table>
@@ -1253,6 +1257,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>release</code></td>
       <td><code>tamper.verify</code></td>
       <td>A tampered copy of the package is refused by the gate and reported by the engine</td>
+    </tr>
+    <tr>
+      <td><code>release</code></td>
+      <td><code>portable.pair</code></td>
+      <td>The published archive starts its pair from a folder outside the repository</td>
     </tr>
   </tbody>
 </table>

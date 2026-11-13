@@ -1,7 +1,16 @@
 {
   "engine.missing": "Engine not found",
-  "engine.reconnecting": "Reconnecting…",
+  "engine.reconnecting": "Reconnecting...",
   "engine.running": "Protected",
   "engine.stopped": "Stopped",
-  "state.engine": "Engine"
+  "state.engine": "Engine",
+  "engine.fail.lowIntegrity": "MI CS was started from a Low-integrity folder. Windows gives a process the integrity level of the folder its image sits in, so the engine cannot write its state database or reach the privileged helper — both are healthy.",
+  "engine.fail.lowIntegrity.fix": "Run the installed copy in %LOCALAPPDATA%\\MI CS, or extract the release archive into a folder outside any web root or sandbox output folder.",
+  "engine.fail.dataDir": "The engine's data folder is not writable.",
+  "engine.fail.dataDir.fix": "Make sure %LOCALAPPDATA%\\MICS is writable, or run the installed copy of MI CS.",
+  "engine.fail.missing": "mics-engine.exe is not beside the app.",
+  "engine.fail.missing.fix": "Extract the release archive in full, or reinstall MI CS.",
+  "engine.fail.spawn": "The engine process could not be created.",
+  "engine.fail.spawn.fix": "Try again; if it keeps failing, run the installed copy.",
+  "engine.fail.detail": "Engine's technical message"
 }

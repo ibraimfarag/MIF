@@ -1,7 +1,16 @@
 {
   "engine.missing": "المحرك غير موجود",
-  "engine.reconnecting": "إعادة الاتصال…",
+  "engine.reconnecting": "إعادة الاتصال...",
   "engine.running": "محمي",
   "engine.stopped": "متوقف",
-  "state.engine": "المحرك"
+  "state.engine": "المحرك",
+  "engine.fail.lowIntegrity": "بدأ MI CS من مجلد ذي مستوى سلامة منخفض (Low integrity)، وويندوز يمنح كل عملية مستوى سلامة المجلد الذي يقع فيه ملفها؛ لذلك لا يستطيع المحرّك كتابة قاعدة بياناته ولا الوصول إلى المساعد المميّز، وهو سليم.",
+  "engine.fail.lowIntegrity.fix": "شغّل النسخة المثبَّتة من %LOCALAPPDATA%\\MI CS، أو أعد استخراج ملف الإصدار في مجلد خارج أي web root أو مجلد sandbox.",
+  "engine.fail.dataDir": "مجلد بيانات المحرّك غير قابل للكتابة.",
+  "engine.fail.dataDir.fix": "تأكد من إمكانية الكتابة في %LOCALAPPDATA%\\MICS، أو شغّل النسخة المثبَّتة من MI CS.",
+  "engine.fail.missing": "لم يُعثر على ملف المحرّك بجوار التطبيق.",
+  "engine.fail.missing.fix": "أعد استخراج ملف الإصدار بالكامل، أو أعد تثبيت MI CS.",
+  "engine.fail.spawn": "تعذّر إنشاء عملية المحرّك.",
+  "engine.fail.spawn.fix": "أعد المحاولة، وإن تكرّر الفشل فشغّل النسخة المثبَّتة.",
+  "engine.fail.detail": "رسالة المحرّك التقنية"
 }

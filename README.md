@@ -75,7 +75,7 @@ delivered to strangers by a robot):
 | File | What it is | Measured 2026-11-11 |
 |---|---|---|
 | `MICS-setup-0.1.0-x64.exe` | The installer: one UAC prompt, Start-Menu and desktop shortcuts, an entry in Apps & features, an uninstaller — and the privileged helper. **Recommended.** | 16,642,682 bytes, SHA-256 `5cd206db…f84f5`, **not signed** (see below) |
-| `MICS-portable-0.1.0-x64.zip` | The portable package: unpack it anywhere and run `mics_app.exe`. Nothing registered, nothing to uninstall. | 23,111,206 bytes, SHA-256 `1eafe3ee…fe6b0`, 69 files |
+| `MICS-portable-0.1.0-x64.zip` | The portable package: unpack it into a folder of your own and run `mics_app.exe`. Nothing registered, nothing to uninstall. Not inside a web root — the engine will not start from a Low-integrity folder ([why](#troubleshooting)). | 23,111,206 bytes, SHA-256 `1eafe3ee…fe6b0`, 69 files |
 | `SHA256SUMS` | The SHA-256 of exactly the files above, written by the run that built them. | re-checked: all three hashes match the downloaded bytes |
 | `report.md` | The QA report of that same run. | SHA-256 `8bc5fab2…846a16` |
 
@@ -302,10 +302,16 @@ later instead. `Uninstall MI CS` removes the lot — the helper included.
 
 **Portable.** Nothing registered, nothing to uninstall: take
 `MICS-portable-<version>-x64.zip`, or the already-unpacked `dist\MICS-portable`
-folder, and put it anywhere (the installed location, `%LOCALAPPDATA%\MI CS\`, a USB
-stick — not a Low-integrity folder such as a web root: Windows refuses notification
-cards to low-integrity processes, so the app would run and stay quiet; see
-[Troubleshooting](#troubleshooting)).
+folder, and put it almost anywhere (the installed location, `%LOCALAPPDATA%\MI CS\`,
+a USB stick). **Not inside a web root, or any other Low-integrity folder.** Windows
+gives a process the integrity label of the folder its image sits in; from a
+Low-labelled folder the engine cannot write its state database or reach the
+privileged helper, so it refuses to start — and because this app starts it detached,
+that refusal reaches the window as a bare "engine not running". It now names the
+folder and the way out instead, and
+`scripts\verify-portable-pair.ps1` unpacks the published zip outside the repository
+on every release run to prove the pair starts there; see
+[Troubleshooting](#troubleshooting).
 `dist\SHA256SUMS` lists the SHA-256 of the zip and of the files inside it, so a
 single extracted file can be checked too. If MI CS is running from the unpacked
 folder, `make-release.ps1` leaves it alone rather than deleting files in use — the
@@ -724,6 +730,7 @@ those ten frames, `app_icon.ico` and `mics.ico` are byte-identical, and
 | A fix reports a permissions error | That change needs administrator rights: use **Settings → Engine → Install helper** (one prompt), then retry — it should not ask again. |
 | **Settings → About says `unverified`**, or a card says these files are not the published ones | The folder no longer matches the manifest inside `mics-engine.exe`: a shipped file changed (a partial copy, an antivirus shim feeding a modified DLL, a repackaged build). `powershell -ExecutionPolicy Bypass -File scripts\verify-manifest.ps1 -Path <folder>` names the file and refuses the folder; re-extract from the zip and check it against `SHA256SUMS`. A copy you *built* yourself has no manifest until `make-release.ps1 -Sign` writes one — which is why a development build shows this line and no card. |
 | **Settings → About says `untrusted-certificate`** | Our certificate is in the engine but this Windows has not been told to trust it (the self-signed release certificate was never installed here, or its root is not trusted yet). This is **not** a mismatch — no file changed — so the line is neutral and no card is raised (D-002). Installing the certificate (`make-release.ps1 -Sign` does it in `CurrentUser\Root`) turns it into `ok`. |
+| The dashboard cannot audit and says *engine not running*, while the top bar reads *Engine not found* — Retry changes nothing | Same cause as the row below, one step worse: from a **low-integrity** folder the engine does not go quiet, it refuses to start, because it can neither write its state database nor reach the privileged helper. The card now names the folder it refused to start from and the way out; move MI CS to a normal folder (`%LOCALAPPDATA%\MI CS` is the tested one), or raise the label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. `scripts\verify-portable-pair.ps1` unpacks the published zip outside the repository and starts the pair there, so this stays fixed in every release. |
 | No desktop cards appear | Check **Settings → Notifications → Desktop notifications** and do-not-disturb (it keeps only CRITICAL). Windows also refuses cards to a **low-integrity** process, which is what you get when the app runs from a confined/sandboxed folder — including a web-root tree like `...\server\www\`, where the folder carries a Low Mandatory Level label: move MI CS to a normal folder (`%LOCALAPPDATA%\MI CS` is the tested one), or raise the folder's label with `icacls "<folder>" /setintegritylevel Medium /T` as an administrator. The engine names the reason itself in `notify.test`'s error and in the log. |
 | Engine shows *Engine not found* | `mics-engine.exe` must sit next to `mics_app.exe` (or set `MICS_ENGINE_PATH`). |
 | A scan looks stuck | It is a durable job — watch the progress card. Closing the window does not stop it, and killing the engine is safe: it resumes at the next file. |
