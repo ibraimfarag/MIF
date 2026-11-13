@@ -64,14 +64,34 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   /// labels because that is all `AppendMenuW` can draw — the styled surface is
   /// the tray panel a left click opens, and this is what a right click has
   /// always meant on Windows.
+  ///
+  /// The two labels come from the language packs, not from string literals
+  /// (D-053): this is a tray surface the app itself draws, so it is Arabic or
+  /// English with every other label. It is re-drawn on a language change; the
+  /// tooltip stays [appDisplayName] because that is the product's own name —
+  /// the same string the window title and Task Manager use, not copy.
   Future<void> _setupTray() async {
     await trayManager.setIcon('assets/icons/mics.ico');
     await trayManager.setToolTip(appDisplayName);
-    await trayManager.setContextMenu(Menu(items: [
-      MenuItem(key: 'show', label: 'Open $appDisplayName'),
-      MenuItem.separator(),
-      MenuItem(key: 'quit', label: 'Quit'),
-    ]));
+    await _applyTrayMenu();
+  }
+
+  /// Draws the native menu in the language Settings is set to, and with the
+  /// pack's labels rather than the raw keys when the tables are not warm yet.
+  Future<void> _applyTrayMenu() async {
+    final lang = ref.read(settingsProvider).value?.lang ?? AppLang.ar;
+    final tables = ref.read(i18nProvider).value ?? const <String, Map<String, String>>{};
+    String label(String key) => lookup(tables, lang, key);
+    try {
+      await trayManager.setContextMenu(Menu(items: [
+        MenuItem(key: 'show', label: label('shell.tray.open')),
+        MenuItem.separator(),
+        MenuItem(key: 'quit', label: label('shell.tray.quit')),
+      ]));
+    } catch (_) {
+      // A platform where `tray_manager` is not answering (a test, a stripped
+      // build) must not throw out of the boot sequence.
+    }
   }
 
   /// Closing the window hides MI CS to the tray and leaves the engine running —
@@ -83,7 +103,8 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   /// Ends this app on purpose: ask the engine it started to stop, then close
   /// the window. The engine also holds a handle to this process, so an answer
   /// that never arrives still takes it with us. The panel's `Quit` and the
-  /// native menu's are this same method (D-040).
+  /// native menu's are this same method (D-040), and it is a *full* exit: it
+  /// stops the engine rather than parking the app in the tray (D-053).
   Future<void> _quit() => ref.read(trayPanelProvider.notifier).quit();
 
   @override
@@ -166,6 +187,17 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     ref.listenManual(settingsProvider, (prev, next) {
       final s = next.value;
       if (s != null) ipc.spawnEnv = s.engineEnv();
+      // The native tray menu is drawn by the app once; a language change has to
+      // redraw it, or the right-click menu keeps the old language while every
+      // Flutter surface follows Settings (D-053).
+      if (prev?.value?.lang != s?.lang) {
+        _applyTrayMenu();
+      }
+    });
+    // The tables land after the icon does; redraw once they are there so the
+    // menu shows words rather than the keys it was built with.
+    ref.listenManual(i18nProvider, (prev, next) {
+      _applyTrayMenu();
     });
     final s = ref.read(settingsProvider).value;
     if (s != null) ipc.spawnEnv = s.engineEnv();

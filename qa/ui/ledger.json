@@ -128,7 +128,7 @@
     "surfaces.trayPanel": [
       "FilledButton(Open MI CS)",
       "IconButton(Close the panel)",
-      "OutlinedButton(Quit)",
+      "OutlinedButton(Quit MI CS completely)",
       "_Toggle/Switch",
       "_Toggle/Switch#2",
       "_Toggle/Switch#3"

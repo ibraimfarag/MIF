@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/window/tray_panel.dart';
 
+import '../qa/ui/fake_engine.dart';
 import '../qa/ui/harness.dart';
 
 void main() {
@@ -108,7 +109,7 @@ void main() {
     await settle(tester);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Quit'));
+    await tester.tap(find.text('Quit MI CS completely'));
     await settle(tester);
     // Quit asks the engine it started to stop and then closes the window; with
     // no window_manager to answer (this test) it must still end quietly.
@@ -117,5 +118,38 @@ void main() {
       isNull,
       reason: 'Quit threw instead of ending quietly',
     );
+  });
+
+  testWidgets('Quit is a full exit: the engine is stopped, then the window goes', (
+    tester,
+  ) async {
+    final engine = FakeEngine();
+    await openScreen(tester, const TrayPanel(), engine: engine);
+    await settle(tester);
+
+    // Watch the window channel itself, after the harness installed its
+    // catch-all handler, so `destroy` is told apart from every other call.
+    final windowCalls = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('window_manager'),
+      (call) async {
+        windowCalls.add(call.method);
+        return null;
+      },
+    );
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'), null));
+
+    await tester.tap(find.text('Quit MI CS completely'));
+    await settle(tester);
+
+    // The label promises the whole app, so the exit has to reach both halves:
+    // the engine this app started, and the process that is the window.
+    expect(engine.engineStopped, isTrue,
+        reason: 'Quit must stop the engine this app started');
+    expect(windowCalls, contains('destroy'),
+        reason: 'Quit must end the window process');
   });
 }

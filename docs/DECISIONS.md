@@ -3249,3 +3249,41 @@ The user decided to remove the feature rather than keep it dark.
 honours are the ones `docs/THREAT-MODEL.md` B9 lists. L5 Mind is incident correlation only, which is
 what the README now says. A settings document written by an older build still loads: the removed keys
 are simply ignored. D-005 is superseded, kept as the record of the earlier decision.
+
+## D-053 — The tray is the app's surface for the language packs, and Quit is a full exit
+
+**Status:** implemented (2026-11-13).
+
+**Context.** Two gaps sat on the tray surface (D-040's panel and the native menu next to it):
+
+- the native right-click menu was drawn once, at boot, from English string literals — `'Open $appDisplayName'`
+  and `'Quit'` — so a user running the app in Arabic met an English menu, and changing the language in
+  Settings never redrew it: every Flutter surface follows Settings, but Windows draws this menu from
+  `AppendMenuW` and nothing listened for the change;
+- the panel's `Quit` was labelled `shell.tray.quit` = "Quit", and the tray's Arabic (this key included) was
+  written in Egyptian colloquial — `اقفل البرنامج`, `شغّال`, `مقفول`, `الفايروول`, `بيتصل` — rather than فصحى;
+- the exit itself was correct but unproved and not exception-safe: `TrayPanelController.quit()` called
+  `stopOwnEngine()` **outside** any guard before `windowManager.destroy()`, so anything that threw on that
+  line skipped the destroy — an app still alive with the engine it was meant to end. The two mechanisms that
+  do end the processes (the engine's `shutdown`, and the synchronize handle the engine holds on the app,
+  `engine/src/platform/windows/parent.rs`) were real but nowhere a test looked.
+
+**Decision.**
+
+- The native menu's labels are `lookup()`ed from the packs (`shell.tray.open`, `shell.tray.quit`) and redrawn
+  by `ref.listenManual` on `settingsProvider` (a language change) and `i18nProvider` (the tables landing after
+  the icon does), not written as literals at boot. The tooltip stays `appDisplayName`: it is the product's own
+  name, the same string the window title and Task Manager carry, not copy.
+- The tray's Arabic is rewritten in فصحى, and the exit is labelled for what it is: `shell.tray.quit` =
+  "Quit MI CS completely" / "إغلاق MI CS بالكامل", with `shell.tray.quitHint` as the panel button's tooltip.
+- `quit()` is one guaranteed order — stop the owned engine, then destroy the window — each half best-effort so
+  neither can strand the other, and `stopOwnEngine()` cancels the reconnect timers **before** the ownership
+  test, so a restart armed earlier cannot start an engine during shutdown.
+
+**Consequences.** The right-click menu follows Settings' language, and the panel and the menu say the same
+thing. The exit is proved at the unit level — a new `test/tray_panel_test.dart` case taps Quit and asserts the
+engine's stop ran and `window_manager` received `destroy` — and `qa/ui/ledger.json` and `qa/report.md` are
+regenerated with it. It is **not** a process-tree proof: confirming an empty `tasklist` after a real quit needs
+a built package, so the OS-level half still rests on `shutdown` plus the parent watch, and that honest limit is
+written in the code and the Done log. Nothing else changed — the engine, the method whitelist and the settings
+document are untouched.

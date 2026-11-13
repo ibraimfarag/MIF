@@ -15,10 +15,12 @@
 > no service. Two consequences. *(a)* **The documents were wrong in places, and are
 > fixed**: the JSON-RPC surface is **73** methods (measured 2026-11-09; the recount of
 > 2026-11-07 found 66 where the docs said 65, and the ROADMAP said 62 in
-> one row); i18n is **19 module files per language / 301 keys** (measured
-> 2026-11-10; the 2026-11-09 count of 299 was right when taken and two keys have
-> landed since — one with the engine-refusal line, one with the unrenderable-tag
-> notice), not 16/169; the
+> one row); i18n is **19 module files per language / 303 keys** (measured
+> 2026-11-13; the 2026-11-10 count of 301 was right when taken and two keys have
+> landed since, both on the tray's exit — its full-exit label and its hint,
+> D-053 — before which the 2026-11-09 count of 299 was right when taken and two
+> keys landed with the engine-refusal line and the unrenderable-tag notice), not
+> 16/169; the
 > README's canary claim ("a read-only open is not noticed") was true until **D-032**
 > landed and is now the opposite — a read is a HIGH `canary_read` event, with the
 > volume's atime range probed and reported; the README presented `v0.1.0` as a
@@ -943,6 +945,7 @@ what was measured. Do not bundle two slices because one "looks small".
 
 | Slice | Done means |
 |---|---|
+| **tray exit slice** — **done 2026-11-13 (D-053)** | The native tray menu's two labels come from the language packs and are re-drawn when Settings changes language (a listener on `settingsProvider`/`i18nProvider`, not a boot-time literal), and the tray surface's Arabic is rewritten in فصحى (`شغّال`/`مقفول`/`الفايروول`/`بيتصل` → `مفعّل`/`معطّل`/`الجدار الناري`/`جارٍ الاتصال`). `Quit` is now a labelled **full exit**: `shell.tray.quit` reads "Quit MI CS completely" (ar: "إغلاق MI CS بالكامل") with a `shell.tray.quitHint` tooltip, `TrayPanelController.quit()` stops the owned engine and then always destroys the window (both best-effort, so neither can strand the other), and `stopOwnEngine` cancels the reconnect timers before the ownership test. Proved by a new case in `test/tray_panel_test.dart` that taps Quit and asserts the fake engine's stop ran and `window_manager` received `destroy`; by the regenerated `qa/ui/ledger.json` line (`OutlinedButton(Quit MI CS completely)`) and `qa/report.md` (157 declared Dart cases); and by `scripts\pipeline.ps1 -Tier fast` green (analyze, 187 Flutter tests, engine tests, clippy, signer). **Honest limit:** that case proves the app *asks* for both halves, in order — it is not a process-tree proof. On Windows the engine is additionally ended by the synchronize handle it holds on this process (`engine/src/platform/windows/parent.rs` waits on it), so a real quit should leave no engine, but confirming an empty `tasklist` needs a built package and was not run in this slice. |
 | ~~**ز2-ب** hang detector~~ — **done** (2026-11-02) | A `std::thread` watchdog started with the session marks a heartbeat the tokio runtime bumps; if the heartbeat stops for the deadline the watchdog writes a `hang` report itself (a plain OS thread still runs when the runtime is wedged) and logs it. The report says how long the runtime was stuck and what the last request was. Tested by freezing the heartbeat on purpose; the honest limit (a hang that takes the whole process, e.g. a deadlock inside the allocator, is invisible) goes in the code and the Done log. |
 | ~~**ز2-ج** bug-id surface~~ — **done** (2026-11-02) | Settings → Diagnostics lists `crash.list`, opens one report with `crash.get`, offers copy and `crash.delete`; the text the user pastes contains the bug id first. `qa/ui/fixtures.json` gains reports, the sweep taps the new controls, `qa/ui/ledger.json` is regenerated and the diff reviewed, and a behaviour test proves the id on screen is the id the engine reported. |
 | **ز2-د** delivery | Not before **D-023** (opt-in, user-configured destination only, rule 8) and not before the user names the Open WhatsApp bridge endpoint. The engine gains `mics-engine report <bug-id> --to <configured destination>`; nothing is sent unless the user configured it and switched it on. |

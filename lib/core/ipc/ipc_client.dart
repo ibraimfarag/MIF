@@ -160,12 +160,19 @@ class EngineIpc {
   /// engine outlives us on purpose. Bounded on purpose too: the engine holds a
   /// handle to this process, so a shutdown that never answers still ends when
   /// we do.
+  ///
+  /// The reconnect timers are cancelled **before** the ownership test (D-053):
+  /// a quit is final regardless of who owns the engine, and a restart armed
+  /// earlier must not survive it to start an engine while the window goes away.
   Future<void> stopOwnEngine(
       {Duration timeout = const Duration(seconds: 3)}) async {
-    if (!_ownsEngine || _pipe == null || _stopping) return;
-    _stopping = true;
     _restartTimer?.cancel();
     _heartbeat?.cancel();
+    if (!_ownsEngine || _pipe == null || _stopping) {
+      _ownsEngine = false;
+      return;
+    }
+    _stopping = true;
     try {
       await request('shutdown', null, const Duration(seconds: 2));
     } catch (e) {
@@ -184,7 +191,8 @@ class EngineIpc {
     // 1) An engine may already be running (autostart, previous app session).
     final existing = await PipeConnection.tryConnect(
       timeout: const Duration(milliseconds: 900),
-    );    if (existing != null) {
+    );
+    if (existing != null) {
       // Somebody else's engine: attach, and leave its lifetime alone.
       _spawnedPid = null;
       _ownsEngine = false;

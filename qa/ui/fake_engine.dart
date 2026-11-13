@@ -64,6 +64,17 @@ class FakeEngine extends EngineIpc {
   int _jobSeq = 0;
   bool scanRunning = false;
 
+  /// Whether the app asked this fake to stop the engine it started. `Quit` must
+  /// reach here *before* the window goes, so a test can tell a real exit from a
+  /// window that merely closed (D-053).
+  bool engineStopped = false;
+
+  @override
+  Future<void> stopOwnEngine(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    engineStopped = true;
+  }
+
   @override
   Stream<Map<String, dynamic>> get eventStream => _events.stream;
 

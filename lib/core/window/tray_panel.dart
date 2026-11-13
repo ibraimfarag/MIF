@@ -110,8 +110,13 @@ class TrayPanelController extends Notifier<TrayPanelState> {
   /// Ends this app on purpose — the engine it started included (D-039). Both
   /// the panel and the native menu's `Quit` come here, so "quit" means one
   /// thing wherever it is clicked.
+  ///
+  /// One exit, in one order, and nothing can short-circuit it (D-053): the
+  /// engine this app started is asked to stop, and the window is destroyed even
+  /// if that stop timed out or threw — a quit that stops half way is an app
+  /// still running with nothing on screen.
   Future<void> quit() async {
-    await ref.read(engineIpcProvider).stopOwnEngine();
+    await _safe(() => ref.read(engineIpcProvider).stopOwnEngine());
     await _safe(() => windowManager.destroy());
   }
 
@@ -358,16 +363,19 @@ class _TrayPanelState extends ConsumerState<TrayPanel> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  OutlinedButton(
-                    onPressed: () =>
-                        ref.read(trayPanelProvider.notifier).quit(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.red,
-                      side: BorderSide(
-                        color: AppColors.red.withValues(alpha: 0.55),
+                  Tooltip(
+                    message: context.tr('shell.tray.quitHint'),
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          ref.read(trayPanelProvider.notifier).quit(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.red,
+                        side: BorderSide(
+                          color: AppColors.red.withValues(alpha: 0.55),
+                        ),
                       ),
+                      child: Text(context.tr('shell.tray.quit')),
                     ),
-                    child: Text(context.tr('shell.tray.quit')),
                   ),
                 ],
               ),
