@@ -3,10 +3,6 @@
   "entries": {
     "screens.audit": [
       "FilledButton(Run first audit)",
-      "IconButton(Explain this finding)",
-      "IconButton(Explain this finding)#2",
-      "IconButton(Explain this finding)#3",
-      "IconButton(Explain this finding)#4",
       "OutlinedButton(Fix)",
       "OutlinedButton(Fix)#2",
       "OutlinedButton(Refresh)"
@@ -100,9 +96,7 @@
       "TextField(Empty = your profile folder)",
       "TextField(NVD API 2.0 key)",
       "TextField(empty = MI CS' own release feed)",
-      "TextField(http://127.0.0.1:1234)",
       "TextField(https://…/hashes.csv)",
-      "TextField(local-model)",
       "_SliderRow/Slider"
     ],
     "screens.vulns": [
@@ -126,7 +120,6 @@
       "IconButton(Dismiss notification)",
       "InkWell(Online)",
       "InkWell(🧯 MI CS — the engine filed a crash report)",
-      "TextField(Ask anything… \"scan the system\" · \"start the guard\" · \"report\")",
       "_ExclusiveMouseRegion/InkWell",
       "_TrafficLight/GestureDetector",
       "_TrafficLight/GestureDetector#2",

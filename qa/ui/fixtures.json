@@ -385,18 +385,6 @@
       "path": "C:/Users/qa/AppData/Local/MICS/reports/report-20261101.md",
       "bytes": 4096
     },
-    "nl.command": {
-      "intent": "scan",
-      "params": {
-        "path": "C:/Users/qa/Downloads"
-      },
-      "explanation": "Runs a scan of the Downloads folder."
-    },
-    "llm.explain": {
-      "explanation": "This finding means the process wrote an encoded script to disk and started it.",
-      "model": "local-model",
-      "from_cache": true
-    },
     "geoip.lookup": {
       "country": "NL",
       "iso": "NL",

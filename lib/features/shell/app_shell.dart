@@ -11,7 +11,7 @@ import 'package:mics_app/providers/providers.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// MI CS shell — macOS-style custom title bar (traffic lights + drag area),
-/// branded header with live score, omnibox and quick controls, and a
+/// branded header with live score and quick controls, and a
 /// 13-module navigation rail.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
@@ -383,9 +383,6 @@ class _TitleBar extends ConsumerWidget {
             const Spacer(),
             const _IntelChip(),
             const SizedBox(width: 8),
-            if (ref.watch(settingsProvider).value?.nlBarEnabled ?? true)
-              const _Omnibox(),
-            const SizedBox(width: 8),
             _HeaderIcon(
               icon: (ref.watch(settingsProvider).value?.themeMode ??
                           ThemeMode.dark) ==
@@ -581,105 +578,6 @@ class _RailItemState extends State<_RailItem> {
           ),
         ),
       ),
-    );
-  }
-}
-
-// ---------------- omnibox ----------------
-
-/// Natural-language command bar (nl.command): Arabic/English intents mapped
-/// to whitelisted engine commands only. Offline regex fallback built in.
-class _Omnibox extends ConsumerStatefulWidget {
-  const _Omnibox();
-
-  @override
-  ConsumerState<_Omnibox> createState() => _OmniboxState();
-}
-
-class _OmniboxState extends ConsumerState<_Omnibox> {
-  final _controller = TextEditingController();
-  final _focus = FocusNode();
-  bool _busy = false;
-  String? _reply;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  Future<void> _run() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      final res =
-          await ref.read(engineIpcProvider).request('nl.command', {'text': text});
-      final nl = (res as Map)['nl'] as Map;
-      setState(() {
-        _reply = (nl['reply'] as String?) ?? 'done';
-        _controller.clear();
-      });
-    } catch (e) {
-      setState(() => _reply = 'error: $e');
-    } finally {
-      setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 320,
-          child: TextField(
-            controller: _controller,
-            focusNode: _focus,
-            style: TextStyle(fontSize: 12, color: AppColors.text),
-            textAlign: TextAlign.right,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: context.tr('omnibox.hint'),
-              hintStyle:
-                  TextStyle(fontSize: 10, color: AppColors.muted),
-              prefixIcon: _busy
-                  ? Padding(
-                      padding: EdgeInsets.all(8),
-                      child: SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2)))
-                  : Icon(Icons.auto_awesome,
-                      size: 15, color: AppColors.cyan),
-              filled: true,
-              fillColor: AppColors.background,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide(color: AppColors.border)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide(color: AppColors.border)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide(color: AppColors.cyan)),
-            ),
-            onSubmitted: (_) => _run(),
-          ),
-        ),
-        if (_reply != null)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(_reply!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 9, color: AppColors.green)),
-          ),
-      ],
     );
   }
 }

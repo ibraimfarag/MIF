@@ -166,7 +166,6 @@ TLS-inspecting proxy will break feeds, by design: no corporate CA is trusted).
 | `cisa.gov` KEV feed | a GET | intel sync |
 | `services.nvd.nist.gov` | installed product identifiers (CPE/keyword query), key optional | vulnerability scan |
 | `dns.google`, `1.1.1.1` | a HEAD/GET probe with no payload | the "online?" check, cached 30 s (`sync/mod.rs::online`) |
-| LM Studio (`lm_url`, default `http://127.0.0.1:1234`) | the finding text to explain | LLM explain, explicit |
 | `github.com/ibraimfarag/MIF/releases/…` (the channel's own release) | a GET for `update.json`, one for `update.json.sig` beside it, and only if it names a newer version that one, for the zip | **`update.check` — the user's *Check now*, never a timer** (D-046; the manifest's signature is D-047) |
 
 Nothing polls the update feed: `update.check` has one caller (the Updates panel's
@@ -238,7 +237,7 @@ local code (F-6).
 `MICS_DATA_DIR`, `MICS_PIPE_NAME` (full path), `PROGRAMDATA`, `MICS_ENGINE_PATH`,
 `MICS_NO_SINGLETON`, `MICS_NO_GUARD`, `MICS_NO_AUTO_RESUME`, `MICS_HELPER_PIPE`
 (**bare** name — `privileged/ops.rs` prefixes `\\.\pipe\`, F-8),
-`NVD_API_KEY`, `MICS_LM_URL`. Whoever can set the engine's environment decides
+`NVD_API_KEY`. Whoever can set the engine's environment decides
 where it reads and writes and whether the guard runs. That requires the ability to
 create a process as the user, which already implies the same-token power described
 in B2 — accepted, and the reason the hooks are documented rather than hidden.

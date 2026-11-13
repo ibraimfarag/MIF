@@ -45,11 +45,8 @@ void main() {
       'nvd_api_key',
       'ioc_feed_url',
       'ioc_feed_key',
-      'lm_url',
-      'lm_model',
       'update_manifest_url',
       'update_channel',
-      'nl_bar_enabled',
       'sound_enabled',
       'sound_volume',
       'toast_enabled',
@@ -70,11 +67,8 @@ void main() {
       nvdApiKey: 'nvd',
       iocFeedUrl: 'https://example.com/hashes.csv',
       iocFeedKey: 'auth-key',
-      lmUrl: 'http://localhost:1234',
-      lmModel: 'qwen',
       updateManifestUrl: 'https://example.com/m.json',
       updateChannel: 'beta',
-      nlBarEnabled: false,
       soundEnabled: false,
       soundVolume: 15,
       toastEnabled: false,
@@ -91,11 +85,8 @@ void main() {
     expect(back.nvdApiKey, 'nvd');
     expect(back.iocFeedUrl, 'https://example.com/hashes.csv');
     expect(back.iocFeedKey, 'auth-key');
-    expect(back.lmUrl, 'http://localhost:1234');
-    expect(back.lmModel, 'qwen');
     expect(back.updateManifestUrl, 'https://example.com/m.json');
     expect(back.updateChannel, 'beta');
-    expect(back.nlBarEnabled, isFalse);
     expect(back.soundEnabled, isFalse);
     expect(back.soundVolume, 15);
     expect(back.toastEnabled, isFalse);

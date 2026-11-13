@@ -63,16 +63,11 @@ pub struct Settings {
     /// Auth-Key sent to that feed (abuse.ch style header); env
     /// `MICS_IOC_FEED_KEY` overrides it. Protected on disk like `nvd_api_key`.
     pub ioc_feed_key: String,
-    /// LM Studio base URL (OpenAI-compatible), e.g. http://127.0.0.1:1234.
-    pub lm_url: String,
-    pub lm_model: String,
     /// Self-update manifest URL the user typed; empty = read the channel's
     /// compiled-in default ([`default_update_manifest_url`], D-046).
     pub update_manifest_url: String,
     /// `stable` | `beta`.
     pub update_channel: String,
-    /// Show the natural-language command bar in the title bar.
-    pub nl_bar_enabled: bool,
     /// Notification sounds.
     pub sound_enabled: bool,
     /// 0..100.
@@ -109,11 +104,8 @@ impl Default for Settings {
             nvd_api_key: String::new(),
             ioc_feed_url: String::new(),
             ioc_feed_key: String::new(),
-            lm_url: "http://127.0.0.1:1234".into(),
-            lm_model: "local-model".into(),
             update_manifest_url: String::new(),
             update_channel: "stable".into(),
-            nl_bar_enabled: true,
             sound_enabled: true,
             sound_volume: 70,
             toast_enabled: true,
@@ -172,12 +164,6 @@ impl Settings {
                     self.ioc_feed_url = v;
                 }
                 "ioc_feed_key" => self.ioc_feed_key = string(value, key)?,
-                "lm_url" => {
-                    let v = string(value, key)?;
-                    check_url(key, &v)?;
-                    self.lm_url = v;
-                }
-                "lm_model" => self.lm_model = string(value, key)?,
                 "update_manifest_url" => {
                     let v = string(value, key)?;
                     check_url(key, &v)?;
@@ -190,7 +176,6 @@ impl Settings {
                     }
                     self.update_channel = v;
                 }
-                "nl_bar_enabled" => self.nl_bar_enabled = boolean(value, key)?,
                 "sound_enabled" => self.sound_enabled = boolean(value, key)?,
                 "sound_volume" => {
                     let v = value
@@ -262,14 +247,6 @@ impl Settings {
         std::env::var("MICS_IOC_FEED_KEY").unwrap_or_else(|_| self.ioc_feed_key.clone())
     }
 
-    pub fn lm_base(&self) -> String {
-        std::env::var("MICS_LM_URL").unwrap_or_else(|_| self.lm_url.clone())
-    }
-
-    pub fn lm_name(&self) -> String {
-        std::env::var("MICS_LM_MODEL").unwrap_or_else(|_| self.lm_model.clone())
-    }
-
     pub fn update_url(&self) -> String {
         resolve_update_url(
             std::env::var("MICS_UPDATE_MANIFEST_URL").ok().as_deref(),
@@ -324,7 +301,6 @@ impl Settings {
                 Ok(mut s) => {
                     for (key, value) in [
                         ("ioc_feed_url", &mut s.ioc_feed_url),
-                        ("lm_url", &mut s.lm_url),
                         ("update_manifest_url", &mut s.update_manifest_url),
                     ] {
                         if let Err(e) = check_url(key, value.as_str()) {
@@ -714,8 +690,9 @@ pub fn update_checks_disabled(url: &str) -> bool {
 
 /// Refuses a cleartext URL that is not loopback.
 ///
-/// `http://127.0.0.1:1234` is the LM Studio default and never leaves the machine,
-/// so it stays accepted. `http://feeds.example.com` is a cleartext downgrade an
+/// `http://127.0.0.1:8080` is loopback and never leaves the machine, so it stays
+/// accepted (a local feed or update manifest). `http://feeds.example.com` is a
+/// cleartext downgrade an
 /// on-path attacker can rewrite into whatever feed or update manifest it likes,
 /// and the engine would trust it (`docs/THREAT-MODEL.md`, F-3), so it is refused
 /// outright rather than warned about. An empty value means "not configured".
@@ -819,7 +796,6 @@ mod tests {
         assert!(s.apply_patch(&json!({"sync_interval_hours": 0})).is_err());
         assert!(s.apply_patch(&json!({"sync_interval_hours": 999})).is_err());
         assert!(s.apply_patch(&json!({"theme": "neon"})).is_err());
-        assert!(s.apply_patch(&json!({"lm_url": "127.0.0.1:1234"})).is_err());
         assert!(s.apply_patch(&json!({"sound_volume": 101})).is_err());
         assert!(s.apply_patch(&json!({"unknown_key": 1})).is_err());
         assert!(s.apply_patch(&json!({"dnd": "yes"})).is_err());
@@ -849,7 +825,7 @@ mod tests {
     #[test]
     fn cleartext_urls_are_only_accepted_for_loopback() {
         let mut s = Settings::default();
-        // The LM Studio default and every honest way to spell loopback.
+        // Every honest way to spell loopback.
         for ok in [
             "",
             "http://127.0.0.1:1234",
@@ -858,7 +834,7 @@ mod tests {
             "http://localhost:1234",
             "https://feeds.example.com/hashes.txt",
         ] {
-            for key in ["ioc_feed_url", "lm_url", "update_manifest_url"] {
+            for key in ["ioc_feed_url", "update_manifest_url"] {
                 s.apply_patch(&json!({ key: ok }))
                     .unwrap_or_else(|e| panic!("{key} rejected {ok}: {e}"));
             }
@@ -873,7 +849,7 @@ mod tests {
             "ftp://feeds.example.com/",
             "feeds.example.com",
         ] {
-            for key in ["ioc_feed_url", "lm_url", "update_manifest_url"] {
+            for key in ["ioc_feed_url", "update_manifest_url"] {
                 assert!(
                     s.apply_patch(&json!({ key: bad })).is_err(),
                     "{key} accepted {bad}"
@@ -883,7 +859,6 @@ mod tests {
 
         // A refused patch changes nothing: the last accepted values survive.
         assert_eq!(s.ioc_feed_url, "https://feeds.example.com/hashes.txt");
-        assert_eq!(s.lm_url, "https://feeds.example.com/hashes.txt");
         assert_eq!(s.update_manifest_url, "https://feeds.example.com/hashes.txt");
     }
 
@@ -948,7 +923,6 @@ mod tests {
             "theme": "light",
             "dnd": true,
             "sync_interval_hours": 24,
-            "lm_url": "http://localhost:1234",
             "canary_paths": ["C:\\a", "C:\\b"],
             "sound_volume": 10,
             "toast_enabled": false

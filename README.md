@@ -277,7 +277,7 @@ flutter test --no-pub tool\write_screenshots_test.dart
 | **CPU / RAM** | 4 cores / 8 GB. The engine idles at **~12 MB RAM** (measured 12.5 MB), against a **150 MB** budget the engine's own benchmark asserts — the number is enforced, not a wish. |
 | **Disk** | **~52 MB** for the unpacked package (70 files, 51.9 MB measured 2026-11-07; the archive is 21.5 MB and the installer 16 MB), plus whatever the quarantine and intel cache grow to. |
 | **Privileges** | none to start: the app runs unelevated. The first firewall/hosts/hardening fix asks **once** to install MI CS's privileged helper (a LocalSystem service); after that, privileged actions need no prompt. |
-| **Network** | optional. Everything core works offline; the network is used only for intel sync, NVD lookups and a local LM Studio instance (if you run one). |
+| **Network** | optional. Everything core works offline; the network is used only for intel sync and NVD lookups. |
 
 ## Install and first run
 
@@ -386,8 +386,7 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 - **No telemetry, no accounts, no ads.** Nothing about your usage is reported
   anywhere.
 - Nothing leaves the machine except what you explicitly trigger: intel sync
-  (public IOC feeds), NVD queries and a local LM Studio instance on `127.0.0.1`
-  (only if you run one).
+  (public IOC feeds) and NVD queries.
 - State is local SQLite plus plain files you can inspect and delete.
 
 ## The five layers
@@ -398,7 +397,7 @@ Set `MICS_DATA_DIR` to relocate the whole state folder (portable mode).
 | **L2 Attack Radar** | Managed hosts-file domain blocklist + GeoIP tables from synced blocklists | Name resolution to known malicious/tracking domains, for every app | Raw-IP traffic, DoH inside apps, no packet inspection |
 | **L3 Response** | Process guard (2 s poll unelevated, kernel ETW when elevated), Sigma-like rules, kill-tree, canaries, incident correlator | Suspicious process creation, persistence attempts, ransomware-style decoy touches | Not a kernel driver; an attacker who is already admin is out of scope; a process **image is not hash-checked at start** — rules match name/parent/command line, and a scan owns the hash dimension (D-048) |
 | **L4 File Engines** | Triage scanner: SHA-256 vs local IOC cache, then YARA rules | Known-bad files by hash and by pattern | No ClamAV signatures, no CAPA, no unpacking |
-| **L5 Mind** | Incident correlation (kill-chain timeline) + assistant: built-in AR/EN templates, optionally a **local** LLM (LM Studio) | Alert fatigue — related events become one incident with a story | The command bar is rule-based (regex intents), not an LLM planner |
+| **L5 Mind** | Incident correlation (kill-chain timeline) | Alert fatigue — related events become one incident with a story | No narrative assistant: the story is the correlated timeline, not generated prose (D-052) |
 
 The same layers, with what each one actually **sees, detects, blocks and misses** —
 layer by layer, with the code file behind every claim and how that claim is
@@ -418,7 +417,6 @@ One screen, eight sections; every field is validated and persisted by the engine
   on/off, volume, test toast, test sound.
 - **Intelligence & schedule** — refresh interval (1–168 h), NVD key, optional hash
   feed URL and Auth-Key, sync now, live connectivity and freshness.
-- **Integrations** — LM Studio URL and model.
 - **Updates** — manifest URL, stable/beta channel, check, download and install.
 - **Engine** — executable path, connection state, start with Windows, and the
   **privileged helper** card (state, version, install/repair/remove).
@@ -856,7 +854,7 @@ Dart متعمّى (obfuscated)، و`scripts\verify-hardening.ps1` بيقيس د�
 مطلوبة غير للتحديثات — الفحص والحماية والحجر والتقوية كلهم شغالين أوفلاين.
 
 **الخصوصية:** مفيش أي تتبّع ولا حسابات. كل حاجة محلية في SQLite، ومفيش حاجة بتطلع
-من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات، NVD، أو LM Studio محلي).
+من الجهاز غير اللي إنت تشغّله بنفسك (تحديث الاستخبارات و NVD).
 
 **ملفات البيانات:** `%PROGRAMDATA%\MICS` — أو `%LOCALAPPDATA%\MICS` لو الأول
 مش قابل للكتابة بحسابك. الاختيار بيتسجّل في `%LOCALAPPDATA%\MICS\.data-dir`

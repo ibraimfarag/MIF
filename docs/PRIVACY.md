@@ -43,7 +43,6 @@ shared. Contact:
 | `cisa.gov` (Known Exploited Vulnerabilities feed) | a GET | intel sync — **on by default, every 6 hours** |
 | `services.nvd.nist.gov` | the installed product identifiers being looked up (CPE/keyword), and an API key if you gave one | a vulnerability scan you start |
 | `dns.google` and `1.1.1.1` | a payload-free HEAD/GET probe | the "is this machine online?" check, cached 30 s |
-| an LM Studio endpoint (default `http://127.0.0.1:1234`) | the finding text you ask it to explain | only when you press *explain*; loopback by default, so nothing leaves the machine |
 | an update-manifest URL | a GET | only if you configure one — **there is no default address today** |
 
 The two feed addresses are built into the engine (`engine/src/sync/mod.rs`), so a
@@ -91,8 +90,7 @@ reports anything.
 To do its job MI CS reads process lists, network connections, startup entries,
 installed software, firewall rules, scheduled tasks and file metadata. That is the
 product. All of it is read locally, kept locally, and never uploaded; the only derived
-information that can leave is the NVD query in §3 and text you explicitly send to a
-local model.
+information that can leave is the NVD query in §3.
 
 ## 6. Privileged changes
 

@@ -797,6 +797,9 @@ needs first, all of it measured rather than assumed:
    origin story) but it is a deliberate choice, not an oversight. The same goes for
    `docs/TODO.md` itself: it is 340 KB of internal handoff notes, and publishing it
    is what makes the project's claims checkable - but it is a choice.
+   **Resolved 2026-11-13 (D-052):** the brief is **deleted** — removing the
+   assistant took its last live claim (the L5 local-LLM wording) with it, so the
+   file no longer had a job to do. `docs/TODO.md` stays, deliberately.
 5. **The version is one number again: 0.1.0.** `pubspec.yaml` said `1.0.0+1` while
    `engine/Cargo.toml` and every shipped artefact said `0.1.0`, so the app's own
    version resource disagreed with the installer that carried it. Decided
@@ -5591,7 +5594,7 @@ publish click in row 1 was made on 2026-11-10), and engineering that is free
 | 17 | Protect the project from theft | **decided** — GPL + trademark + signing, never secrecy | D-001 |
 | 18 | Cheapen the project + licenses | **answered, and it got cheaper than planned** — GPL-3 **text** now really ships (`LICENSE` was a placeholder until 2026-11-07); SBOM + `THIRD-PARTY-NOTICES` generated, committed and shipped (ب1a, D-018); `docs\COST.md` still records the researched prices, but the single purchase it named is **off the plan** (D-035) — the project's running cost is **zero**, which was always the point of this row | D-035, `docs\COST.md` |
 | 19 | Professional README | **done** — see row 10 | `README.md` |
-| 20 | L5 wording vs reality (LLM) | **decided** — optional local LLM + templates; wording fix in P5 | D-005 |
+| 20 | L5 wording vs reality (LLM) | **closed — the assistant was removed, not reworded**: L5 is incident correlation only, and `llm.explain`/`nl.command` are gone (2026-11-13) | D-005 → **D-052** |
 | 21 | Living TODO/handoff file | **done** — this file | — |
 
 ---
@@ -5790,8 +5793,9 @@ signing certificate respectively), so this is the work that is always available.
       disk figure is 52 MB unpacked (was written as "~150 MB", which was the engine's
       RAM budget read as disk), the idle figure is 12.5 MB (was 11), the canary claim
       was inverted by D-032, and "Download" now says the release is a draft.
-- [ ] Fix L5/assistant wording everywhere (README, About, brief): "event
-      correlation + optional local-LLM explanations", command bar is regex.
+- [x] L5/assistant wording — **resolved by removal, not rewording** (2026-11-13):
+      the assistant, the command bar and their settings are gone; README and docs
+      now say L5 = incident correlation only (D-052).
 
 ### P6 — QA
 - [x] Pipeline entry point: `scripts/pipeline.ps1` (ز0) — tiers, JSON report, and

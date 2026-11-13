@@ -176,7 +176,9 @@ recorded in `THIRD-PARTY-NOTICES` before it ships (P4).
 
 ## D-005 — AI assistant: optional local LLM, honest wording
 
-**Status:** accepted (2026-10-28)
+**Status:** superseded by D-052 (2026-11-13) — the assistant, the command bar and
+their settings were removed outright; kept here as the record of what was decided
+before them.
 
 **Decision.** The "MI CS Assistant" stays an **optional** enhancement:
 
@@ -3200,3 +3202,50 @@ release, which is knowable only once an identity is being kept, so the variable 
 keeping one. **Measured end to end** by a lane run (below). The remaining act is the owner's and takes
 a minute: `docs/SIGNING.md` section 7 item 6 is the copy-paste recipe, and the deadline is unchanged —
 before the next publish.
+
+---
+
+## D-052 — The AI assistant is removed, not gated
+
+**Status:** implemented (2026-11-13).
+
+**Context.** D-005 kept the "MI CS Assistant" as an optional enhancement backed by a local LM Studio
+instance, and D-045's audit kept LLM output strictly advisory. By 2026-11-13 the surface it created had
+outgrown the value:
+
+- two JSON-RPC methods (`llm.explain`, `nl.command`) and a whole `engine/src/llm/` module, the only
+  user of the `regex` crate, existed to post a finding to `127.0.0.1:1234` and to translate Arabic/
+  English phrases into whitelisted commands;
+- the affordances were scattered: an *explain* button on every audit finding, a natural-language
+  command box in the title bar, and an *Integrations* section in Settings carrying an LM Studio URL,
+  a model name and a `nl_bar_enabled` toggle — three settings, one screen section;
+- the honest position (D-005's own "the command bar is a rule-based parser, not an LLM planner")
+  is a capability the product is better off not claiming at all: an on-device assistant that explains
+  audit findings is a security feature only if it is trustworthy, and a loopback LLM is neither
+  audited nor benchmarked here.
+
+The user decided to remove the feature rather than keep it dark.
+
+**Decision.** Delete the assistant and everything that existed only for it:
+
+- engine: `engine/src/llm/mod.rs` (the LM client and the regex intent parser), the dispatcher's
+  `llm.explain` and `nl.command` arms, the `lm_url` / `lm_model` / `nl_bar_enabled` settings fields
+  and their validation, `LmClient`'s `lm_base` / `lm_name` resolvers, and the `regex` dependency.
+  `check_url`'s cleartext rule stays — it still guards the feed and update URLs.
+- app: the audit finding's explain button and its bottom sheet, the shell's natural-language command
+  box, the Settings *Integrations* section, the matching `AppSettings` fields and their
+  `shared_preferences` migration entries and `MICS_LM_*` environment exports.
+- i18n: the `audit.assistant` / `audit.askingAnalyst` / `audit.explain` / `audit.explainFailed`,
+  `settings.integrations` / `settings.lmHint` / `settings.lmModel` / `settings.lmUrl` and
+  `omnibox.hint` keys, both packs.
+- QA: the `llm.explain` and `nl.command` rows in `qa/methods.json`, their `qa/ui/fixtures.json`
+  entries, and a regenerated UI ledger — the pipe drops from **73 methods to 71** and the ledger from
+  **109 controls to 102** (four explain buttons, two Settings fields, one command box).
+- README, `AGENTS.md`, `docs/PRIVACY.md`, `docs/PROTECTION-MATRIX.md`, `docs/THREAT-MODEL.md` and
+  `qa/README.md` stop describing an assistant, and `MI-CS-Agent-Prompt.md` — a build prompt written
+  for an agent, named the author and mojibake-encoded in places (§0.2a item 4) — is deleted with it.
+
+**Consequences.** The engine no longer reads `MICS_LM_URL` or `MICS_LM_MODEL`; the only env vars it
+honours are the ones `docs/THREAT-MODEL.md` B9 lists. L5 Mind is incident correlation only, which is
+what the README now says. A settings document written by an older build still loads: the removed keys
+are simply ignored. D-005 is superseded, kept as the record of the earlier decision.

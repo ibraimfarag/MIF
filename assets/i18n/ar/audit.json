@@ -1,12 +1,8 @@
 {
   "audit.applyingFix": "بيطبّق الإصلاح… (ممكن تظهر نافذة UAC)",
-  "audit.askingAnalyst": "بيسأل المحلّل…",
-  "audit.assistant": "مساعد MI CS",
   "audit.empty.action": "ابدأ الفحص الأول",
   "audit.empty.title": "لم يتم تشغيل فحص بعد",
   "audit.error": "فشل الفحص",
-  "audit.explain": "اشرحلي الملاحظة دي",
-  "audit.explainFailed": "الشرح فشل",
   "audit.findings": "ملاحظة",
   "audit.fixFailed": "الإصلاح فشل",
   "audit.fixed": "تم الإصلاح: {item} — أعد الفحص لمعرفة الدرجة الجديدة",

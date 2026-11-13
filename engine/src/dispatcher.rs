@@ -935,45 +935,6 @@ impl Dispatcher {
                 Ok(path) => Some(json!({"status": "exported", "path": path})),
                 Err(e) => { error!("report.export: {e:#}"); return detailed_error(req, "report.export", e); }
             },
-            "llm.explain" => {
-                let finding = req.params.as_ref().and_then(|p| p.get("finding")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let lang = req.params.as_ref().and_then(|p| p.get("lang")).and_then(|v| v.as_str()).unwrap_or("ar").to_string();
-                match crate::llm::LmClient::new().explain(&finding, &lang).await {
-                    Ok(text) => Some(json!({"explanation": text})),
-                    Err(e) => { error!("llm.explain: {e:#}"); return detailed_error(req, "llm.explain", e); }
-                }
-            }
-            "nl.command" => {
-                let Some(text) = req.params.as_ref().and_then(|p| p.get("text")).and_then(|v| v.as_str()).map(String::from) else {
-                    return error_response(req, "missing text");
-                };
-                let mut result = crate::llm::parse_nl(&text);
-                // Execute matched whitelisted command immediately.
-                if result.matched {
-                    let sub = JsonRpcRequest {
-                        jsonrpc: "2.0".into(),
-                        method: result.command.clone(),
-                        params: Some(result.params.clone()),
-                        id: Some(json!(900000)),
-                    };
-                    let inner = Box::pin(Dispatcher::handle_request(sub)).await;
-                    result.reply = if inner.result.is_some() {
-                        format!("{} ✓", result.reply)
-                    } else {
-                        format!("{} — engine returned an error", result.reply)
-                    };
-                    return JsonRpcResponse {
-                        jsonrpc: "2.0".into(),
-                        result: Some(json!({
-                            "nl": result,
-                            "engine_result": inner.result,
-                        })),
-                        error: None,
-                        id: req.id,
-                    };
-                }
-                Some(json!({"nl": result}))
-            }
             "helper.status" => Some(json!(crate::privileged::status())),
             "helper.install" => {
                 // The user has to answer one UAC prompt inside this call, so it

@@ -16,7 +16,6 @@ mod ids;
 mod hardening;
 mod jobs;
 mod lifecycle;
-mod llm;
 mod notify;
 mod privileged;
 mod reports;

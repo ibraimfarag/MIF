@@ -20,8 +20,8 @@ Three words are used precisely throughout:
 **Layer names.** The `L1`–`L5` numbers are the product's own, the same ones the
 README's "five layers" table uses: **L1 Network Gate** (firewall), **L2 Attack
 Radar** (name-resolution blocklists), **L3 Response** (guard, canaries,
-correlation), **L4 File Engines** (scanner), **L5 Mind** (incident correlation and
-the optional local-LLM assistant). The vulnerability, posture, Defender and
+correlation), **L4 File Engines** (scanner), **L5 Mind** (incident correlation).
+The vulnerability, posture, Defender and
 delivery rows below are cross-cutting work that does not sit inside a single layer,
 so they keep their own names. This sheet's section numbers (§2 scanner, §3 network,
 §4 guard) are stable on purpose — other documents cite them.

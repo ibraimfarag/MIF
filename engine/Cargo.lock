@@ -1947,7 +1947,6 @@ dependencies = [
  "ferrisetw",
  "getrandom 0.3.4",
  "hex",
- "regex",
  "reqwest",
  "rusqlite",
  "serde",

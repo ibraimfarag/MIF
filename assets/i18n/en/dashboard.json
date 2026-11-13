@@ -11,6 +11,5 @@
     "layer.l1":  "Network Gate",
     "layer.l4":  "File Engines",
     "layer.l2":  "Attack Radar",
-    "layer.l5":  "Mind",
-    "omnibox.hint":  "Ask anything… \"scan the system\" · \"start the guard\" · \"report\""
+    "layer.l5":  "Mind"
 }

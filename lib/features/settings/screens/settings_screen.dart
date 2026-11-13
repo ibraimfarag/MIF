@@ -356,32 +356,6 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
 
-          // ---------- integrations ----------
-          _Section(
-            icon: Icons.hub_outlined,
-            title: context.tr('settings.integrations'),
-            children: [
-              _TextSetting(
-                label: context.tr('settings.lmUrl'),
-                hint: 'http://127.0.0.1:1234',
-                initial: s.lmUrl,
-                onSave: (v) => notifier.setLm(v, s.lmModel),
-              ),
-              const SizedBox(height: 8),
-              _TextSetting(
-                label: context.tr('settings.lmModel'),
-                hint: 'local-model',
-                initial: s.lmModel,
-                onSave: (v) => notifier.setLm(s.lmUrl, v),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                context.tr('settings.lmHint'),
-                style: TextStyle(color: AppColors.muted, fontSize: 10.5),
-              ),
-            ],
-          ),
-
           // ---------- updates ----------
           _Section(
             icon: Icons.system_update_outlined,

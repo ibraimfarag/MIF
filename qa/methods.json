@@ -428,20 +428,6 @@
       "note": "Writes the markdown report into the isolated data dir."
     },
     {
-      "method": "llm.explain",
-      "class": "network",
-      "skip": "posts the finding to the configured LM Studio endpoint",
-      "note": "Outbound even when the endpoint is loopback."
-    },
-    {
-      "method": "nl.command",
-      "class": "pure",
-      "params": { "text": "hello there" },
-      "expect": "object",
-      "missing": true,
-      "note": "Unmatched text answers matched=false and executes nothing."
-    },
-    {
       "method": "helper.status",
       "class": "read",
       "params": null,

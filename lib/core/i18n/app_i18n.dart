@@ -270,11 +270,8 @@ class AppSettings {
   final String iocFeedUrl;
   /// Auth-Key for that feed (abuse.ch style header).
   final String iocFeedKey;
-  final String lmUrl;
-  final String lmModel;
   final String updateManifestUrl;
   final String updateChannel;
-  final bool nlBarEnabled;
   final bool soundEnabled;
   final int soundVolume;
   /// Desktop notification cards (Windows toasts) for protection events.
@@ -299,11 +296,8 @@ class AppSettings {
     this.nvdApiKey = '',
     this.iocFeedUrl = '',
     this.iocFeedKey = '',
-    this.lmUrl = 'http://127.0.0.1:1234',
-    this.lmModel = 'local-model',
     this.updateManifestUrl = '',
     this.updateChannel = 'stable',
-    this.nlBarEnabled = true,
     this.soundEnabled = true,
     this.soundVolume = 70,
     this.toastEnabled = true,
@@ -339,11 +333,8 @@ class AppSettings {
         nvdApiKey: j['nvd_api_key'] as String? ?? '',
         iocFeedUrl: j['ioc_feed_url'] as String? ?? '',
         iocFeedKey: j['ioc_feed_key'] as String? ?? '',
-        lmUrl: j['lm_url'] as String? ?? '',
-        lmModel: j['lm_model'] as String? ?? '',
         updateManifestUrl: j['update_manifest_url'] as String? ?? '',
         updateChannel: j['update_channel'] as String? ?? 'stable',
-        nlBarEnabled: j['nl_bar_enabled'] as bool? ?? true,
         soundEnabled: j['sound_enabled'] as bool? ?? true,
         soundVolume: (j['sound_volume'] as num?)?.toInt() ?? 70,
         toastEnabled: j['toast_enabled'] as bool? ?? true,
@@ -371,11 +362,8 @@ class AppSettings {
         'nvd_api_key': nvdApiKey,
         'ioc_feed_url': iocFeedUrl,
         'ioc_feed_key': iocFeedKey,
-        'lm_url': lmUrl,
-        'lm_model': lmModel,
         'update_manifest_url': updateManifestUrl,
         'update_channel': updateChannel,
-        'nl_bar_enabled': nlBarEnabled,
         'sound_enabled': soundEnabled,
         'sound_volume': soundVolume,
         'toast_enabled': toastEnabled,
@@ -389,8 +377,6 @@ class AppSettings {
   Map<String, String> engineEnv() => {
         'MICS_SYNC_HOURS': syncIntervalHours.toString(),
         'MICS_DND': dndMode ? '1' : '0',
-        if (lmUrl.isNotEmpty) 'MICS_LM_URL': lmUrl,
-        if (lmModel.isNotEmpty) 'MICS_LM_MODEL': lmModel,
         if (updateManifestUrl.isNotEmpty)
           'MICS_UPDATE_MANIFEST_URL': updateManifestUrl,
       };
@@ -428,8 +414,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     final hasLegacy = prefs.containsKey('guardAutostart') ||
         prefs.containsKey('dndMode') ||
         prefs.containsKey('syncIntervalHours') ||
-        prefs.containsKey('lmUrl') ||
-        prefs.containsKey('lmModel') ||
         prefs.containsKey('updateManifestUrl') ||
         prefs.containsKey('lang') ||
         prefs.containsKey('themeMode');
@@ -446,12 +430,10 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       guardAutostart: prefs.getBool('guardAutostart') ?? true,
       dndMode: prefs.getBool('dndMode') ?? false,
       syncIntervalHours: prefs.getInt('syncIntervalHours') ?? 6,
-      lmUrl: prefs.getString('lmUrl') ?? '',
-      lmModel: prefs.getString('lmModel') ?? '',
       updateManifestUrl: prefs.getString('updateManifestUrl') ?? '',
     );
     // Only carry over values the user actually set: sending empty strings
-    // would overwrite the engine's real defaults (e.g. the LM Studio URL).
+    // would overwrite the engine's real defaults.
     final patch = legacy.toEngineJson()
       ..removeWhere((key, value) =>
           value == '' || (value is List && value.isEmpty));
@@ -509,9 +491,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<void> setToastEnabled(bool enabled) =>
       patch({'toast_enabled': enabled});
 
-  Future<void> setNlBarEnabled(bool enabled) =>
-      patch({'nl_bar_enabled': enabled});
-
   Future<void> setAutoResumeScans(bool enabled) =>
       patch({'auto_resume_scans': enabled});
 
@@ -542,9 +521,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setIocFeed(String url, String key) =>
       patch({'ioc_feed_url': url, 'ioc_feed_key': key});
-
-  Future<void> setLm(String url, String model) =>
-      patch({'lm_url': url, 'lm_model': model});
 
   Future<void> setUpdates(String manifestUrl, String channel) => patch({
         'update_manifest_url': manifestUrl,

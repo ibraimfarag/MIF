@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>73 rows in <code>qa&#47;methods.json</code></td>
-      <td>73 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>71 rows in <code>qa&#47;methods.json</code></td>
+      <td>71 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>73 declared in the registry, 17 classified not to run</td>
+      <td>71 declared in the registry, 16 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -57,7 +57,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Controls</td>
-      <td>109 in the ledger</td>
+      <td>102 in the ledger</td>
       <td>the sweep fails when a control appears or disappears unannounced</td>
       <td><code>qa&#47;ui&#47;harness.dart</code>, <code>qa&#47;ui&#47;ledger.dart</code></td>
     </tr>
@@ -88,7 +88,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td>Engine tests</td>
       <td>26 modules</td>
-      <td>206 declared cases</td>
+      <td>203 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 73 methods</h2>
+<h2>The pipe: 71 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -129,14 +129,14 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>network</code></td>
-      <td class="num">5</td>
+      <td class="num">4</td>
       <td class="num">0</td>
-      <td class="num">5</td>
+      <td class="num">4</td>
     </tr>
     <tr>
       <td><code>pure</code></td>
-      <td class="num">6</td>
-      <td class="num">6</td>
+      <td class="num">5</td>
+      <td class="num">5</td>
       <td class="num">0</td>
     </tr>
     <tr>
@@ -433,21 +433,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td></td>
     </tr>
     <tr>
-      <td><code>llm.explain</code></td>
-      <td><code>network</code></td>
-      <td class="num">0</td>
-      <td>yes</td>
-    </tr>
-    <tr>
       <td><code>net.connections</code></td>
       <td><code>read</code></td>
       <td class="num">1</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td><code>nl.command</code></td>
-      <td><code>pure</code></td>
-      <td class="num">2</td>
       <td></td>
     </tr>
     <tr>
@@ -602,7 +590,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h3>The 17 methods that are classified not to run</h3>
+<h3>The 16 methods that are classified not to run</h3>
 <p>Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so &quot;n&#47;a&quot; cannot pass as one.</p>
 <table>
   <thead><tr>
@@ -652,11 +640,6 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td>removes the privileged helper service</td>
     </tr>
     <tr>
-      <td><code>llm.explain</code></td>
-      <td><code>network</code></td>
-      <td>posts the finding to the configured LM Studio endpoint</td>
-    </tr>
-    <tr>
       <td><code>notify.test</code></td>
       <td><code>desktop</code></td>
       <td>raises a real Windows toast on this machine</td>
@@ -698,10 +681,10 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The screens: 13 screens and the shell, 109 controls</h2>
+<h2>The screens: 13 screens and the shell, 102 controls</h2>
 <p>The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with <code>qa&#47;ui&#47;ledger.json</code>. The ledger is a ratchet in both directions.</p>
 <ul>
-  <li><code>screens.audit</code> - 8 controls</li>
+  <li><code>screens.audit</code> - 4 controls</li>
   <li><code>screens.canaries</code> - 6 controls</li>
   <li><code>screens.dashboard</code> - 1 control</li>
   <li><code>screens.guard</code> - 3 controls</li>
@@ -712,9 +695,9 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <li><code>screens.network</code> - 8 controls</li>
   <li><code>screens.reports</code> - 1 control</li>
   <li><code>screens.scanner</code> - 9 controls</li>
-  <li><code>screens.settings</code> - 34 controls</li>
+  <li><code>screens.settings</code> - 32 controls</li>
   <li><code>screens.vulns</code> - 2 controls</li>
-  <li><code>shell</code> - 21 controls (rail, window buttons, command box)</li>
+  <li><code>shell</code> - 20 controls (rail, window buttons, command box)</li>
 </ul>
 <h2>The languages: 2</h2>
 <table>
@@ -1163,7 +1146,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;tests.rs</code></td>
-      <td>56</td>
+      <td>53</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;update.rs</code></td>
@@ -1175,7 +1158,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**206** in 26 modules</td>
+      <td>**203** in 26 modules</td>
     </tr>
   </tbody>
 </table>

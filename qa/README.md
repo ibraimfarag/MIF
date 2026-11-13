@@ -193,8 +193,8 @@ The `cargo`/`rustc` rows are what is left after ط1's
 - **Mutations of this machine.** Firewall profile changes, hosts, registry,
   Defender scans, the helper service and UAC: skipped with a reason, or only
   their refusal path runs.
-- **Anything that leaves the machine.** The intel feeds, NVD, LM Studio and the
-  update manifest are `network` rows.
+- **Anything that leaves the machine.** The intel feeds, NVD and the update
+  manifest are `network` rows.
 - **The UI.** This file is about the engine side of the pipe; the screens and
   controls are tested in `test/` and, from د2 on, in `qa/ui/`.
 

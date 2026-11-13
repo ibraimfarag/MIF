@@ -60,8 +60,8 @@ binary, and a `%TEMP%\mics-target` left by an earlier session is itself a trap.
 8. **No telemetry, no analytics, no cloud.** The only outbound traffic is the list
    in `docs/THREAT-MODEL.md` §B6: the intel sources the user can see and configure
    (StevenBlack hosts, CISA KEV, NVD), a 30 s connectivity probe to
-   `dns.google`/`1.1.1.1`, and whatever the user points the engine at (LM Studio,
-   an IOC hash feed, an update manifest — which is the project's own release
+   `dns.google`/`1.1.1.1`, and whatever the user points the engine at (an IOC
+   hash feed, an update manifest — which is the project's own release
    assets unless the user typed another feed, and is fetched only when they press
    *Check now*, D-046). Any other destination is a decision for
    `docs/DECISIONS.md`, not a detail to slip into a commit.

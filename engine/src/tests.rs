@@ -74,32 +74,6 @@ mod tests {
     }
 
     #[test]
-    fn nl_parser_matches_arabic_full_audit() {
-        let r = crate::llm::parse_nl("افحص النظام");
-        assert!(r.matched);
-        assert_eq!(r.command, "audit.run");
-    }
-
-    #[test]
-    fn nl_parser_matches_scan_with_path() {
-        let r = crate::llm::parse_nl(r#"افحص مجلد "C:\Users\x\Downloads""#);
-        assert!(r.matched);
-        assert_eq!(r.command, "scan.start");
-        // parse_nl lowercases the input; Windows paths are case-insensitive.
-        assert_eq!(
-            r.params["path"].as_str().unwrap().to_lowercase(),
-            r"c:\users\x\downloads"
-        );
-    }
-
-    #[test]
-    fn nl_parser_unmatched_input_is_honest() {
-        let r = crate::llm::parse_nl("اطبخ لي بيضة");
-        assert!(!r.matched);
-        assert_eq!(r.command, "");
-    }
-
-    #[test]
     fn pua_live_preference_counts_when_no_policy_is_set() {
         use crate::platform::windows::collectors::pua_effective;
         // The regression: the audit read the Group Policy key alone, so a

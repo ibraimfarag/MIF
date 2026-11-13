@@ -1,12 +1,8 @@
 {
   "audit.applyingFix": "Applying fix… (UAC may appear)",
-  "audit.askingAnalyst": "Asking the analyst…",
-  "audit.assistant": "MI CS Assistant",
   "audit.empty.action": "Run first audit",
   "audit.empty.title": "No audit has run yet",
   "audit.error": "Audit failed",
-  "audit.explain": "Explain this finding",
-  "audit.explainFailed": "Explain failed",
   "audit.findings": "findings",
   "audit.fixFailed": "Fix failed",
   "audit.fixed": "Fixed: {item} — rescan for the new score",

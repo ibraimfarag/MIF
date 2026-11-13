@@ -12,19 +12,19 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 73 rows in `qa/methods.json` | 73 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 73 declared in the registry, 17 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 71 rows in `qa/methods.json` | 71 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 71 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens, 1 surface and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
-| Controls | 109 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
+| Controls | 102 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
 | Dart tests | 32 files | 156 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 26 modules | 206 declared cases | `engine.test` step |
+| Engine tests | 26 modules | 203 declared cases | `engine.test` step |
 | Pipeline steps | 15 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 73 methods
+## The pipe: 71 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
@@ -32,8 +32,8 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 |---|---|---|---|
 | `desktop` | 2 | 0 | 2 |
 | `mutating` | 22 | 12 | 10 |
-| `network` | 5 | 0 | 5 |
-| `pure` | 6 | 6 | 0 |
+| `network` | 4 | 0 | 4 |
+| `pure` | 5 | 5 | 0 |
 | `read` | 25 | 25 | 0 |
 | `sandbox` | 13 | 13 | 0 |
 
@@ -86,9 +86,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `job.get` | `read` | 1 |  |
 | `job.list` | `read` | 1 |  |
 | `job.resume` | `read` | 1 |  |
-| `llm.explain` | `network` | 0 | yes |
 | `net.connections` | `read` | 1 |  |
-| `nl.command` | `pure` | 2 |  |
 | `noise.mute` | `sandbox` | 2 |  |
 | `noise.stats` | `read` | 1 |  |
 | `noise.unmute` | `sandbox` | 2 |  |
@@ -115,7 +113,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `update.download` | `network` | 0 | yes |
 | `vuln.scan.start` | `network` | 0 | yes |
 
-### The 17 methods that are classified not to run
+### The 16 methods that are classified not to run
 
 Each of these is a recorded decision, not a gap: the class decides what the harness may do on the machine it is protecting, and the reason says what would have to change for the row to run. The report test refuses a reason shorter than 20 characters, so "n/a" cannot pass as one.
 
@@ -129,7 +127,6 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `guard.start` | `mutating` | starts the ETW guard session on this machine |
 | `helper.install` | `mutating` | opens a UAC prompt and installs a service |
 | `helper.uninstall` | `mutating` | removes the privileged helper service |
-| `llm.explain` | `network` | posts the finding to the configured LM Studio endpoint |
 | `notify.test` | `desktop` | raises a real Windows toast on this machine |
 | `service.install` | `mutating` | writes an HKCU Run autostart entry |
 | `service.remove` | `mutating` | deletes the HKCU Run autostart entry |
@@ -139,11 +136,11 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `update.download` | `network` | downloads the configured update manifest |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 
-## The screens: 13 screens and the shell, 109 controls
+## The screens: 13 screens and the shell, 102 controls
 
 The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with `qa/ui/ledger.json`. The ledger is a ratchet in both directions.
 
-- `screens.audit` - 8 controls
+- `screens.audit` - 4 controls
 - `screens.canaries` - 6 controls
 - `screens.dashboard` - 1 control
 - `screens.guard` - 3 controls
@@ -154,9 +151,9 @@ The sweep mounts each screen the way the router does, taps every control once ag
 - `screens.network` - 8 controls
 - `screens.reports` - 1 control
 - `screens.scanner` - 9 controls
-- `screens.settings` - 34 controls
+- `screens.settings` - 32 controls
 - `screens.vulns` - 2 controls
-- `shell` - 21 controls (rail, window buttons, command box)
+- `shell` - 20 controls (rail, window buttons, command box)
 
 ## The languages: 2
 
@@ -274,10 +271,10 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/secrets.rs` | 5 |
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 10 |
-| `engine/src/tests.rs` | 56 |
+| `engine/src/tests.rs` | 53 |
 | `engine/src/update.rs` | 4 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **206** in 26 modules |
+| **total** | **203** in 26 modules |
 
 ## What runs where
 

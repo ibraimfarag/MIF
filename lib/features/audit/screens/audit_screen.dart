@@ -199,54 +199,6 @@ String? _hardeningActionFor(AuditFinding f) {
   return null;
 }
 
-Future<void> _explainFinding(
-    BuildContext context, WidgetRef ref, AuditFinding f) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final asking = context.tr('audit.askingAnalyst');
-  final assistant = context.tr('audit.assistant');
-  final failedLabel = context.tr('audit.explainFailed');
-  messenger.showSnackBar(SnackBar(
-      content: Text(asking), duration: const Duration(seconds: 2)));
-  try {
-    final res = await ref.read(engineIpcProvider).request('llm.explain', {
-      'finding': '${f.section} :: ${f.item} — ${f.description}',
-      'lang': 'ar',
-    });
-    if (!context.mounted) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(Icons.auto_awesome, color: AppColors.cyan, size: 18),
-              const SizedBox(width: 8),
-              Text(assistant,
-                  style: TextStyle(
-                      color: AppColors.cyan, fontWeight: FontWeight.w700)),
-            ]),
-            const SizedBox(height: 12),
-            SelectableText((res as Map)['explanation']?.toString() ?? '—',
-                style: TextStyle(
-                    color: AppColors.text, fontSize: 13.5, height: 1.6)),
-          ],
-        ),
-      ),
-    );
-  } catch (e) {
-    if (context.mounted) {
-      messenger.showSnackBar(
-          SnackBar(content: Text('$failedLabel: $e')));
-    }
-  }
-}
-
 class _FindingCard extends ConsumerWidget {
   const _FindingCard({required this.finding, this.staleSince});
   final AuditFinding finding;
@@ -322,12 +274,6 @@ class _FindingCard extends ConsumerWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  tooltip: context.tr('audit.explain'),
-                  icon: Icon(Icons.auto_awesome,
-                      size: 16, color: AppColors.cyan),
-                  onPressed: () => _explainFinding(context, ref, finding),
-                ),
                 if (finding.fixAvailable)
                   OutlinedButton(
                     onPressed: () async {
