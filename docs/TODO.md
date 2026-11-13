@@ -219,6 +219,46 @@
 > `0.1.2` package holding an app that still called itself 0.1.1 with every step
 > green. `test\version_agreement_test.dart` is that gate now (2 cases, proved to
 > fail on a hand-made `0.1.2`-against-`0.1.1+2` tree before it was committed).
+> **2026-11-13: `0.1.2` is cut from `bda619e`.** The bump itself is three
+> declarations and two generated files: `engine/Cargo.toml` and `pubspec.yaml`
+> (`0.1.2+3`, the pair `test/version_agreement_test.dart` holds together),
+> `engine/Cargo.lock` following its crate, and `sbom.cdx.json` +
+> `THIRD-PARTY-NOTICES` rewritten by `dart run tool/sbom.dart` (579 components,
+> 8 licences, no copyleft, no missing texts) — the first attempt edited the SBOM
+> by hand, left the `serialNumber` on the old value and the notices headed
+> `0.1.1`, and the lane's staleness gate refused the package with exactly that
+> diff. What the batch carries over `0.1.1`: the engine's refusal reason reaching
+> the card (D-050), the AI surface gone whole (D-052), an Arabic tray whose Quit
+> ends the engine rather than the window (D-053), the Explorer entry per user in
+> HKCU plus the key that enables it (D-054), and the فصحى pass with the gate that
+> keeps it (D-055).
+> The package: `MICS-portable-0.1.2-x64.zip` **22,684,796 bytes**
+> `sha256 f15b34a21050b105485ca23cb90959ed7ab1c54e89953d057810252572f6e2fd`, engine
+> `20e3b3c2…`, app `8ba89db5…`, `VERSION` built 2026-11-13 18:20:11 +02:00, signed
+> by the same certificate `0.1.1` pinned (`ABB0FF3D…`), so an installed `0.1.1`
+> engine accepts the `0.1.2` feed. **No installer was built for this cut** —
+> `make-installer.ps1` was not run, so there is no `MICS-setup-0.1.2-x64.exe`
+> beside the zip. `update.json` keeps `notes_ar` empty because
+> `update-manifest.ps1` documents the release page as the place notes are
+> explained.
+> **The lane is not green on this machine, and the reasons are written down
+> rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
+> engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,
+> `fw.wfp.reset` — and `-Tier full` ends the same way; the run does report `PASS`
+> for the 19-check app/engine lifetime suite ("the engine ends with the app that
+> started it") and the 18-check signing-identity suite ("one PFX gives every build
+> the same identity"). Measured with the privileged helper service removed, an
+> unelevated standard-user shell (`admin_member=False`, `elevated_token=False`) and
+> an engine whose Authenticode status is `NotSigned`, the engine's WFP calls
+> nevertheless succeed (`status: blocked`, 2 filters) while the contract expects
+> the refusal an unsigned, unelevated caller gets. The same three were red in this
+> machine's first run of the day, before any commit in this batch, and
+> `make-release.ps1` passes end to end on the same tree. One more defect the run
+> paid for: **a failing `engine.contract` leaves its engine alive**; the leaked
+> process keeps `engine\target\release\mics-engine.exe` locked and the next
+> `cargo build` in the repo dies with `Access is denied (os error 5)` — the
+> packaging run above was completed by pointing `CARGO_TARGET_DIR` outside the
+> tree, which is a workaround, not a fix.
 > ب4 landed 2026-11-03 (D-026): the installer now creates the privileged helper inside
 > the one UAC prompt it already asks for — by calling the shipped engine's own
 > `install-helper` — and its uninstaller stops and deletes that service again through
