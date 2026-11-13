@@ -6,7 +6,7 @@
   "shell.tray.on": "مفعّل",
   "shell.tray.off": "معطّل",
   "shell.tray.strict": "صارم",
-  "shell.tray.firewall": "الجدار الناري",
+  "shell.tray.firewall": "جدار الحماية",
   "shell.tray.connections": "الاتصالات",
   "shell.tray.guardToggle": "حارس العمليات",
   "shell.tray.guardHint": "يراقب كل عملية تبدأ",
@@ -22,6 +22,6 @@
   "shell.tray.engineWait": "جارٍ الاتصال",
   "shell.tray.engineMissing": "المحرّك غير موجود",
   "shell.tray.engineDown": "المحرّك متوقف",
-  "card.dismiss": "اقفل الإشعار",
-  "card.crashNotSent": "ما اتبعتش في أي حتة — التسليم مقفول"
+  "card.dismiss": "أغلق الإشعار",
+  "card.crashNotSent": "لم يُرسل في أي مكان — التسليم مقفول"
 }

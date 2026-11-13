@@ -1,7 +1,7 @@
-﻿{
-    "reports.exportNow":  "صدّر دلوقتي",
-    "reports.intro":  "صدّر درجة الفحص الحية وكل الملاحظات وعناصر بدء التشغيل وسلاسل الحوادث كتقرير Markdown.",
+{
+    "reports.exportNow":  "صدّر الآن",
+    "reports.intro":  "صدّر درجة الفحص الحية وكل الملاحظات وعناصر بدء التشغيل وسلاسل الحوادث في تقرير Markdown.",
     "reports.markdownTitle":  "تقرير أمني Markdown",
-    "reports.where":  "كل حاجة فين",
-    "reports.paths":  "الاستخبارات والحجر واللقطات:  %PROGRAMDATA%\\MICS\\`nالتقارير:  Documents\\MICS-Reports\\`nالقواعد (YARA والحارس):  rules\\ بجوار mics-engine.exe"
+    "reports.where":  "أين كل شيء",
+    "reports.paths":  "الاستخبارات والحجر واللقطات:  %PROGRAMDATA%\\MICS\\\nالتقارير:  Documents\\MICS-Reports\\\nالقواعد (YARA والحارس):  rules\\ بجوار mics-engine.exe"
 }

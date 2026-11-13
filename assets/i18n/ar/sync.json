@@ -4,15 +4,15 @@
   "sync.hashes": "{count} بصمة IOC معروفة",
   "sync.intel": "الاستخبارات قبل {age}",
   "sync.never": "لم تُحدَّث بعد",
-  "sync.offline": "أوفلاين",
+  "sync.offline": "بلا اتصال",
   "sync.online": "متصل",
   "sync.tooltip": "حالة الاتصال وعمر الاستخبارات. اضغط للتحديث الآن.",
   "update.available": "يوجد تحديث: {version}",
   "update.current": "إصدارك الحالي {version}",
   "update.download": "نزّل وثبّت",
-  "update.failed": "التحديث فشل",
-  "update.installed": "التحديث جاهز — MI CS هيعيد التشغيل",
+  "update.failed": "تعذّر التحديث",
+  "update.installed": "التحديث جاهز — سيعيد MI CS التشغيل",
   "update.notes": "ملاحظات الإصدار",
-  "update.upToDate": "إنت على أحدث إصدار",
-  "update.checking": "بيتأكد من التحديثات…"
+  "update.upToDate": "أنت على أحدث إصدار",
+  "update.checking": "جارٍ التحقق من التحديثات..."
 }

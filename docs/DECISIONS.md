@@ -3329,3 +3329,49 @@ its entry from the installer at install time, with the fixed English label, whil
 `false` — so on that copy the switch can read off while the entry is present, and turning it on is what
 adopts the pack's language; and the entry is a plain `command` value, so a same-user process can rewrite
 the command line, exactly as before D-054 — MI CS still validates the path it is handed like any other.
+
+## D-055 — The Arabic copy speaks فصحى, and a gate keeps it that way
+
+**Status:** implemented (2026-11-13).
+
+**Context.** The Arabic packs were written in Egyptian colloquial — `مفيش`, `دلوقتي`, `عشان`, `اللي`,
+`بيقول`, the `م...ش` negator — mixed with transliterated English (`فولدر`, `دومين`, `هاش`, `أوفلاين`,
+`كارت`) and with English words left standing inside Arabic sentences (`Cache`, `Low integrity`,
+`web root`, `rules/`). A line-by-line review of the packs found **122 colloquial or transliterated
+tokens** and **117 places where Latin script stood inside an Arabic sentence**, and it found the voice
+drifting with nothing to stop it coming back: a sentence could be rewritten in فصحى and a later edit
+could quietly return it, because no test read the copy as Arabic.
+
+**Decision.**
+
+- The Arabic packs are rewritten in فصحى in one step — 16 files, key for key, placeholder for
+  placeholder, path for path, with the English pack untouched except where it carried the same defect.
+  `test/i18n_parity_test.dart` holds the two languages to the same keys, so the rewrite is proved not
+  to have moved the surface it did not mean to move.
+- **The voice becomes a rule of the repository, not a reviewer's note**: `test/i18n_voice_test.dart`,
+  four cases, in the fast tier. **R1** fails a colloquial token, **R2** a transliterated term, **R3**
+  Latin script in Arabic copy, **R4** a placeholder that does not match the English one. Every finding
+  names the word to write instead (`مفيش` → use `لا يوجد`), because a gate that only says "no" sends
+  the next reader back to the review.
+- The gate reads a string the way a reader sees it before it looks for words: `{placeholders}`,
+  `<tags>`, `%VARS%`, `slash/paths`, `back\slash\paths`, `dotted.keys` and CVE ids are stripped, so the
+  copy may keep naming `ids.blocklist.import`, `%PROGRAMDATA%\MICS\` and `rules/guard/*.json` without
+  failing its own voice test. Latin that must stay — Windows' own words (`UAC`, `DPAPI`, `KEV`,
+  `SMBv1`), the formats and rule languages the engine reads (`JSON`, `YARA`, `Sigma`, `TLS`, `cidr`) —
+  is an **allowlist with a written reason per group**, so the price of naming a thing as Windows names
+  it is paid in the file that decides, not in a weakened rule.
+- **Two limits are recorded rather than glossed.** The Egyptian present tense cannot be caught by
+  pattern — `ب` + verb collides with فصحى words as ordinary as `بيع` and `بين` — so the listed verb
+  forms (`بيعمل`, `بيفشل`, `بيحجب`) stand in for it, form by form, and the file says so where the list
+  lives. And the gate judges **words, not sentences**: a sentence assembled only from allowed words
+  passes even if it reads as a translation. Tone and idiom remain the reviewer's job.
+- The same review found a defect the gate does not test for and this step fixes: `reports.paths`
+  carried a literal `` `n `` — backtick and `n` — where a newline belonged, in **both** packs, so the
+  "where everything lives" list printed `` `n `` between the folders. Both files now carry `\n`.
+
+**Consequences.** All 19 Arabic packs pass the gate (0 colloquial, 0 transliterated, 0 Latin leaks, 0
+placeholder mismatches) and the suite is **192 passing, 0 failing** with `flutter analyze` clean. The
+QA report is regenerated with the new case count (33 test files, 162 declared cases against 32 and
+158), so the committed report and the registries agree again. What the step buys is not the wording it
+changed but the fact that the wording can no longer drift in silence: an Arabic string added tomorrow
+is checked by the same four rules, and its failure names the فصحى word that belongs there.
