@@ -481,6 +481,12 @@
       "note": "Validated and persisted into the isolated settings.json. The engine checks that the value is a language tag, not that it is in a fixed list: the UI owns the packs, so a language added next month must not need an engine change."
     },
     {
+      "method": "explorer.menu.set",
+      "class": "mutating",
+      "invalid": { "enabled": "yes" },
+      "note": "Writes the opt-in, per-user Explorer verb (HKCU\\Software\\Classes\\*|Directory|Directory\\Background\\shell\\MICS) and persists settings.explorer_menu (D-054). Refusal only in the harness: a happy path would put a menu item on the machine running the suite, and the flag would then survive into the next test."
+    },
+    {
       "method": "update.check",
       "class": "network",
       "skip": "fetches the configured update manifest",

@@ -1728,4 +1728,201 @@ mod tests {
             );
         }
     }
+
+    // ---- the Explorer right-click entry (D-054) ------------------------------
+
+    use std::cell::RefCell;
+    use std::collections::{HashMap, HashSet};
+
+    /// A registry that lives in a `HashMap`, so the verb's exact shape - three
+    /// keys, three values each, removed as a tree - is a claim a test can check
+    /// without writing to the machine's own hive.
+    #[derive(Default)]
+    struct FakeRegistry {
+        values: RefCell<HashMap<(String, String), String>>,
+        deleted: RefCell<Vec<String>>,
+    }
+
+    impl crate::explorer::VerbRegistry for FakeRegistry {
+        fn set_value(&self, subkey: &str, name: &str, value: &str) -> anyhow::Result<()> {
+            self.values
+                .borrow_mut()
+                .insert((subkey.to_string(), name.to_string()), value.to_string());
+            Ok(())
+        }
+
+        fn delete_tree(&self, subkey: &str) -> anyhow::Result<()> {
+            self.deleted.borrow_mut().push(subkey.to_string());
+            let nested = format!("{subkey}\\");
+            self.values
+                .borrow_mut()
+                .retain(|(key, _), _| key != subkey && !key.starts_with(&nested));
+            Ok(())
+        }
+
+        fn read_default(&self, subkey: &str) -> anyhow::Result<Option<String>> {
+            Ok(self
+                .values
+                .borrow()
+                .get(&(subkey.to_string(), String::new()))
+                .cloned())
+        }
+    }
+
+    const EXPLORER_EXE: &str = r"C:\Program Files\MI CS\mics_app.exe";
+
+    fn enabled_registry() -> FakeRegistry {
+        let registry = FakeRegistry::default();
+        crate::explorer::enable(
+            &registry,
+            EXPLORER_EXE,
+            "Scan this file with MI CS",
+            "Scan this folder with MI CS",
+        )
+        .unwrap();
+        registry
+    }
+
+    /// Register and unregister must cover the same keys: a key `enable` writes
+    /// but `disable` never visits is a leftover nothing in the UI can remove.
+    #[test]
+    fn the_explorer_entry_writes_and_removes_the_same_keys() {
+        let registry = enabled_registry();
+        assert_eq!(
+            registry.values.borrow().len(),
+            9,
+            "three classes x (label, Icon, command)"
+        );
+
+        let written: HashSet<String> = registry
+            .values
+            .borrow()
+            .keys()
+            .map(|(key, _)| key.split(r"\command").next().unwrap().to_string())
+            .collect();
+        let keys: HashSet<String> = crate::explorer::verb_keys().into_iter().collect();
+        assert_eq!(written, keys, "register and unregister must agree");
+
+        crate::explorer::disable(&registry).unwrap();
+        assert!(registry.values.borrow().is_empty(), "nothing may survive");
+        assert_eq!(
+            *registry.deleted.borrow(),
+            crate::explorer::verb_keys(),
+            "disable removes exactly the keys enable wrote"
+        );
+    }
+
+    /// The two placeholders, and the quoting: a Windows path may contain a space,
+    /// and there is no shell in between, so the quotes are the whole rule.
+    #[test]
+    fn the_explorer_command_is_a_quoted_scan_with_explorers_own_placeholder() {
+        let registry = enabled_registry();
+        let values = registry.values.borrow();
+        let command = |class: &str| {
+            values
+                .get(&(
+                    format!(r"Software\Classes\{class}\shell\MICS\command"),
+                    String::new(),
+                ))
+                .cloned()
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            command("*"),
+            r#""C:\Program Files\MI CS\mics_app.exe" --scan "%1""#
+        );
+        assert_eq!(
+            command(r"Directory"),
+            r#""C:\Program Files\MI CS\mics_app.exe" --scan "%1""#
+        );
+        assert_eq!(
+            command(r"Directory\Background"),
+            r#""C:\Program Files\MI CS\mics_app.exe" --scan "%V""#,
+            "the folder's empty space is %V, not %1"
+        );
+    }
+
+    /// The menu text is the app's, not the engine's: whatever the pack says is
+    /// what the key holds, Arabic or otherwise.
+    #[test]
+    fn the_explorer_label_is_the_callers_own_text() {
+        let registry = FakeRegistry::default();
+        crate::explorer::enable(
+            &registry,
+            EXPLORER_EXE,
+            "فحص هذا الملف باستخدام MI CS",
+            "فحص هذا المجلد باستخدام MI CS",
+        )
+        .unwrap();
+        let values = registry.values.borrow();
+        let label = |class: &str| {
+            values
+                .get(&(
+                    format!(r"Software\Classes\{class}\shell\MICS"),
+                    String::new(),
+                ))
+                .cloned()
+                .unwrap_or_default()
+        };
+        assert_eq!(label("*"), "فحص هذا الملف باستخدام MI CS");
+        assert_eq!(label(r"Directory"), "فحص هذا المجلد باستخدام MI CS");
+        assert_eq!(label(r"Directory\Background"), "فحص هذا المجلد باستخدام MI CS");
+    }
+
+    /// The status check reads back the same command line the writer produced, so
+    /// a moved copy can tell "my entry" from "someone else's".
+    #[test]
+    fn the_explorer_entry_names_the_copy_that_registered_it() {
+        let registry = enabled_registry();
+        assert!(crate::explorer::is_registered(&registry, EXPLORER_EXE).unwrap());
+        assert!(
+            !crate::explorer::is_registered(&registry, r"D:\Other\mics_app.exe").unwrap(),
+            "a different copy is not this entry"
+        );
+        crate::explorer::disable(&registry).unwrap();
+        assert!(
+            !crate::explorer::is_registered(&registry, EXPLORER_EXE).unwrap(),
+            "after removal there is nothing to report as registered"
+        );
+    }
+
+    /// A path that cannot be a command's executable is refused before anything
+    /// is written - a relative path would resolve against Explorer's own working
+    /// directory, which is not this app's.
+    #[test]
+    fn the_explorer_entry_refuses_a_path_it_could_not_run() {
+        let registry = FakeRegistry::default();
+for bad in [
+            "mics_app.exe",
+            r".\mics_app.exe",
+            r"C:\MI CS\mics_app.dll",
+            r"C:\MI CS\mics_app.exe\",
+        ] {
+            assert!(
+                crate::explorer::enable(&registry, bad, "Scan", "Scan").is_err(),
+                "{bad} must be refused"
+            );
+        }
+        assert!(
+            crate::explorer::enable(&registry, EXPLORER_EXE, "  ", "Scan").is_err(),
+            "a blank label would be an empty menu line"
+        );
+        assert!(
+            registry.values.borrow().is_empty(),
+            "a refused call writes nothing"
+        );
+    }
+
+    /// `command_exe` is the inverse of `scan_command` for the paths that matter,
+    /// including one with a space and one with non-ASCII text.
+    #[test]
+    fn the_explorer_command_reader_is_the_writers_inverse() {
+        for path in [
+            r"C:\Program Files\MI CS\mics_app.exe",
+            r"D:\أدوات\mics_app.exe",
+        ] {
+            let command = crate::explorer::scan_command(path, "%1");
+            assert_eq!(crate::explorer::command_exe(&command), path);
+        }
+    }
 }

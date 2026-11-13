@@ -439,8 +439,11 @@ the empty space inside a folder — the installer writes that entry for the user
 installed it, and the uninstaller removes it (D-041). Choosing it starts a scan of what
 you clicked and shows the result in the scanner screen; if MI CS is already open, the
 window that is open comes forward and scans there instead of a second window starting.
-A portable or Store copy carries no menu entry, because it is this installer that
-writes one.
+A portable or Store copy carries no menu entry until you ask for one: **Settings →
+Protection → Add to the Explorer right-click menu** writes the same three keys for your
+own account only (no administrator prompt) and labels them in the language the app is
+running in; turning the switch off removes exactly those keys again, and leaving it on
+means a portable copy that moved refreshes the path Explorer would launch (D-054).
 
 ## Building from source
 

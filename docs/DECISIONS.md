@@ -3287,3 +3287,45 @@ regenerated with it. It is **not** a process-tree proof: confirming an empty `ta
 a built package, so the OS-level half still rests on `shutdown` plus the parent watch, and that honest limit is
 written in the code and the Done log. Nothing else changed — the engine, the method whitelist and the settings
 document are untouched.
+
+## D-054 — The Explorer entry is per-user and the user's switch, and the app remembers what it wrote
+
+**Status:** implemented (2026-11-13).
+
+**Context.** `installer/mics.nsi` has written the Explorer verb since D-041: the same three keys
+(`*`, `Directory`, `Directory\Background`) under `HKCU\Software\Classes`, label `Scan with MI CS`,
+command `"<install>\mics_app.exe" --scan "%1"`, in the per-user class store so even the per-machine build
+needs no extra prompt. That gives an installed copy a working menu item, and gives a **portable or Store
+copy nothing at all** — there is no installer to run. The label was also fixed in English, and the only
+way to remove the entry was the uninstaller or regedit.
+
+**Decision.**
+
+- The engine owns the write, like every other piece of OS access (rule 4): one method,
+  `explorer.menu.set` = `{enabled: true|false}`, where `explorer::enable` writes the three verbs and
+  `explorer::disable` deletes exactly those three trees. Key paths and the command line are produced by
+  pure functions (`entries`, `scan_command`, and `command_exe` for reading back what Explorer would run),
+  so the tests assert on the strings without touching a real hive — `UserRegistry` is the seam.
+- **`HKEY_CURRENT_USER` only, never `HKLM`**: the entry needs no elevation, and a portable copy can offer
+  the same feature as an installed one. There is no `Drive` and no `AllFilesystemObjects`; the verb stays
+  on files, folders, and the empty space inside a folder (`%V`).
+- The command line is the quoted form `"<exe>" --scan "<selection>"`, handed to the `--scan` entry point
+  that D-041 already built — no shell string is assembled by concatenation, and the request reaches the
+  window that is already open through the handoff path rather than starting a second app.
+- **`explorer_menu` defaults to `false`** for a copy the app has never written for, and the toggle is
+  explicit: nothing in the app writes a registry key on first run. The flag is the app's memory of what
+  *it* registered, which is what lets a moved portable copy refresh a stale path instead of leaving a
+  dead menu item: the surviving window calls `syncExplorerMenu()` at start, and `command_exe` is how the
+  stale path is recognised.
+- The labels are the app's own pack text (`scanner.menuFile`, `scanner.menuFolder`), so the menu speaks the
+  language the app is running in; turning the switch off deletes exactly the three keys it wrote.
+
+**Consequences.** `enabled:true` and `enabled:false` are proven symmetric — the test asserts the two key
+sets are equal — and the strings are asserted for a path containing spaces and non-ASCII characters, so a
+portable user who turns the entry on leaves nothing behind by turning it off. `qa/methods.json` gains one
+`mutating` method (the suite's invalid-input case is `enabled: "yes"`), and the ledger and the report are
+regenerated with it. Two honest limits are recorded rather than glossed: an **installed** copy still gets
+its entry from the installer at install time, with the fixed English label, while the app's flag starts
+`false` — so on that copy the switch can read off while the entry is present, and turning it on is what
+adopts the pack's language; and the entry is a plain `command` value, so a same-user process can rewrite
+the command line, exactly as before D-054 — MI CS still validates the path it is handed like any other.

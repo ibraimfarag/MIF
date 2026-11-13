@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show stderr;
+import 'dart:io' show Platform, stderr;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -283,6 +283,13 @@ class AppSettings {
   /// Folder that scheduled scan walks; empty = the engine uses the profile.
   final String scanTarget;
   final List<String> canaryPaths;
+  /// The opt-in Explorer right-click entry ("Scan this file/folder with MI CS").
+  ///
+  /// Off by default (D-054): the installer writes the same keys for an installed
+  /// copy, and a portable copy writes nothing until the user turns this on. The
+  /// engine is what touches the registry; this flag is its memory of what it
+  /// registered, so a folder that moved can refresh the stale path at next start.
+  final bool explorerMenu;
 
   const AppSettings({
     this.lang = AppLang.ar,
@@ -305,6 +312,7 @@ class AppSettings {
     this.scanIntervalHours = 0,
     this.scanTarget = '',
     this.canaryPaths = const [],
+    this.explorerMenu = false,
   }) : _storedTagOverride = storedLangTag;
 
   static String themeToString(ThemeMode mode) => switch (mode) {
@@ -344,6 +352,7 @@ class AppSettings {
         canaryPaths: (j['canary_paths'] as List? ?? const [])
             .map((e) => e.toString())
             .toList(),
+        explorerMenu: j['explorer_menu'] as bool? ?? false,
       );
   }
 
@@ -371,6 +380,7 @@ class AppSettings {
         'scan_interval_hours': scanIntervalHours,
         'scan_target': scanTarget,
         'canary_paths': canaryPaths,
+        'explorer_menu': explorerMenu,
       };
 
   /// Environment for the case where *this app* has to start the engine.
@@ -516,6 +526,46 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setCanaryPaths(List<String> paths) =>
       patch({'canary_paths': paths});
+
+  /// Turns the Explorer right-click entry on or off (D-054).
+  ///
+  /// The engine owns the per-user `HKCU` keys and the `explorer_menu` flag in
+  /// `settings.json`; this is the one place the app reaches both. The labels
+  /// travel with the call because they are the app's translations: a language
+  /// the engine has never heard of still gets a menu item in that language.
+  ///
+  /// A refusal does not flip the switch: the registry is the thing that
+  /// happened, so a failure leaves the state exactly as the engine still has it.
+  Future<void> setExplorerMenu(bool enabled) async {
+    final current = state.value ?? const AppSettings();
+    final tables = ref.read(i18nProvider).value ?? const {};
+    try {
+      await ref.read(engineIpcProvider).request('explorer.menu.set', {
+        'enabled': enabled,
+        if (enabled) ...{
+          'app_path': Platform.resolvedExecutable,
+          'file_label': lookup(tables, current.lang, 'scanner.menuFile'),
+          'folder_label': lookup(tables, current.lang, 'scanner.menuFolder'),
+        },
+      });
+    } catch (e) {
+      stderr.writeln('explorer.menu.set failed ($e) — switch left unchanged');
+      return;
+    }
+    final next = _mergeLocal(current, {'explorer_menu': enabled});
+    state = AsyncValue.data(next);
+    await _writeCache(next);
+  }
+
+  /// Re-asserts the entry at startup when the user left it on, so a copy whose
+  /// folder moved refreshes the dead path instead of leaving a menu item that
+  /// launches nothing. Does nothing when the switch is off — writing registry
+  /// keys nobody asked for is exactly what the flag exists to prevent.
+  Future<void> syncExplorerMenu() async {
+    final current = state.value;
+    if (current == null || !current.explorerMenu) return;
+    await setExplorerMenu(true);
+  }
 
   Future<void> setNvdKey(String key) => patch({'nvd_api_key': key});
 

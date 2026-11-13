@@ -84,6 +84,7 @@
       "OutlinedButton(Send a test notification)",
       "OutlinedButton(Sync now)",
       "SegmentedButton<ThemeMode>(Dark)",
+      "SwitchListTile(Add to the Explorer right-click menu)",
       "SwitchListTile(Auto-quarantine detections by default)",
       "SwitchListTile(Desktop notifications)",
       "SwitchListTile(Do not disturb)",

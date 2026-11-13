@@ -164,6 +164,14 @@ class SettingsScreen extends ConsumerWidget {
                 value: s.scanQuarantineDefault,
                 onChanged: notifier.setScanQuarantineDefault,
               ),
+              // Opt-in, per-user, no elevation (D-054). The engine writes the
+              // keys; turning it off removes exactly the keys it wrote.
+              _Switch(
+                title: context.tr('settings.explorerMenu'),
+                subtitle: context.tr('settings.explorerMenuHint'),
+                value: s.explorerMenu,
+                onChanged: notifier.setExplorerMenu,
+              ),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(

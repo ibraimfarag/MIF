@@ -12,26 +12,26 @@ One row per surface the QA harness covers: what registers it, what proves it, an
 
 | Surface | Registered | Proven by | Enforced by |
 |---|---|---|---|
-| JSON-RPC methods | 71 rows in `qa/methods.json` | 71 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
-| Contract cases | 71 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
+| JSON-RPC methods | 72 rows in `qa/methods.json` | 72 dispatched by `engine/src/dispatcher.rs` | `test/qa_registry_test.dart` |
+| Contract cases | 72 declared in the registry, 16 classified not to run | every method has a case that runs here, or a recorded reason; the harness adds its own scenarios | `engine.contract`, `qa/contract.dart` |
 | Screens | 13 screens, 1 surface and the shell | every screen swept, `qa/ui/ledger.json` agrees | `test/ui_screens_test.dart` |
-| Controls | 102 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
+| Controls | 103 in the ledger | the sweep fails when a control appears or disappears unannounced | `qa/ui/harness.dart`, `qa/ui/ledger.dart` |
 | Languages | 2 languages, 38 packs | each language is bundled and parity-checked against the others | `test/lang_registry_test.dart`, `test/i18n_parity_test.dart` |
 | Shipped files | 9 binaries in `qa/opsec-baseline.json` | every count carries a written reason, and may only fall | `scripts/verify-opsec.ps1`, `test/opsec_baseline_test.dart` |
 | Integrity manifest | 1 `MICS_MANIFEST` resource in the packaged engine | every file it lists is re-hashed out of the package, and the engine signature covers the document | `scripts/verify-manifest.ps1`, `manifest.verify` |
-| Dart tests | 32 files | 157 declared cases (a floor: loops add more at run time) | `flutter.test` step |
-| Engine tests | 26 modules | 203 declared cases | `engine.test` step |
+| Dart tests | 32 files | 158 declared cases (a floor: loops add more at run time) | `flutter.test` step |
+| Engine tests | 26 modules | 209 declared cases | `engine.test` step |
 | Pipeline steps | 15 across 3 tiers | the same script a human runs and CI runs | `scripts/pipeline.ps1`, `.github/workflows/ci.yml` |
 | This report | 2 files | rebuilt from the registries above and compared byte for byte | `test/qa_report_test.dart` |
 
-## The pipe: 71 methods
+## The pipe: 72 methods
 
 The UI speaks JSON-RPC and nothing else, so this is the product's whole public surface. Cases are the rows of `qa/methods.json` that make the harness call the engine; a method with none must carry a recorded reason instead.
 
 | Class | Methods | With a case | Classified not to run |
 |---|---|---|---|
 | `desktop` | 2 | 0 | 2 |
-| `mutating` | 22 | 12 | 10 |
+| `mutating` | 23 | 13 | 10 |
 | `network` | 4 | 0 | 4 |
 | `pure` | 5 | 5 | 0 |
 | `read` | 25 | 25 | 0 |
@@ -51,6 +51,7 @@ The UI speaks JSON-RPC and nothing else, so this is the product's whole public s
 | `crash.get` | `read` | 3 |  |
 | `crash.list` | `read` | 1 |  |
 | `defender.scan.quick` | `mutating` | 0 | yes |
+| `explorer.menu.set` | `mutating` | 1 |  |
 | `fw.country.block` | `mutating` | 1 |  |
 | `fw.default_deny.disable` | `mutating` | 0 | yes |
 | `fw.default_deny.enable` | `mutating` | 0 | yes |
@@ -136,7 +137,7 @@ Each of these is a recorded decision, not a gap: the class decides what the harn
 | `update.download` | `network` | downloads the configured update manifest |
 | `vuln.scan.start` | `network` | starts a durable job that queries NVD |
 
-## The screens: 13 screens and the shell, 102 controls
+## The screens: 13 screens and the shell, 103 controls
 
 The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with `qa/ui/ledger.json`. The ledger is a ratchet in both directions.
 
@@ -151,7 +152,7 @@ The sweep mounts each screen the way the router does, taps every control once ag
 - `screens.network` - 8 controls
 - `screens.reports` - 1 control
 - `screens.scanner` - 9 controls
-- `screens.settings` - 32 controls
+- `screens.settings` - 33 controls
 - `screens.vulns` - 2 controls
 - `shell` - 20 controls (rail, window buttons, command box)
 
@@ -236,13 +237,13 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `test/settings_model_test.dart` | 10 |
 | `test/sound_assets_test.dart` | 2 |
 | `test/tray_panel_test.dart` | 5 |
-| `test/ui_screens_test.dart` | 12 |
+| `test/ui_screens_test.dart` | 13 |
 | `test/ui_shell_test.dart` | 3 |
 | `test/version_agreement_test.dart` | 2 |
 | `test/vuln_model_test.dart` | 3 |
 | `test/vuln_screen_test.dart` | 2 |
 | `test/widget_test.dart` | 1 |
-| **total** | **157** in 32 files |
+| **total** | **158** in 32 files |
 
 ### Engine: the modules under engine/src with tests
 
@@ -271,10 +272,10 @@ Declared cases per file, counted in the source. A loop over fixtures adds cases 
 | `engine/src/secrets.rs` | 5 |
 | `engine/src/selfcheck.rs` | 10 |
 | `engine/src/settings.rs` | 10 |
-| `engine/src/tests.rs` | 53 |
+| `engine/src/tests.rs` | 59 |
 | `engine/src/update.rs` | 4 |
 | `engine/src/watchdog.rs` | 5 |
-| **total** | **203** in 26 modules |
+| **total** | **209** in 26 modules |
 
 ## What runs where
 

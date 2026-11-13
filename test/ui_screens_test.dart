@@ -198,6 +198,31 @@ void main() {
     expect(mounted.container.read(rtlProvider), isTrue);
   });
 
+  // The Explorer entry is opt-in, per-user and reversible (D-054). The toggle
+  // must reach the engine — the only thing that touches the registry — and it
+  // must carry this copy's own executable plus the two labels from the UI's
+  // pack; a switch that only repainted itself would leave the menu item absent.
+  testWidgets('settings: the Explorer entry toggle reaches the engine',
+      (tester) async {
+    final mounted = await openScreen(tester, const SettingsScreen());
+    final toggle = find.widgetWithText(
+        SwitchListTile, 'Add to the Explorer right-click menu');
+    expect(toggle, findsOneWidget,
+        reason: 'the Explorer entry switch is not in Settings');
+
+    await tester.tap(toggle);
+    await settle(tester);
+
+    final params = mounted.engine.lastParams('explorer.menu.set');
+    expect(params, isNotNull, reason: 'the toggle never reached the engine');
+    expect(params!['enabled'], isTrue);
+    expect(params['app_path'], Platform.resolvedExecutable,
+        reason: 'the entry must name this copy of MI CS, not a guess');
+    expect(params['file_label'], isNotEmpty,
+        reason: 'the menu text comes from the pack, so it must travel');
+    expect(params['folder_label'], isNotEmpty);
+  });
+
   // The tag nobody can pick: `settings.json` edited by hand, or an RPC caller
   // writing `lang` straight. The screen used to render Arabic - the product's
   // default - over an English key table, with nothing saying why (D-049).

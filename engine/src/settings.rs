@@ -89,6 +89,15 @@ pub struct Settings {
     pub scan_target: String,
     /// Extra canary paths; empty = engine defaults.
     pub canary_paths: Vec<String>,
+    /// The Explorer right-click entry ("Scan this file/folder with MI CS").
+    ///
+    /// **Off by default** (D-054): the installer writes the entry for an
+    /// installed copy, and a portable copy writes nothing until the user turns
+    /// the switch on. The flag is the app's memory of what it registered so a
+    /// moved copy can refresh the stale path at next start; the engine never
+    /// reads the registry on its own, and `explorer.menu.set` is what both
+    /// writes the keys and updates this value together.
+    pub explorer_menu: bool,
 }
 
 impl Default for Settings {
@@ -113,6 +122,7 @@ impl Default for Settings {
             scan_interval_hours: 0,
             scan_target: String::new(),
             canary_paths: Vec::new(),
+            explorer_menu: false,
         }
     }
 }
@@ -225,6 +235,7 @@ impl Settings {
                     }
                     self.canary_paths = paths;
                 }
+                "explorer_menu" => self.explorer_menu = boolean(value, key)?,
                 other => bail!("unknown setting: {other}"),
             }
         }

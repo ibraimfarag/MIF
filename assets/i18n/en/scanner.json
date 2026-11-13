@@ -6,6 +6,8 @@
   "scanner.findingsSoFar": "{count} finding(s) so far",
   "scanner.folder": "Folder or drive to scan",
   "scanner.hint": "Pick a folder and run a scan. Files are triaged (location × extension × size × age) so the riskiest are checked first: IOC hash cache, then YARA rules.",
+  "scanner.menuFile": "Scan this file with MI CS",
+  "scanner.menuFolder": "Scan this folder with MI CS",
   "scanner.queue": "Triaged queue: {scanned} / {total} files",
   "scanner.queuePreparing": "Preparing the triage queue…",
   "scanner.quarantineCount": "Quarantine ({count} active)",

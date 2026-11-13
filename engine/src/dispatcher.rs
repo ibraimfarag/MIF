@@ -1030,6 +1030,63 @@ impl Dispatcher {
                     }
                 }
             }
+            // The opt-in Explorer right-click entry (D-054). The app is the only
+            // caller, and it brings the labels: they come from its language pack,
+            // so the engine never stores a translation for a language it does not
+            // know. Per-user HKCU, no elevation, and `enabled:false` removes
+            // exactly the keys `enabled:true` wrote.
+            "explorer.menu.set" => {
+                let params = req.params.clone().unwrap_or_else(|| json!({}));
+                let Some(enabled) = params.get("enabled").and_then(|v| v.as_bool()) else {
+                    return error_response(req, "explorer.menu.set requires enabled (true|false)");
+                };
+                let applied = if enabled {
+                    let app_path = params
+                        .get("app_path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
+                    let file_label = params
+                        .get("file_label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    let folder_label = params
+                        .get("folder_label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    crate::explorer::enable(
+                        &crate::explorer::UserRegistry,
+                        &app_path,
+                        &file_label,
+                        &folder_label,
+                    )
+                } else {
+                    crate::explorer::disable(&crate::explorer::UserRegistry)
+                };
+                if let Err(e) = applied {
+                    error!("explorer.menu.set failed: {e:#}");
+                    return detailed_error(req, "explorer.menu.set", e);
+                }
+                // The registry is the thing that happened; the flag is the memory
+                // of it (so a moved copy refreshes the stale path at next start).
+                // Persisting second means a failed write never claims success.
+                match crate::settings::patch(&json!({ "explorer_menu": enabled })) {
+                    Ok(next) => {
+                        crate::jobs::notify(
+                            "event",
+                            json!({ "type": "settings.changed", "data": next }),
+                        );
+                        Some(json!({ "enabled": enabled, "settings": next }))
+                    }
+                    Err(e) => {
+                        error!("explorer.menu.set: {e:#}");
+                        return detailed_error(req, "explorer.menu.set", e);
+                    }
+                }
+            }
             "update.check" => {
                 // Manifest-based self-update check. The URL is the user's own or
                 // the channel's compiled-in default (D-046), and this is the only

@@ -21,6 +21,8 @@ void main() {
     expect(s.toastEnabled, isTrue, reason: 'desktop cards are on by default (D-013)');
     expect(s.scanQuarantineDefault, isTrue);
     expect(s.canaryPaths, isEmpty);
+    expect(s.explorerMenu, isFalse,
+        reason: 'a portable copy writes no registry keys until asked (D-054)');
   });
 
   test('engine JSON keys are the documented snake_case contract', () {
@@ -51,6 +53,10 @@ void main() {
       'sound_volume',
       'toast_enabled',
       'scan_quarantine_default',
+      'scan_interval_hours',
+      'scan_target',
+      'canary_paths',
+      'explorer_menu',
     ]) {
       expect(json.containsKey(key), isTrue, reason: 'missing $key');
     }
@@ -74,6 +80,7 @@ void main() {
       toastEnabled: false,
       scanQuarantineDefault: false,
       canaryPaths: [r'C:\one', r'D:\two'],
+      explorerMenu: true,
     );
     final back = AppSettings.fromEngineJson(original.toEngineJson());
     expect(back.lang, original.lang);
@@ -92,6 +99,7 @@ void main() {
     expect(back.toastEnabled, isFalse);
     expect(back.scanQuarantineDefault, isFalse);
     expect(back.canaryPaths, hasLength(2));
+    expect(back.explorerMenu, isTrue);
   });
 
   test('closing the window quits unless the user asked for the background', () {

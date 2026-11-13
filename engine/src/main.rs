@@ -14,6 +14,7 @@ mod tests;
 mod guard;
 mod ids;
 mod hardening;
+mod explorer;
 mod jobs;
 mod lifecycle;
 mod notify;

@@ -23,6 +23,8 @@
     "settings.engine":  "المحرك",
     "settings.engine.lastError":  "ليه ماشتغلش",
     "settings.enginePath":  "مسار المحرك",
+    "settings.explorerMenu":  "إضافة إلى قائمة النقر بالزر الأيمن في مستكشف الملفات",
+    "settings.explorerMenuHint":  "يضيف «فحص هذا الملف باستخدام MI CS» و«فحص هذا المجلد باستخدام MI CS» إلى قائمة النقر بالزر الأيمن، لحسابك في ويندوز فقط. إيقاف الخيار يزيلهما.",
     "settings.guardAutostart":  "تشغيل حارس العمليات مع المحرك",
     "settings.guardAutostartHint":  "المراقبة اللحظية بتبدأ مع المحرك؛ ومش بتكمل بعد قفل النافذة غير لو «سيبه شغّال في الخلفية» مفتوح.",
     "settings.intel":  "الاستخبارات والجدولة",

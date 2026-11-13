@@ -6,6 +6,8 @@
   "scanner.findingsSoFar": "{count} اكتشاف لحد دلوقتي",
   "scanner.folder": "المجلد أو القرص اللي هيتفحص",
   "scanner.hint": "اختار مجلد وابدأ الفحص. الملفات بتترتّب حسب الخطورة (المكان × الامتداد × الحجم × العمر) عشان الأخطر يتفحص الأول: كاش مفاتيح IOC، وبعده قواعد YARA.",
+  "scanner.menuFile": "فحص هذا الملف باستخدام MI CS",
+  "scanner.menuFolder": "فحص هذا المجلد باستخدام MI CS",
   "scanner.queue": "الطابور المرتّب: {scanned} / {total} ملف",
   "scanner.queuePreparing": "بيجهّز طابور الفحص…",
   "scanner.quarantineCount": "الحجر ({count} نشط)",

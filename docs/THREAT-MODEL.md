@@ -271,6 +271,21 @@ a per-machine install still writes it per user rather than for everyone, the
 uninstaller removes all three keys, and the MSIX and portable packages carry no verb at
 all because this installer is what writes it.
 
+Since D-054 the same three keys can also be written, and removed, by the user from
+Settings (`explorer.menu.set`), which changes who may ask for the write but not what it
+is: still `HKCU`, still the installing user's own hive, still `"<mics_app.exe>" --scan
+"%1"` with no shell in between, and the label is the app's own pack text rather than a
+fixed string. Two properties follow. **The write needs no elevation**, because HKCU is
+the user's own hive - so the app never asks for a UAC prompt to add a menu item, and
+the refusal case in the harness exists because a happy path would put a key on the
+machine running the suite. **It is reversible without an uninstaller**: `enabled:false`
+deletes exactly the three keys `enabled:true` wrote (the test asserts the two key sets
+are equal), so a portable user who turned the entry on leaves nothing behind by turning
+it off. What it does *not* do is widen the surface - no `Drive`, no
+`AllFilesystemObjects`, no background on `*`; a malicious same-user process could still
+rewrite the command line, exactly as before, and the answer is unchanged: the entry
+starts MI CS, and MI CS scans a path it validates like any other.
+
 ## 5. Attack paths we considered
 
 | # | Attempt | Outcome | Evidence |

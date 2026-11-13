@@ -208,7 +208,12 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       } catch (_) {}
     }
     if (mounted) setState(() => _ready = true);
-    await _handoff(ipc);
+    if (await _handoff(ipc) && mounted) {
+      // The window that survives owns the Explorer entry (D-054): re-assert it
+      // so a copy whose folder moved refreshes the path Explorer would launch.
+      // A launch that handed itself over owns nothing and skips this.
+      unawaited(ref.read(settingsProvider.notifier).syncExplorerMenu());
+    }
   }
 
   /// The single-instance half of D-041: this launch either hands itself over to
@@ -219,7 +224,10 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   /// app), so a handover that ends this process is a window that appears and
   /// closes; keeping that beat short is what the early `ensureRunning` above
   /// buys: the engine is up, not spawned.
-  Future<void> _handoff(EngineIpc ipc) async {
+  ///
+  /// Returns whether this process *is* the window (false when it handed itself
+  /// over and is about to end).
+  Future<bool> _handoff(EngineIpc ipc) async {
     final handoff = AppHandoff(ipc: ipc, onActivate: _onActivate);
     _handoffSub = handoff;
     // The window that answers "nobody else is here" is the one that keeps
@@ -227,14 +235,15 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     handoff.listen();
     final scanPath = widget.scanPath;
     final delivered = await handoff.announce(path: scanPath);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (delivered) {
       // Another window has it: leave without touching the engine (a second
       // process never owns the engine it did not start).
       await ref.read(trayPanelProvider.notifier).quit();
-      return;
+      return false;
     }
     if (scanPath != null) _onActivate(scanPath);
+    return true;
   }
 
   /// Raises this window for a handover, and shows + starts the scan when the

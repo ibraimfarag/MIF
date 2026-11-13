@@ -39,13 +39,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <tbody>
     <tr>
       <td>JSON-RPC methods</td>
-      <td>71 rows in <code>qa&#47;methods.json</code></td>
-      <td>71 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
+      <td>72 rows in <code>qa&#47;methods.json</code></td>
+      <td>72 dispatched by <code>engine&#47;src&#47;dispatcher.rs</code></td>
       <td><code>test&#47;qa_registry_test.dart</code></td>
     </tr>
     <tr>
       <td>Contract cases</td>
-      <td>71 declared in the registry, 16 classified not to run</td>
+      <td>72 declared in the registry, 16 classified not to run</td>
       <td>every method has a case that runs here, or a recorded reason; the harness adds its own scenarios</td>
       <td><code>engine.contract</code>, <code>qa&#47;contract.dart</code></td>
     </tr>
@@ -57,7 +57,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>Controls</td>
-      <td>102 in the ledger</td>
+      <td>103 in the ledger</td>
       <td>the sweep fails when a control appears or disappears unannounced</td>
       <td><code>qa&#47;ui&#47;harness.dart</code>, <code>qa&#47;ui&#47;ledger.dart</code></td>
     </tr>
@@ -82,13 +82,13 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td>Dart tests</td>
       <td>32 files</td>
-      <td>157 declared cases (a floor: loops add more at run time)</td>
+      <td>158 declared cases (a floor: loops add more at run time)</td>
       <td><code>flutter.test</code> step</td>
     </tr>
     <tr>
       <td>Engine tests</td>
       <td>26 modules</td>
-      <td>203 declared cases</td>
+      <td>209 declared cases</td>
       <td><code>engine.test</code> step</td>
     </tr>
     <tr>
@@ -105,7 +105,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The pipe: 71 methods</h2>
+<h2>The pipe: 72 methods</h2>
 <p>The UI speaks JSON-RPC and nothing else, so this is the product&#39;s whole public surface. Cases are the rows of <code>qa&#47;methods.json</code> that make the harness call the engine; a method with none must carry a recorded reason instead.</p>
 <table>
   <thead><tr>
@@ -123,8 +123,8 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>mutating</code></td>
-      <td class="num">22</td>
-      <td class="num">12</td>
+      <td class="num">23</td>
+      <td class="num">13</td>
       <td class="num">10</td>
     </tr>
     <tr>
@@ -221,6 +221,12 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>mutating</code></td>
       <td class="num">0</td>
       <td>yes</td>
+    </tr>
+    <tr>
+      <td><code>explorer.menu.set</code></td>
+      <td><code>mutating</code></td>
+      <td class="num">1</td>
+      <td></td>
     </tr>
     <tr>
       <td><code>fw.country.block</code></td>
@@ -681,7 +687,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
   </tbody>
 </table>
-<h2>The screens: 13 screens and the shell, 102 controls</h2>
+<h2>The screens: 13 screens and the shell, 103 controls</h2>
 <p>The sweep mounts each screen the way the router does, taps every control once against the fake engine, and compares what it found with <code>qa&#47;ui&#47;ledger.json</code>. The ledger is a ratchet in both directions.</p>
 <ul>
   <li><code>screens.audit</code> - 4 controls</li>
@@ -695,7 +701,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
   <li><code>screens.network</code> - 8 controls</li>
   <li><code>screens.reports</code> - 1 control</li>
   <li><code>screens.scanner</code> - 9 controls</li>
-  <li><code>screens.settings</code> - 32 controls</li>
+  <li><code>screens.settings</code> - 33 controls</li>
   <li><code>screens.vulns</code> - 2 controls</li>
   <li><code>shell</code> - 20 controls (rail, window buttons, command box)</li>
 </ul>
@@ -1017,7 +1023,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>test&#47;ui_screens_test.dart</code></td>
-      <td>12</td>
+      <td>13</td>
     </tr>
     <tr>
       <td><code>test&#47;ui_shell_test.dart</code></td>
@@ -1041,7 +1047,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**157** in 32 files</td>
+      <td>**158** in 32 files</td>
     </tr>
   </tbody>
 </table>
@@ -1146,7 +1152,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;tests.rs</code></td>
-      <td>53</td>
+      <td>59</td>
     </tr>
     <tr>
       <td><code>engine&#47;src&#47;update.rs</code></td>
@@ -1158,7 +1164,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     </tr>
     <tr>
       <td>**total**</td>
-      <td>**203** in 26 modules</td>
+      <td>**209** in 26 modules</td>
     </tr>
   </tbody>
 </table>

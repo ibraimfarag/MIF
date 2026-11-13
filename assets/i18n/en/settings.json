@@ -23,6 +23,8 @@
     "settings.engine":  "Engine",
     "settings.engine.lastError":  "Why it would not start",
     "settings.enginePath":  "Engine executable",
+    "settings.explorerMenu":  "Add to the Explorer right-click menu",
+    "settings.explorerMenuHint":  "Adds «Scan this file with MI CS» and «Scan this folder with MI CS» to the right-click menu, for your Windows account only. Turning it off removes them.",
     "settings.guardAutostart":  "Start the process guard with the engine",
     "settings.guardAutostartHint":  "Real-time process monitoring starts with the engine; it outlives the window only when «Keep running in the background» is on.",
     "settings.intel":  "Intelligence \u0026 schedule",
