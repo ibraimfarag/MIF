@@ -218,16 +218,43 @@ fn wait_until_reachable() -> Result<HelperStatus> {
     )
 }
 
-/// Makes sure the helper exists, installing it (one UAC prompt) when it does
-/// not. Called by the privileged entry points so a first-time user gets the
-/// same "it just works" behaviour as before — but only ever once.
+/// Answers whether the helper can serve an operation right now, and refuses with
+/// the reason when it cannot - without ever raising a prompt of its own.
+///
+/// Installing the helper is the one step that needs a UAC prompt, and it belongs
+/// to the explicit `helper.install` entry point. An operation that raised one
+/// instead did it *per call*: on a machine where the helper is installed and
+/// stopped nothing answers that prompt, so every call sat until its timeout and
+/// the windows piled up (measured: `consent.exe` went from 5 to 20 in two
+/// minutes). The register promises the refusal for an unelevated call
+/// (D-007/D-042, `qa/methods.json`), and `wfp::status_blocking` already turns
+/// this error into the honest `needs_elevation: true` answer.
 pub fn ensure() -> Result<()> {
-    if let Some(probe) = server::probe()
-        && probe.elevated
-    {
-        return Ok(());
+    let state = service::query();
+    if let Some(probe) = server::probe() {
+        if probe.elevated {
+            return Ok(());
+        }
+        bail!(
+            "the privileged helper is running without an elevated token (service {}: {}) - \
+             start the MI CS Helper service as an administrator",
+            SERVICE_NAME,
+            state.state
+        );
     }
-    install().map(|_| ())
+    if state.installed {
+        bail!(
+            "the privileged helper is installed but not answering (service {}: {}, binary {}) - \
+             start the service, or run MI CS as an administrator",
+            SERVICE_NAME,
+            state.state,
+            state.binary.as_deref().unwrap_or("unknown")
+        );
+    }
+    bail!(
+        "this call needs the privileged helper and it is not installed - MI CS installs it once \
+         from its own settings, behind a single UAC prompt"
+    )
 }
 
 /// `ensure()` + `call()`: the path every privileged operation takes.
