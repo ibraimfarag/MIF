@@ -760,11 +760,11 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>data\app.so</code></td>
       <td class="num">54</td>
-      <td class="num">66</td>
+      <td class="num">67</td>
       <td class="num">0</td>
       <td class="num">0</td>
       <td class="num">2</td>
-      <td class="num">122</td>
+      <td class="num">123</td>
     </tr>
     <tr>
       <td><code>flutter_windows.dll</code></td>
@@ -779,19 +779,19 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
       <td><code>mics-engine.exe</code></td>
       <td class="num">55</td>
       <td class="num">1</td>
-      <td class="num">1244</td>
+      <td class="num">1243</td>
       <td class="num">97</td>
       <td class="num">0</td>
-      <td class="num">1397</td>
+      <td class="num">1396</td>
     </tr>
     <tr>
       <td><code>mics_app.exe</code></td>
-      <td class="num">39</td>
+      <td class="num">38</td>
       <td class="num">0</td>
       <td class="num">0</td>
       <td class="num">0</td>
       <td class="num">0</td>
-      <td class="num">39</td>
+      <td class="num">38</td>
     </tr>
     <tr>
       <td><code>screen_retriever_windows_plugin.dll</code></td>
@@ -849,7 +849,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>data\app.so</code></td>
       <td><code>dart</code></td>
-      <td>the snapshot keeps the Dart VM&#39;s own type and library names; obfuscation renames ours, not the VM&#39;s.</td>
+      <td>the snapshot keeps the Dart VM&#39;s own type and library names; obfuscation renames ours, not the VM&#39;s. Raised 66 -&gt; 67 on 2026-11-14: D-060 lets the window leave by calling exit(0), and the VM bakes the message it guards that call with into the snapshot - the one occurrence that appeared is the string &quot;this embedder disallows calling dart:io&#39;s exit()&quot;. It names no account, no path and no source file, and the forbidden-path measurement for this file was zero hits in the same build, so this is the measured cost of D-060 and not a new kind of leak.</td>
     </tr>
     <tr>
       <td><code>data\app.so</code></td>
@@ -879,7 +879,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>mics-engine.exe</code></td>
       <td><code>cargo</code></td>
-      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -&gt; 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency&#39;s own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -&gt; 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads <code>&#47;build\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_json-1.0.154\src\error.rs</code> - so the extra occurrence is a repeat inside the toolchain&#39;s own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits).</td>
+      <td>rustc records the source directory of every crate it compiles; the account prefix is remapped to &#47;build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain&#39;s own layout (.cargo\registry\src\...), which says which crates built the file, not who built it. Raised 1242 -&gt; 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\target\release\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\src\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency&#39;s own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -&gt; 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads <code>&#47;build\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_json-1.0.154\src\error.rs</code> - so the extra occurrence is a repeat inside the toolchain&#39;s own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits). Fell 1244 -&gt; 1243 on 2026-11-14 with the D-057..D-061 batch, which changed engine\src\scanner\mod.rs and the revocation path; the ratchet records a fall so the baseline can be tightened. The string that stopped appearing was not diffed - the previous package was removed from disk before this build - and the forbidden-path measurement for this file was zero hits in the same build.</td>
     </tr>
     <tr>
       <td><code>mics-engine.exe</code></td>
@@ -889,7 +889,7 @@ code { font-family: Consolas, ui-monospace, monospace; font-size: .88em; }
     <tr>
       <td><code>mics_app.exe</code></td>
       <td><code>flutter</code></td>
-      <td>the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger).</td>
+      <td>the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger). Fell 39 -&gt; 38 on 2026-11-14: the D-057..D-061 batch removed exactly one Flutter-named call from windows\runner\flutter_window.cpp - FlutterEngine::SetNextFrameCallback, which D-059 replaced with the explicit show after the hand-off - and one import-table name is one occurrence. The new mics_app.exe no longer contains that string; the previous package was not on disk to diff, so the removal is matched to the fall of exactly one rather than proven by comparison.</td>
     </tr>
     <tr>
       <td><code>screen_retriever_windows_plugin.dll</code></td>
