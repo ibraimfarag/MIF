@@ -130,8 +130,9 @@ work — so a crash mid-op still leaves the intent on disk (`security` rule 6 in
 ## Install, upgrade, remove
 
 `install-helper` has two callers and they are the same command: the app's
-`Settings -> Engine -> Install helper` on a portable copy (elevated, started by the
-engine with one UAC prompt on the first privileged operation), and — since ب4/D-026 —
+`Settings -> Engine -> Install helper` on a portable copy (elevated, one UAC
+prompt; a privileged operation does *not* start it — that path refuses with the
+reason instead, so "one prompt" stays one prompt), and — since ب4/D-026 —
 the **installer itself**, which already holds the elevation and runs the same
 subcommand while it installs, so an installed copy never sees a second prompt. It is a
 CLI **subcommand**, and both callers pass exactly

@@ -330,9 +330,10 @@ Then, either way:
    `Unblock-File` steps.
 2. The app starts the engine automatically, runs a first audit (~10 s) and shows
    your score with the single most valuable fix to make.
-3. The first privileged fix asks once to install the helper
-   (`Settings → Engine → Install helper` also does it explicitly); the card then
-   shows **ready** and no later action prompts again.
+3. A privileged fix needs the helper, and installing it is the one step that
+   asks for a UAC prompt: `Settings → Engine → Install helper`. Until then the
+   card names the reason instead of prompting; once the helper is ready, no later
+   action prompts again.
 4. Open **Settings → About** and read the integrity line: on an untouched copy it
    says the shipped files are the ones the package describes. If it says
    `unverified` instead, the folder no longer matches the manifest inside

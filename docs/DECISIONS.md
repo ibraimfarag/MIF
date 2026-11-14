@@ -271,8 +271,10 @@ instead of leaving an old helper behind.
 3. **Audit first, payload never.** Every call writes `phase=start` and
    `phase=done ok=… dur_ms=…` to `%PROGRAMDATA%\MICS\logs\priv.log`; documents are
    represented by `bytes`/`lines`/`sha256[..16]`, never copied.
-4. **One prompt, then none.** `install-helper` is the only elevated step and is
-   started by the engine (`ensure()`) on the first privileged action. It polls the
+4. **One prompt, then none.** `install-helper` is the only elevated step. The
+   engine starts it from `helper.install`; a privileged operation that finds no
+   usable helper refuses with the reason rather than raising a prompt of its own,
+   so an unattended call cannot hang on a question nobody answers. It polls the
    pipe for 20 s and only reports success when the helper answers — "sc said Ok"
    is not evidence. `uninstall-helper` treats a missing service as done. Both are
    CLI subcommands, so the engine must not spell them as flags: `Cli` refuses
