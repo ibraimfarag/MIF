@@ -3628,3 +3628,53 @@ in — so this decision's only guard is the probe's exit-code check, and it is a
 either of the two rows above it reads `FAIL … (exit code -1073740771)`. `flutter analyze` clean and
 192 Dart tests passing say nothing about this line. The window is left by the process that keeps it,
 and the process that leaves owns no window to destroy.
+
+## D-061 — The card says why the engine refused
+
+**Status:** implemented (2026-11-13, `f5048e1`), tests re-run 2026-11-14.
+
+**Context.** The owner's first real run had one symptom and no cause. MI CS started from the FlyEnv
+web root, the engine refused to serve from a Low-labelled folder (D-058), and the window answered
+with `EngineException(-1): engine not running` above a **retry** button — an action that could not
+succeed, offered in place of the one sentence that said why. The engine had already said it: the
+refusal goes to stderr, and the app starts the engine `ProcessStartMode.detached` (D-039 — this
+process crashing must not take protection down with it), which discards that stdio by construction.
+So the reason existed, was correct, and had nowhere to go.
+
+**Decision.**
+
+- The client keeps the engine's own words. When the pipe stays silent and nothing is on record, it
+  runs the same command **once more with stderr piped** and keeps the last 12 non-empty lines
+  (`_probeStartFailure`, `keepTail`): a refusal is the sentence at the *end* of what the engine
+  printed, and an engine that died mid-scan can print a great deal. Bounded, at most once per
+  failure episode (cleared by a successful attach), and harmless by the engine's own single-instance
+  mutex — if the probe's copy is the one that ends up serving the pipe, it is attached to and owned
+  instead of reported as a failure.
+- `classifyEngineFailure` turns that text into a kind the UI can translate: `lowIntegrity`,
+  `dataDirUnwritable`, `engineMissing`, `spawnFailed`. **`null` means "nothing to add"**, and the
+  card keeps exactly the message it always had: the card never invents a cause it did not read.
+- The Low case is classified **before** the data-dir case on purpose. The engine's refusal quotes
+  *"attempt to write a readonly database"* as one of the two symptoms it is explaining (D-058), so a
+  naive substring rule files it as a data-dir problem and sends the user to the wrong fix. A test
+  pins that order.
+- The dashboard card shows the reason, then the way out, above the symptom, and keeps the raw error
+  as a quiet 12 px line (`engine.fail.detail`) — evidence for a bug report, not the headline. The
+  retry button stays where it was: a retry cannot fix a Low folder, and the card is what says so.
+- Both surfaces and both languages, through one key per kind: the dashboard card, and the settings
+  row (`settings.engine.lastError`, shown only when no engine was found and a reason is on record),
+  read `assets/i18n{en,ar}/engine.json`. The Arabic `engine.fail.lowIntegrity` names
+  `%LOCALAPPDATA%\MI CS` and "re-extract the release outside any web root", so a new failure kind
+  cannot arrive in one language only.
+
+**Consequences.** `test/engine_failure_card_test.dart` — **6 checks, all passing** (2026-11-14):
+the refusal copied verbatim from an engine started inside the FlyEnv web root classifies as
+`lowIntegrity` (with the message-level variants), unrelated text classifies as nothing at all, the
+card shows the reason and the fix *above* the symptom, and the card is left exactly as it was when
+the client has nothing on record. `qa/ui/`'s fake engine drives it, and
+`test/ui_screens_test.dart` stubs `lastFailure` for the same reason.
+
+**Honest limits.** The classifier is substring matching against the engine's stderr, so it is
+coupled to the engine's wording by construction — which is why the tests pin the exact sentence the
+engine prints, and why D-058 owns that wording. A refusal with new words shows the plain symptom
+until someone adds a kind. Nothing here re-measures the engine's side: that is
+`scripts\verify-low-integrity.ps1`.
