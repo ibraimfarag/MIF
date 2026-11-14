@@ -179,7 +179,9 @@
 > (E2E on the built installer) — **it ran on 2026-11-07 and is closed**: one
 > per-machine run, one prompt each way, and with that click the whole product has now
 > been measured as a user meets it (§0.2 item 1). **Nothing in the release lane waits
-> on you any more: the publish click was made on 2026-11-10.** The
+> on you any more: the publish click was made on 2026-11-10, and again on 2026-11-14
+> for `0.1.2`, which is the live release as this is written — `0.1.3` is cut on top of
+> it to carry the ARM64 measurement.** The
 > download it produced was verified on 2026-11-11 — four assets, three hashes
 > re-checked against the published `SHA256SUMS`, and the portable package
 > `PASS` against its own signed manifest — which closed §0.6 row 1 and left
@@ -258,6 +260,20 @@
 > beside the zip. `update.json` keeps `notes_ar` empty because
 > `update-manifest.ps1` documents the release page as the place notes are
 > explained.
+> **2026-11-14: `0.1.3` is cut, and it exists to carry the ARM64 measurement.** The
+> bump is the same five files as last time and nothing else — the declarations in
+> `engine/Cargo.toml` and `pubspec.yaml` (`0.1.3+4`, the pair
+> `test/version_agreement_test.dart` holds together), `engine/Cargo.lock` following
+> its crate, and `sbom.cdx.json` + `THIRD-PARTY-NOTICES` rewritten by
+> `dart run tool/sbom.dart` through the one command, not by hand (579 components, 8
+> licences, no copyleft, no gaps; the `serialNumber` moved with the component set).
+> It sits on top of `349cb55` so that the release run which measures the ARM64 legs
+> measures that gate fix in the same tree, and it is a new version rather than a
+> re-run of `0.1.2` because `0.1.2`'s release is already published: `gh release
+> create --draft` on a live tag fails instead of re-uploading, which would have
+> turned the run red for a reason that says nothing about ARM64. **This paragraph is
+> written before the run** — the package size, the hashes, the ARM64 verdict and the
+> publish click are measurements, and they belong here when the run has them.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,
