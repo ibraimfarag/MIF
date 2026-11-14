@@ -338,6 +338,29 @@
 > `1cdfe86` and this cut touches the x64 half of the package - it is the ARM64 job
 > and the docs around it - so the 0.1.4 draft remains a valid x64 build of the same
 > tree, and stays where it is for you to publish or drop.
+> **The `0.1.5` run (`43599686296`) got past the gate for the first time, and stopped
+> on an assumption.** The snapshot rebuild worked - `Building flutter tool...` twice,
+> then `Flutter 3.47.8` - and `precache` fetched the ARM64 engine: `windows-arm64`
+> with its `font-subset` and `flutter-cpp-client-wrapper`, plus
+> `windows-arm64-debug`, `-profile` and `-release`, each carrying its
+> `windows-arm64-flutter`. The prerequisites went 7 of 7, and the job said nothing
+> about that because `Show-Toolchain` prints a row per prerequisite only when one is
+> missing. Then it stopped at
+> `scripts/make-release.ps1:478 - no Flutter output for arm64 at ...\build\windows\arm64`,
+> a throw that sat *before* `flutter build windows`, so the build was never
+> attempted: the check asks whether `build\windows\arm64` exists already, which is a
+> folder only a build with an ARM64 tool writes, so it refused work this host can now
+> do. It is a post-build check now - the build runs, and a failure names the folders
+> Flutter actually wrote under `build\windows` - which leaves exactly one thing to
+> measure, and it is the answer rather than a step towards it. The docs' claim that
+> the host decides which engine artifacts arrive was wrong in the same way: the
+> *tool's* platform decides, which is why this same ARM64 runner fetched
+> `windows-x64` before the swap and `windows-arm64` after it (both measured
+> 2026-11-14).
+> **`0.1.6` carries that fix, and the measurement drafts are gone:** `v0.1.3`,
+> `v0.1.4` and `v0.1.5` were builds of trees that differ only in the ARM64 job, the
+> notes around it and the version string itself, so all three were deleted with their
+> tags and this cut leaves one draft standing.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,

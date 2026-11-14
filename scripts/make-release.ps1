@@ -471,12 +471,14 @@ if (-not $SkipBuild) {
 
   Write-Host "building the app ($Configuration) for $Arch..."
   # Flutter has no Windows cross-compile flag: the folder it writes is named after
-  # the host architecture, so an ARM64 app is produced on an ARM64 host, and
-  # `-Arch arm64` on an x64 one is refused earlier by the prerequisite check
-  # rather than failing here.
-  if (-not (Test-Path $flutterArchDir) -and $Arch -ne "x64") {
-    throw "no Flutter output for $Arch at $flutterArchDir - build the app on an ARM64 host first"
-  }
+  # the platform the *tool* runs as, so an ARM64 app needs an ARM64 tool on an ARM64
+  # host - `dart --version` answering `windows_x64` on an ARM64 runner is exactly how
+  # this lane produced x64 output under emulation (measured 2026-11-14).
+  # That used to be checked here, before the build, and run 43599686296 measured what
+  # the check cost: the tool was native, `precache` had fetched `windows-arm64`, the
+  # prerequisites were 7 of 7 - and the refusal came from a folder only the build
+  # could create, so the build was never attempted. The build runs first now, and the
+  # failure names what it wrote instead of assuming what it would have written.
   # Dart obfuscation (g1, D-021): the Release AOT snapshot ships with its symbol
   # names replaced, and the symbol table that makes a stack trace readable is
   # written *outside* the package (`dist\symbols\<version>`), because it maps the
@@ -488,6 +490,12 @@ if (-not $SkipBuild) {
     & flutter build windows --release --obfuscate "--split-debug-info=$symbolsDir"
     if ($LASTEXITCODE -ne 0) { throw "flutter build windows failed ($LASTEXITCODE)" }
   } finally { Pop-Location }
+  if (-not (Test-Path $flutterArchDir)) {
+    $produced = @(Get-ChildItem (Join-Path $root "build\windows") -Directory -ErrorAction SilentlyContinue |
+      Select-Object -ExpandProperty Name)
+    $wrote = if ($produced.Count) { $produced -join ", " } else { "nothing" }
+    throw "flutter build windows succeeded but wrote $wrote under build\windows, not $Arch at $flutterArchDir - the tool's platform decides that folder, so an $Arch build needs an $Arch tool (the release workflow swaps in the matching Dart SDK for this)"
+  }
 
   # The engine is cargo's, not Flutter's - build it here so "make a release" is one
   # command. It must carry its Windows version resource: that is what Task Manager

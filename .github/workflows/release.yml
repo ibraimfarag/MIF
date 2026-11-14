@@ -396,13 +396,15 @@ jobs:
           "flutter --version exit: $LASTEXITCODE"
 
       # `make-release.ps1 -Arch arm64` refuses until the SDK carries the engine
-      # artifacts for *this host*, and nothing downloads them on its own - the
-      # build does, but the gate runs first, so the gate was answering "has a
+      # artifacts the gate looks for, and nothing downloads them on its own - the
+      # build would, but the gate runs first, so the gate was answering "has a
       # build run here before?" (measured 2026-11-14: it reported the row missing
       # in the same job whose ARM64 engine linked and ran natively). Asking for
-      # them here makes the row say what it means. Which variant arrives is the
-      # question this whole job exists to answer - the host decides - so the step
-      # prints what it got instead of asserting.
+      # them here makes the row say what it means. What arrives is decided by the
+      # *tool's* platform rather than the host's - the same ARM64 runner fetched
+      # `windows-x64` while `dart --version` answered `windows_x64`, and fetches
+      # `windows-arm64` once the swap below has run (both measured 2026-11-14) - so
+      # the step prints what it got instead of asserting.
       - name: Precache the Flutter engine for this host
         shell: pwsh
         run: |
