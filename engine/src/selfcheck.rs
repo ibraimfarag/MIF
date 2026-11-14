@@ -645,7 +645,7 @@ mod tests {
             .enable_all()
             .build()
             .expect("a runtime for one call");
-        let response = runtime.block_on(crate::dispatcher::Dispatcher::handle_request(request));
+        let response = runtime.block_on(crate::dispatcher::Dispatcher::handle_request(request, None));
         let result = response.result.expect("status answers");
         assert_eq!(result["integrity"], serde_json::json!("unverified"));
         assert_eq!(result["state"], serde_json::json!("running"));

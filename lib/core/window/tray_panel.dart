@@ -15,6 +15,8 @@
 // for anything this panel does not do — and because a left click that opens a
 // panel, with a right click that opens the old menu, is what Windows users
 // already expect from tray icons.
+import 'dart:io' show exit;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -118,6 +120,30 @@ class TrayPanelController extends Notifier<TrayPanelState> {
   Future<void> quit() async {
     await _safe(() => ref.read(engineIpcProvider).stopOwnEngine());
     await _safe(() => windowManager.destroy());
+  }
+
+  /// Ends a launch that handed itself over (D-041): it owns no engine and nobody
+  /// has seen a window, so it leaves without shutting either down.
+  ///
+  /// Three ways of leaving were measured on this path (2026-11-13, once per
+  /// right-click scan) and only one ends cleanly. Destroying the window —
+  /// `quit()`, what this used to call — dies with **0xC000041D**
+  /// (`STATUS_FATAL_USER_CALLBACK_EXCEPTION`); so does Flutter's own
+  /// `ServicesBinding.exitApplication(AppExitType.required)`, whose
+  /// documentation calls it "always preferred over calling `exit`". Both go
+  /// through the embedder's shutdown of a window that was never shown while the
+  /// engine is still inside startup. Ending the process outright does not: exit
+  /// code 0, no Application Error, no Windows Error Reporting entry. A launch
+  /// that owns no engine and no visible window has nothing to shut down, which
+  /// is why the blunt exit is the right one here and only here — the user's own
+  /// quit still goes through `quit()`, in one order (D-053).
+  ///
+  /// Asking the engine to stop stays first for the reason D-053 gives: it is a
+  /// no-op for a process that started no engine, and it is what a copy that did
+  /// start one needs.
+  Future<void> endHandedOver() async {
+    await _safe(() => ref.read(engineIpcProvider).stopOwnEngine());
+    exit(0);
   }
 
   Future<void> _restoreAppWindow() async {

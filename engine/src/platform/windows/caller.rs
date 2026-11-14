@@ -102,6 +102,61 @@ pub fn configured_engine_path() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// The only image name the engine hands the app's handover to.
+const APP_IMAGE: &str = "mics_app.exe";
+
+/// True when `path` names the app, comparing only the file name.
+pub fn is_app_image(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(APP_IMAGE))
+}
+
+/// The app path a caller recorded, if any. `MICS_APP_PATH` mirrors what
+/// `MICS_ENGINE_PATH` does for the helper: one named exception, so the
+/// verification scripts can speak as the app instead of the check having to trust
+/// every image it meets.
+pub fn configured_app_path() -> Option<PathBuf> {
+    std::env::var_os("MICS_APP_PATH")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Whether the image on the other end of the engine pipe may ask this engine to
+/// hand a path to the app's window.
+///
+/// The pipe admits Low-integrity callers, so that a release unpacked into a folder
+/// Windows labels Low can still drive its own engine (the mandatory label in
+/// [`super::pipe`] says why). "A process of this user" is therefore no longer the
+/// whole membership test - Low is exactly where Windows puts the sandboxes, and
+/// any one of them reaches the pipe too. The handover is the one method whose
+/// effect lands on the user's screen: it raises the window and puts the path it
+/// was handed into the scan field. So it asks one thing more, and asks it of the
+/// caller rather than of the transport: be this product. By name, or - the answer
+/// that cannot simply be typed - by carrying the certificate this engine itself is
+/// signed with. `allowed` is the script hook above.
+pub fn may_hand_over(
+    image: &Path,
+    our_signer: Option<&str>,
+    their_signer: Option<&str>,
+    allowed: Option<&Path>,
+) -> bool {
+    is_app_image(image)
+        || super::signature::same_signer(our_signer, their_signer)
+        || allowed.is_some_and(|expected| same_path(image, expected))
+}
+
+/// [`may_hand_over`] with both certificates read from disk.
+pub fn handover_allowed(image: &Path) -> bool {
+    let their_signer = super::signature::embedded_signer_thumbprint(image);
+    may_hand_over(
+        image,
+        super::signature::own_thumbprint(),
+        their_signer.as_deref(),
+        configured_app_path().as_deref(),
+    )
+}
+
 /// Decides one connection. `installer_sid` is the account recorded at install time;
 /// `None` means this machine has no record yet and the image check stands alone.
 pub fn judge(caller: &Caller, allowed: Option<&Path>, installer_sid: Option<&str>) -> Verdict {
@@ -547,5 +602,89 @@ mod tests {
     fn the_owner_of_a_missing_path_is_an_error() {
         let missing = std::env::temp_dir().join("mics-definitely-not-here-12345");
         assert!(owner_sid(&missing).is_err());
+    }
+
+    #[test]
+    fn the_app_image_is_recognised_by_name() {
+        assert!(is_app_image(Path::new(
+            r"C:\Users\x\AppData\Local\MI CS\mics_app.exe"
+        )));
+        assert!(is_app_image(Path::new(r"mics_app.exe")));
+        assert!(is_app_image(Path::new(r"C:\MI CS\MICS_APP.EXE")));
+    }
+
+    /// The handover reaches the user's screen, so "not this product" has to be the
+    /// answer for everything that is not this product - including the neighbour of
+    /// the real name, which is how a name check is usually defeated.
+    #[test]
+    fn only_this_product_may_drive_the_handover() {
+        let app = Path::new(r"C:\Users\x\AppData\Local\MI CS\mics_app.exe");
+        let ours = "6A1B0D9C4E77B3F2A5C8E10D3F6B92A4C7E018B5";
+        let theirs = "1C4E9A2B7D0F3E8A5B1C6D2E9F4A7B3C8D0E5F19";
+
+        // The app, by name, with or without a certificate read.
+        assert!(may_hand_over(app, None, None, None));
+        // A differently signed binary that is not the app: refused by every rule.
+        assert!(!may_hand_over(
+            Path::new(r"C:\Tools\evil.exe"),
+            Some(ours),
+            Some(theirs),
+            None
+        ));
+        // Our own certificate is the answer a name cannot be: a copy under another
+        // name is still ours.
+        assert!(may_hand_over(
+            Path::new(r"C:\Tools\renamed.exe"),
+            Some(ours),
+            Some(ours),
+            None
+        ));
+        // Case, as Windows compares thumbprints.
+        assert!(may_hand_over(
+            Path::new(r"C:\Tools\renamed.exe"),
+            Some(ours),
+            Some(&ours.to_ascii_lowercase()),
+            None
+        ));
+        // An unsigned caller is not ours by default, in either direction.
+        assert!(!may_hand_over(Path::new(r"C:\Tools\raw.exe"), Some(ours), None, None));
+        assert!(!may_hand_over(Path::new(r"C:\Tools\raw.exe"), None, Some(ours), None));
+        assert!(!may_hand_over(Path::new(r"C:\Tools\raw.exe"), None, None, None));
+
+        // The script hook names one client without widening anything else.
+        let script_host = Path::new(r"C:\Program Files\PowerShell\7\pwsh.exe");
+        assert!(may_hand_over(script_host, None, None, Some(script_host)));
+        assert!(!may_hand_over(
+            Path::new(r"C:\Windows\System32\cmd.exe"),
+            None,
+            None,
+            Some(script_host)
+        ));
+
+        // Names that must not pass a file-name comparison.
+        for path in [
+            r"C:\Tools\mics_app.exe.bak",
+            r"C:\Tools\not_mics_app.exe",
+            r"C:\Tools\mics_app.exe.dll",
+            r"C:\Tools\mics-app.exe",
+        ] {
+            assert!(
+                !may_hand_over(Path::new(path), None, None, None),
+                "{path} must not pass"
+            );
+        }
+    }
+
+    /// The gate reads the caller's own certificate, which unit tests do not have:
+    /// an unsigned binary is therefore outside the handover by every rule but the
+    /// name, and `MICS_APP_PATH` is the one way in. Kept honest by asking for a path
+    /// that is not actually named.
+    #[test]
+    fn an_unsigned_caller_is_refused_by_the_certificate_rule() {
+        let ours = std::env::current_exe().expect("this test binary's path");
+        assert!(
+            !handover_allowed(&ours),
+            "the test binary is not the app and carries no certificate"
+        );
     }
 }

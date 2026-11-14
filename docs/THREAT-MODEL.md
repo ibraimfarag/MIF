@@ -69,17 +69,33 @@ OS only through the engine (`AGENTS.md` rule 4, whitelisted JSON-RPC methods).
 
 ### B2 — `\\.\pipe\mics_engine` (UI ↔ engine)
 
-The engine's pipe server passes **no** security attributes
-An **explicit** SDDL (`platform/windows/pipe.rs`), measured on the reference
-machine with an isolated `service` engine (`scripts/verify-pipe-acl.ps1`):
+The engine's pipe server passes an **explicit** security descriptor
+(`platform/windows/pipe.rs`), measured on the reference machine with an isolated
+`service` engine (`scripts\verify-pipe-acl.ps1`):
 
 ```
 D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user-SID>)
+S:(ML;;NW;;;LW)
 ```
 
 - Full control: SYSTEM, Administrators, and the user who started the engine.
   Nobody else: `Everyone` and `ANONYMOUS LOGON` are gone, and `P` marks the DACL
   protected so no inherited ACE can widen it.
+- **The object is Low, and a Low caller is equal to it, not below it.** The
+  descriptor carries the mandatory label `S:(ML;;NW;;;LW)` as well as the DACL
+  (D-057). An object with no label counts as Medium, and mandatory integrity
+  control refuses a *Low* subject write access before the DACL is consulted at
+  all — which is how the product's own UI came to be refused its own engine on
+  2026-11-13, with `EngineException(-1): engine not running`, when the app was
+  started from a folder Windows labelled Low (`icacls`, the portable tree as it
+  was shipped to a web root). The label is **not** a grant: the DACL above still
+  decides who may open the pipe, and it is unchanged.
+  The engine's separate answer to being *started* Low is D-058: it refuses by
+  name, because serving from below Medium produces SQLite's *"attempt to write a
+  readonly database"* and the helper's *"installed but not answering"* on a
+  machine where both are healthy. That is a **diagnosis, not a control** — it
+  stops nothing, and `MICS_ALLOW_LOW_INTEGRITY=1` runs it anyway for a probe —
+  so this boundary is what a Low process actually meets.
 - **This was not always so.** Until the fix below, the pipe passed no security
   attributes at all, so it carried Windows' default ACL for a pipe created by
   this process — `D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)(A;;FR;;;WD)(A;;FR;;;AN)`.

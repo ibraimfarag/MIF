@@ -16,7 +16,10 @@
        no INTERACTIVE);
     3. drives a real JSON-RPC `status` call over that same hardened pipe, so the
        ACL cannot pass by locking the UI's own user out;
-    4. starts `mics-engine.exe helper-console` on a private helper pipe and
+    4. reads the mandatory label of both pipes back the same way: Low with
+       no-write-up (D-057), because a process below the object's label is refused
+       the pipe no matter what the DACL grants it;
+    5. starts `mics-engine.exe helper-console` on a private helper pipe and
        measures its ACL too: the documented INTERACTIVE grant, which is the open
        multi-user risk F-2 in the threat model. This probe reports it; it does
        not bless it.
@@ -74,6 +77,7 @@ public static class MicsPipeAcl {
   const uint OPEN_EXISTING = 3;
   const int SE_KERNEL_OBJECT = 6;
   const uint DACL_SECURITY_INFORMATION = 4;
+  const uint LABEL_SECURITY_INFORMATION = 0x10;
 
   [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
   static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa,
@@ -89,20 +93,28 @@ public static class MicsPipeAcl {
   [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr p);
 
   /// The DACL of a pipe as SDDL, or a message that starts with "ERROR:".
-  public static string DaclOf(string pipe) {
-    // READ_CONTROL is what reading a DACL costs; opening the pipe also completes
-    // the server's pending ConnectNamedPipe, which is harmless here.
+  public static string DaclOf(string pipe) { return Of(pipe, DACL_SECURITY_INFORMATION); }
+
+  /// The mandatory label of a pipe as SDDL, or a message that starts with
+  /// "ERROR:". READ_CONTROL is enough for this half of the descriptor too, which
+  /// is why an unelevated probe can measure it - the same read `icacls` prints
+  /// labels with.
+  public static string LabelOf(string pipe) { return Of(pipe, LABEL_SECURITY_INFORMATION); }
+
+  static string Of(string pipe, uint what) {
+    // READ_CONTROL is what reading a descriptor costs; opening the pipe also
+    // completes the server's pending ConnectNamedPipe, which is harmless here.
     IntPtr h = CreateFileW(pipe, READ_CONTROL | SYNCHRONIZE, SHARE_ALL, IntPtr.Zero,
                            OPEN_EXISTING, 0, IntPtr.Zero);
     if (h == new IntPtr(-1)) return "ERROR: CreateFileW " + Marshal.GetLastWin32Error();
     try {
       IntPtr o, g, d, s, sd;
-      uint r = GetSecurityInfo(h, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION,
+      uint r = GetSecurityInfo(h, SE_KERNEL_OBJECT, what,
                                out o, out g, out d, out s, out sd);
       if (r != 0) return "ERROR: GetSecurityInfo " + r;
       IntPtr text; uint len;
       if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(
-              sd, 1, DACL_SECURITY_INFORMATION, out text, out len))
+              sd, 1, what, out text, out len))
         return "ERROR: SDDL conversion " + Marshal.GetLastWin32Error();
       string result = Marshal.PtrToStringUni(text);
       LocalFree(text); LocalFree(sd);
@@ -145,6 +157,23 @@ function Expect-Acl([string]$what, [string]$sddl, [bool]$protected, [string[]]$g
   foreach ($ace in $refuses) { Check "$what refuses $ace" ($sddl -notlike "*$ace*") "" }
   $found = ([regex]::Matches($sddl, "\(A;;")).Count
   Check "$what has exactly $aces ACEs" ($found -eq $aces) "$found found"
+}
+
+# The label is the other half of the boundary: the DACL says who, the label says
+# at which integrity level. A process below it cannot open the pipe at all, which
+# is why both pipes are labelled Low (D-057) - and the reason this reads the
+# descriptor back instead of trusting the string that asked for it.
+function Expect-Label([string]$what, [string]$label, [string[]]$levels) {
+  if ($label -like "ERROR:*") {
+    Check "$what label is readable" $false $label
+    return
+  }
+  Write-Output ("  {0,-12} {1}" -f "$what label", $label)
+  $ok = $false
+  foreach ($level in $levels) { if ($label -like "*$level*") { $ok = $true } }
+  # `LW` and the numeric `S-1-16-4096` are the same level, written the two ways
+  # the SDDL converter uses; the kernel's own `AI` prefix is not ours to choose.
+  Check "$what is Low, no-write-up" $ok "expected one of $($levels -join ', ')"
 }
 
 $engine = Resolve-Engine $EnginePath
@@ -191,6 +220,8 @@ try {
   } else {
     Expect-Acl "engine" ([MicsPipeAcl]::DaclOf("\\.\pipe\$PipeName")) $true `
       @("(A;;FA;;;SY)", "(A;;FA;;;BA)", "(A;;FA;;;$user)") @(";;;WD)", ";;;AN)", ";;;IU)") 3
+    Expect-Label "engine" ([MicsPipeAcl]::LabelOf("\\.\pipe\$PipeName")) `
+      @("(ML;;NW;;;LW)", "(ML;;NW;;;S-1-16-4096)")
 
     $writer = New-Object System.IO.StreamWriter($client)
     $writer.AutoFlush = $true
@@ -214,6 +245,8 @@ try {
   } else {
     Expect-Acl "helper" ([MicsPipeAcl]::DaclOf("\\.\pipe\$HelperPipeName")) $false `
       @("(A;;FA;;;SY)", "(A;;FA;;;BA)", "(A;;FA;;;IU)") @(";;;WD)", ";;;AN)") 3
+    Expect-Label "helper" ([MicsPipeAcl]::LabelOf("\\.\pipe\$HelperPipeName")) `
+      @("(ML;;NW;;;LW)", "(ML;;NW;;;S-1-16-4096)")
     Write-Output "  note: INTERACTIVE covers every logged-on account, standard users included - threat model F-2, still open"
   }
 } finally {
@@ -223,7 +256,7 @@ try {
 }
 
 if ($failures.Count -eq 0) {
-  Write-Output "RESULT: PASS - both pipe ACLs are what docs/THREAT-MODEL.md says, and the engine still serves its own user"
+  Write-Output "RESULT: PASS - both pipes carry the ACL and the Low label docs/THREAT-MODEL.md says, and the engine still serves its own user"
   exit 0
 }
 Write-Output "failures:"

@@ -17,6 +17,11 @@
   NamedPipeClientStream connections the way the two app windows use two pipe
   handles:
 
+    0. `app.activate` from a process that is not this product is refused, with its
+       own error code, and raises nothing on the attached window (D-057). The
+       phases below that expect a handover name this probe as the app through
+       `MICS_APP_PATH` - the one named client the caller gate offers, next to "is
+       the app" and "carries our certificate" - because a probe is PowerShell.
     1. `app.activate` reaches the connection that is already attached, as an
        `event` notification (a notification, not a reply: nothing to answer);
     2. the path survives the trip unchanged, spaces and all;
@@ -55,10 +60,12 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $EngineExe) {
   # Newest, not first-found: a stale release build next to a fresh debug one
   # would otherwise be probed as if it were the current code.
-  $candidates = @(
+  # Array on purpose, outside the pipeline: with exactly one candidate the result
+  # would be a bare string and `$candidates[0]` its first character.
+  $candidates = @(@(
     (Join-Path $root "engine\target\release\mics-engine.exe"),
     (Join-Path $root "engine\target\debug\mics-engine.exe")
-  ) | Where-Object { Test-Path $_ } | Sort-Object { (Get-Item $_).LastWriteTime } -Descending
+  ) | Where-Object { Test-Path $_ } | Sort-Object { (Get-Item $_).LastWriteTime } -Descending)
   if ($candidates.Count -gt 0) { $EngineExe = $candidates[0] }
 }
 if (-not $EngineExe -or -not (Test-Path $EngineExe)) {
@@ -159,7 +166,7 @@ function Stop-Tree([int]$processId) {
   $ErrorActionPreference = $previous
 }
 
-function Start-IsolatedEngine([string]$name, [string]$dir, [int]$parentPid) {
+function Start-IsolatedEngine([string]$name, [string]$dir, [int]$parentPid, [string]$appPath = "", [string]$logTag = "engine") {
   New-Item -ItemType Directory -Path $dir -Force | Out-Null
   # Private pipe + private data: this probe must not see, or be seen by, the
   # engine the user is actually running.
@@ -169,10 +176,16 @@ function Start-IsolatedEngine([string]$name, [string]$dir, [int]$parentPid) {
   $env:MICS_NO_GUARD = "1"
   $env:MICS_NO_AUTO_RESUME = "1"
   $env:MICS_NO_SCAN_SCHEDULE = "1"
+  # Who may take a handover is decided from the caller's image
+  # (`caller::handover_allowed`): the app by name, a process signed with the
+  # same certificate, or this one path. A probe is PowerShell, so the phases that
+  # expect to be let in name it here; the refusal phase sets nothing, which is
+  # the state a foreign process is in.
+  if ($appPath) { $env:MICS_APP_PATH = $appPath } else { Remove-Item Env:MICS_APP_PATH -ErrorAction SilentlyContinue }
   $arguments = @("service")
   if ($parentPid -gt 0) { $arguments += @("--parent", "$parentPid") }
-  $out = Join-Path $scratch "engine.stdout.log"
-  $err = Join-Path $scratch "engine.stderr.log"
+  $out = Join-Path $scratch "$logTag.stdout.log"
+  $err = Join-Path $scratch "$logTag.stderr.log"
   Start-Process -FilePath $EngineExe -ArgumentList $arguments -PassThru -NoNewWindow `
     -RedirectStandardOutput $out -RedirectStandardError $err
 }
@@ -187,12 +200,53 @@ $standIn = $null
 $engine = $null
 $caller = $null
 $listener = $null
+# The image Windows reports for this probe's own process. The gate reads the
+# caller's image from the kernel, not from anything the caller says, so this is
+# the path `MICS_APP_PATH` has to name for the phases below to be let in.
+$appImage = (Get-Process -Id $PID).Path
 try {
   Write-Output ""
-  Write-Output "== part 1 - a second launch reaches the window that is already open"
+  Write-Output "== part 0 - a process that is not this product may not drive the handover"
   $standIn = Start-StandInApp
   Start-Sleep -Milliseconds 500
-  $engine = Start-IsolatedEngine -name $pipeName -dir $dataDir -parentPid $standIn.Id
+  # No MICS_APP_PATH: the refusal branch, which is the state any foreign process
+  # is in.
+  $engine = Start-IsolatedEngine -name $pipeName -dir $dataDir -parentPid $standIn.Id -logTag "refused"
+
+  for ($i = 0; $i -lt 40 -and $null -eq $caller; $i++) {
+    try { $caller = Open-Pipe $pipeName } catch { Start-Sleep -Milliseconds 250 }
+  }
+  Check ($null -ne $caller) "the engine is listening on its private pipe ($pipeName)"
+  if ($null -eq $caller) { throw "no pipe to probe" }
+
+  $listener = Open-Pipe $pipeName
+  Start-Sleep -Milliseconds 300
+  $refused = Send-Rpc $caller "app.activate" @{ path = "C:\Users\probe\Downloads\report final.pdf" }
+  Check ($null -ne $refused -and $null -ne $refused.error) `
+    "app.activate from a foreign image is refused instead of served"
+  Check ($null -ne $refused -and $null -ne $refused.error -and $refused.error.code -eq -32003) `
+    "the refusal carries its own code (-32003), so the app can tell it apart"
+  Check ($null -ne $refused -and $null -ne $refused.error -and "$($refused.error.message)" -match "may not drive this window") `
+    "the refusal says which image was turned away and why"
+  # A refusal that still raised the window would be the same defect with an error
+  # code attached, so the silence is the part that matters.
+  $raised = Read-Line $listener 1500
+  Check ($null -eq $raised) "the refused activation raised nothing on the attached window"
+  Check ($null -eq $refused -or $null -eq $refused.result) "a refused call answers no result at all"
+
+  Close-Pipe $listener
+  $listener = $null
+  Close-Pipe $caller
+  $caller = $null
+  Stop-Tree $engine.Id
+  $engine = $null
+
+  Write-Output ""
+  Write-Output "== part 1 - a second launch reaches the window that is already open"
+  # Same engine, told who this probe is: the named-client hook, which stands in
+  # for the app's own image (mics_app.exe) and our certificate on a release.
+  $engine = Start-IsolatedEngine -name $pipeName -dir $dataDir -parentPid $standIn.Id -appPath $appImage -logTag "allowed"
+  Start-Sleep -Milliseconds 500
 
   for ($i = 0; $i -lt 40 -and $null -eq $caller; $i++) {
     try { $caller = Open-Pipe $pipeName } catch { Start-Sleep -Milliseconds 250 }

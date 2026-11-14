@@ -20,6 +20,7 @@
 use anyhow::{bail, Context, Result};
 use serde_json::json;
 use std::ffi::c_void;
+use std::os::windows::io::AsRawHandle;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::{broadcast, mpsc};
@@ -87,9 +88,24 @@ const BACKOFF: std::time::Duration = std::time::Duration::from_millis(300);
 /// starts the engine, or the autostart entry does), so naming that user's SID is
 /// what keeps the transport working while `Everyone`/`ANONYMOUS LOGON` lose the
 /// read access Windows' default pipe ACL would hand them.
+///
+/// The mandatory label is what the user met from the other side. A pipe created
+/// by a Medium-integrity engine is Medium, and Windows' no-write-up rule then
+/// refuses every client below Medium: an app started from a folder that carries a
+/// Low label — an unpacked release inside a web root or a sandbox — reached this
+/// pipe and was told "access denied", with the engine running perfectly (the
+/// Dart client has a line for exactly that case, `pipe_client.dart`).
+/// `S:(ML;;NW;;;LW)` labels the object Low, which denies write-up only to what is
+/// below Low, so that client is served. It widens nothing on its own: the DACL
+/// above still decides which accounts may connect at all, and the label cannot
+/// hand anyone an access the DACL withheld. It removes a refusal aimed at the
+/// user's own process, and the engine's answer to "what may a Low caller do" is
+/// the caller gate in front of `app.activate` (see `caller::handover_allowed`).
 fn pipe_sddl() -> Result<String> {
     let user = current_user_sid().context("resolve the current user for the pipe ACL")?;
-    Ok(format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{user})"))
+    Ok(format!(
+        "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{user})S:(ML;;NW;;;LW)"
+    ))
 }
 
 /// `SECURITY_ATTRIBUTES` carrying [`pipe_sddl`]. The descriptor is leaked on
@@ -245,6 +261,14 @@ pub async fn run_pipe_server() -> Result<()> {
 }
 
 async fn handle_client(stream: NamedPipeServer) -> Result<()> {
+    // Who is on the other end, asked once and before the split: the dispatcher's
+    // caller gate needs the client's image, and reading it later would need the
+    // handle that `tokio::io::split` takes away. Best effort on purpose - `None`
+    // is "a caller this process could not identify", which is what the gate
+    // refuses, so a failed read cannot become an accident that passes.
+    let peer = crate::platform::windows::caller::identify(HANDLE(stream.as_raw_handle()))
+        .map(|caller| caller.image)
+        .ok();
     let (rd, wr) = tokio::io::split(stream);
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
 
@@ -314,8 +338,10 @@ async fn handle_client(stream: NamedPipeServer) -> Result<()> {
                 // as "engine connection lost". Responses carry their `id`, so
                 // the client does not care about ordering.
                 let tx = out_tx.clone();
+                let peer = peer.clone();
                 tokio::spawn(async move {
-                    let resp = crate::dispatcher::Dispatcher::handle_request(req).await;
+                    let resp =
+                        crate::dispatcher::Dispatcher::handle_request(req, peer.as_deref()).await;
                     if let Ok(text) = serde_json::to_string(&resp) {
                         let _ = tx.send(text);
                     }
@@ -353,7 +379,7 @@ mod tests {
     use windows::Win32::Security::Authorization::{
         ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
     };
-    use windows::Win32::Security::DACL_SECURITY_INFORMATION;
+    use windows::Win32::Security::{DACL_SECURITY_INFORMATION, LABEL_SECURITY_INFORMATION};
 
     /// The DACL of a live pipe object, read back from the handle the server
     /// itself holds — the same measurement an outsider would make.
@@ -385,6 +411,44 @@ mod tests {
                 )
                 .is_ok(),
                 "SDDL conversion failed"
+            );
+            let sddl = text.to_string().unwrap_or_default();
+            let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+            let _ = LocalFree(Some(HLOCAL(descriptor.0)));
+            sddl
+        }
+    }
+
+    /// The mandatory label of a live pipe object, read from the same handle — the
+    /// one part of the descriptor an outside reader needs no privilege for.
+    fn label_of(server: &NamedPipeServer) -> String {
+        unsafe {
+            let mut label = std::ptr::null_mut();
+            let mut descriptor = PSECURITY_DESCRIPTOR::default();
+            let status = GetSecurityInfo(
+                HANDLE(server.as_raw_handle()),
+                SE_KERNEL_OBJECT,
+                LABEL_SECURITY_INFORMATION,
+                None,
+                None,
+                None,
+                Some(&mut label),
+                Some(&mut descriptor),
+            );
+            assert_eq!(status, ERROR_SUCCESS, "GetSecurityInfo failed for the label");
+
+            let mut text = PWSTR::null();
+            let mut len = 0u32;
+            assert!(
+                ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor,
+                    1,
+                    LABEL_SECURITY_INFORMATION,
+                    &mut text,
+                    Some(&mut len),
+                )
+                .is_ok(),
+                "label SDDL conversion failed"
             );
             let sddl = text.to_string().unwrap_or_default();
             let _ = LocalFree(Some(HLOCAL(text.0.cast())));
@@ -438,6 +502,41 @@ mod tests {
         let user = current_user_sid().expect("current user SID");
         assert!(user.starts_with("S-1-"), "not a SID: {user}");
         assert!(sddl.contains(&user), "{sddl}");
+    }
+
+    /// The mandatory label, as the object itself reports it. `S:(ML;;NW;;;LW)` is
+    /// the same pair `icacls /setintegritylevel low` writes: label Low, deny
+    /// write-up to everything below Low. The engine pipe is Medium by default
+    /// (created by a Medium process), and Medium refuses a Low client - the
+    /// "access denied" an app started from a Low folder met.
+    #[test]
+    fn the_pipe_sddl_labels_the_object_low() {
+        let sddl = pipe_sddl().expect("build the SDDL");
+        assert!(
+            sddl.contains("S:(ML;;NW;;;LW)"),
+            "the pipe must be Low with no-write-up: {sddl}"
+        );
+    }
+
+    /// Read back from the live pipe, not from the string that asked for it.
+    /// `LABEL_SECURITY_INFORMATION` is readable by the object's owner without
+    /// `SeSecurityPrivilege` - the read `icacls` prints labels with - so this is a
+    /// unit test, and `scripts/verify-pipe-acl.ps1` measures the same thing from
+    /// outside the process on a real install.
+    #[tokio::test]
+    async fn a_low_integrity_client_may_write_to_the_engine_pipe() {
+        let mut attributes = pipe_security_attributes().expect("build the pipe ACL");
+        let server = create_instance(&unique_name("label"), true, Some(&mut attributes))
+            .expect("create the pipe");
+        let label = label_of(&server);
+        // The read-back carries an `AI` prefix — the flag the kernel sets on a
+        // label it applied to the object — and writes the level as `LW`. Both are
+        // spellings of what was asked for, and `NW` (the part that decides who is
+        // refused) survives the round trip unchanged.
+        assert!(
+            label.contains("(ML;;NW;;;LW)") || label.contains("(ML;;NW;;;S-1-16-4096)"),
+            "the engine pipe must be Low with no-write-up; read {label}"
+        );
     }
 
     #[test]

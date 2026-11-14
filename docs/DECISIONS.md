@@ -3393,7 +3393,7 @@ The damage came from what happens next. Findings at `high` are quarantined **wit
 `sha256 20e3b3c2…d050f54`, the very hash published in `VERSION` and `SHA256SUMS` — and its rules
 file out of the package they were run from, silently. A scheduled scan was enabled on the machine
 (the engine's own test fails `assert!(!status.enabled)` here, because that test reads live settings
-rather than a default) with its target inside the build output, so the tick re-walked `dist\` and
+rather than a default — its own defect, fixed on 2026-11-13, see Consequences) with its target inside the build output, so the tick re-walked `dist\` and
 left it empty: the zip, `SHA256SUMS`, `release\` and `symbols\` went too, including files no rule
 matches — which the quarantine list alone does not explain. The shipped zip, built before the
 first deletion, kept its hash (`f15b34a2…f6e2fd`, 22,684,796 bytes) and re-extracting it proved
@@ -3416,9 +3416,215 @@ the payload: both restored files hashed exactly as `SHA256SUMS` says.
 
 **Consequences.** A copy of the package can no longer be turned into a threat by its own rules, and
 the product cannot be talked into eating itself again. `cargo test --bin mics-engine` is
-**211 passing, 1 failing**, and the failure is not this change: `the_status_serializes_the_shapes_the_ui_reads`
-asserts the schedule is off while reading the live machine, so it passes on a fresh host and fails on
-an installed one. The responsibility this does **not** take over is the alarm when our own binary is
+**219 passing, 0 failing** — the one failure recorded here at the time
+(`the_status_serializes_the_shapes_the_ui_reads` asserting the schedule is off while reading the
+live machine, so it passed on a fresh host and failed on an installed one) was that test's defect
+rather than the code's, and it now derives its expectation from `scan_interval_hours` instead of
+asserting a default. The responsibility this does **not** take over is the alarm when our own binary is
 wrong: that stays with the tamper self-check, which pins the manifest and the signer, and it is not
 weakened by skipping our own files here. **Open:** the six `mics_app.exe` crash dumps written during
 the incident (`%LOCALAPPDATA%\CrashDumps`, 18:44–18:52) have not been read.
+
+## D-057 — Both pipes are labelled Low, and the handover names its callers
+
+**Status:** implemented (2026-11-13).
+
+**Context.** The pipe ACL (F-1) answers *who* may open a pipe. It does not answer *at what
+integrity*: an object with no explicit label counts as Medium, and mandatory integrity control
+refuses a Low subject write access to it before the DACL is consulted at all. On 2026-11-13 that
+refused the product's own UI. The app had been started from
+`H:\FlyEnv\PhpWebStudy-Data\server\www\dist\MICS-portable\`, a tree that carries
+`Mandatory Label\Low Mandatory Level:(I)(OI)(CI)(NW)` (`icacls`), so Windows gave the process the
+folder's label; the engine's unlabelled pipe counted as Medium; and the client connect failed with
+access denied — which the app reported as `EngineException(-1): engine not running`, and the user
+worked around by running everything as administrator (an elevated token is High integrity, and a
+High subject writing to a Medium object is not restricted). The engine's own, separate answer to
+being *started* Low is D-058. This decision is about the pipe, and it stays necessary either way: a
+Low copy of the app must be able to attach to a Medium engine and say what it wants.
+
+**Decision.**
+
+- Both pipes — the engine's (`\\.\pipe\mics_engine`) and the privileged helper's — carry the
+  mandatory label `S:(ML;;NW;;;LW)`: the object is Low. It is appended to the same SDDL string that
+  carries each DACL (`pipe_security_attributes`), so a change to one cannot silently leave the other
+  behind, and a Low caller is then *equal* to the object instead of below it.
+- The label is not a grant. It says nothing about who may open the pipe; the DACL still decides
+  that, and it is unchanged — `verify-pipe-acl.ps1` still counts exactly three ACEs per pipe and
+  still refuses `WD`, `AN` and `IU` on the engine pipe. Higher-integrity callers lose nothing: the
+  no-write-up policy restricts subjects *below* the object's level.
+- Because a Low caller is now let in, the one method whose misuse is a control action is gated:
+  `app.activate` checks the caller's image — taken from the kernel
+  (`GetNamedPipeClientProcessId`, then that process's image path), never from anything the caller
+  sends — and allows exactly three things (`caller::may_hand_over`): the app's own image name
+  (`mics_app.exe`), a process signed with the release certificate (`signature::same_signer`, the
+  same identity D-056 trusts to recognise our files), or the one path named in `MICS_APP_PATH`,
+  which mirrors `MICS_ENGINE_PATH`'s single-name hook. Everything else is answered `-32003` with
+  the image named, and **no `activate` event is raised**: a refusal that still raised the window
+  would be the same defect with an error code attached.
+- Only `app.activate` is gated. The rest of the API is the transport the app has always used, and
+  the methods that change the machine carry their own checks (elevation, `B3` boundaries, the
+  helper's `judge`).
+
+**Consequences.** A same-user process at Low integrity can now attach to the engine pipe and read
+the event stream it could not open before — the accepted cost of the label, and the reason the
+handover gate exists; it still cannot drive the handover, and it never could write a descriptor the
+DACL protects. The case that motivated this — a portable app inside a Low tree — now has a
+transport instead of `engine not running`. Measured, not assumed: `scripts/verify-pipe-acl.ps1`
+reads both labels back as `S:AI(ML;;NW;;;LW)` (the kernel's own `AI` flag, the level as `LW`) and
+the engine still answers `status` to the same user; `scripts/verify-handoff.ps1` measures **both**
+branches of the gate — a foreign image refused with `-32003`, the reason named, and nothing raised
+on the attached window; then the same call delivered once the probe names itself through
+`MICS_APP_PATH`; and the pipe's unit test starts a real instance and reads the label off it.
+`cargo test --bin mics-engine` is **219 passing, 0 failing**.
+
+## D-058 — A Low-integrity launch is refused by name, and the hatch is for probes
+
+**Status:** implemented (2026-11-13), measured live (2026-11-14).
+
+**Context.** Windows gives a process the mandatory label of the folder its image sits in, and on
+2026-11-13 that landed on this product twice from one tree
+(`H:\FlyEnv\PhpWebStudy-Data\server\www\dist\MICS-portable\`, which carries
+`Mandatory Label\Low Mandatory Level:(I)(OI)(CI)(NW)`). The pipe half of it is D-057. This is the
+other half: an engine started from such a folder starts, answers, and then fails every write — in
+two errors that read like unrelated bugs. SQLite says *"attempt to write a readonly database"* and
+the helper says *"installed but not answering"*, on a machine where the database is fine and the
+service is healthy. Neither sentence mentions a folder, so the user's next hour goes to the
+database and the service, and a support case gets filed against both.
+
+**Decision.**
+
+- The engine refuses to start below Medium, once, in words that carry the folder it was started
+  from, both symptoms, and the two ways out — run the installed copy in `%LOCALAPPDATA%\MI CS`, or
+  extract the release ZIP outside a web root or sandbox folder (`engine\src\main.rs`, before any
+  command is dispatched; `platform::windows::integrity::below_medium()` is
+  `GetTokenInformation(TokenIntegrityLevel)` below `0x2000`).
+- Three commands stay usable below Medium — `helper-status`, `helper-console`,
+  `helper-service` — because they only *read* state and they are exactly what a Low run needs for
+  diagnosis (`needs_normal_integrity`).
+- A token whose level cannot be read is **not** Low. `below_medium()` is
+  `current().is_some_and(...)`, so `None` never turns into a refusal: a machine where the level is
+  unreadable is not a machine to stop serving on.
+- `MICS_ALLOW_LOW_INTEGRITY=1` runs anyway, for a diagnostic probe. It is an environment variable
+  and so has to be set on purpose, which is what the acceptance probes do when they start an engine
+  from a work tree (`verify-pipe-acl.ps1`, `verify-toast.ps1`, `measure-guard-cpu.ps1`).
+- The softer half stays on every command, exempt ones included: `mics_engine::settings` warns at
+  startup that the data dir is not writable by this Low-integrity process.
+
+**Consequences.** Measured 2026-11-14 with an engine copy in `%TEMP%\mics-low-probe`, labelled
+`icacls <dir> /setintegritylevel (OI)(CI)L`, `inventory --json` in all three runs:
+
+- the mechanism first, because the whole decision rests on it: from that folder the engine logged
+  *"data dir C:\Users\…\MICS is not writable by this Low-integrity process — Windows runs a program
+  from a Low-labelled folder at Low"*. "The folder carries the label, not the program" is measured,
+  not assumed.
+- no hatch: `ERROR … MI CS was started from a Low-integrity location
+  (…\mics-low-probe\mics-engine.exe) …`, after the starting banner and before any state was touched;
+  exit code **1**.
+- with `MICS_ALLOW_LOW_INTEGRITY=1`: `INFO mics_engine: MI CS engine 0.1.2 starting
+  (mode=inventory, …)` — and the settings warning still in front of it, because the hatch buys the
+  run, not the writability.
+- unit tests hold the two halves of the shape: `only_the_helper_inspection_commands_run_below_medium`
+  (the three exempt commands, and `serve` / `service` / `scan` / `install-helper` refused) and
+  `a_readonly_database_failure_names_the_directory_and_the_fix` (a write that fails anyway points at
+  the same directory and names the integrity level), plus `integrity`'s level tests.
+- `scripts\verify-low-integrity.ps1` is all of it again, on demand, with the positive control the
+  three runs above lacked: an ordinary folder beside the Low one where the same command is **not**
+  refused (so "refused" cannot be a missing binary in disguise). **6 checks passed, 0 failed**
+  (2026-11-14): the ordinary copy runs, the Low copy reports itself Low, it is refused by name and
+  ends non-zero, the hatch runs it with the warning intact, and `helper-status` answers from the Low
+  folder without the hatch.
+- Honest limits: this is a diagnosis, not a control. It stops nothing — a Low process can be started
+  all the same, and every other program on the machine is unaffected. It exists so MI CS stops
+  producing two false bug reports, and the hatch exists so a developer can still watch what a Low
+  run does. One folder, one machine, measured once; `scripts\verify-low-integrity.ps1` is the
+  repeatable form of the three runs above.
+
+## D-059 — The window belongs to the launch that turns out to be the window
+
+Reported 2026-11-13, from Explorer's verb: with MI CS already open, right-clicking a file and
+choosing "Scan with MI CS" opened a second window — a window that appeared and closed. D-041's
+handover was working, and `verify-handoff.ps1` had measured it on the pipe; what the user saw was the
+half of it nobody had looked at. `windows\runner\flutter_window.cpp` showed the window on Flutter's
+first frame, which arrives before Dart has asked the engine whether another window is attached, and
+`lib\main.dart` then calls `quit()` on the branch that hands itself over. Two processes agreed
+correctly that one of them should not be there, and the user watched the one that was leaving.
+
+**Decision.**
+
+- The window is created hidden and only the process that turns out to be the window shows it: the
+  runner no longer registers `Show()` for the first frame (it keeps the redraw that forces a frame to
+  be pending), and Dart shows the window after `_handoff` has answered. `windowManager.show()` and
+  `focus()` moved out of `waitUntilReadyToShow` into one `_showWindow()` that runs once.
+- A launch that is not the window never shows one: it cancels the startup beat and returns before
+  that call.
+- An engine that cannot answer must not cost the user the window. The old `waitUntilReadyToShow`
+  showed the window whatever happened next; a 1500 ms startup beat now calls the same `_showWindow()`
+  if the handover has not answered by then. A live engine answers in milliseconds, so the beat covers
+  the failing-engine case only.
+- `syncExplorerMenu()` keeps the condition it had (the window that survives, D-054), which the early
+  return now expresses directly.
+
+**Consequences.** A right-click scan is a path handed to the window that was already open, and a
+process that ends without ever being seen. Measured, not assumed: `scripts\verify-single-instance.ps1`
+launches the app twice on a private pipe (`MICS_PIPE_NAME`, so a running MI CS is untouched) and asks
+Windows itself about every top-level window of the second process (`EnumWindows` + `IsWindowVisible`,
+per process id) — **4 checks, 0 failures**: the first launch shows a window (the positive control,
+without which "no visible window" would also be true of a detector that reads nothing), the second
+launch's windows are all `hidden`, it ends by itself, and one window is left. The negative control is
+the same probe against the pre-fix runner with the Dart half kept: the second launch's windows there
+are `visible|mics_app` and `visible|MI CS` — the reported flash, reproduced on demand. Two honest
+limits: the probe samples every 25 ms, so a flash shorter than that could pass unnoticed (the pre-fix
+build's did not, in the one run recorded here), and it measures one machine.
+
+A side effect of the same change: the window is now shown after Dart has set the title, so the
+runner's `mics_app` title is no longer what the taskbar sees first (the pre-fix build's first visible
+window was titled `mics_app`; the fixed one, `MI CS`).
+
+This decision is *not* the crash found next to it — that is **D-060**, below, which is where the
+handed-over launch stops dying: the branch this decision gave the window rule to was still calling
+`quit()`, and `quit()` destroys a window that was never shown.
+
+## D-060 — A handed-over launch leaves with `exit(0)`
+
+**Status:** implemented (2026-11-14).
+
+**Context.** D-059 stopped the flash, and the same branch still ended the wrong way: the launch that
+hands itself over called `quit()`, i.e. `windowManager.destroy()` — on a process whose window was
+never shown and whose engine is still inside startup. It died with **0xC000041D**
+(`STATUS_FATAL_USER_CALLBACK_EXCEPTION`), leaving Application Error id 1000 (`0xC0000005`, then
+`0xC000041D`) and Windows Error Reporting id 1001 behind it, once per right-click scan (trap 34).
+Both the pre-fix and the post-flash-fix build did it, so it is older than D-059; the user sees
+nothing of it until someone reads their event log, or WER pops a dialog where no window should be.
+
+**Decision.**
+
+- `lib\main.dart`'s `_handoff` branch ends through `trayPanelProvider.notifier.endHandedOver()`,
+  which asks the engine to stop (D-053's order: it is a no-op for a process that started no engine,
+  and it is what a copy that did start one needs) and then calls `dart:io`'s `exit(0)`.
+- `quit()` is untouched: the user's own quit still stops its engine and destroys its window in that
+  order. The blunt exit lives in exactly one place, on the one path with nothing to shut down.
+
+**Consequences.** Three ways of leaving were measured on the same path with
+`scripts\verify-single-instance.ps1`, whose check 3 now asserts the exit code, not merely that the
+process ended:
+
+| way out of the handed-over launch | exit code | event log |
+| --- | --- | --- |
+| `windowManager.destroy()` — `quit()`, what the branch used to call | `0xC000041D` (`-1073740771`) | Application Error 1000 + WER 1001 |
+| `ServicesBinding.exitApplication(AppExitType.required)` | `0xC000041D` (`-1073740771`) | Application Error 1000 + WER 1001 |
+| `dart:io`'s `exit(0)` — what it calls now | `0` | nothing |
+
+The middle row is worth its space. Flutter's own documentation for `exitApplication` says it
+"differs from calling `dart:io`'s `exit` in that it gives the engine a chance to clean up resources
+so that it doesn't crash on exit, so calling this is always preferred over calling `exit`" — and on
+this path it crashed exactly like `destroy()` did. What dies is the embedder's shutdown of a window
+that was never shown while the engine is still starting, which is also why `destroy()` died: the
+problem is any teardown of that window, not which API asks for it. Measured 2026-11-14: probe **4
+checks passed** (`exit code 0`), and the Application log holds no Application Error and no WER entry
+in the window that covers the run.
+
+**Honest limits.** `exit(0)` cannot be exercised by a unit test — it ends the process the test runs
+in — so this decision's only guard is the probe's exit-code check, and it is a real one: against
+either of the two rows above it reads `FAIL … (exit code -1073740771)`. `flutter analyze` clean and
+192 Dart tests passing say nothing about this line. The window is left by the process that keeps it,
+and the process that leaves owns no window to destroy.

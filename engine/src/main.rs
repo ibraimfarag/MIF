@@ -296,7 +296,11 @@ async fn run() -> Result<()> {
                     break;
                 }
                 if let Ok(req) = serde_json::from_str::<rpc::JsonRpcRequest>(&line) {
-                    let resp = dispatcher::Dispatcher::handle_request(req).await;
+                    // Stdio cannot name the peer: the client is whoever holds this
+                    // process's stdin, and nothing here reads their token. Passing
+                    // `None` is what keeps this transport from granting the one
+                    // method that acts on the user's behalf (`app.activate`).
+                    let resp = dispatcher::Dispatcher::handle_request(req, None).await;
                     println!("{}", serde_json::to_string(&resp)?);
                 }
             }

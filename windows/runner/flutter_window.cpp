@@ -27,13 +27,16 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
-
-  // Flutter can complete the first frame before the "show window" callback is
-  // registered. The following call ensures a frame is pending to ensure the
-  // window is shown. It is a no-op if the first frame hasn't completed yet.
+  // The window is created hidden and stays hidden until Dart shows it (D-059).
+  // It used to be shown on the first frame, which is no longer proof that this
+  // process is the window: a launch from Explorer's verb hands itself over to
+  // the window that is already open and exits (D-041), and showing on the first
+  // frame turned that handover into a window that appeared and vanished. Dart
+  // shows it once the engine has answered and the handover has been decided.
+  //
+  // Flutter can complete the first frame before anything is registered. The
+  // following call ensures a frame is pending; it is a no-op if the first frame
+  // hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
   return true;

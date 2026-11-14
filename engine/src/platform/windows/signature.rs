@@ -504,6 +504,32 @@ pub fn embedded_signer_thumbprint(path: &std::path::Path) -> Option<String> {
     embedded_identity(path).map(|signer| signer.thumbprint)
 }
 
+/// True when two thumbprints name the same certificate.
+///
+/// Kept apart from the two certificate reads so the rule is testable without a
+/// signed binary: an absent signer is never a match - an unsigned file is not ours
+/// by default.
+pub fn same_signer(ours: Option<&str>, theirs: Option<&str>) -> bool {
+    matches!((ours, theirs), (Some(a), Some(b)) if a.eq_ignore_ascii_case(b))
+}
+
+/// The thumbprint this process's own image is signed with, read once.
+///
+/// Two callers ask "is this ours": the scan loop, per candidate file, and the
+/// engine's caller gate, per connection. The answer cannot change while the
+/// process lives, so it is read on the first ask and kept. `None` on an unsigned
+/// build - which is what makes both checks false under `cargo test`, and true for
+/// every copy of a signed release. Nothing is cached across processes, so a
+/// re-signed engine never compares against a stale certificate.
+pub fn own_thumbprint() -> Option<&'static str> {
+    static OWN: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    OWN.get_or_init(|| {
+        let own = std::env::current_exe().ok()?;
+        embedded_signer_thumbprint(&own)
+    })
+    .as_deref()
+}
+
 /// The signer's name and thumbprint out of the certificate embedded in a file's
 /// Authenticode signature, read without building a chain.
 fn embedded_identity(path: &std::path::Path) -> Option<VerifiedSigner> {

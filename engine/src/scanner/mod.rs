@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use walkdir::WalkDir;
 
+use crate::platform::windows::signature;
 use crate::storage::sqlite::{JobRow, Storage};
 use crate::scanner::quarantine::QuarantineManager;
 use crate::scanner::yara_engine::YaraEngine;
@@ -395,6 +396,22 @@ fn run_job(
                             });
                         }
 
+                    // Our own artefacts are not suspects, wherever they sit. The
+                    // rules match this engine because it carries the very strings
+                    // they look for, and a copy of the package carries the
+                    // certificate that signed it - so a scan pointed at a folder
+                    // holding one reported the product as a threat. Held back
+                    // here rather than in `enumerate` because this reads a
+                    // certificate: a cost worth paying only for a file that
+                    // already matched something.
+                    let hit = hit.filter(|_| {
+                        if !signed_by_us(&p) {
+                            return true;
+                        }
+                        tracing::info!("keeping own file out of the report: {path}");
+                        false
+                    });
+
                     if let Some(f) = hit {
                         findings += 1;
                         storage.add_job_finding(job_id, seq, &serde_json::to_string(&f)?)?;
@@ -448,7 +465,10 @@ fn run_job(
                     // The product is never quarantined, and neither is a copy of
                     // it: the rules match our engine because it contains the
                     // strings they look for, and it carries the same certificate
-                    // that signed this engine.
+                    // that signed this engine. Since the same test holds a
+                    // finding back (see the scan loop), reaching it here means a
+                    // row written before that, or by a build we did not sign:
+                    // the second line of defence, not the first.
                     if is_product_file(path) || signed_by_us(path) {
                         tracing::warn!("keeping own file out of quarantine: {}", f.path);
                         continue;
@@ -511,8 +531,9 @@ fn pct(processed: i64, total: i64) -> u32 {
 /// the product as a threat and - because findings are quarantined without asking
 /// - moved its own engine and rules out of the package they were run from.
 ///
-/// A *copy* of the package is settled at the quarantine itself, by
-/// [`signed_by_us`]: its path is not ours, but its certificate is.
+/// A *copy* of the package is settled by [`signed_by_us`]: its path is not ours,
+/// but its certificate is. That is checked where a finding would be recorded,
+/// not here, because it reads a certificate - see the scan loop.
 fn is_product_file(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let ext = ext.to_ascii_lowercase();
@@ -523,12 +544,11 @@ fn is_product_file(path: &Path) -> bool {
     // Our own package: the layout the release is unpacked into, where `rules\`
     // sits beside the exe. A user's own `rules\` folder is not ours to skip, so
     // this is anchored on where this engine is running from.
-    if let Ok(own) = std::env::current_exe() {
-        if let Some(dir) = own.parent() {
-            if path.starts_with(dir.join("rules")) || path == own {
-                return true;
-            }
-        }
+    if let Ok(own) = std::env::current_exe()
+        && let Some(dir) = own.parent()
+        && (path.starts_with(dir.join("rules")) || path == own)
+    {
+        return true;
     }
     false
 }
@@ -537,19 +557,17 @@ fn is_product_file(path: &Path) -> bool {
 ///
 /// Our binaries are signed with the release certificate, so a package the user
 /// copied elsewhere and pointed a scan at is still the product - not something
-/// the product should quarantine out from under them.
+/// the product should judge, quarantine, or show them as a threat.
 fn signed_by_us(path: &Path) -> bool {
-    use crate::platform::windows::signature::embedded_signer_thumbprint;
-    let Ok(own) = std::env::current_exe() else {
-        return false;
-    };
-    let Some(ours) = embedded_signer_thumbprint(&own) else {
-        return false;
-    };
-    matches!(
-        embedded_signer_thumbprint(path),
-        Some(theirs) if theirs.eq_ignore_ascii_case(&ours)
+    signature::same_signer(
+        signature::own_thumbprint(),
+        signer_thumbprint(path).as_deref(),
     )
+}
+
+/// The signer of one file, or `None` when it carries no embedded signature.
+fn signer_thumbprint(path: &Path) -> Option<String> {
+    crate::platform::windows::signature::embedded_signer_thumbprint(path)
 }
 
 /// Walks the root, scores every file, and persists the queue in one batch.
@@ -748,6 +766,33 @@ mod product_file_tests {
         // A user's own folder called `rules` is not ours to skip.
         assert!(!is_product_file(Path::new("/home/u/rules/notes.txt")));
     }
+
+    #[test]
+    fn a_signer_is_the_same_signer_only_when_both_files_carry_one() {
+        let ours = "6A1B0D9C4E77B3F2A5C8E10D3F6B92A4C7E018B5";
+        assert!(signature::same_signer(Some(ours), Some(ours)));
+        assert!(signature::same_signer(
+            Some(ours),
+            Some(&ours.to_ascii_lowercase())
+        ));
+        assert!(!signature::same_signer(Some(ours), Some("0F0F0F")));
+        // Absent is never a match, in either direction: an unsigned file is not
+        // ours by default, or every unsigned download would be exempt.
+        assert!(!signature::same_signer(Some(ours), None));
+        assert!(!signature::same_signer(None, Some(ours)));
+        assert!(!signature::same_signer(None, None));
+    }
+
+    #[test]
+    fn the_exemption_is_off_while_no_certificate_is_readable() {
+        // Unit tests run an unsigned binary, so `own_thumbprint()` is None and
+        // nothing is exempt: a copy of the package is judged like any other
+        // file. The signed case - the one a user hit - is measured out of
+        // process by `scripts/verify-portable-pair.ps1`.
+        assert!(!signature::same_signer(signature::own_thumbprint(), None));
+        assert!(!signed_by_us(Path::new("/home/u/rulebook.doc")));
+        assert!(!signed_by_us(Path::new("/home/u/copy-of-the-package.exe")));
+    }
 }
 
 #[cfg(test)]
@@ -802,8 +847,17 @@ mod schedule_tests {
         for key in ["enabled", "interval_hours", "target", "last_started", "next_due"] {
             assert!(json.get(key).is_some(), "{key} must be present");
         }
-        // The default is off, so the UI can say so without a special case.
-        assert!(!status.enabled);
-        assert!(status.next_due.is_none());
+        // The status mirrors the setting rather than a hard-coded default: the
+        // default is off, but a developer machine whose own copy has the schedule
+        // on (`%LOCALAPPDATA%\MICS\settings.json`, `scan_interval_hours: 6`) made
+        // this test fail on 2026-11-13 for a reason that says nothing about the
+        // code.
+        let hours = crate::settings::current().scan_interval_hours;
+        assert_eq!(status.enabled, hours > 0, "enabled mirrors scan_interval_hours");
+        assert_eq!(
+            status.next_due.is_none(),
+            hours == 0,
+            "a due time exists exactly when an interval is set"
+        );
     }
 }

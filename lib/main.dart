@@ -46,6 +46,11 @@ class _BootstrapState extends ConsumerState<Bootstrap>
   bool _ready = false;
   AppHandoff? _handoffSub;
 
+  /// Whether this process has shown its window yet, and the startup beat that
+  /// shows it if the handover has not answered (D-059).
+  bool _shown = false;
+  Timer? _showTimer;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +61,7 @@ class _BootstrapState extends ConsumerState<Bootstrap>
 
   @override
   void dispose() {
+    _showTimer?.cancel();
     _handoffSub?.dispose();
     super.dispose();
   }
@@ -175,11 +181,17 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       () async {
         await windowManager.setPreventClose(true);
         await _setupTray();
-        await windowManager.show();
-        await windowManager.focus();
         WindowCorners.apply(rounded: true);
+        // Deliberately no `show()` here: the runner no longer shows the window
+        // either (D-059), and whether *this* process is the window is decided
+        // below by the handover.
       },
     );
+    // A launch that is about to hand itself over may not paint nothing for the
+    // whole engine wait, so the window appears on its own after a beat even if
+    // the handover has not answered yet. A live engine answers in milliseconds,
+    // which is the normal case; this only covers an engine that is failing.
+    _showTimer = Timer(const Duration(milliseconds: 1500), _showWindow);
     // Engines start with the app — no manual engine launch required.
     final ipc = ref.read(engineIpcProvider);
     // Start the sound router once: it maps engine events to cues (D-004).
@@ -208,7 +220,15 @@ class _BootstrapState extends ConsumerState<Bootstrap>
       } catch (_) {}
     }
     if (mounted) setState(() => _ready = true);
-    if (await _handoff(ipc) && mounted) {
+    final isWindow = await _handoff(ipc);
+    // The decision is in, so the startup beat is over either way: a launch that
+    // handed itself over must not flash a window on its way out (D-059).
+    _showTimer?.cancel();
+    if (!isWindow) return;
+    // This process is the window, so now it becomes visible — and not one beat
+    // earlier.
+    await _showWindow();
+    if (mounted) {
       // The window that survives owns the Explorer entry (D-054): re-assert it
       // so a copy whose folder moved refreshes the path Explorer would launch.
       // A launch that handed itself over owns nothing and skips this.
@@ -216,14 +236,28 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     }
   }
 
+  /// Shows the window the runner created hidden (D-059). Called either because
+  /// this process is the window, or by the startup beat; once.
+  Future<void> _showWindow() async {
+    if (_shown || !mounted) return;
+    _shown = true;
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {
+      // A platform where window_manager is not answering must not throw out of
+      // the boot sequence; the window is then whatever the runner left.
+    }
+  }
+
   /// The single-instance half of D-041: this launch either hands itself over to
   /// the window that is already open (and ends), or it *is* that window — and
   /// then it scans the path Explorer handed over, if there was one.
   ///
-  /// The window is already visible by now (the splash in [build] becomes the
-  /// app), so a handover that ends this process is a window that appears and
-  /// closes; keeping that beat short is what the early `ensureRunning` above
-  /// buys: the engine is up, not spawned.
+  /// Nothing is visible by now: the runner creates the window hidden and Dart
+  /// shows it, so a launch that hands itself over ends without ever opening one
+  /// (D-059). The early `ensureRunning` above is what keeps the decision quick —
+  /// the engine is attached to, not spawned.
   ///
   /// Returns whether this process *is* the window (false when it handed itself
   /// over and is about to end).
@@ -238,8 +272,10 @@ class _BootstrapState extends ConsumerState<Bootstrap>
     if (!mounted) return false;
     if (delivered) {
       // Another window has it: leave without touching the engine (a second
-      // process never owns the engine it did not start).
-      await ref.read(trayPanelProvider.notifier).quit();
+      // process never owns the engine it did not start) and without destroying
+      // a window nobody saw — that destroy is what made this path die with
+      // 0xC000041D instead of exiting (trap 34).
+      await ref.read(trayPanelProvider.notifier).endHandedOver();
       return false;
     }
     if (scanPath != null) _onActivate(scanPath);

@@ -5,9 +5,11 @@
 # inside a web root (FlyEnv's `www`), Windows gave that folder a Low integrity
 # label, and the engine refused to start from it - quietly, because the app starts
 # the engine detached and nobody read its stderr. So this gate unpacks the zip into
-# a fresh folder outside the repository and runs the pair from there. Two things
-# have to hold: the named pipe answers a `status` call, and the engine reports its
-# own `package integrity:` line. An `-ExtractTo` inside the repository is refused,
+# a fresh folder outside the repository and runs the pair from there. Three things
+# have to hold: the named pipe answers a `status` call, the engine reports its own
+# `package integrity:` line, and a second copy of the package - left in a folder of
+# its own and scanned by this engine - is judged and cleared instead of being
+# reported as a threat. An `-ExtractTo` inside the repository is refused,
 # because a web root or the build tree is the situation under test, not a place to
 # test in.
 
@@ -23,6 +25,32 @@ $repo = Split-Path $PSScriptRoot -Parent
 $proc = $null
 $target = $null
 $data = $null
+$copy = $null
+
+# One JSON-RPC call over the pipe, waiting for the answer with that id.
+# Notifications the engine sends meanwhile are skipped, which is why the answer
+# is matched on the id rather than read in order.
+function Rpc([string]$pipeName, [int]$id, [string]$method, [hashtable]$params, [int]$waitMs) {
+  $caller = New-Object System.IO.Pipes.NamedPipeClientStream(".", $pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+  try {
+    $caller.Connect(2000)
+    $call = @{ jsonrpc = "2.0"; id = $id; method = $method }
+    if ($params) { $call.params = $params }
+    $writer = New-Object System.IO.StreamWriter($caller)
+    $writer.AutoFlush = $true
+    $reader = New-Object System.IO.StreamReader($caller)
+    $writer.WriteLine(($call | ConvertTo-Json -Compress -Depth 4))
+    $deadline = (Get-Date).AddMilliseconds($waitMs)
+    while ((Get-Date) -lt $deadline) {
+      $line = $reader.ReadLine()
+      if (-not $line) { continue }
+      if ($line -match ('"id"\s*:\s*' + $id + '(\D|$)')) { return ($line | ConvertFrom-Json) }
+    }
+    return $null
+  } finally {
+    $caller.Dispose()
+  }
+}
 
 function Fail([string]$why, [string[]]$hints = @()) {
   Write-Output "RESULT: FAIL - $why"
@@ -33,7 +61,7 @@ function Fail([string]$why, [string[]]$hints = @()) {
 function Cleanup {
   if ($proc -and -not $proc.HasExited) { $proc.Kill() }
   if (-not $Keep) {
-    foreach ($dir in @($target, $data)) {
+    foreach ($dir in @($target, $data, $copy)) {
       if ($dir -and (Test-Path -LiteralPath $dir)) {
         Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
       }
@@ -124,6 +152,48 @@ try {
     }
   }
 
+  # 7. A copy of the package, in a folder of its own, is the product - not a
+  #    threat. The rules match our engine because it carries the very strings they
+  #    look for, so a scan pointed at a folder holding a second copy reported the
+  #    product as HIGH and listed it beside real malware. The copy sits outside
+  #    the engine's own directory on purpose: the path test skips a file beside
+  #    the engine, so only the certificate test can hold this one back. `scanned`
+  #    is read as well, so a copy that was quietly skipped cannot pass for a copy
+  #    that was judged and cleared.
+  $copy = Join-Path $env:TEMP ("mics-pair-copy-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
+  New-Item -ItemType Directory -Path $copy -Force | Out-Null
+  Copy-Item -LiteralPath $engine -Destination (Join-Path $copy "mics-engine.exe") -Force
+
+  $started = Rpc $pipe 2 "scan.start" @{ path = $copy; quarantine = $false } 30000
+  $jobId = ""
+  if ($started -and $started.result) { $jobId = [string]$started.result.job_id }
+  if ($jobId -eq "") {
+    Fail "the engine started no scan of a copy of its own package" ($tail + @("scan.start over the pipe did not answer with a job_id"))
+  }
+
+  $job = $null
+  $scanDeadline = (Get-Date).AddSeconds(90)
+  while ((Get-Date) -lt $scanDeadline) {
+    $answer = Rpc $pipe 3 "job.get" @{ job_id = $jobId } 30000
+    if ($answer -and $answer.result -and $answer.result.job) {
+      $job = $answer.result.job
+      if (@("done", "failed", "cancelled") -contains $job.state) { break }
+    }
+    Start-Sleep -Milliseconds 400
+  }
+  if (-not $job) { Fail "the scan of $copy never reported a state" @("the engine is up and answered status: is the job queue running?") }
+  if ($job.state -ne "done") {
+    Fail "the scan of a copy of the package ended '$($job.state)'" @([string]$job.error)
+  }
+  if ([int]$job.scanned -lt 1) {
+    Fail "the scan of $copy examined no file at all" @("a copy that was skipped is not a copy that was cleared")
+  }
+  if ([int]$job.findings_count -ne 0) {
+    Fail "a copy of the package was reported as a threat ($($job.findings_count) findings) from $copy" @(
+      "its own engine judged it: the signer test is what holds this back, and it did not fire")
+  }
+  $scanLine = "$($job.scanned) file(s) judged in a copy of the package, $($job.findings_count) findings"
+
   if ($proc -and -not $proc.HasExited) { $proc.Kill() }
   Start-Sleep -Milliseconds 250
 
@@ -149,7 +219,8 @@ try {
   }
 
   Write-Output "pipe answered (integrity '$verdict'), package integrity: $detail"
-  Write-Output "RESULT: PASS - the published archive runs from $target, outside the repository, and its package is whole"
+  Write-Output $scanLine
+  Write-Output "RESULT: PASS - the published archive runs from $target, outside the repository, calls its package whole, and does not report a copy of itself"
   Cleanup
   exit 0
 } catch {

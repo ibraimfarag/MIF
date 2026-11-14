@@ -1,6 +1,6 @@
 use crate::rpc::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn, error};
 use crate::platform::traits::PlatformCollectors;
 use crate::platform::windows::process::ToolCall;
@@ -15,6 +15,12 @@ const REG_ENTRY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15
 /// really does run for minutes, so the budget is generous — it only exists so an
 /// unanswered `-Wait` cannot pin this request for the rest of the session.
 const DEFENDER_SCAN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
+
+/// The transport carried the request and the process that sent it is not this
+/// product, so the one method that acts on the user's behalf is refused. Its own
+/// code, so a caller can tell "the engine declined you" apart from "the engine
+/// could not do it" (-32000) and "you sent nonsense" (-32602).
+const REFUSED_CALLER: i32 = -32003;
 
 /// The autostart entry's registry call, with a deadline. `action` is `add` or
 /// `delete`; `what` names the operation in the timeout error.
@@ -107,7 +113,13 @@ pub(crate) fn filter_spec(req: &JsonRpcRequest) -> Option<crate::firewall::wfp::
 }
 
 impl Dispatcher {
-    pub async fn handle_request(req: JsonRpcRequest) -> JsonRpcResponse {
+    /// `caller` is the image of the process on the other end of the transport that
+    /// carried `req`, when that transport can name it: the pipe asks the kernel for
+    /// the client's process id (see `platform::windows::pipe`). `None` means the
+    /// transport cannot name its peer (the stdio loop) or the read failed — and the
+    /// methods that decide something on the user's behalf treat that as "not this
+    /// product", so an unidentifiable caller cannot inherit a permission.
+    pub async fn handle_request(req: JsonRpcRequest, caller: Option<&Path>) -> JsonRpcResponse {
         info!("Processing request: {}", req.method);
         // Proof of life for the hang detector, plus the method its report names
         // if this runtime stops answering (ز2-ب). A no-op when no session
@@ -402,7 +414,35 @@ impl Dispatcher {
             // over path when there is one. `delivered` is the caller's answer —
             // true means another client took it and this process has nothing to
             // show, false means it is the window and scans the path itself.
+            //
+            // The transport is not the gate any more. The pipe is Low-labelled so
+            // that a release unpacked into a folder Windows calls Low can still
+            // drive its own engine, and Low is where the sandboxes live: what may
+            // ask for a handover is decided from the caller's image instead
+            // (`caller::handover_allowed`), which is the only thing a Low process
+            // of a foreign build cannot borrow.
             "app.activate" => {
+                let allowed = caller.is_some_and(crate::platform::windows::caller::handover_allowed);
+                if !allowed {
+                    let image = caller
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "an unidentified process".to_string());
+                    warn!("app.activate refused: {image} is not this product");
+                    return JsonRpcResponse {
+                        jsonrpc: "2.0".to_string(),
+                        result: None,
+                        error: Some(json!(JsonRpcError {
+                            code: REFUSED_CALLER,
+                            message: format!(
+                                "app.activate: {image} may not drive this window — only the \
+                                 app itself, or a process signed with the same certificate, \
+                                 can hand a path to it"
+                            ),
+                            data: None,
+                        })),
+                        id: req.id,
+                    };
+                }
                 let path = req
                     .params
                     .as_ref()

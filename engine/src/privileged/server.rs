@@ -28,7 +28,17 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 /// The pipe is reachable by LocalSystem, administrators and *interactive* users
 /// only — the same people who could answer a UAC prompt themselves. Nothing else
 /// on the machine can ask the helper for anything.
-const PIPE_SDDL: &str = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)";
+///
+/// The mandatory label carries the rest of that thought. This service runs at
+/// Medium or higher, so Windows' no-write-up rule refused every Low-integrity
+/// caller — including the user's own engine started from a folder with a Low
+/// label, which reported it as "installed but not answering" while the helper was
+/// answering fine (`engine/src/platform/windows/integrity.rs` documents the
+/// levels). `S:(ML;;NW;;;LW)` labels the pipe Low so that caller is served; the
+/// DACL above is unchanged and still decides who may connect, and the caller
+/// gate behind it (`caller::judge`) still refuses anything that is not the engine
+/// or the path the installer recorded.
+const PIPE_SDDL: &str = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)S:(ML;;NW;;;LW)";
 
 /// Serves requests until `stop` is set (SCM stop) or the process dies.
 ///
