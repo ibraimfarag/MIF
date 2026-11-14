@@ -329,6 +329,27 @@ jobs:
           flutter-version: 3.47.8   # same pin as the x64 job: CI must not drift
           cache: true
 
+      # `make-release.ps1 -Arch arm64` refuses until the SDK carries the engine
+      # artifacts for *this host*, and nothing downloads them on its own - the
+      # build does, but the gate runs first, so the gate was answering "has a
+      # build run here before?" (measured 2026-11-14: it reported the row missing
+      # in the same job whose ARM64 engine linked and ran natively). Asking for
+      # them here makes the row say what it means. Which variant arrives is the
+      # question this whole job exists to answer - the host decides - so the step
+      # prints what it got instead of asserting.
+      - name: Precache the Flutter engine for this host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          dart --version
+          flutter precache --windows
+          $code = $LASTEXITCODE
+          "engine artifacts under $env:FLUTTER_ROOT\bin\cache\artifacts\engine:"
+          Get-ChildItem "$env:FLUTTER_ROOT\bin\cache\artifacts\engine" -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name
+          exit $code
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:

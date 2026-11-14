@@ -141,7 +141,11 @@ if ($Reproducible) {
 # Checking first turns that into a list. Measured on this machine 2026-11-03: the
 # first three rows are missing, the SDK libs and the Rust target are present, and
 # the Flutter SDK has no windows-arm64 artifacts at all (only windows-x64*), so an
-# ARM64 app also needs an ARM64 host and its own SDK download.
+# ARM64 app also needs an ARM64 host and its own SDK download. The last row is
+# therefore about a *state*, not a capability: no `flutter` command downloads the
+# host's engine artifacts until something asks for them, so whoever runs this must
+# run `flutter precache --windows` first (the CI job does) - otherwise the row is
+# missing on a machine that can build, and the gate refuses a buildable host.
 function Test-Arm64Prerequisites {
   $rows = New-Object System.Collections.Generic.List[object]
 
@@ -207,15 +211,30 @@ function Test-Arm64Prerequisites {
              else { "install the LLVM/clang component, or set CC_aarch64_pc_windows_msvc" }
   })
 
+    # The predicate is `build-engine-arm64.ps1`'s, not "the newest version folder":
+  # that build keeps whichever version *has* `um\arm64\kernel32.lib`, so a machine
+  # carrying a newer SDK for another architecture beside an older one that has the
+  # ARM64 import libraries must not be refused here. Measured on the ARM64 CI
+  # runner 2026-11-14: the newest-version-only check said MISSING while the engine
+  # built and linked ARM64 there in the same run - the gate was the wrong half.
+  # Both SDK roots are searched; on a native ARM64 host the SDK does not have to
+  # live under Program Files (x86).
+  $sdkSeen = @()
   $sdkLib = ""
-  foreach ($kits in @("${env:ProgramFiles(x86)}\Windows Kits\10\Lib")) {
-    $ver = Get-ChildItem $kits -Directory -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1
-    if ($ver -and (Test-Path (Join-Path $ver.FullName "um\arm64\kernel32.lib"))) { $sdkLib = (Join-Path $ver.FullName "um\arm64") }
+  foreach ($kits in @("${env:ProgramFiles(x86)}\Windows Kits\10\Lib", "${env:ProgramFiles}\Windows Kits\10\Lib")) {
+    if (-not (Test-Path $kits)) { continue }
+    $sdkSeen += $kits
+    $ver = Get-ChildItem $kits -Directory -ErrorAction SilentlyContinue |
+      Where-Object { Test-Path (Join-Path $_.FullName "um\arm64\kernel32.lib") } |
+      Sort-Object Name | Select-Object -Last 1
+    if ($ver) { $sdkLib = (Join-Path $ver.FullName "um\arm64"); break }
   }
   $rows.Add([pscustomobject]@{
     Name = "Windows SDK arm64 libs"
     Ok = [bool]$sdkLib
-    Detail = if ($sdkLib) { $sdkLib } else { "add the SDK's ARM64 libraries" }
+    Detail = if ($sdkLib) { $sdkLib }
+             elseif ($sdkSeen.Count -gt 0) { "no version under $($sdkSeen -join ' or ') has um\arm64\kernel32.lib" }
+             else { "no Windows Kits\10\Lib root found; add the SDK's ARM64 libraries" }
   })
 
   $flutterRoot = ""
@@ -225,7 +244,8 @@ function Test-Arm64Prerequisites {
   $rows.Add([pscustomobject]@{
     Name = "Flutter windows-arm64 engine"
     Ok = [bool]($flutterArm -and (Test-Path $flutterArm))
-    Detail = if ($flutterArm -and (Test-Path $flutterArm)) { $flutterArm } else { "downloaded on an ARM64 host; this SDK has windows-x64* only" }
+    Detail = if ($flutterArm -and (Test-Path $flutterArm)) { $flutterArm }
+             else { "run: flutter precache --windows (an ARM64 host gets windows-arm64, an x64 one only windows-x64*)" }
   })
 
   $rows.Add([pscustomobject]@{

@@ -153,7 +153,24 @@
 > the run's log (it needs a signed-in browser; the public API answers 403). The
 > **ARM64 diagnosis is done and fixed**: Flutter publishes no Windows ARM64 SDK
 > (0 of 747 archives), so the job now asks for the x64 SDK and for
-> `targets: aarch64-pc-windows-msvc`, and both ARM64 jobs stay informational. The
+> `targets: aarch64-pc-windows-msvc`, and both ARM64 jobs stay informational.
+> **2026-11-14: the red `package-arm64` job was the gate reading the wrong two
+> things.** In `Release` 43588227581 the ARM64 engine job built, linked and ran its
+> suite **natively on the same `windows-11-arm` image** (green, 22m41s) while the
+> packaging job refused with `NOT READY - 2 of 7` — which is proof the runner has
+> the SDK's ARM64 import libraries, so that row was the check and not the machine:
+> it looked at `Windows Kits\10\Lib\<newest version>` only, while
+> `build-engine-arm64.ps1` keeps whichever version actually *has*
+> `um\arm64\kernel32.lib` (a newer SDK for another architecture can sit beside an
+> older one that has them), and it looked under `Program Files (x86)` only. The
+> second row is a state, not a capability: nothing downloads the host's Flutter
+> engine artifacts until something asks, and the gate runs before the build, so on
+> a buildable host it was guaranteed missing — the CI job now runs
+> `flutter precache --windows` first and prints `PROCESSOR_ARCHITECTURE`,
+> `dart --version` and the artifact directory, so a MISSING there now means the
+> precache could not fetch one. Locally `-CheckToolchain` still reports the same
+> two missing (Flutter engine, ARM64 host). Both ARM64 jobs keep
+> `continue-on-error`: the answer is the next run's, not this commit's. The
 > release lane is otherwise in place: `.github/workflows/release.yml` (`version`,
 > `package-x64` 10 steps, `engine-arm64`, `package-arm64`, `publish`),
 > `make-installer.ps1 -Arch` and the arch-aware NSIS guard (built and checked for
