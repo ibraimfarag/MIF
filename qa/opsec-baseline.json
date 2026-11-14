@@ -1,6 +1,6 @@
 {
   "artifact": "dist/MICS-portable",
-  "measured": "2026-11-12",
+  "measured": "2026-11-14",
   "definition": "case-insensitive substring count over the whole file, decoded as ISO-8859-1 (one byte, one character)",
   "policy": {
     "forbidden": "the profile path of the account that runs the probe, and its leaf directory: zero hits, always - the probe computes it, this file never stores it",
@@ -37,8 +37,8 @@
           "reason": "the AOT snapshot names the engine entry points and embedder API it links against. Raised 50 -> 54 on 2026-11-12: what the substring matches here is the framework's own platform-channel names - flutter/textinput, flutter/lifecycle, flutter/keydata, flutter/mousecursor, flutter/restoration, flutter/keyboard, plugins.flutter.io/path_provider, dev.leanflutter.plugins/screen_retriever - and the four that appeared since 2026-11-03 are channels the app's newer window and tray UI opens. None of the 54 carries a path."
         },
         "dart": {
-          "count": 66,
-          "reason": "the snapshot keeps the Dart VM's own type and library names; obfuscation renames ours, not the VM's."
+          "count": 67,
+          "reason": "the snapshot keeps the Dart VM's own type and library names; obfuscation renames ours, not the VM's. Raised 66 -> 67 on 2026-11-14: D-060 lets the window leave by calling exit(0), and the VM bakes the message it guards that call with into the snapshot - the one occurrence that appeared is the string \"this embedder disallows calling dart:io's exit()\". It names no account, no path and no source file, and the forbidden-path measurement for this file was zero hits in the same build, so this is the measured cost of D-060 and not a new kind of leak."
         },
         "pubspec": {
           "count": 2,
@@ -61,8 +61,8 @@
     "mics-engine.exe": {
       "counts": {
         "cargo": {
-          "count": 1244,
-          "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\\target\\release\\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\\src\\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -> 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads `/build\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_json-1.0.154\\src\\error.rs` - so the extra occurrence is a repeat inside the toolchain's own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits)."
+          "count": 1243,
+          "reason": "rustc records the source directory of every crate it compiles; the account prefix is remapped to /build by the 2026-11-02 fingerprint sweep, so what is left is the toolchain's own layout (.cargo\\registry\\src\\...), which says which crates built the file, not who built it. Raised 1242 -> 1243 on 2026-11-03 (the LOW-row slice), and the cause was measured instead of assumed: counting the crate-path strings in engine\\target\\release\\mics-engine.exe against the shipped engine gives 1240 against 1239, and the one path that appeared is windows-strings-0.5.1\\src\\bstr.rs - the DPAPI store in secrets.rs routes the API keys through windows-dpapi, whose error path monomorphizes one more windows-strings module. That is a dependency's own source layout, not the account that built the file: the forbidden-path check stayed green in the same run. Raised 1243 -> 1244 on 2026-11-12: the distinct cargo-bearing strings differ from the 2026-11-09 build by exactly one, and it is the remapped form of a path that build still carried with the profile prefix in it - today the string reads `/build\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_json-1.0.154\\src\\error.rs` - so the extra occurrence is a repeat inside the toolchain's own layout rather than a new kind of string, and the same run kept the forbidden-path check green (zero hits). Fell 1244 -> 1243 on 2026-11-14 with the D-057..D-061 batch, which changed engine\\src\\scanner\\mod.rs and the revocation path; the ratchet records a fall so the baseline can be tightened. The string that stopped appearing was not diffed - the previous package was removed from disk before this build - and the forbidden-path measurement for this file was zero hits in the same build."
         },
         "dart": {
           "count": 1,
@@ -81,8 +81,8 @@
     "mics_app.exe": {
       "counts": {
         "flutter": {
-          "count": 39,
-          "reason": "the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger)."
+          "count": 38,
+          "reason": "the C++ runner calls the Flutter C API by name (DartProject, the view controller, the messenger). Fell 39 -> 38 on 2026-11-14: the D-057..D-061 batch removed exactly one Flutter-named call from windows\\runner\\flutter_window.cpp - FlutterEngine::SetNextFrameCallback, which D-059 replaced with the explicit show after the hand-off - and one import-table name is one occurrence. The new mics_app.exe no longer contains that string; the previous package was not on disk to diff, so the removal is matched to the fall of exactly one rather than proven by comparison."
         }
       }
     },
