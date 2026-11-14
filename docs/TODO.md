@@ -309,6 +309,30 @@
 > a re-run of `0.1.2`. The bump is the same five files as both cuts before it, and
 > the only thing that differs is the intent: this one is a measurement vehicle, and
 > its draft is disposable.
+> **The `0.1.4` run (`43597179356`) measured the swap, and the swap worked - then it
+> stopped one layer deeper.** `dart before:` said `windows_x64`; the step downloaded
+> the ARM64 SDK for `cf636b1dfb`; `archive root:` was the `dart-sdk/` the archive
+> really carries (so the fallback branch never ran); and `dart after:` said
+> `windows_arm64` - and the precache step confirmed it a second time
+> (`PROCESSOR_ARCHITECTURE=ARM64`, `dart --version` -> `windows_arm64`), which also
+> answers a question that was open: Flutter does not undo the swap on its next
+> command, because the engine stamps still match. What failed is the tool itself:
+> `Snapshot not compatible with the current VM configuration: the snapshot requires
+> '... x64 windows ...' but the VM has '... arm64 windows ...'`.
+> `flutter_tools.snapshot` is an app-jit snapshot (`bin/internal/shared.bat`,
+> `--snapshot-kind="app-jit"`), so it is architecture-specific, and the one the SDK
+> ships cannot start on the native Dart - the engine artifacts were never reached,
+> which is why the engine listing is all the precache step had to show. Two
+> consequences are in the workflow now: the snapshot and its stamp are deleted so
+> `shared.bat` rebuilds them with the native Dart (dependencies are already vendored
+> in `packages/flutter_tools/.dart_tool/package_config.json`, so it is a compile and
+> not a network trip), and the precache step reports its exit code instead of
+> exiting with it - that exit is what stopped the job before `make-release.ps1`
+> could print which rows are missing, and losing the gate's own answer is worse than
+> losing a step's status. **What the next run measures is the same question one
+> layer down:** with a native snapshot, does `precache` fetch `windows-arm64` so the
+> row turns present, and does `flutter build windows` then produce an ARM64 app or
+> refuse a target it does not have.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,

@@ -318,10 +318,16 @@ release certificate, keep it as `MICS_PFX` + `MICS_PFX_PASSWORD` — the recipe 
 5. **A Windows on ARM machine** (optional): the engine builds and is checked for
    ARM64, and CI now supplies a host where it genuinely *runs* - the release
    workflow's `windows-11-arm` engine job executes the engine's tests natively
-   (informational until it has a green run). The **app** half cannot follow it
-   today: Flutter publishes no Windows ARM64 SDK (0 of 747 archives, measured
-   2026-11-04), so the packaging job runs the x64 SDK under emulation and stays
-   informational until a run says what that produces.
+   (informational until it has a green run - green since 2026-11-14). The **app**
+   half still cannot follow it: Flutter publishes no Windows ARM64 SDK (0 of 749
+   archives, remeasured 2026-11-14), so the packaging job installs the x64 SDK and
+   the artifacts it asks for follow *that SDK*, not the hardware - `dart --version`
+   answers `windows_x64` on a runner whose `PROCESSOR_ARCHITECTURE` is `ARM64`
+   (measured 2026-11-14). The job therefore now installs the matching ARM64 Dart SDK
+   itself and rebuilds the architecture-specific `flutter_tools.snapshot` that goes
+   with it, because swapping the SDK alone leaves a tool that cannot start. Whether
+   `flutter build windows` then produces an ARM64 app is the open measurement, and
+   until a run says so this job stays informational.
 6. **~~Public or private repository~~** - **decided and prepared 2026-11-04: this
    repository goes public.** The history was rewritten in place first (git-filter-repo:
    `dist/` build artefacts dropped, the machine account name scrubbed from old

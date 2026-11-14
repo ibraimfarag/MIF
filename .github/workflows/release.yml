@@ -377,6 +377,24 @@ jobs:
           Move-Item $src "$env:FLUTTER_ROOT\bin\cache\dart-sdk"
           "dart after: $(& $dart --version)"
 
+          # Swapping the SDK is not enough on its own, and run 43597179356 measured
+          # what it costs: the tool then refused to start at all with `Snapshot not
+          # compatible with the current VM configuration: the snapshot requires
+          # '... x64 windows ...' but the VM has '... arm64 windows ...'` - the
+          # snapshot in the SDK is app-jit, so it is architecture-specific, and the
+          # x64 one it ships cannot run on the native Dart. `bin/internal/shared.bat`
+          # rebuilds it with whatever Dart sits in `bin/cache/dart-sdk` once the
+          # snapshot or its stamp is missing, so both go; `flutter --version` is what
+          # pays for the rebuild and proves it happened (`Building flutter tool...`
+          # on stderr, a version on stdout). The dependencies are already vendored
+          # in `packages/flutter_tools/.dart_tool/package_config.json`, so this is a
+          # compile, not a network trip.
+          Remove-Item "$env:FLUTTER_ROOT\bin\cache\flutter_tools.snapshot*" -Force -ErrorAction SilentlyContinue
+          Remove-Item "$env:FLUTTER_ROOT\bin\cache\flutter_tools.stamp" -Force -ErrorAction SilentlyContinue
+          "rebuilding the tool snapshot with the native Dart:"
+          flutter --version
+          "flutter --version exit: $LASTEXITCODE"
+
       # `make-release.ps1 -Arch arm64` refuses until the SDK carries the engine
       # artifacts for *this host*, and nothing downloads them on its own - the
       # build does, but the gate runs first, so the gate was answering "has a
@@ -396,7 +414,12 @@ jobs:
           "engine artifacts under $env:FLUTTER_ROOT\bin\cache\artifacts\engine:"
           Get-ChildItem "$env:FLUTTER_ROOT\bin\cache\artifacts\engine" -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty Name
-          exit $code
+          # Report, do not abort: run 43597179356 exited here with the tool's failure
+          # code and the job stopped before `make-release.ps1` ever ran, so the gate
+          # never spoke and the one line that says which rows are missing was lost.
+          # The gate is the thing that decides this job; this step's job is to leave
+          # the artifacts where the gate looks and to say what it got.
+          "precache exit: $code"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
