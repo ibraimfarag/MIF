@@ -303,6 +303,12 @@
 > from the host platform, which is why the tool has to be native first). **That
 > build is the next measurement, and it is not written down here because it has not
 > run yet.**
+> **`0.1.4` is cut on top of that, the same day, to carry the swap.** The version
+> moves because `v0.1.3` already has a draft release and `gh release create` refuses
+> a tag that already has one - the same collision that made `0.1.3` a cut rather than
+> a re-run of `0.1.2`. The bump is the same five files as both cuts before it, and
+> the only thing that differs is the intent: this one is a measurement vehicle, and
+> its draft is disposable.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,
