@@ -361,6 +361,32 @@
 > `v0.1.4` and `v0.1.5` were builds of trees that differ only in the ARM64 job, the
 > notes around it and the version string itself, so all three were deleted with their
 > tags and this cut leaves one draft standing.
+> **The `0.1.6` run (`43602227390`) answered the question and moved the failure one
+> step later.** `building the app (Release) for arm64...`, then
+> `√ Built build\windows\arm64\runner\Release\mics_app.exe` in 165.8s: with the Dart
+> swap and the snapshot rebuilt from the native tool, `flutter build windows` *does*
+> produce a Windows ARM64 app on an ARM64 host, and the post-build check stayed silent
+> because the folder it asks about exists. The cargo engine followed (the
+> `aarch64-pc-windows-msvc` target in 10m14s) and the job reached
+> `assembling dist\MICS-portable.staging`, where the package check failed:
+>
+> ```
+> RESULT: FAIL - the package is incomplete:
+>   missing: flutter_windows.dll
+>   missing: data\app.so
+>   missing: data\icudtl.dat
+>   missing: data\flutter_assets\AssetManifest.bin
+> ```
+>
+> The app, the engine, both rule packs and the inventory were all in the staging
+> folder; what is missing is Flutter's runtime, which the build installs beside the
+> exe. Three explanations fit and the failure list cannot tell them apart: the runtime
+> went somewhere else, `Copy-Item -Recurse` dropped a junction, or the
+> `windows-arm64` engine set has no runtime files to install - so `0.1.7` prints the
+> tree (`build\windows` two levels down, plus `runner\Release` and its `data`, with
+> symlink kinds) and lists `artifacts\engine\windows-arm64` file by file.
+> **The x64 package is unaffected:** it went green in the same run, and the `v0.1.6`
+> draft is a complete x64 build.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,

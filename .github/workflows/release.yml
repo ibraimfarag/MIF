@@ -416,6 +416,22 @@ jobs:
           "engine artifacts under $env:FLUTTER_ROOT\bin\cache\artifacts\engine:"
           Get-ChildItem "$env:FLUTTER_ROOT\bin\cache\artifacts\engine" -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty Name
+          # The names above say which variant arrived, not whether it can be shipped:
+          # run 43602227390 got as far as building an ARM64 app and then had no
+          # `flutter_windows.dll`, `data\app.so`, `data\icudtl.dat` or
+          # `data\flutter_assets\AssetManifest.bin` to put beside it. Whether those
+          # four were ever fetched is the first thing to rule out, and the top-level
+          # listing cannot - so the runtime folder is listed file by file.
+          $arm64 = "$env:FLUTTER_ROOT\bin\cache\artifacts\engine\windows-arm64"
+          if (Test-Path $arm64) {
+            "files under windows-arm64 (the runtime the build installs beside the app):"
+            Get-ChildItem $arm64 -Recurse -File -Force -ErrorAction SilentlyContinue |
+              ForEach-Object { "  " + $_.FullName.Substring($arm64.Length + 1) } |
+              Select-Object -First 40
+            "  ($(@(Get-ChildItem $arm64 -Recurse -File -Force -ErrorAction SilentlyContinue).Count) files)"
+          } else {
+            "no windows-arm64 folder under artifacts\engine"
+          }
           # Report, do not abort: run 43597179356 exited here with the tool's failure
           # code and the job stopped before `make-release.ps1` ever ran, so the gate
           # never spoke and the one line that says which rows are missing was lost.
@@ -468,6 +484,39 @@ jobs:
         if: failure() || cancelled()
         shell: pwsh
         run: ./scripts/annotate-failure.ps1 -Path build/release-arm64-log.txt
+
+      # The two halves of this job's question can be true at once: run 43602227390
+      # built `build\windows\arm64\runner\Release\mics_app.exe` - Flutter does make an
+      # ARM64 app on an ARM64 host with the native tool - and then had no `data\` and
+      # no `flutter_windows.dll` beside it, so the package check failed on four
+      # runtime files while the app, the engine, both rule packs and the inventory
+      # were all in place. A failure list cannot tell apart the three explanations
+      # that fit: Flutter wrote them somewhere else, the recursive copy dropped a
+      # junction, or those files have to come from the engine set and are absent
+      # there too (the precache step now lists that folder). So the job prints the
+      # tree it is arguing about, and stays informational.
+      - name: Show what the build wrote
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $root = Join-Path (Get-Location) 'build\windows'
+          if (-not (Test-Path $root)) { "no build\windows at all"; exit 0 }
+          "build\windows, two levels down:"
+          $here = (Get-Location).Path.Length + 1
+          Get-ChildItem $root -Recurse -Depth 2 -Force -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $name = $_.FullName.Substring($here)
+              if ($_.PSIsContainer) { "  $name\" } else { "  $name ($($_.Length))" }
+            }
+          foreach ($rel in @('arm64\runner\Release', 'arm64\runner\Release\data', 'x64\runner\Release')) {
+            $dir = Join-Path $root $rel
+            "--- $rel"
+            if (-not (Test-Path $dir)) { "  (absent)"; continue }
+            Get-ChildItem $dir -Force -ErrorAction SilentlyContinue | ForEach-Object {
+              if ($_.PSIsContainer) { "  $($_.Name)\ [$($_.LinkType)]" } else { "  $($_.Name) ($($_.Length))" }
+            }
+          }
 
       - name: Wrap the package in an installer
         shell: pwsh
