@@ -1,7 +1,7 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:f68f6c15-8977-52dc-b448-88fba558798e",
+  "serialNumber": "urn:uuid:201246e6-ece8-5109-90f4-0f1f5474eba2",
   "version": 1,
   "metadata": {
     "tools": {
@@ -16,9 +16,9 @@
     },
     "component": {
       "type": "application",
-      "bom-ref": "pkg:generic/mi-cs@0.1.6",
+      "bom-ref": "pkg:generic/mi-cs@0.1.7",
       "name": "MI CS",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "licenses": [
         {
           "license": {
