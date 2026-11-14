@@ -273,6 +273,22 @@ code edit. What is left is confirming the identity and writing the purchase down
    certificate will actually use is usually **`MICS_CERT_THUMBPRINT`** (a cloud agent or a
    token on the runner), or the Azure `/dlib` work named in §2.1 — which eligibility, not
    effort, keeps out of reach for an individual in Egypt.
+
+   The local half of this is set up (2026-11-14): one self-signed development certificate
+   kept outside the repository at `%USERPROFILE%\.mics-signing\` (pfx, password, cer),
+   trusted at the root of that one machine, and pointed at with `MICS_PFX_PATH` and
+   `MICS_PFX_PASSWORD` as User environment variables. `-Sign` is still required: those
+   variables choose an *identity*, they do not ask for signing, and a run that sets them
+   without the flag builds an unsigned engine and fails its own manifest check with
+   `signature: NotSigned` — which reads like a certificate problem and is not one. Trusting
+   the root is what turns that signature from `UnknownError` into `Valid`, so it satisfies
+   the production modes locally and **only** locally: a runner has no such root, and a
+   donated PFX still has to be CA-issued. The reason the identity kept changing is narrower
+   than it looks — `scripts\codesign-cert.ps1` does reuse its certificate, but it keeps the
+   PFX in `%TEMP%\mics-signing`, so a cleaned temp directory sent the next build back to
+   minting a fresh one (31 earlier `MI CS Code Signing` certificates are still trusted in
+   the user stores). Keeping the file stable also keeps `EXPECTED_SIGNER_CN` matching, since
+   the development subject is `CN=MI CS Code Signing`.
 3. **Move the pin before that release, not after.** No publicly trusted CA can issue
    `CN=MI CS Code Signing` (constraint 3), so the string `EXPECTED_SIGNER_CN`
    (`signature.rs:42`) compares against stops matching the moment the certificate is real,
