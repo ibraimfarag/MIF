@@ -329,6 +329,54 @@ jobs:
           flutter-version: 3.47.8   # same pin as the x64 job: CI must not drift
           cache: true
 
+      # Flutter publishes no Windows ARM64 SDK: `releases_windows.json` mentions
+      # arm64 in 0 of its 749 archives (measured 2026-11-14), so the action can only
+      # install the x64 SDK - and on this ARM64 host its Dart runs under emulation.
+      # That run measured the consequence exactly: `PROCESSOR_ARCHITECTURE=ARM64`
+      # while `dart --version` said `on "windows_x64"`, so `precache` fetched
+      # `windows-x64` and the gate's Flutter row stayed missing with the host row
+      # present. What *is* published, for this exact engine revision, is the ARM64
+      # side: `dart-sdk-windows-arm64.zip` (161,631,589 bytes) and
+      # `windows-arm64/artifacts.zip` (34,257,934 bytes) both answer 200, and the
+      # archive's own `version` file says `3.13.7` - the same Dart the x64 SDK
+      # carries. So the tool is made native by putting that Dart SDK in
+      # `bin/cache/dart-sdk` before `precache` runs, which is what makes `precache`
+      # ask for `windows-arm64`. Nothing here is asserted: the step prints what the
+      # tool reports, and whether the Windows build then honours the host
+      # architecture is a measurement, not an assumption of this one.
+      - name: Make the Flutter tool native (matching ARM64 Dart SDK)
+        if: ${{ runner.arch == 'ARM64' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $dart = "$env:FLUTTER_ROOT\bin\cache\dart-sdk\bin\dart.exe"
+          "dart before: $(& $dart --version)"
+          if ((& $dart --version) -match 'windows_arm64') {
+            "the tool already runs native; nothing to swap"
+            exit 0
+          }
+          $rev = (Get-Content "$env:FLUTTER_ROOT\bin\internal\engine.version" -Raw).Trim()
+          $url = "https://storage.googleapis.com/flutter_infra_release/flutter/$rev/dart-sdk-windows-arm64.zip"
+          $zip = Join-Path $env:RUNNER_TEMP 'dart-sdk-windows-arm64.zip'
+          "downloading $url"
+          curl.exe -sSL --fail --retry 3 -o $zip $url
+          if ($LASTEXITCODE -ne 0) {
+            "download failed (curl exit $LASTEXITCODE); the SDK is left as it was and the gate below reports the truth either way"
+            exit 0
+          }
+          $tmp = Join-Path $env:RUNNER_TEMP 'dart-sdk-arm64'
+          Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+          # Expand-Archive rather than tar: this runs beside the x64 job, so a
+          # minute spent extracting is cheaper than an unreliable assumption.
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          # the archive carries a top-level `dart-sdk/`; accept a bare layout too
+          $src = Join-Path $tmp 'dart-sdk'
+          if (-not (Test-Path (Join-Path $src 'bin\dart.exe'))) { $src = $tmp }
+          "archive root: $src"
+          Remove-Item "$env:FLUTTER_ROOT\bin\cache\dart-sdk" -Recurse -Force
+          Move-Item $src "$env:FLUTTER_ROOT\bin\cache\dart-sdk"
+          "dart after: $(& $dart --version)"
+
       # `make-release.ps1 -Arch arm64` refuses until the SDK carries the engine
       # artifacts for *this host*, and nothing downloads them on its own - the
       # build does, but the gate runs first, so the gate was answering "has a

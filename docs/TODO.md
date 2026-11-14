@@ -274,6 +274,35 @@
 > turned the run red for a reason that says nothing about ARM64. **This paragraph is
 > written before the run** — the package size, the hashes, the ARM64 verdict and the
 > publish click are measurements, and they belong here when the run has them.
+> **Measured, run `43593726650` (2026-11-14, `windows-11-vs2026-arm64`).** `Package
+> (x64)` and `Publish` are green and a **draft** `v0.1.3` exists with six assets -
+> `MICS-portable-0.1.3-x64.zip` 23,244,662 bytes, `MICS-setup-0.1.3-x64.exe`
+> 16,827,724, `report.md`, `SHA256SUMS`, `update.json` and its `.sig`. It is a draft
+> because the lane makes drafts; the publish click is not a measurement and has not
+> been made. `Package (arm64)` is red and now for exactly one reason: `NOT READY - 1
+> of 7`, with the Windows SDK row present (`...\10.0.26100.0\um\arm64`) and the
+> host row present (`PROCESSOR_ARCHITECTURE=ARM64`), so the `349cb55` row fix did
+> what it was for. The engine job is green on that runner, natively, again.
+> **The one row that is left is the Flutter engine artifacts, and the precache step
+> added with that fix printed the cause rather than leaving it to be guessed:**
+> `dart --version` on that ARM64 runner answers `on "windows_x64"` - the action can
+> only install the x64 SDK, since no Windows ARM64 SDK is published - so `precache`
+> fetched `windows-x64`, and the engine directory listed `windows-x64` and no
+> `windows-arm64`. Flutter's tool reads the platform of the process it is, not the
+> machine it is on. **The correction to what this file believed:** the ARM64
+> artifacts are published; what is missing is the SDK. For engine revision
+> `cf636b1dfb`, `windows-arm64/artifacts.zip` is 34,257,934 bytes and
+> `dart-sdk-windows-arm64.zip` is 161,631,589 bytes (its `version` file says
+> `3.13.7`, the same Dart the x64 SDK carries, and `bin/dart.exe`'s PE machine is
+> `0xaa64`) - while `releases_windows.json` mentions arm64 in **0 of 749**
+> archives. An earlier reading of this row ("an ARM64 host gets `windows-arm64`, an
+> x64 one only `windows-x64`") is what the run falsified: the host was ARM64 and it
+> still got x64. So the job now puts that ARM64 Dart SDK in `bin/cache/dart-sdk`
+> before `precache` runs, which is the precondition for the row to be reached - not
+> proof that `flutter build windows` then produces an ARM64 app (its target comes
+> from the host platform, which is why the tool has to be native first). **That
+> build is the next measurement, and it is not written down here because it has not
+> run yet.**
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,

@@ -140,12 +140,21 @@ if ($Reproducible) {
 # with a message about a missing tool, which says nothing about what to install.
 # Checking first turns that into a list. Measured on this machine 2026-11-03: the
 # first three rows are missing, the SDK libs and the Rust target are present, and
-# the Flutter SDK has no windows-arm64 artifacts at all (only windows-x64*), so an
-# ARM64 app also needs an ARM64 host and its own SDK download. The last row is
-# therefore about a *state*, not a capability: no `flutter` command downloads the
-# host's engine artifacts until something asks for them, so whoever runs this must
-# run `flutter precache --windows` first (the CI job does) - otherwise the row is
-# missing on a machine that can build, and the gate refuses a buildable host.
+# the last row is about a *state*, not a capability: no `flutter` command downloads
+# the host's engine artifacts until something asks for them, so whoever runs this
+# must run `flutter precache --windows` first (the CI job does) - otherwise the row
+# is missing on a machine that can build, and the gate refuses a buildable host.
+# That reading of the row was incomplete and 2026-11-14 corrected it: the ARM64
+# artifacts *are* published - for engine revision cf636b1dfb,
+# `windows-arm64/artifacts.zip` is 34,257,934 bytes and the matching
+# `dart-sdk-windows-arm64.zip` is 161,631,589 bytes (its own `version` file says
+# 3.13.7), both answering 200. What was missing is the SDK: no Windows ARM64 SDK is
+# published at all (0 of 749 archives in `releases_windows.json` mention arm64), so
+# CI installs the x64 one, its Dart runs emulated, and `precache` asks for
+# `windows-x64` on an ARM64 runner whose `PROCESSOR_ARCHITECTURE` is ARM64 - the
+# engine dir listed windows-x64 and nothing else (run 43593726650, job
+# 132443743917). So installing the matching ARM64 Dart SDK into `bin/cache/dart-sdk`
+# is what makes this row reachable there, and the CI job does exactly that.
 function Test-Arm64Prerequisites {
   $rows = New-Object System.Collections.Generic.List[object]
 
@@ -245,7 +254,7 @@ function Test-Arm64Prerequisites {
     Name = "Flutter windows-arm64 engine"
     Ok = [bool]($flutterArm -and (Test-Path $flutterArm))
     Detail = if ($flutterArm -and (Test-Path $flutterArm)) { $flutterArm }
-             else { "run: flutter precache --windows (an ARM64 host gets windows-arm64, an x64 one only windows-x64*)" }
+             else { "run: flutter precache --windows - and on an ARM64 host check `dart --version` first: a Dart SDK that reports windows_x64 precaches windows-x64 whatever the hardware is (measured 2026-11-14)" }
   })
 
   $rows.Add([pscustomobject]@{
