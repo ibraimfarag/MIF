@@ -333,6 +333,11 @@
 > layer down:** with a native snapshot, does `precache` fetch `windows-arm64` so the
 > row turns present, and does `flutter build windows` then produce an ARM64 app or
 > refuse a target it does not have.
+> **`0.1.5` is the cut that asks it, and the same collision is why the version moves
+> rather than the tag being reused:** `v0.1.4` now has a draft. Nothing between
+> `1cdfe86` and this cut touches the x64 half of the package - it is the ARM64 job
+> and the docs around it - so the 0.1.4 draft remains a valid x64 build of the same
+> tree, and stays where it is for you to publish or drop.
 > **The lane is not green on this machine, and the reasons are written down
 > rather than smoothed over.** `-Tier release` ends `RESULT: FAIL -
 > engine.contract` with **85 cases, 3 failed** — `fw.wfp.block`, `fw.wfp.unblock`,
