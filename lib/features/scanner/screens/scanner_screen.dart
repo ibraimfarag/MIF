@@ -139,8 +139,16 @@ class ScannerNotifier extends Notifier<ScannerState> {
     // open, and its scanner screen may not be built yet (D-041). Reading the
     // current value covers "the handover arrived before this notifier existed";
     // the listener covers every handover after it.
+    //
+    // That read is acted on in a microtask, not here: `scan` reads and writes
+    // `state`, and riverpod has not initialised it while `build` is still
+    // running. Acting inline throws "tried to read the state of an
+    // uninitialized provider" and the handed path is never scanned at all.
     ref.listen(handedScanProvider, (_, next) => _scanHanded(next));
-    _scanHanded(ref.read(handedScanProvider));
+    final arrivedBefore = ref.read(handedScanProvider);
+    if (arrivedBefore != null) {
+      Future.microtask(() => _scanHanded(arrivedBefore));
+    }
     ref.onDispose(() {
       _progressSub?.cancel();
       _eventSub?.cancel();

@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mics_app/core/ipc/handoff.dart';
 import 'package:mics_app/core/ipc/ipc_client.dart';
@@ -149,5 +150,28 @@ void main() {
       'quarantine': true,
     });
     expect(find.text(r'C:\Users\me\Downloads\report.pdf'), findsWidgets);
+  });
+
+  test('a handover that arrived before the scanner existed is still scanned',
+      () async {
+    // The handover can land before the scanner is ever built: main decides which
+    // window this is, and the scanner screen mounts whenever the user gets to
+    // it. Acting on that earlier value inside `build` is the trap this covers -
+    // riverpod has not initialised `state` while a notifier is still building,
+    // so the scan threw and the handed path was dropped on the floor.
+    final engine = FakeEngine();
+    final container = ProviderContainer(
+      overrides: [engineIpcProvider.overrideWithValue(engine)],
+    );
+    addTearDown(container.dispose);
+
+    container.read(handedScanProvider.notifier).handOver(r'C:\tmp\a.pdf');
+    container.read(scannerProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(engine.lastParams('scan.start'), {
+      'path': r'C:\tmp\a.pdf',
+      'quarantine': true,
+    });
   });
 }
